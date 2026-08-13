@@ -1,26 +1,20 @@
 [package]
 name = "rhystic-tracker"
+default-run = "rhystic-tracker"
 version = "0.1.0"
-description = "Rhystic Tracker - Real-time MTGA Tracker & Dashboard"
+description = "Rhystic Tracker Tauri Desktop Application"
 authors = ["Dave Pople"]
 edition = "2021"
 
-[lib]
-name = "rhystic_tracker_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
 [build-dependencies]
-tauri-build = { version = "2.0.0", features = [] }
+tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
+tauri = { version = "2.0", features = [] }
+tokio = { version = "1.0", features = ["full"] }
+notify = "6.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-axum = "0.7"
-sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite", "json", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
-notify = "6.1"
-rfd = "0.14"
-reqwest = { version = "0.11", features = ["json"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite", "chrono"] }
 dirs = "5.0"
