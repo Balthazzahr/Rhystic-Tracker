@@ -24,7 +24,7 @@ interface MatchTimelineProps {
   palette: any;
   cards: CardItem[];
   opponentName?: string;
-  onHoverCard?: (card: CardItem | null) => void;
+  onCardClick?: (card: CardItem, turn: number) => void;
 }
 
 export function MatchTimeline({
@@ -35,7 +35,7 @@ export function MatchTimeline({
   palette,
   cards,
   opponentName,
-  onHoverCard,
+  onCardClick,
 }: MatchTimelineProps) {
   const [turnEvents, setTurnEvents] = useState<TurnEventItem[]>([]);
   const [heroSeatId, setHeroSeatId] = useState<number>(goingFirst ? 1 : 2);
@@ -81,8 +81,7 @@ export function MatchTimeline({
   const renderEventRow = (ev: TurnEventItem, isPlayer: boolean) => (
     <div
       key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.timestamp}`}
-      onMouseEnter={() => onHoverCard && onHoverCard({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type })}
-      onMouseLeave={() => onHoverCard && onHoverCard(null)}
+      onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
       className="text-xs flex items-center justify-between p-1.5 rounded hover:bg-white/10 cursor-pointer group"
     >
       <div className="flex items-center gap-2 min-w-0">

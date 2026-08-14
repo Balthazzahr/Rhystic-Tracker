@@ -23,8 +23,7 @@ import { listen } from '@tauri-apps/api/event';
 import { ManaPip } from './components/ManaPip';
 import { SettingsView } from './components/SettingsView';
 import { CustomDropdown } from './components/CustomDropdown';
-import { CardBreakdown, CardItem } from './components/CardBreakdown';
-import { MatchTimeline } from './components/MatchTimeline';
+import { CardItem } from './components/CardBreakdown';
 import { HoverArtPreview } from './components/HoverArtPreview';
 import { FullMatchInfoModal } from './components/FullMatchInfoModal';
 import { OpponentH2HModal } from './components/OpponentH2HModal';
@@ -583,7 +582,7 @@ export default function App() {
   const deckRowVirtualizer = useVirtualizer({
     count: filteredDecks.length,
     getScrollElement: () => deckTableParentRef.current,
-    estimateSize: () => 72, // Exact row height: 72px
+    estimateSize: () => 84, // Exact row height: 84px
     overscan: 10,
   });
 
@@ -1379,40 +1378,40 @@ export default function App() {
                         >
                           {/* Deck Art + Name (left-aligned) */}
                           <div className="flex-1 min-w-[200px] flex items-center gap-3">
-                            {renderDeckArt(d)}
+                            {renderDeckArt(d, 'w-14 h-14')}
                             <div className="min-w-0">
-                              <div className="text-lg font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
+                              <div className="text-[22px] font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
                                 {d.deck_name}
                               </div>
                             </div>
                           </div>
 
                           {/* Colors */}
-                          <div className="w-[90px] shrink-0 flex justify-center">
+                          <div className="w-[110px] shrink-0 flex justify-center">
                             {renderDeckColorIdentity(d.colors)}
                           </div>
 
                           {/* Format chips (centered) */}
-                          <div className="w-[80px] shrink-0 flex flex-wrap gap-1 justify-center">
+                          <div className="w-[100px] shrink-0 flex flex-wrap gap-1 justify-center">
                             {(d.formats || []).map((f: any, i: number) => (
-                              <span key={i} className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 border" style={{ borderColor: palette?.border, color: palette?.subtext }}>
+                              <span key={i} className="text-[11px] font-mono px-1 py-0.5 rounded bg-black/40 border" style={{ borderColor: palette?.border, color: palette?.subtext }}>
                                 {f.format}
                               </span>
                             ))}
                           </div>
 
                           {/* Games */}
-                          <div className="w-[90px] shrink-0 text-center font-mono text-sm font-bold" style={{ color: palette?.text }}>
+                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: palette?.text }}>
                             {d.total_matches}
                           </div>
 
                           {/* W/L */}
-                          <div className="w-[90px] shrink-0 text-center font-mono text-sm font-bold" style={{ color: palette?.text }}>
+                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: palette?.text }}>
                             {d.wins}/{d.losses}
                           </div>
 
                           {/* Win Rate */}
-                          <div className={`w-[90px] shrink-0 text-center font-mono text-sm font-bold ${parseFloat(d.winrate) >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <div className={`w-[110px] shrink-0 text-center font-mono text-base font-bold ${parseFloat(d.winrate) >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {d.winrate}
                           </div>
                         </div>
@@ -1660,10 +1659,10 @@ export default function App() {
                 {/* Player deck name with colors inline */}
                 <div className="flex items-center justify-center gap-2">
                   <button 
-                    onClick={() => setActiveTab('decks')}
+                    onClick={() => setSelectedDeckName(selectedMatch.player_deck_name)}
                     className="text-lg font-extrabold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer text-center max-w-[60%]" 
                     style={{ color: palette?.accent || '#38BDF8' }}
-                    title="View Deck Details"
+                    title="Open Deck Details"
                   >
                     {selectedMatch.player_deck_name}
                   </button>
@@ -1935,9 +1934,10 @@ export default function App() {
         commanderInfo={commanderInfo}
         palette={palette}
         impactfulGrpIds={new Set(impactfulCards.map((c) => c.grp_id))}
+        impactfulCards={impactfulCards}
         onSelectDeck={(deckName) => {
           setIsFullInfoOpen(false);
-          setActiveTab('decks');
+          setSelectedDeckName(deckName);
         }}
         onSelectOpponent={(oppName) => {
           setIsFullInfoOpen(false);

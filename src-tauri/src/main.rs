@@ -268,20 +268,24 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 3c. Highest-CMC card per deck from cards seen (for non-commander decks).
-    //     Tie-break by name ASC for deterministic selection.
+    // 3c. Random non-land card per deck from cards seen (for non-commander
+    //     decks). Non-land ensures the thumbnail is a spell, not a basic land;
+    //     ORDER BY random() gives a different representative each refresh.
     let top_card_rows = sqlx::query(
         r#"
-        SELECT deck_name, card_name, grp_id, cmc FROM (
+        SELECT deck_name, card_name, grp_id FROM (
             SELECT m.hero_deck_name as deck_name, c.name as card_name,
-                   MIN(c.grp_id) as grp_id, MAX(c.cmc) as cmc,
-                   ROW_NUMBER() OVER (PARTITION BY m.hero_deck_name ORDER BY c.cmc DESC, c.name ASC) as rn
+                   MIN(c.grp_id) as grp_id,
+                   ROW_NUMBER() OVER (PARTITION BY m.hero_deck_name ORDER BY RANDOM()) as rn
             FROM match_cards mc
             JOIN matches m ON mc.match_id = m.id
             JOIN cards_cache c ON mc.grp_id = c.grp_id
             WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
-              AND mc.is_opponent = 0 AND c.cmc > 0
-            GROUP BY m.hero_deck_name, c.name, c.grp_id, c.cmc
+              AND mc.is_opponent = 0
+              AND c.card_type IS NOT NULL
+              AND lower(c.card_type) NOT LIKE '%land%'
+              AND c.card_type != ''
+            GROUP BY m.hero_deck_name, c.name, c.grp_id
         ) WHERE rn = 1
         "#
     )

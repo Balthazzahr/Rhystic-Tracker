@@ -16,8 +16,7 @@ export interface CardItem {
 interface CardBreakdownProps {
   cards: CardItem[];
   palette: any;
-  onHoverCard?: (card: CardItem | null) => void;
-  onMouseMove?: (e: React.MouseEvent) => void;
+  onCardClick?: (card: CardItem) => void;
   impactfulGrpIds?: Set<number>;
 }
 
@@ -53,7 +52,7 @@ function getCardCategory(name?: string, typeStr?: string): string {
   return 'Spells / Other';
 }
 
-export function CardBreakdown({ cards, palette, onHoverCard, onMouseMove, impactfulGrpIds }: CardBreakdownProps) {
+export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: CardBreakdownProps) {
   const playerCards = cards.filter(c => !c.is_opponent);
   const opponentCards = cards.filter(c => c.is_opponent);
 
@@ -123,9 +122,7 @@ export function CardBreakdown({ cards, palette, onHoverCard, onMouseMove, impact
                       return (
                         <div
                           key={idx}
-                          onMouseEnter={() => onHoverCard && onHoverCard(card)}
-                          onMouseLeave={() => onHoverCard && onHoverCard(null)}
-                          onMouseMove={onMouseMove}
+                          onClick={() => onCardClick && onCardClick(card)}
                           className="flex items-center justify-between p-2 rounded-lg border transition-all hover:bg-white/10 cursor-pointer group"
                           style={{
                             backgroundColor: `${palette?.surface}99`,

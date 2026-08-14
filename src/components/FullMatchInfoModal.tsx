@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, CheckCircle2, XCircle, ListFilter, Clock } from 'lucide-react';
 import { ManaPip } from './ManaPip';
 import { CardBreakdown, CardItem } from './CardBreakdown';
 import { MatchTimeline } from './MatchTimeline';
+import { ManaFontPip } from './ManaFontPip';
+import { parseMtgaManaCost } from '../utils/manaUtils';
 
 interface FullMatchInfoModalProps {
   isOpen: boolean;
@@ -12,6 +14,7 @@ interface FullMatchInfoModalProps {
   commanderInfo: any;
   palette: any;
   impactfulGrpIds?: Set<number>;
+  impactfulCards?: any[];
   onSelectDeck?: (deckName: string) => void;
   onSelectOpponent?: (opponentName: string) => void;
 }
@@ -24,18 +27,22 @@ export function FullMatchInfoModal({
   commanderInfo,
   palette,
   impactfulGrpIds,
+  impactfulCards,
   onSelectDeck,
   onSelectOpponent,
 }: FullMatchInfoModalProps) {
   const [subTab, setSubTab] = useState<'cards' | 'timeline'>('cards');
-  const [hoveredCard, setHoveredCard] = useState<CardItem | null>(null);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selectedCard, setSelectedCard] = useState<{ card: CardItem; turn?: number; damage?: number } | null>(null);
+
+  // Close the card overlay with Escape.
+  useEffect(() => {
+    if (!selectedCard) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedCard(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedCard]);
 
   if (!isOpen || !selectedMatch) return null;
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    setMousePos({ x: e.clientX, y: e.clientY });
-  };
 
   // Helper to render deck color identity pips (accepts either a WUBRG string or array)
   const renderDeckColorIdentity = (colorStr?: any) => {
@@ -263,9 +270,11 @@ export function FullMatchInfoModal({
                 <CardBreakdown 
                   cards={cards} 
                   palette={palette} 
-                  onHoverCard={(c) => setHoveredCard(c)}
-                  onMouseMove={handleMouseMove}
                   impactfulGrpIds={impactfulGrpIds}
+                  onCardClick={(card) => {
+                    const impactful = (impactfulCards || []).find((c) => c.grp_id === card.grp_id);
+                    setSelectedCard({ card, damage: impactful?.total_damage || impactful?.max_hit || 0 });
+                  }}
                 />
               </div>
             )}
@@ -280,37 +289,75 @@ export function FullMatchInfoModal({
                   result={selectedMatch.result} 
                   palette={palette} 
                   cards={cards}
-                  onHoverCard={(c) => setHoveredCard(c)}
+                  onCardClick={(card, turn) => {
+                    const impactful = (impactfulCards || []).find((c) => c.grp_id === card.grp_id);
+                    setSelectedCard({ card, turn, damage: impactful?.total_damage || impactful?.max_hit || 0 });
+                  }}
                 />
               </div>
             )}
           </div>
         </div>
 
-        {/* Item 2: Mouse-Position Floating Cursor Art Preview Tooltip */}
-        {hoveredCard && (
+        {/* Card overlay modal on click (same pattern as Deck Library) */}
+        {selectedCard && (
           <div
-            className="fixed pointer-events-none z-50 transition-opacity duration-150 animate-fade-in"
-            style={{
-              left: `${mousePos.x + 18}px`,
-              top: `${Math.min(mousePos.y - 120, window.innerHeight - 340)}px`,
-            }}
+            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+            onClick={() => setSelectedCard(null)}
           >
-            <div 
-              className="p-2 rounded-2xl border shadow-2xl bg-black/90 backdrop-blur-md w-[340px] space-y-2"
-              style={{ borderColor: palette?.accent || '#38BDF8' }}
-            >
-              <img
-                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(hoveredCard.name)}&format=image&version=normal`}
-                alt={hoveredCard.name}
-                className="w-full h-auto rounded-xl border border-white/10 shadow-lg object-contain"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-              <div className="text-center space-y-0.5">
-                <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{hoveredCard.name}</p>
-                <p className="text-[10px] font-mono opacity-50 uppercase">{hoveredCard.set_code || 'MTGA'}</p>
+            <div className="flex flex-col items-center max-h-full overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => setSelectedCard(null)}
+                className="self-end mb-2 flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold opacity-70 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5 transition-opacity"
+                style={{ color: palette?.text, borderColor: palette?.border }}
+                title="Close (Esc)"
+              >
+                <X className="w-4 h-4" /> Close
+              </button>
+
+              <div className="w-[340px] rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
+                <img
+                  src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(selectedCard.card.name)}&format=image&version=normal`}
+                  alt={selectedCard.card.name}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="mt-3 w-[340px] rounded-xl border p-4 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{selectedCard.card.name}</p>
+                  <span className="shrink-0 flex items-center gap-0.5">
+                    {parseMtgaManaCost(selectedCard.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
+                  {selectedCard.card.card_type || 'Card'}
+                </p>
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
+                  {selectedCard.turn != null && (
+                    <div>
+                      <p className="text-[9px] font-mono uppercase opacity-50">Played</p>
+                      <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>Turn {selectedCard.turn}</p>
+                    </div>
+                  )}
+                  {selectedCard.damage ? (
+                    <div>
+                      <p className="text-[9px] font-mono uppercase opacity-50">Damage</p>
+                      <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.damage}</p>
+                    </div>
+                  ) : null}
+                  {selectedCard.card.set_code && (
+                    <div>
+                      <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
+                      <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.card.set_code}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[9px] font-mono uppercase opacity-50">In Match</p>
+                    <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.card.count}x</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
