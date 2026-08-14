@@ -587,6 +587,94 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         }));
     }
 
+    // Stage 2 chart data: mana value histogram, card-type distribution, and
+    // mana-color distribution. Each card counts ONCE (distinct grp_id) so the
+    // distributions reflect deck composition, not match frequency.
+    let chart_rows = sqlx::query(
+        r#"
+        SELECT c.card_type, c.mana_cost, c.color_identity, c.colors
+        FROM match_cards mc
+        JOIN matches m ON mc.match_id = m.id
+        JOIN cards_cache c ON mc.grp_id = c.grp_id
+        WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+        GROUP BY c.grp_id
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Mana value histogram: bin by CMC (same bins as overview curve).
+    let mut curve = vec![0i64; 7];
+    // Card type distribution: map primary type (last keyword wins).
+    let mut type_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    // Mana color distribution: each card counts once toward each of its colors.
+    let mut color_counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    // Win-rate pie is computed from total/wins/losses already available.
+
+    fn chart_category(ct: &str) -> String {
+        let lower = ct.to_lowercase();
+        for kw in ["planeswalker", "battle", "creature", "land", "enchantment", "artifact", "instant", "sorcery"] {
+            if lower.contains(kw) {
+                return kw[..1].to_uppercase() + &kw[1..];
+            }
+        }
+        if lower.contains("token") { return "Token".to_string(); }
+        "Other".to_string()
+    }
+
+    for r in &chart_rows {
+        let ct: Option<String> = r.get("card_type");
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let ci: Option<String> = r.get("color_identity");
+        let cols: Option<String> = r.get("colors");
+
+        // Mana value bin.
+        if let Some(cost) = &mana_cost {
+            let cmc = card_db::parse_mtga_cmc(cost);
+            let bin = match cmc as usize {
+                0 => 0, 1 => 0, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, _ => 6,
+            };
+            curve[bin] += 1;
+        }
+
+        // Card type.
+        let cat = chart_category(ct.as_deref().unwrap_or("Other"));
+        *type_map.entry(cat).or_insert(0) += 1;
+
+        // Mana colors (each card counts once per color it has).
+        let mut card_colors: Vec<String> = Vec::new();
+        for src in [ci, cols].into_iter().flatten() {
+            for ch in src.chars() {
+                if !ch.is_ascii_alphanumeric() { continue; }
+                let c = match ch {
+                    '1' | 'W' => "W", '2' | 'U' => "U", '3' | 'B' => "B", '4' | 'R' => "R", '5' | 'G' => "G",
+                    _ => "",
+                };
+                if !c.is_empty() && !card_colors.contains(&c.to_string()) {
+                    card_colors.push(c.to_string());
+                }
+            }
+        }
+        if card_colors.is_empty() {
+            *color_counts.entry("C".to_string()).or_insert(0) += 1;
+        } else {
+            for c in card_colors { *color_counts.entry(c).or_insert(0) += 1; }
+        }
+    }
+
+    let color_order = ["W", "U", "B", "R", "G", "C"];
+    let color_dist: Vec<serde_json::Value> = color_order.iter()
+        .filter_map(|c| color_counts.get(*c).map(|n| serde_json::json!({ "color": c, "count": n })))
+        .collect();
+
+    let mut types_sorted: Vec<serde_json::Value> = type_map.into_iter()
+        .map(|(t, n)| serde_json::json!({ "type": t, "count": n }))
+        .collect();
+    types_sorted.sort_by(|a, b| b.get("count").and_then(|v| v.as_i64()).unwrap_or(0)
+        .cmp(&a.get("count").and_then(|v| v.as_i64()).unwrap_or(0)));
+
     Ok(serde_json::json!({
         "deck_name": deck_name,
         "total": total,
@@ -599,6 +687,9 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         "commander_grp_id": commander_grp_id,
         "colors": colors_arr,
         "recent_matches": recent,
+        "mana_curve": curve,
+        "card_types": types_sorted,
+        "mana_distribution": color_dist,
     }))
 }
 

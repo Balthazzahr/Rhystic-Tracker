@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { ManaPip } from './ManaPip';
 
 interface DeckDetailViewProps {
@@ -18,6 +19,63 @@ const scryfallCardUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 const scryfallArtUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+
+// Mana value histogram (7 bins: 0-1, 2, 3, 4, 5, 6, 7+) using simple div bars,
+// consistent with the histogram style used elsewhere in the app.
+function ManaValueHistogram({ bins, palette }: { bins: number[]; palette: any }) {
+  const labels = ['0-1', '2', '3', '4', '5', '6', '7+'];
+  const max = Math.max(...bins, 1);
+  return (
+    <div className="flex items-end gap-1.5 h-32">
+      {bins.map((val, idx) => (
+        <div key={idx} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+          <span className="text-[10px] font-mono font-bold" style={{ color: palette?.accent }}>{val}</span>
+          <div
+            className="w-full rounded-t-sm"
+            style={{ height: `${Math.max((val / max) * 100, 3)}%`, backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.1)' }}
+          />
+          <span className="text-[9px] font-mono opacity-50">{labels[idx]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Card type distribution: horizontal bars.
+function CardTypeBars({ data, palette }: { data: { type: string; count: number }[]; palette: any }) {
+  if (!data || data.length === 0) return <div className="text-xs font-mono opacity-40">No card type data</div>;
+  const max = Math.max(...data.map(d => d.count), 1);
+  return (
+    <div className="space-y-1.5">
+      {data.map((d) => (
+        <div key={d.type} className="flex items-center gap-2">
+          <span className="w-28 shrink-0 text-[11px] font-semibold truncate" style={{ color: palette?.text }}>{d.type}</span>
+          <div className="flex-1 h-3 rounded bg-white/5 overflow-hidden">
+            <div className="h-full rounded" style={{ width: `${(d.count / max) * 100}%`, backgroundColor: palette?.accent || '#38BDF8' }} />
+          </div>
+          <span className="w-8 shrink-0 text-right text-[11px] font-mono font-bold" style={{ color: palette?.accent }}>{d.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Mana distribution pie: each card counts once per color it has.
+const MANA_COLORS: Record<string, string> = {
+  W: '#F8F6D8', U: '#38BDF8', B: '#A855F7', R: '#F87171', G: '#34D399', C: '#94A3B8',
+};
+function ManaPie({ data }: { data: { color: string; count: number }[] }) {
+  if (!data || data.length === 0) return <div className="text-xs font-mono opacity-40">No mana distribution data</div>;
+  return (
+    <PieChart width={180} height={180}>
+      <Pie data={data} dataKey="count" nameKey="color" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={2} label={({ color }) => color}>
+        {data.map((d) => <Cell key={d.color} fill={MANA_COLORS[d.color] || '#94A3B8'} />)}
+      </Pie>
+      <Tooltip contentStyle={{ backgroundColor: '#12141A', borderColor: '#2A2F3D', fontSize: 12 }} />
+      <Legend wrapperStyle={{ fontSize: 11 }} />
+    </PieChart>
+  );
+}
 
 export function DeckDetailView({
   isOpen,
@@ -203,10 +261,37 @@ export function DeckDetailView({
               </div>
             </div>
 
-            {/* Main content area (charts coming in Stage 2) */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
-              <div className="rounded-2xl border border-dashed p-8 text-center text-xs font-mono opacity-40" style={{ borderColor: palette?.border }}>
-                Charts (mana curve, card types, mana distribution, win-rate pie) arriving in Stage 2.
+            {/* Main content area: Stage 2 charts */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+              {/* Win rate pie */}
+              <div className="rounded-2xl border p-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <p className="text-[10px] font-mono uppercase tracking-wider font-bold mb-2" style={{ color: palette?.accent }}>Overall Win Rate</p>
+                <PieChart width={180} height={180}>
+                  <Pie data={[{name:'Wins',value:detail.wins||0},{name:'Losses',value:detail.losses||0}]} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={40} paddingAngle={2}>
+                    <Cell fill="#34D399" />
+                    <Cell fill="#F87171" />
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: palette?.mantle, borderColor: palette?.border, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </div>
+
+              {/* Mana value histogram */}
+              <div className="rounded-2xl border p-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <p className="text-[10px] font-mono uppercase tracking-wider font-bold mb-3" style={{ color: palette?.accent }}>Mana Value Distribution</p>
+                <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0]} palette={palette} />
+              </div>
+
+              {/* Card type distribution */}
+              <div className="rounded-2xl border p-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <p className="text-[10px] font-mono uppercase tracking-wider font-bold mb-3" style={{ color: palette?.accent }}>Card Types</p>
+                <CardTypeBars data={detail.card_types || []} palette={palette} />
+              </div>
+
+              {/* Mana distribution pie */}
+              <div className="rounded-2xl border p-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <p className="text-[10px] font-mono uppercase tracking-wider font-bold mb-2" style={{ color: palette?.accent }}>Mana Distribution</p>
+                <ManaPie data={detail.mana_distribution || []} />
               </div>
             </div>
           </div>
