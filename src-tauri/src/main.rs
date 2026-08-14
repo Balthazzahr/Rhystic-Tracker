@@ -346,6 +346,11 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         use std::collections::HashSet;
         let mut colors: HashSet<String> = HashSet::new();
         let mut curve = vec![0i64; 7];
+        // Color-identity pollution guard: only count a card's colors toward the deck's
+        // identity if it appeared in >=10% of the deck's matches (min 2). This filters
+        // one-off anomalies (stolen/borrowed cards, legacy is_opponent mislabels) while
+        // preserving genuine multicolor decks. Mana curve still uses all cards-seen.
+        let color_min_count = std::cmp::max(2i64, (total as f64 * 0.10).round() as i64);
         for card in &card_rows {
             let cdeck: String = card.get("deck_name");
             if cdeck != deck_name { continue; }
@@ -368,16 +373,18 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
                 };
                 curve[bin] += count;
             }
-            for src in [color_identity, colors_str].into_iter().flatten() {
-                for ch in src.chars() {
-                    if !ch.is_ascii_alphanumeric() { continue; }
-                    match ch {
-                        '1' | 'W' => { colors.insert("W".to_string()); },
-                        '2' | 'U' => { colors.insert("U".to_string()); },
-                        '3' | 'B' => { colors.insert("B".to_string()); },
-                        '4' | 'R' => { colors.insert("R".to_string()); },
-                        '5' | 'G' => { colors.insert("G".to_string()); },
-                        _ => {}
+            if count >= color_min_count {
+                for src in [color_identity, colors_str].into_iter().flatten() {
+                    for ch in src.chars() {
+                        if !ch.is_ascii_alphanumeric() { continue; }
+                        match ch {
+                            '1' | 'W' => { colors.insert("W".to_string()); },
+                            '2' | 'U' => { colors.insert("U".to_string()); },
+                            '3' | 'B' => { colors.insert("B".to_string()); },
+                            '4' | 'R' => { colors.insert("R".to_string()); },
+                            '5' | 'G' => { colors.insert("G".to_string()); },
+                            _ => {}
+                        }
                     }
                 }
             }
