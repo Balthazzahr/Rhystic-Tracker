@@ -321,7 +321,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         SELECT m.hero_deck_name as deck_name,
                c.name, MIN(c.grp_id) as grp_id,
                MAX(c.cmc) as cmc,
-               c.card_type, c.mana_cost, c.rarity, c.set_code
+               c.card_type, c.mana_cost, c.rarity, c.set_code, c.color_identity
         FROM match_cards mc
         JOIN matches m ON mc.match_id = m.id
         JOIN cards_cache c ON mc.grp_id = c.grp_id
@@ -330,12 +330,93 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
           AND c.card_type IS NOT NULL
           AND c.card_type != ''
           AND lower(c.card_type) NOT LIKE '%land%'
-        GROUP BY m.hero_deck_name, c.name, c.card_type, c.mana_cost, c.rarity, c.set_code
+        GROUP BY m.hero_deck_name, c.name, c.card_type, c.mana_cost, c.rarity, c.set_code, c.color_identity
         "#
     )
     .fetch_all(db.pool())
     .await
     .map_err(|e| e.to_string())?;
+
+    // 4c. True Decklists (imported) — when present, key cards must be drawn from
+    //     these grp_ids, not the logged cards. Load the stored grp_ids per deck.
+    let list_rows = sqlx::query(
+        "SELECT deck_name, cards_json, commander_grp_id FROM deck_lists"
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4d. Brawl commander color identity per deck (for filtering logged cards).
+    let brawl_cmd_rows = sqlx::query(
+        r#"
+        SELECT m.hero_deck_name as deck_name, c.color_identity FROM (
+            SELECT m.hero_deck_name, m.hero_commander_id,
+                   ROW_NUMBER() OVER (PARTITION BY m.hero_deck_name ORDER BY COUNT(*) DESC) as rn
+            FROM matches m
+            WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
+              AND m.hero_commander_id IS NOT NULL
+            GROUP BY m.hero_deck_name, m.hero_commander_id
+        ) top
+        JOIN cards_cache c ON top.hero_commander_id = c.grp_id
+        WHERE top.rn = 1
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4e. Pre-compute the key-card candidate source per deck:
+    //     - True Decklist grp_ids when an import exists
+    //     - else logged cards, filtered by commander identity for Brawl decks.
+    let mut true_list_grps: std::collections::HashMap<String, Vec<i64>> = std::collections::HashMap::new();
+    let mut all_true_grps: Vec<i64> = Vec::new();
+    for lr in &list_rows {
+        let dname: String = lr.get("deck_name");
+        let cards_json: String = lr.get("cards_json");
+        let entries: Vec<serde_json::Value> = serde_json::from_str(&cards_json).unwrap_or_default();
+        let grps: Vec<i64> = entries.iter()
+            .filter_map(|e| e.get("grp_id").and_then(|v| v.as_i64()))
+            .collect();
+        if !grps.is_empty() {
+            true_list_grps.insert(dname.clone(), grps.clone());
+            for g in grps { if !all_true_grps.contains(&g) { all_true_grps.push(g); } }
+        }
+    }
+
+    // Batch metadata for every true-list grp_id (avoids N+1 queries).
+    let mut meta_by_grp: std::collections::HashMap<i64, serde_json::Value> = std::collections::HashMap::new();
+    if !all_true_grps.is_empty() {
+        let placeholders = all_true_grps.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let q = format!(
+            r#"
+            SELECT grp_id, name, card_type, mana_cost, cmc, rarity, set_code, color_identity
+            FROM cards_cache WHERE grp_id IN ({})
+            "#, placeholders
+        );
+        let mut q = sqlx::query(&q);
+        for g in &all_true_grps { q = q.bind(*g); }
+        let meta_rows = q.fetch_all(db.pool()).await.map_err(|e| e.to_string())?;
+        for m in meta_rows {
+            let grp: i64 = m.get("grp_id");
+            meta_by_grp.insert(grp, serde_json::json!({
+                "name": m.get::<Option<String>,_>("name"),
+                "card_type": m.get::<Option<String>,_>("card_type"),
+                "mana_cost": m.get::<Option<String>,_>("mana_cost"),
+                "cmc": m.get::<i64,_>("cmc"),
+                "rarity": m.get::<i64,_>("rarity"),
+                "set_code": m.get::<Option<String>,_>("set_code"),
+                "color_identity": m.get::<Option<String>,_>("color_identity"),
+            }));
+        }
+    }
+
+    // Brawl commander identity per deck (parsed colors, empty for non-Brawl).
+    let mut deck_identity: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for br in &brawl_cmd_rows {
+        let dname: String = br.get("deck_name");
+        let ci: Option<String> = br.get("color_identity");
+        deck_identity.insert(dname, parse_identity(ci.unwrap_or_default()));
+    }
 
     // Assemble.
     let order = ["W", "U", "B", "R", "G"];
@@ -452,25 +533,65 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         // (non-creature, non-instant/sorcery, non-land). Fallbacks if a
         // category is missing: extra spell if no creatures, extra creature if
         // no spells, extra creature if no others.
+        //
+        // Candidate source: the imported True Decklist when one exists; else
+        // logged cards filtered to the commander's color identity (Brawl).
+        let mut candidates: Vec<serde_json::Value> = Vec::new();
+        let is_brawl = deck_identity.get(&deck_name).map(|v| !v.is_empty()).unwrap_or(false);
+        if let Some(grps) = true_list_grps.get(&deck_name) {
+            for g in grps {
+                if let Some(meta) = meta_by_grp.get(g) {
+                    candidates.push(serde_json::json!({
+                        "name": meta.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        "grp_id": g,
+                        "cmc": meta.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0),
+                        "card_type": meta.get("card_type"),
+                        "mana_cost": meta.get("mana_cost"),
+                        "rarity": meta.get("rarity").and_then(|v| v.as_i64()).unwrap_or(0),
+                        "set_code": meta.get("set_code"),
+                    }));
+                }
+            }
+        } else {
+            let identity = deck_identity.get(&deck_name).cloned().unwrap_or_default();
+            for kc in &key_card_rows {
+                let kdeck: String = kc.get("deck_name");
+                if kdeck != deck_name { continue; }
+                // Brawl color-identity filter on logged cards.
+                if is_brawl && !identity.is_empty() {
+                    let ci: Option<String> = kc.get("color_identity");
+                    let card_identity = parse_identity(ci.unwrap_or_default());
+                    let within = card_identity.is_empty() || card_identity.iter().all(|c| identity.contains(c));
+                    if !within { continue; }
+                }
+                candidates.push(serde_json::json!({
+                    "name": kc.get::<String,_>("name"),
+                    "grp_id": kc.get::<i64,_>("grp_id"),
+                    "cmc": kc.get::<i64,_>("cmc"),
+                    "card_type": kc.get::<Option<String>,_>("card_type"),
+                    "mana_cost": kc.get::<Option<String>,_>("mana_cost"),
+                    "rarity": kc.get::<i64,_>("rarity"),
+                    "set_code": kc.get::<Option<String>,_>("set_code"),
+                }));
+            }
+        }
+
         let mut key_cards: Vec<serde_json::Value> = Vec::new();
         let mut used: Vec<String> = Vec::new();
-        for kc in &key_card_rows {
-            let kdeck: String = kc.get("deck_name");
-            if kdeck != deck_name { continue; }
-            let name: String = kc.get("name");
-            let card_type: Option<String> = kc.get("card_type");
-            let ct = card_type.as_deref().unwrap_or("").to_lowercase();
+        for cand in &candidates {
+            let name: String = cand.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let card_type: Option<&serde_json::Value> = cand.get("card_type");
+            let ct = card_type.and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
             if top_commander_name.as_deref() == Some(name.as_str()) { continue; }
             if used.contains(&name) { continue; }
 
             let is_creature = ct.contains("creature");
             let is_spell = ct.contains("instant") || ct.contains("sorcery");
-            let is_other = !is_creature && !is_spell;
 
             // Target slot index: 0=creature, 1=spell, 2=other.
             let slot = if is_creature { 0 } else if is_spell { 1 } else { 2 };
             // If this slot's card would be a better fit (higher CMC), replace it.
-            let cmc: i64 = kc.get("cmc");
+            let cmc: i64 = cand.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
             let replace = match key_cards.get(slot) {
                 Some(existing) => {
                     let existing_cmc = existing.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -479,15 +600,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
                 None => true,
             };
             if replace {
-                let entry = serde_json::json!({
-                    "name": name.clone(),
-                    "grp_id": kc.get::<i64,_>("grp_id"),
-                    "cmc": cmc,
-                    "card_type": card_type,
-                    "mana_cost": kc.get::<Option<String>,_>("mana_cost"),
-                    "rarity": kc.get::<i64,_>("rarity"),
-                    "set_code": kc.get::<Option<String>,_>("set_code"),
-                });
+                let entry = cand.clone();
                 if key_cards.len() <= slot {
                     while key_cards.len() < slot { key_cards.push(serde_json::Value::Null); }
                     key_cards.push(entry);
@@ -509,20 +622,18 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             (1usize, vec!["spell", "creature", "other"]),
             (2usize, vec!["other", "creature", "spell"]),
         ];
-        // Rescan key_card_rows for the best remaining candidate per priority.
+        // Rescan candidates for the best remaining candidate per priority.
         for (slot, priority) in &fill_order {
             if key_cards.len() > *slot && !key_cards[*slot].is_null() { continue; }
             // Gather remaining unused candidates in priority order.
             for kind in priority {
                 let mut best: Option<serde_json::Value> = None;
-                for kc in &key_card_rows {
-                    let kdeck: String = kc.get("deck_name");
-                    if kdeck != deck_name { continue; }
-                    let name: String = kc.get("name");
+                for cand in &candidates {
+                    let name: String = cand.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
                     if used.contains(&name) { continue; }
                     if top_commander_name.as_deref() == Some(name.as_str()) { continue; }
-                    let card_type: Option<String> = kc.get("card_type");
-                    let ct = card_type.as_deref().unwrap_or("").to_lowercase();
+                    let card_type = cand.get("card_type").and_then(|v| v.as_str()).unwrap_or("");
+                    let ct = card_type.to_lowercase();
                     let is_creature = ct.contains("creature");
                     let is_spell = ct.contains("instant") || ct.contains("sorcery");
                     let is_other = !is_creature && !is_spell;
@@ -532,21 +643,13 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
                         _ => is_other,
                     };
                     if !matches_kind { continue; }
-                    let cmc: i64 = kc.get("cmc");
+                    let cmc: i64 = cand.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
                     let replace = match &best {
                         Some(b) => cmc > b.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0),
                         None => true,
                     };
                     if replace {
-                        best = Some(serde_json::json!({
-                            "name": name.clone(),
-                            "grp_id": kc.get::<i64,_>("grp_id"),
-                            "cmc": cmc,
-                            "card_type": card_type,
-                            "mana_cost": kc.get::<Option<String>,_>("mana_cost"),
-                            "rarity": kc.get::<i64,_>("rarity"),
-                            "set_code": kc.get::<Option<String>,_>("set_code"),
-                        }));
+                        best = Some(cand.clone());
                     }
                 }
                 if let Some(card) = best {

@@ -761,7 +761,7 @@ export default function App() {
         src={scryfallArtUrl(artName)}
         alt={artName}
         onClick={openOverlay}
-        className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer hover:opacity-85 transition-opacity`}
+        className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70`}
         style={{ borderColor: `${palette?.border}66` }}
         loading="lazy"
         onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
@@ -1453,7 +1453,7 @@ export default function App() {
                                 src={scryfallArtUrl(k.name)}
                                 alt={k.name}
                                 onClick={(e) => { e.stopPropagation(); setDeckCardOverlay({ card: k, isCommander: false }); }}
-                                className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer hover:opacity-85 transition-opacity"
+                                className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70 z-10"
                                 style={{ borderColor: `${palette?.border}66` }}
                                 loading="lazy"
                                 onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
