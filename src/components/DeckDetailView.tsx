@@ -24,17 +24,21 @@ const scryfallCardUrl = (name: string) =>
 const scryfallArtUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
-// Mana value histogram (7 bins: 0-1, 2, 3, 4, 5, 6, 7+). Bars fill the full
+// Mana value histogram (bins 0, 1, 2, 3, 4, 5, 6, 7+). Bars fill the full
 // cell height; each bar shows its mana value label underneath, hover shows count.
 type Tip = { text: string; x: number; y: number };
 function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette: any; onTip: (t: Tip | null) => void }) {
-  const labels = ['0-1', '2', '3', '4', '5', '6', '7+'];
-  const max = Math.max(...bins, 1);
+  const labels = ['0', '1', '2', '3', '4', '5', '6', '7+'];
+  // Hide the 0-CMC column if the deck has no 0-cost spells.
+  const startIdx = (bins[0] || 0) > 0 ? 0 : 1;
+  const visible = bins.slice(startIdx);
+  const visibleLabels = labels.slice(startIdx);
+  const max = Math.max(...visible, 1);
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex-1 flex items-end gap-1 min-h-0">
-        {bins.map((val, idx) => (
-          <div key={idx} className="flex-1 h-full flex flex-col justify-end">
+        {visible.map((val, i) => (
+          <div key={i} className="flex-1 h-full flex flex-col justify-end">
             <div
               className="w-full rounded-t-sm"
               style={{
@@ -49,7 +53,7 @@ function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette:
         ))}
       </div>
       <div className="flex gap-1 mt-1 shrink-0">
-        {labels.map((l, idx) => (
+        {visibleLabels.map((l, idx) => (
           <span key={idx} className="flex-1 text-center text-[9px] font-mono opacity-60 leading-none">{l}</span>
         ))}
       </div>
@@ -280,7 +284,7 @@ export function DeckDetailView({
                 </div>
                 <div className="rounded-xl border p-3 flex flex-col min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
                   <p className="text-[9px] font-mono uppercase tracking-wider font-bold mb-2 opacity-60" style={{ color: palette?.accent }}>Mana Value</p>
-                  <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
+                  <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
                 </div>
                 <div className="rounded-xl border p-3 flex flex-col min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
                   <p className="text-[9px] font-mono uppercase tracking-wider font-bold mb-2 opacity-60" style={{ color: palette?.accent }}>Card Types</p>
@@ -400,6 +404,21 @@ export function DeckDetailView({
                   status={deckListStatus}
                   palette={palette}
                 />
+              ) : listMode === 'true' ? (
+                /* True Decklist selected but none imported yet — show an empty prompt. */
+                <div className="flex-1 flex flex-col items-center justify-center min-h-0">
+                  <div
+                    className="flex flex-col items-center gap-2 text-center cursor-pointer select-none"
+                    onClick={() => setImportOpen(true)}
+                  >
+                    <p className="text-sm font-mono text-center opacity-40" style={{ color: palette?.text }}>
+                      Click Import Decklist
+                    </p>
+                    <p className="text-[11px] font-mono text-center opacity-25" style={{ color: palette?.text }}>
+                      to upload the actual cards in this deck
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <DeckCardList deckName={deckName} palette={palette} />
               )}
@@ -410,7 +429,7 @@ export function DeckDetailView({
         {/* Import Decklist dialog */}
         {importOpen && (
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-text"
             onClick={() => { if (!importBusy) setImportOpen(false); }}
           >
             <div
@@ -421,7 +440,7 @@ export function DeckDetailView({
               <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
                 <div>
                   <p className="text-sm font-bold font-outfit" style={{ color: palette?.text }}>Import Decklist</p>
-                  <p className="text-[10px] font-mono opacity-50">Paste the deck export from MTGA</p>
+                  <p className="text-[10px] font-mono opacity-50">Paste the deck export from MTGA (Ctrl+V)</p>
                 </div>
                 <button onClick={() => { if (!importBusy) setImportOpen(false); }} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
                   <X className="w-4 h-4" />
@@ -432,8 +451,9 @@ export function DeckDetailView({
                 <textarea
                   value={importText}
                   onChange={(e) => setImportText(e.target.value)}
-                  placeholder="Commander&#10;1 Aang, at the Crossroads (TLA) 203&#10;&#10;Deck&#10;1 Cloudshift (JMP) 97&#10;...&#10;&#10;Sideboard&#10;..."
-                  className="w-full h-56 rounded-xl border p-3 font-mono text-xs leading-relaxed focus:outline-none resize-none custom-scrollbar"
+                  placeholder=""
+                  autoFocus
+                  className="w-full h-56 rounded-xl border p-3 font-mono text-xs leading-relaxed focus:outline-none resize-none custom-scrollbar select-text"
                   style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
                 />
 

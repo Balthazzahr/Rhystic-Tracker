@@ -686,8 +686,9 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         }
     }
 
-    // Mana value histogram: bin by CMC (same bins as overview curve).
-    let mut curve = vec![0i64; 7];
+    // Mana value histogram: bin by CMC (bins 0, 1, 2, 3, 4, 5, 6, 7+).
+    // Lands are excluded entirely — the curve reflects spell costs only.
+    let mut curve = vec![0i64; 8];
     // Card type distribution: map primary type (last keyword wins).
     let mut type_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     // Mana color distribution: each card counts once toward each of its colors.
@@ -711,13 +712,17 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         let ci: Option<String> = r.get("color_identity");
         let cols: Option<String> = r.get("colors");
 
-        // Mana value bin.
+        let is_land = ct.as_deref().map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
+
+        // Mana value bin (spells only — lands/tokens without a cost excluded).
         if let Some(cost) = &mana_cost {
-            let cmc = card_db::parse_mtga_cmc(cost);
-            let bin = match cmc as usize {
-                0 => 0, 1 => 0, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, _ => 6,
-            };
-            curve[bin] += 1;
+            if !is_land {
+                let cmc = card_db::parse_mtga_cmc(cost);
+                let bin = match cmc as usize {
+                    0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, _ => 7,
+                };
+                curve[bin] += 1;
+            }
         }
 
         // Card type.
@@ -726,7 +731,6 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
 
         // Mana colors (each card counts once per color it has). Lands are
         // excluded — this distribution reflects spell colors only.
-        let is_land = ct.as_deref().map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
         if !is_land {
             // Brawl color-identity guard: cards outside the commander's identity
             // are legacy leaks and must not pollute the color distribution.
