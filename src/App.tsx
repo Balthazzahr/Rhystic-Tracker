@@ -102,8 +102,13 @@ export default function App() {
   const [impactfulCards, setImpactfulCards] = useState<any[]>([]);
   const [impactfulIndex, setImpactfulIndex] = useState<number>(0);
   const [deckOverview, setDeckOverview] = useState<any[]>([]);
+  const [decksSubTab, setDecksSubTab] = useState<'library' | 'stats'>('library');
   const [deckSearch, setDeckSearch] = useState('');
   const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
+  const [commanderSearch, setCommanderSearch] = useState('');
+  const [deckFormatFilter, setDeckFormatFilter] = useState<string>('ALL');
+  const [deckColorFilter, setDeckColorFilter] = useState<string[]>([]);
+  const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
   const [deckSortKey, setDeckSortKey] = useState<string>('total_matches');
   const [deckSortDir, setDeckSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -379,7 +384,67 @@ export default function App() {
       }
     }
     const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
-    return [{ value: 'ALL', label: 'All Commanders' }, ...sorted.map(n => ({ value: n, label: n }))];
+    return [
+      { value: 'ALL', label: 'All Commanders' },
+      { value: 'N/A', label: 'No Commander (N/A)' },
+      ...sorted.map(n => ({ value: n, label: n })),
+    ];
+  }, [deckOverview]);
+
+  // Commander type-ahead: narrowed list based on the search text.
+  const commanderSearchResults = useMemo(() => {
+    const q = commanderSearch.toLowerCase().trim();
+    const results = commanderOptions.filter(o => o.value !== 'ALL' && (o.value === 'N/A' || o.label.toLowerCase().includes(q)));
+    return results.slice(0, 30);
+  }, [commanderOptions, commanderSearch]);
+
+  // Deck Library KPI computations (client-side from deckOverview).
+  const deckKPIs = useMemo(() => {
+    // Most common format across decks.
+    const formatCounts: Record<string, number> = {};
+    for (const d of deckOverview) {
+      const f = (d.formats || [])[0]?.format;
+      if (f) formatCounts[f] = (formatCounts[f] || 0) + 1;
+    }
+    let topFormat = '—';
+    let topFormatCount = 0;
+    for (const [f, c] of Object.entries(formatCounts)) {
+      if (c > topFormatCount) { topFormat = f; topFormatCount = c; }
+    }
+
+    // Color configuration tallies. Exclude decks with 0 resolved colors (colorless or
+    // all-below-threshold) so they don't count toward either mono or multi buckets.
+    const monoCounts: Record<string, number> = {};
+    const multiCounts: Record<string, number> = {};
+    for (const d of deckOverview) {
+      const cols = d.colors || [];
+      if (cols.length === 0) continue;
+      if (cols.length === 1) {
+        const key = cols[0];
+        monoCounts[key] = (monoCounts[key] || 0) + 1;
+      } else if (cols.length >= 2) {
+        const key = [...cols].sort((a, b) => ['W','U','B','R','G'].indexOf(a) - ['W','U','B','R','G'].indexOf(b)).join('');
+        multiCounts[key] = (multiCounts[key] || 0) + 1;
+      }
+    }
+    const colorName: Record<string, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+    const guildName: Record<string, string> = {
+      WU: 'Azorius', WB: 'Orzhov', WR: 'Boros', WG: 'Selesnya',
+      UB: 'Dimir', UR: 'Izzet', UG: 'Simic', BR: 'Rakdos', BG: 'Golgari', RG: 'Gruul',
+    };
+
+    let topMono = '—';
+    let topMonoCount = 0;
+    for (const [c, n] of Object.entries(monoCounts)) {
+      if (n > topMonoCount) { topMono = `Mono-${colorName[c] || c}`; topMonoCount = n; }
+    }
+    let topMulti = '—';
+    let topMultiCount = 0;
+    for (const [c, n] of Object.entries(multiCounts)) {
+      if (n > topMultiCount) { topMulti = guildName[c] || c; topMultiCount = n; }
+    }
+
+    return { total: deckOverview.length, topFormat, topMono, topMulti };
   }, [deckOverview]);
 
   // Filtered deck list: by search term and commander filter
@@ -397,8 +462,23 @@ export default function App() {
 
     const list = deckOverview.filter(d => {
       const matchesSearch = d.deck_name.toLowerCase().includes(deckSearch.toLowerCase());
-      const matchesCommander = commanderFilter === 'ALL' || (d.commanders || []).some(c => c.name === commanderFilter);
-      return matchesSearch && matchesCommander;
+
+      // Commander filter: 'ALL' -> no filter; 'N/A' -> only decks with no commander;
+      // specific name -> only decks that include that commander (non-commander decks drop out).
+      let matchesCommander = true;
+      if (commanderFilter === 'N/A') {
+        matchesCommander = !(d.commanders || []).some(c => c.name);
+      } else if (commanderFilter !== 'ALL') {
+        matchesCommander = (d.commanders || []).some(c => c.name === commanderFilter);
+      }
+
+      // Format filter: match if deck has that format.
+      const matchesFormat = deckFormatFilter === 'ALL' || (d.formats || []).some(f => f.format === deckFormatFilter);
+
+      // Color filter: deck must contain ALL selected colors in its color identity.
+      const matchesColor = deckColorFilter.length === 0 || (deckColorFilter.every(c => (d.colors || []).includes(c)));
+
+      return matchesSearch && matchesCommander && matchesFormat && matchesColor;
     });
 
     const dir = deckSortDir === 'asc' ? 1 : -1;
@@ -438,7 +518,7 @@ export default function App() {
       return cmp * dir;
     });
     return list;
-  }, [deckOverview, deckSearch, commanderFilter, deckSortKey, deckSortDir]);
+  }, [deckOverview, deckSearch, commanderFilter, deckFormatFilter, deckColorFilter, deckSortKey, deckSortDir]);
 
   // Deck table virtualization (separate from the match history virtualizer)
   const deckTableParentRef = useRef<HTMLDivElement>(null);
@@ -987,11 +1067,48 @@ export default function App() {
         {/* VIEW 4: Decks & Stats */}
         {activeTab === 'decks' && (
           <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
+            {/* Sub-tab bar: Deck Library | Play Stats */}
+            <div className="flex items-center gap-1.5 shrink-0 p-1 rounded-xl border bg-black/30 w-fit" style={{ borderColor: palette?.border }}>
+              <button
+                onClick={() => setDecksSubTab('library')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  decksSubTab === 'library' ? 'shadow-md' : 'opacity-60 hover:opacity-100'
+                }`}
+                style={{
+                  backgroundColor: decksSubTab === 'library' ? (palette?.accent || '#38BDF8') : 'transparent',
+                  color: decksSubTab === 'library' ? '#000000' : (palette?.text || '#F8FAFC'),
+                }}
+              >
+                Deck Library
+              </button>
+              <button
+                onClick={() => setDecksSubTab('stats')}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  decksSubTab === 'stats' ? 'shadow-md' : 'opacity-60 hover:opacity-100'
+                }`}
+                style={{
+                  backgroundColor: decksSubTab === 'stats' ? (palette?.accent || '#38BDF8') : 'transparent',
+                  color: decksSubTab === 'stats' ? '#000000' : (palette?.text || '#F8FAFC'),
+                }}
+              >
+                Play Stats
+              </button>
+            </div>
+
+            {/* Play Stats placeholder */}
+            {decksSubTab === 'stats' ? (
+              <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
+                <BarChart3 className="w-10 h-10 opacity-40" style={{ color: palette?.accent }} />
+                <h3 className="text-lg font-bold">Play Stats — Coming Soon</h3>
+                <p className="text-xs opacity-60 max-w-sm">Aggregated play statistics will arrive in a future iteration.</p>
+              </div>
+            ) : (
+              <>
             {/* Header */}
             <div className="flex items-center justify-between gap-4 shrink-0">
               <div>
                 <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-                  Decks &amp; Stats
+                  Deck Library
                 </h1>
               </div>
               <div className="flex items-center gap-3">
@@ -1007,17 +1124,162 @@ export default function App() {
                     style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
                   />
                 </div>
-                {/* Commander Filter */}
-                <div className="w-48">
-                  <CustomDropdown
-                    options={commanderOptions}
-                    value={commanderFilter}
-                    onChange={(val) => setCommanderFilter(val)}
-                    palette={palette}
-                  />
+                {/* Filters Button */}
+                <button
+                  onClick={() => setShowFilterPanel(!showFilterPanel)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 ${
+                    showFilterPanel || deckFormatFilter !== 'ALL' || deckColorFilter.length > 0 || commanderFilter !== 'ALL' ? 'opacity-100' : 'opacity-70'
+                  }`}
+                  style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                >
+                  <Filter className="w-3.5 h-3.5" style={{ color: palette?.accent }} />
+                  Filters
+                  {(deckFormatFilter !== 'ALL' || deckColorFilter.length > 0 || commanderFilter !== 'ALL') && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Deck Library KPI Boxes */}
+            <div className="grid grid-cols-4 gap-4 shrink-0">
+              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Total Decks</p>
+                  <h3 className="text-2xl font-extrabold font-outfit mt-0.5">{deckKPIs.total}</h3>
+                </div>
+                <BarChart3 className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
+              </div>
+
+              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Format</p>
+                  <h3 className="text-xl font-extrabold font-outfit mt-0.5" style={{ color: palette?.accent || '#38BDF8' }}>{deckKPIs.topFormat}</h3>
+                </div>
+                <Filter className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
+              </div>
+
+              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Mono-Color</p>
+                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topMono}</h3>
+                </div>
+                <ManaPip symbol="G" size={20} className="opacity-40" />
+              </div>
+
+              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Multi-Color</p>
+                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topMulti}</h3>
+                </div>
+                <div className="flex gap-0.5">
+                  <ManaPip symbol="G" size={20} className="opacity-40" />
+                  <ManaPip symbol="B" size={20} className="opacity-40" />
                 </div>
               </div>
             </div>
+
+            {/* Filter Panel (dropdown) */}
+            {showFilterPanel && (
+              <div className="shrink-0 rounded-2xl border shadow-xl p-4 space-y-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-mono uppercase tracking-wider font-bold" style={{ color: palette?.accent }}>Filters</p>
+                  <button
+                    onClick={() => { setShowFilterPanel(false); setDeckFormatFilter('ALL'); setDeckColorFilter([]); setCommanderFilter('ALL'); setCommanderSearch(''); }}
+                    className="text-[10px] font-mono opacity-60 hover:opacity-100 underline"
+                  >
+                    Clear all
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-6">
+                  {/* Format filter */}
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Format</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => setDeckFormatFilter('ALL')}
+                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                          deckFormatFilter === 'ALL' ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                        }`}
+                        style={{ backgroundColor: deckFormatFilter === 'ALL' ? `${palette?.accent || '#38BDF8'}25` : 'transparent', borderColor: deckFormatFilter === 'ALL' ? (palette?.accent || '#38BDF8') : palette?.border, color: deckFormatFilter === 'ALL' ? (palette?.accent || '#38BDF8') : palette?.text }}
+                      >
+                        All
+                      </button>
+                      {Array.from(new Set(deckOverview.flatMap((d: any) => (d.formats || []).map((f: any) => f.format)))).sort().map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => setDeckFormatFilter(deckFormatFilter === f ? 'ALL' : f)}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                            deckFormatFilter === f ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                          }`}
+                          style={{ backgroundColor: deckFormatFilter === f ? `${palette?.accent || '#38BDF8'}25` : 'transparent', borderColor: deckFormatFilter === f ? (palette?.accent || '#38BDF8') : palette?.border, color: deckFormatFilter === f ? (palette?.accent || '#38BDF8') : palette?.text }}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color filter (multi-select) */}
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Color Identity</p>
+                    <div className="flex items-center gap-2">
+                      {['W', 'U', 'B', 'R', 'G'].map((c) => {
+                        const active = deckColorFilter.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            onClick={() => {
+                              setDeckColorFilter(prev => active ? prev.filter(x => x !== c) : [...prev, c]);
+                            }}
+                            className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                            title={`Toggle ${c}`}
+                          >
+                            <ManaPip symbol={c} size={24} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[9px] font-mono opacity-40 mt-2">Deck must contain all selected colors</p>
+                  </div>
+
+                  {/* Commander filter (type-ahead) */}
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Commander (Brawl only)</p>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search commander..."
+                        value={commanderSearch}
+                        onChange={(e) => setCommanderSearch(e.target.value)}
+                        className="w-full pl-3 pr-3 py-1.5 text-xs rounded-lg border bg-black/30 focus:outline-none"
+                        style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+                      />
+                      {commanderSearchResults.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border shadow-2xl overflow-y-auto max-h-56 custom-scrollbar" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                          {commanderSearchResults.map((o) => {
+                            const isSelected = commanderFilter === o.value;
+                            return (
+                              <button
+                                key={o.value}
+                                onClick={() => { setCommanderFilter(o.value); setCommanderSearch(o.value === 'N/A' ? '' : o.label); setShowFilterPanel(false); }}
+                                className="w-full text-left px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 flex items-center justify-between"
+                                style={{ color: isSelected ? (palette?.accent || '#38BDF8') : (palette?.text || '#F8FAFC') }}
+                              >
+                                <span className="truncate">{o.label}</span>
+                                {isSelected && <span className="text-[10px] font-mono">✓</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[9px] font-mono opacity-40 mt-2">Selecting a commander hides non-commander decks</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Deck Overview — Virtualized Sortable Table */}
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
@@ -1097,6 +1359,8 @@ export default function App() {
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
 
