@@ -83,7 +83,7 @@ export default function App() {
   const [isDrawerOpenManual, setIsDrawerOpenManual] = useState<boolean>(false);
 
   // Navigation & Filter State
-  const [activeTab, setActiveTab] = useState<'matches' | 'live' | 'decks' | 'draft' | 'collection' | 'settings'>('matches');
+  const [activeTab, setActiveTab] = useState<'matches' | 'live' | 'decks' | 'deckstats' | 'draft' | 'collection' | 'settings'>('matches');
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');
@@ -102,13 +102,13 @@ export default function App() {
   const [impactfulCards, setImpactfulCards] = useState<any[]>([]);
   const [impactfulIndex, setImpactfulIndex] = useState<number>(0);
   const [deckOverview, setDeckOverview] = useState<any[]>([]);
-  const [decksSubTab, setDecksSubTab] = useState<'library' | 'stats'>('library');
   const [deckSearch, setDeckSearch] = useState('');
   const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
   const [commanderSearch, setCommanderSearch] = useState('');
   const [deckFormatFilter, setDeckFormatFilter] = useState<string>('ALL');
   const [deckColorFilter, setDeckColorFilter] = useState<string[]>([]);
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
+  const [commanderSearchOpen, setCommanderSearchOpen] = useState<boolean>(false);
   const [deckSortKey, setDeckSortKey] = useState<string>('total_matches');
   const [deckSortDir, setDeckSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -400,6 +400,10 @@ export default function App() {
 
   // Deck Library KPI computations (client-side from deckOverview).
   const deckKPIs = useMemo(() => {
+    // Canonical WUBRG order for order-independent combo keys.
+    const WUBRG = ['W', 'U', 'B', 'R', 'G'];
+    const canon = (cols: string[]) => [...cols].sort((a, b) => WUBRG.indexOf(a) - WUBRG.indexOf(b)).join('');
+
     // Most common format across decks.
     const formatCounts: Record<string, number> = {};
     for (const d of deckOverview) {
@@ -413,38 +417,63 @@ export default function App() {
     }
 
     // Color configuration tallies. Exclude decks with 0 resolved colors (colorless or
-    // all-below-threshold) so they don't count toward either mono or multi buckets.
+    // all-below-threshold) so they don't count toward any color bucket.
+    const colorName: Record<string, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+    const dualName: Record<string, string> = {
+      WU: 'Azorius', WB: 'Orzhov', WR: 'Boros', WG: 'Selesnya',
+      UB: 'Dimir', UR: 'Izzet', UG: 'Simic', BR: 'Rakdos', BG: 'Golgari', RG: 'Gruul',
+    };
+    const triName: Record<string, string> = {
+      // Shards
+      WUG: 'Bant', WUB: 'Esper', UBR: 'Grixis', BRG: 'Jund', RGW: 'Naya',
+      // Wedges
+      WBG: 'Abzan', WUR: 'Jeskai', BGU: 'Sultai', WBR: 'Mardu', GUR: 'Temur',
+    };
+
     const monoCounts: Record<string, number> = {};
-    const multiCounts: Record<string, number> = {};
+    const dualCounts: Record<string, number> = {};
+    const triCounts: Record<string, number> = {};
     for (const d of deckOverview) {
       const cols = d.colors || [];
       if (cols.length === 0) continue;
       if (cols.length === 1) {
-        const key = cols[0];
-        monoCounts[key] = (monoCounts[key] || 0) + 1;
-      } else if (cols.length >= 2) {
-        const key = [...cols].sort((a, b) => ['W','U','B','R','G'].indexOf(a) - ['W','U','B','R','G'].indexOf(b)).join('');
-        multiCounts[key] = (multiCounts[key] || 0) + 1;
+        monoCounts[cols[0]] = (monoCounts[cols[0]] || 0) + 1;
+      } else if (cols.length === 2) {
+        const key = canon(cols);
+        dualCounts[key] = (dualCounts[key] || 0) + 1;
+      } else if (cols.length === 3) {
+        const key = canon(cols);
+        triCounts[key] = (triCounts[key] || 0) + 1;
       }
+      // 4-color and 5-color (Domain) are intentionally skipped.
     }
-    const colorName: Record<string, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
-    const guildName: Record<string, string> = {
-      WU: 'Azorius', WB: 'Orzhov', WR: 'Boros', WG: 'Selesnya',
-      UB: 'Dimir', UR: 'Izzet', UG: 'Simic', BR: 'Rakdos', BG: 'Golgari', RG: 'Gruul',
-    };
 
     let topMono = '—';
+    let topMonoKey = '';
     let topMonoCount = 0;
     for (const [c, n] of Object.entries(monoCounts)) {
-      if (n > topMonoCount) { topMono = `Mono-${colorName[c] || c}`; topMonoCount = n; }
+      if (n > topMonoCount) { topMono = colorName[c] || c; topMonoKey = c; topMonoCount = n; }
     }
-    let topMulti = '—';
-    let topMultiCount = 0;
-    for (const [c, n] of Object.entries(multiCounts)) {
-      if (n > topMultiCount) { topMulti = guildName[c] || c; topMultiCount = n; }
+    let topDual = '—';
+    let topDualKey = '';
+    let topDualCount = 0;
+    for (const [c, n] of Object.entries(dualCounts)) {
+      if (n > topDualCount) { topDual = dualName[c] || c; topDualKey = c; topDualCount = n; }
+    }
+    let topTri = '—';
+    let topTriKey = '';
+    let topTriCount = 0;
+    for (const [c, n] of Object.entries(triCounts)) {
+      if (n > topTriCount) { topTri = triName[c] || c; topTriKey = c; topTriCount = n; }
     }
 
-    return { total: deckOverview.length, topFormat, topMono, topMulti };
+    return {
+      total: deckOverview.length,
+      topFormat,
+      topMono, topMonoKey,
+      topDual, topDualKey,
+      topTri, topTriKey,
+    };
   }, [deckOverview]);
 
   // Filtered deck list: by search term and commander filter
@@ -475,8 +504,19 @@ export default function App() {
       // Format filter: match if deck has that format.
       const matchesFormat = deckFormatFilter === 'ALL' || (d.formats || []).some(f => f.format === deckFormatFilter);
 
-      // Color filter: deck must contain ALL selected colors in its color identity.
-      const matchesColor = deckColorFilter.length === 0 || (deckColorFilter.every(c => (d.colors || []).includes(c)));
+      // Color filter: EXACT match on the full color identity.
+      // - 'C' (colorless) selected -> only decks with 0 resolved colors
+      // - otherwise the deck's colors must exactly equal the selected set
+      let matchesColor = true;
+      if (deckColorFilter.length > 0) {
+        if (deckColorFilter.includes('C')) {
+          matchesColor = (d.colors || []).length === 0;
+        } else {
+          const deckCols = [...(d.colors || [])].sort();
+          const selCols = [...deckColorFilter.filter(c => c !== 'C')].sort();
+          matchesColor = deckCols.length === selCols.length && deckCols.every((c, i) => c === selCols[i]);
+        }
+      }
 
       return matchesSearch && matchesCommander && matchesFormat && matchesColor;
     });
@@ -559,7 +599,8 @@ export default function App() {
   const navItems = [
     { id: 'matches', label: 'Match History', icon: Swords },
     { id: 'live', label: 'Live Match HUD', icon: Activity },
-    { id: 'decks', label: 'Decks & Stats', icon: Layers },
+    { id: 'decks', label: 'Deck Library', icon: Layers },
+    { id: 'deckstats', label: 'Play Stats', icon: BarChart3 },
     { id: 'draft', label: 'Draft (v2)', icon: Sparkles, badge: 'SOON' },
     { id: 'collection', label: 'Collection (v2)', icon: BookOpen, badge: 'SOON' },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -1064,46 +1105,9 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 4: Decks & Stats */}
+        {/* VIEW 4A: Deck Library */}
         {activeTab === 'decks' && (
           <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-            {/* Sub-tab bar: Deck Library | Play Stats */}
-            <div className="flex items-center gap-1.5 shrink-0 p-1 rounded-xl border bg-black/30 w-fit" style={{ borderColor: palette?.border }}>
-              <button
-                onClick={() => setDecksSubTab('library')}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  decksSubTab === 'library' ? 'shadow-md' : 'opacity-60 hover:opacity-100'
-                }`}
-                style={{
-                  backgroundColor: decksSubTab === 'library' ? (palette?.accent || '#38BDF8') : 'transparent',
-                  color: decksSubTab === 'library' ? '#000000' : (palette?.text || '#F8FAFC'),
-                }}
-              >
-                Deck Library
-              </button>
-              <button
-                onClick={() => setDecksSubTab('stats')}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  decksSubTab === 'stats' ? 'shadow-md' : 'opacity-60 hover:opacity-100'
-                }`}
-                style={{
-                  backgroundColor: decksSubTab === 'stats' ? (palette?.accent || '#38BDF8') : 'transparent',
-                  color: decksSubTab === 'stats' ? '#000000' : (palette?.text || '#F8FAFC'),
-                }}
-              >
-                Play Stats
-              </button>
-            </div>
-
-            {/* Play Stats placeholder */}
-            {decksSubTab === 'stats' ? (
-              <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
-                <BarChart3 className="w-10 h-10 opacity-40" style={{ color: palette?.accent }} />
-                <h3 className="text-lg font-bold">Play Stats — Coming Soon</h3>
-                <p className="text-xs opacity-60 max-w-sm">Aggregated play statistics will arrive in a future iteration.</p>
-              </div>
-            ) : (
-              <>
             {/* Header */}
             <div className="flex items-center justify-between gap-4 shrink-0">
               <div>
@@ -1142,7 +1146,7 @@ export default function App() {
             </div>
 
             {/* Deck Library KPI Boxes */}
-            <div className="grid grid-cols-4 gap-4 shrink-0">
+            <div className="grid grid-cols-5 gap-4 shrink-0">
               <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
                 <div>
                   <p className="text-[10px] uppercase font-semibold opacity-60">Total Decks</p>
@@ -1164,17 +1168,28 @@ export default function App() {
                   <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Mono-Color</p>
                   <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topMono}</h3>
                 </div>
-                <ManaPip symbol="G" size={20} className="opacity-40" />
+                {deckKPIs.topMonoKey ? <ManaPip symbol={deckKPIs.topMonoKey as any} size={20} className="opacity-40" /> : <span className="text-[10px] opacity-30">—</span>}
               </div>
 
               <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Multi-Color</p>
-                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topMulti}</h3>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Dual-Color</p>
+                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topDual}</h3>
                 </div>
                 <div className="flex gap-0.5">
-                  <ManaPip symbol="G" size={20} className="opacity-40" />
-                  <ManaPip symbol="B" size={20} className="opacity-40" />
+                  {(deckKPIs.topDualKey || '').split('').map((c) => <ManaPip key={c} symbol={c as any} size={20} className="opacity-40" />)}
+                  {!deckKPIs.topDualKey && <span className="text-[10px] opacity-30">—</span>}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Tri-Color</p>
+                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topTri}</h3>
+                </div>
+                <div className="flex gap-0.5">
+                  {(deckKPIs.topTriKey || '').split('').map((c) => <ManaPip key={c} symbol={c as any} size={20} className="opacity-40" />)}
+                  {!deckKPIs.topTriKey && <span className="text-[10px] opacity-30">—</span>}
                 </div>
               </div>
             </div>
@@ -1183,7 +1198,7 @@ export default function App() {
             {showFilterPanel && (
               <div className="shrink-0 rounded-2xl border shadow-xl p-4 space-y-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-mono uppercase tracking-wider font-bold" style={{ color: palette?.accent }}>Filters</p>
+                  <Filter className="w-4 h-4" style={{ color: palette?.accent }} />
                   <button
                     onClick={() => { setShowFilterPanel(false); setDeckFormatFilter('ALL'); setDeckColorFilter([]); setCommanderFilter('ALL'); setCommanderSearch(''); }}
                     className="text-[10px] font-mono opacity-60 hover:opacity-100 underline"
@@ -1221,7 +1236,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Color filter (multi-select) */}
+                  {/* Color filter (multi-select, exact-match) */}
                   <div>
                     <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Color Identity</p>
                     <div className="flex items-center gap-2">
@@ -1240,8 +1255,18 @@ export default function App() {
                           </button>
                         );
                       })}
+                      {/* Colorless option */}
+                      <button
+                        onClick={() => {
+                          setDeckColorFilter(prev => prev.includes('C') ? prev.filter(x => x !== 'C') : [...prev, 'C']);
+                        }}
+                        className={`transition-all ${deckColorFilter.includes('C') ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                        title="Toggle Colorless"
+                      >
+                        <ManaPip symbol="C" size={24} />
+                      </button>
                     </div>
-                    <p className="text-[9px] font-mono opacity-40 mt-2">Deck must contain all selected colors</p>
+                    <p className="text-[9px] font-mono opacity-40 mt-2">Exact match on full color identity</p>
                   </div>
 
                   {/* Commander filter (type-ahead) */}
@@ -1253,17 +1278,20 @@ export default function App() {
                         placeholder="Search commander..."
                         value={commanderSearch}
                         onChange={(e) => setCommanderSearch(e.target.value)}
+                        onFocus={() => setCommanderSearchOpen(true)}
+                        onBlur={() => setTimeout(() => setCommanderSearchOpen(false), 150)}
                         className="w-full pl-3 pr-3 py-1.5 text-xs rounded-lg border bg-black/30 focus:outline-none"
                         style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
                       />
-                      {commanderSearchResults.length > 0 && (
+                      {commanderSearchOpen && commanderSearchResults.length > 0 && (
                         <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border shadow-2xl overflow-y-auto max-h-56 custom-scrollbar" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
                           {commanderSearchResults.map((o) => {
                             const isSelected = commanderFilter === o.value;
                             return (
                               <button
                                 key={o.value}
-                                onClick={() => { setCommanderFilter(o.value); setCommanderSearch(o.value === 'N/A' ? '' : o.label); setShowFilterPanel(false); }}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => { setCommanderFilter(o.value); setCommanderSearch(o.value === 'N/A' ? '' : o.label); setCommanderSearchOpen(false); }}
                                 className="w-full text-left px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 flex items-center justify-between"
                                 style={{ color: isSelected ? (palette?.accent || '#38BDF8') : (palette?.text || '#F8FAFC') }}
                               >
@@ -1359,8 +1387,15 @@ export default function App() {
                 )}
               </div>
             </div>
-              </>
-            )}
+          </div>
+        )}
+
+        {/* VIEW 4B: Play Stats */}
+        {activeTab === 'deckstats' && (
+          <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
+            <BarChart3 className="w-10 h-10 opacity-40" style={{ color: palette?.accent }} />
+            <h3 className="text-lg font-bold">Play Stats — Coming Soon</h3>
+            <p className="text-xs opacity-60 max-w-sm">Aggregated play statistics will arrive in a future iteration.</p>
           </div>
         )}
 
