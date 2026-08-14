@@ -1906,7 +1906,7 @@ export default function App() {
         onBack={() => setSelectedDeckName(null)}
         onSelectMatch={(matchId) => {
           setSelectedMatchId(matchId);
-          setIsDrawerOpenManual(true);
+          setIsFullInfoOpen(true);
         }}
         onViewAll={() => {
           setSelectedDeckName(null);
