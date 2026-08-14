@@ -118,6 +118,10 @@ pub async fn parse_deck_export(
             section = "Sideboard";
             continue;
         }
+        if trimmed.eq_ignore_ascii_case("About") {
+            section = "About";
+            continue;
+        }
 
         let parsed = parse_line(trimmed);
         let Some((qty, name, set_code, coll_num)) = parsed else { continue; };
@@ -230,5 +234,17 @@ mod tests {
         sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?").bind(deck)
             .execute(db.pool()).await.expect("cleanup");
         println!("roundtrip ok: {:?}", stored);
+    }
+
+    #[tokio::test]
+    async fn test_export_with_about_name_parses() {
+        // Export format now includes an About/Name header (Moxfield convention).
+        // Verify the import parser tolerates it and still resolves the deck.
+        let db = crate::db::DatabaseManager::init().await.expect("db init");
+        let sample = "About\nName Test Deck\n\nCommander\n1 Aang, at the Crossroads (TLA) 203\n\nDeck\n1 Cloudshift (JMP) 97\n";
+        let parsed = parse_deck_export(db.pool(), sample).await.expect("parse");
+        assert!(parsed.unresolved.is_empty(), "unresolved: {:?}", parsed.unresolved);
+        assert_eq!(parsed.commander.as_deref(), Some("Aang, at the Crossroads"));
+        assert_eq!(parsed.cards.len(), 2); // commander + cloudshift
     }
 }

@@ -1338,17 +1338,23 @@ async fn export_decklist(deck_name: String, source: String) -> Result<serde_json
         }
     }
 
-    // Format: "Commander\n1 Name (SET) num\n\nDeck\n...".
+    // Format: "About\nName <deck>\n\nCommander\n...\n\nDeck\n..." — matches the
+    // Moxfield/MTGA deck-name convention so re-imports preserve the deck name.
     let mut lines: Vec<String> = Vec::new();
+    lines.push("About".to_string());
+    lines.push(format!("Name {}", deck_name));
+
     if let Some(cgrp) = commander_grp {
         if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), cgrp).await {
             if let (Some(set), Some(num)) = (meta.set_code, meta.collector_number) {
+                lines.push("".to_string());
                 lines.push("Commander".to_string());
                 lines.push(format!("1 {} ({}) {}", meta.name, set, num));
             }
         }
     }
 
+    lines.push("".to_string());
     lines.push("Deck".to_string());
     for (grp, count) in &entries {
         if commander_grp == Some(*grp) { continue; } // commander already listed
