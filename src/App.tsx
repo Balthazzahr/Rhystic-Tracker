@@ -582,7 +582,7 @@ export default function App() {
   const deckRowVirtualizer = useVirtualizer({
     count: filteredDecks.length,
     getScrollElement: () => deckTableParentRef.current,
-    estimateSize: () => 84, // Exact row height: 84px
+    estimateSize: () => 92, // Exact row height: 92px
     overscan: 10,
   });
 
@@ -660,17 +660,31 @@ export default function App() {
     );
   };
 
-  const renderDeckColorIdentity = (colors?: string[]) => {
+  const renderDeckColorIdentity = (colors?: string[], size: number = 14) => {
     if (!colors || colors.length === 0) {
-      return <ManaPip symbol="C" size={14} className="shrink-0" />;
+      return <ManaPip symbol="C" size={size} className="shrink-0" />;
     }
     return (
-      <div className="flex flex-wrap items-center justify-center gap-0.5 w-[56px] max-w-[56px] shrink-0">
+      <div className="flex flex-wrap items-center justify-center gap-0.5 shrink-0">
         {colors.map((c) => (
-          <ManaPip key={c} symbol={c} size={14} className="shrink-0" />
+          <ManaPip key={c} symbol={c} size={size} className="shrink-0" />
         ))}
       </div>
     );
+  };
+
+  // Muted format-chip colors, inspired by the mana pip palette but toned down.
+  const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
+    switch (format.toLowerCase()) {
+      case 'brawl':
+        return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
+      case 'standard':
+        return { bg: '#F8717115', fg: '#FCA5A5', border: '#F8717130' };
+      case 'historic':
+        return { bg: '#34D39915', fg: '#6EE7B7', border: '#34D39930' };
+      default:
+        return { bg: '#94A3B815', fg: '#CBD5E1', border: '#94A3B830' };
+    }
   };
 
   // Format timestamp as "14 Aug 26 14:52" (day, short month, 2-digit year, HH:MM)
@@ -690,12 +704,27 @@ export default function App() {
   const scryfallArtUrl = (name: string) =>
     `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
-  // Win-rate gradient color: red (0%) → yellow (50%) → green (100%), with a
-  // smooth interpolation between the stops (HSL hue 0 → 60 → 120).
+  // Win-rate gradient: interpolate between the ManaPip theme colors — red
+  // (#F87171) at 0%, yellow mid, green (#34D399) at 100%. Matches the app's
+  // mana pip palette rather than a fluorescent HSL ramp.
   const winRateColor = (rate: string): string => {
-    const pct = Math.max(0, Math.min(100, parseFloat(rate) || 0));
-    const hue = (pct / 100) * 120; // 0=red, 60=yellow, 120=green
-    return `hsl(${hue} 85% 55%)`;
+    const pct = Math.max(0, Math.min(100, parseFloat(rate) || 0)) / 100;
+    const red: [number, number, number] = [0xF8, 0x71, 0x71];
+    const yellow: [number, number, number] = [0xF8, 0xCB, 0x6B];
+    const green: [number, number, number] = [0x34, 0xD3, 0x99];
+    let r: number, g: number, b: number;
+    if (pct <= 0.5) {
+      const t = pct * 2;
+      r = red[0] + (yellow[0] - red[0]) * t;
+      g = red[1] + (yellow[1] - red[1]) * t;
+      b = red[2] + (yellow[2] - red[2]) * t;
+    } else {
+      const t = (pct - 0.5) * 2;
+      r = yellow[0] + (green[0] - yellow[0]) * t;
+      g = yellow[1] + (green[1] - yellow[1]) * t;
+      b = yellow[2] + (green[2] - yellow[2]) * t;
+    }
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
   };
 
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
@@ -1357,11 +1386,11 @@ export default function App() {
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
                 <div className="flex items-center py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
                   <div className="flex-1 min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
-                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('Colors', 'colors')}</div>
-                  <div className="w-[100px] shrink-0 text-center">{renderDeckColHeader('Format', 'format')}</div>
-                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('Games', 'games')}</div>
-                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('W/L', 'record')}</div>
-                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
+                  <div className="w-[160px] shrink-0 flex justify-center">{renderDeckColHeader('Colors', 'colors')}</div>
+                  <div className="w-[140px] shrink-0 flex justify-center">{renderDeckColHeader('Format', 'format')}</div>
+                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Games', 'games')}</div>
+                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('W/L', 'record')}</div>
+                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
                 </div>
               </div>
 
@@ -1395,33 +1424,36 @@ export default function App() {
                           </div>
 
                           {/* Colors */}
-                          <div className="w-[110px] shrink-0 flex justify-center">
-                            {renderDeckColorIdentity(d.colors)}
+                          <div className="w-[160px] shrink-0 flex justify-center">
+                            {renderDeckColorIdentity(d.colors, 22)}
                           </div>
 
                           {/* Format chips (centered) */}
-                          <div className="w-[100px] shrink-0 flex flex-wrap gap-1 justify-center">
-                            {(d.formats || []).map((f: any, i: number) => (
-                              <span key={i} className="text-[11px] font-mono px-1 py-0.5 rounded bg-black/40 border" style={{ borderColor: palette?.border, color: palette?.subtext }}>
-                                {f.format}
-                              </span>
-                            ))}
+                          <div className="w-[140px] shrink-0 flex flex-wrap gap-1 justify-center">
+                            {(d.formats || []).map((f: any, i: number) => {
+                              const chip = formatChipColor(f.format);
+                              return (
+                                <span key={i} className="text-[13px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}>
+                                  {f.format}
+                                </span>
+                              );
+                            })}
                           </div>
 
                           {/* Games */}
-                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
+                          <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
                             {d.total_matches}
                           </div>
 
                           {/* W/L */}
-                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold">
+                          <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold">
                             <span className="text-emerald-400">{d.wins}</span>
                             <span className="opacity-50" style={{ color: palette?.subtext }}> / </span>
                             <span className="text-rose-400">{d.losses}</span>
                           </div>
 
                           {/* Win Rate */}
-                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: winRateColor(d.winrate) }}>
+                          <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold" style={{ color: winRateColor(d.winrate) }}>
                             {d.winrate}
                           </div>
                         </div>
