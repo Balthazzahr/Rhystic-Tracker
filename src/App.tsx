@@ -15,12 +15,15 @@ import {
   Search,
   Filter,
   ListFilter,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ManaPip } from './components/ManaPip';
+import { ManaFontPip } from './components/ManaFontPip';
+import { parseMtgaManaCost } from './utils/manaUtils';
 import { SettingsView } from './components/SettingsView';
 import { CustomDropdown } from './components/CustomDropdown';
 import { CardItem } from './components/CardBreakdown';
@@ -104,6 +107,7 @@ export default function App() {
   const [deckOverview, setDeckOverview] = useState<any[]>([]);
   const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null);
   const [deckDetail, setDeckDetail] = useState<any>(null);
+  const [deckCardOverlay, setDeckCardOverlay] = useState<any>(null);
   const [deckSearch, setDeckSearch] = useState('');
   const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
   const [commanderSearch, setCommanderSearch] = useState('');
@@ -217,6 +221,14 @@ export default function App() {
     }, 5000);
     return () => clearInterval(timer);
   }, [impactfulCards]);
+
+  // Close the deck library card overlay with Escape.
+  useEffect(() => {
+    if (!deckCardOverlay) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDeckCardOverlay(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [deckCardOverlay]);
 
   const [liveMatchState, setLiveMatchState] = useState<{
     status: string;
@@ -728,9 +740,15 @@ export default function App() {
   };
 
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
-  // random non-land card (non-commander). Falls back to a placeholder on load error.
+  // random non-land card (non-commander). Clicking opens the card overlay.
   const renderDeckArt = (d: any, size: string = 'w-10 h-10') => {
     const artName = d.top_commander_name || d.top_card_name;
+    const openOverlay = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const entry = d.key_cards?.find((k: any) => k.name === artName)
+        || (artName ? { name: artName, grp_id: d.top_commander_grp_id || d.top_card_grp_id } : null);
+      if (entry) setDeckCardOverlay({ card: entry, isCommander: d.top_commander_name === artName });
+    };
     if (!artName) {
       return (
         <div className={`${size} rounded-lg bg-black/40 border shrink-0 flex items-center justify-center`} style={{ borderColor: palette?.border }}>
@@ -742,7 +760,8 @@ export default function App() {
       <img
         src={scryfallArtUrl(artName)}
         alt={artName}
-        className={`${size} rounded-lg object-cover shrink-0 border`}
+        onClick={openOverlay}
+        className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer hover:opacity-85 transition-opacity`}
         style={{ borderColor: `${palette?.border}66` }}
         loading="lazy"
         onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
@@ -750,20 +769,22 @@ export default function App() {
     );
   };
 
-  // Sortable column header: click to toggle asc/desc.
+  // Sortable column header: click to toggle asc/desc (no-op when sortKey empty).
   const renderDeckColHeader = (label: string, sortKey: string) => {
-    const active = deckSortKey === sortKey;
+    const active = sortKey ? deckSortKey === sortKey : false;
     return (
       <button
-        onClick={() => toggleDeckSort(sortKey)}
+        onClick={() => sortKey && toggleDeckSort(sortKey)}
         className="flex items-center gap-1 hover:opacity-100 transition-opacity uppercase text-xs font-semibold"
         style={{ color: active ? (palette?.accent || '#38BDF8') : palette?.subtext }}
-        title={`Sort by ${label}`}
+        title={sortKey ? `Sort by ${label}` : undefined}
       >
         {label}
-        <span className="text-[9px] font-mono opacity-70">
-          {active ? (deckSortDir === 'asc' ? '▲' : '▼') : '↕'}
-        </span>
+        {sortKey && (
+          <span className="text-[9px] font-mono opacity-70">
+            {active ? (deckSortDir === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        )}
       </button>
     );
   };
@@ -1386,6 +1407,7 @@ export default function App() {
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
                 <div className="flex items-center py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
                   <div className="flex-1 min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
+                  <div className="hidden xl:flex w-[170px] shrink-0 justify-center">{renderDeckColHeader('Key Cards', '')}</div>
                   <div className="w-[160px] shrink-0 flex justify-center">{renderDeckColHeader('Colors', 'colors')}</div>
                   <div className="w-[140px] shrink-0 flex justify-center">{renderDeckColHeader('Format', 'format')}</div>
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Games', 'games')}</div>
@@ -1421,6 +1443,22 @@ export default function App() {
                                 {d.deck_name}
                               </div>
                             </div>
+                          </div>
+
+                          {/* Key Cards (low-priority column — drops first on narrow widths) */}
+                          <div className="hidden xl:flex w-[170px] shrink-0 items-center justify-center gap-1.5">
+                            {(d.key_cards || []).slice(0, 3).map((k: any) => (
+                              <img
+                                key={k.grp_id}
+                                src={scryfallArtUrl(k.name)}
+                                alt={k.name}
+                                onClick={(e) => { e.stopPropagation(); setDeckCardOverlay({ card: k, isCommander: false }); }}
+                                className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer hover:opacity-85 transition-opacity"
+                                style={{ borderColor: `${palette?.border}66` }}
+                                loading="lazy"
+                                onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                              />
+                            ))}
                           </div>
 
                           {/* Colors */}
@@ -1999,6 +2037,62 @@ export default function App() {
           setIsDrawerOpenManual(true);
         }}
       />
+
+      {/* Deck Library card overlay (click a deck's art or key card) */}
+      {deckCardOverlay && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+          onClick={() => setDeckCardOverlay(null)}
+        >
+          <div className="flex flex-col items-center max-h-full overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setDeckCardOverlay(null)}
+              className="self-end mb-2 flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold opacity-70 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5 transition-opacity"
+              style={{ color: palette?.text, borderColor: palette?.border }}
+              title="Close (Esc)"
+            >
+              <X className="w-4 h-4" /> Close
+            </button>
+
+            <div className="w-[340px] rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
+              <img
+                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(deckCardOverlay.card.name)}&format=image&version=normal`}
+                alt={deckCardOverlay.card.name}
+                className="w-full"
+              />
+            </div>
+
+            <div className="mt-3 w-[340px] rounded-xl border p-4 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{deckCardOverlay.card.name}</p>
+                <span className="shrink-0 flex items-center gap-0.5">
+                  {parseMtgaManaCost(deckCardOverlay.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
+                </span>
+              </div>
+              {deckCardOverlay.isCommander && (
+                <p className="text-[11px] font-mono uppercase tracking-wide" style={{ color: palette?.accent || '#38BDF8' }}>Commander</p>
+              )}
+              {deckCardOverlay.card.card_type && (
+                <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
+                  {deckCardOverlay.card.card_type}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
+                <div>
+                  <p className="text-[9px] font-mono uppercase opacity-50">Mana Value</p>
+                  <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{deckCardOverlay.card.cmc || 0}</p>
+                </div>
+                {deckCardOverlay.card.set_code && (
+                  <div>
+                    <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
+                    <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{deckCardOverlay.card.set_code}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

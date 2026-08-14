@@ -314,6 +314,29 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // 4b. Every non-land card per deck (for the Key Cards column). These are the
+    //     highest-MV creature / highest-MV spell / highest-MV other in the deck.
+    let key_card_rows = sqlx::query(
+        r#"
+        SELECT m.hero_deck_name as deck_name,
+               c.name, MIN(c.grp_id) as grp_id,
+               MAX(c.cmc) as cmc,
+               c.card_type, c.mana_cost, c.rarity, c.set_code
+        FROM match_cards mc
+        JOIN matches m ON mc.match_id = m.id
+        JOIN cards_cache c ON mc.grp_id = c.grp_id
+        WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
+          AND mc.is_opponent = 0
+          AND c.card_type IS NOT NULL
+          AND c.card_type != ''
+          AND lower(c.card_type) NOT LIKE '%land%'
+        GROUP BY m.hero_deck_name, c.name, c.card_type, c.mana_cost, c.rarity, c.set_code
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
     // Assemble.
     let order = ["W", "U", "B", "R", "G"];
     let mut result = Vec::new();
@@ -424,6 +447,122 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             }
         }
 
+        // Key Cards: three representative non-commander cards — highest-MV
+        // creature, highest-MV spell (instant/sorcery), highest-MV other
+        // (non-creature, non-instant/sorcery, non-land). Fallbacks if a
+        // category is missing: extra spell if no creatures, extra creature if
+        // no spells, extra creature if no others.
+        let mut key_cards: Vec<serde_json::Value> = Vec::new();
+        let mut used: Vec<String> = Vec::new();
+        for kc in &key_card_rows {
+            let kdeck: String = kc.get("deck_name");
+            if kdeck != deck_name { continue; }
+            let name: String = kc.get("name");
+            let card_type: Option<String> = kc.get("card_type");
+            let ct = card_type.as_deref().unwrap_or("").to_lowercase();
+            if top_commander_name.as_deref() == Some(name.as_str()) { continue; }
+            if used.contains(&name) { continue; }
+
+            let is_creature = ct.contains("creature");
+            let is_spell = ct.contains("instant") || ct.contains("sorcery");
+            let is_other = !is_creature && !is_spell;
+
+            // Target slot index: 0=creature, 1=spell, 2=other.
+            let slot = if is_creature { 0 } else if is_spell { 1 } else { 2 };
+            // If this slot's card would be a better fit (higher CMC), replace it.
+            let cmc: i64 = kc.get("cmc");
+            let replace = match key_cards.get(slot) {
+                Some(existing) => {
+                    let existing_cmc = existing.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
+                    cmc > existing_cmc
+                }
+                None => true,
+            };
+            if replace {
+                let entry = serde_json::json!({
+                    "name": name.clone(),
+                    "grp_id": kc.get::<i64,_>("grp_id"),
+                    "cmc": cmc,
+                    "card_type": card_type,
+                    "mana_cost": kc.get::<Option<String>,_>("mana_cost"),
+                    "rarity": kc.get::<i64,_>("rarity"),
+                    "set_code": kc.get::<Option<String>,_>("set_code"),
+                });
+                if key_cards.len() <= slot {
+                    while key_cards.len() < slot { key_cards.push(serde_json::Value::Null); }
+                    key_cards.push(entry);
+                } else {
+                    // Replacing an existing slot: free up the old name.
+                    if let Some(old) = key_cards[slot].get("name").and_then(|v| v.as_str()) {
+                        if let Some(pos) = used.iter().position(|u| u == old) { used.remove(pos); }
+                    }
+                    key_cards[slot] = entry;
+                }
+                used.push(name);
+            }
+        }
+
+        // Fill gaps with fallback logic (extra creature/spell/other).
+        let fill_order = [
+            // fill creature slot -> prefer another creature, else spell, else other
+            (0usize, vec!["creature", "spell", "other"]),
+            (1usize, vec!["spell", "creature", "other"]),
+            (2usize, vec!["other", "creature", "spell"]),
+        ];
+        // Rescan key_card_rows for the best remaining candidate per priority.
+        for (slot, priority) in &fill_order {
+            if key_cards.len() > *slot && !key_cards[*slot].is_null() { continue; }
+            // Gather remaining unused candidates in priority order.
+            for kind in priority {
+                let mut best: Option<serde_json::Value> = None;
+                for kc in &key_card_rows {
+                    let kdeck: String = kc.get("deck_name");
+                    if kdeck != deck_name { continue; }
+                    let name: String = kc.get("name");
+                    if used.contains(&name) { continue; }
+                    if top_commander_name.as_deref() == Some(name.as_str()) { continue; }
+                    let card_type: Option<String> = kc.get("card_type");
+                    let ct = card_type.as_deref().unwrap_or("").to_lowercase();
+                    let is_creature = ct.contains("creature");
+                    let is_spell = ct.contains("instant") || ct.contains("sorcery");
+                    let is_other = !is_creature && !is_spell;
+                    let matches_kind = match *kind {
+                        "creature" => is_creature,
+                        "spell" => is_spell,
+                        _ => is_other,
+                    };
+                    if !matches_kind { continue; }
+                    let cmc: i64 = kc.get("cmc");
+                    let replace = match &best {
+                        Some(b) => cmc > b.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0),
+                        None => true,
+                    };
+                    if replace {
+                        best = Some(serde_json::json!({
+                            "name": name.clone(),
+                            "grp_id": kc.get::<i64,_>("grp_id"),
+                            "cmc": cmc,
+                            "card_type": card_type,
+                            "mana_cost": kc.get::<Option<String>,_>("mana_cost"),
+                            "rarity": kc.get::<i64,_>("rarity"),
+                            "set_code": kc.get::<Option<String>,_>("set_code"),
+                        }));
+                    }
+                }
+                if let Some(card) = best {
+                    if let Some(n) = card.get("name").and_then(|v| v.as_str()) {
+                        used.push(n.to_string());
+                    }
+                    while key_cards.len() < *slot { key_cards.push(serde_json::Value::Null); }
+                    key_cards.insert(*slot, card);
+                    break;
+                }
+            }
+        }
+        // Drop null placeholders, cap at 3.
+        key_cards.retain(|v| !v.is_null());
+        key_cards.truncate(3);
+
         result.push(serde_json::json!({
             "deck_name": deck_name,
             "total_matches": total,
@@ -438,6 +577,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             "top_commander_grp_id": top_commander_grp,
             "top_card_name": top_card_name,
             "top_card_grp_id": top_card_grp,
+            "key_cards": key_cards,
         }));
         let _ = &mut colors_arr;
     }
