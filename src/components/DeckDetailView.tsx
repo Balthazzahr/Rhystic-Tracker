@@ -14,6 +14,7 @@ interface DeckDetailViewProps {
   onBack: () => void;
   onSelectMatch: (matchId: string) => void;
   onViewAll: () => void;
+  onDeckListImported?: () => void;
   formatDateShort: (ts: string) => string;
 }
 
@@ -130,6 +131,7 @@ export function DeckDetailView({
   onBack,
   onSelectMatch,
   onViewAll,
+  onDeckListImported,
   formatDateShort,
 }: DeckDetailViewProps) {
   const [hoverCmdr, setHoverCmdr] = useState<{ x: number; y: number } | null>(null);
@@ -223,18 +225,9 @@ export function DeckDetailView({
           >
             <ChevronLeft className="w-4 h-4" /> Deck Library
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setImportOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
-              style={{ color: palette?.accent || '#38BDF8', borderColor: `${palette?.accent}55` }}
-            >
-              <Upload className="w-3.5 h-3.5" /> Import Decklist
-            </button>
-            <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (mouse back)">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (mouse back)">
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -372,9 +365,8 @@ export function DeckDetailView({
 
             {/* Main content area: decklist (True Decklist / All Logged Cards) */}
             <div className="flex-1 p-5 overflow-hidden min-h-0 flex flex-col">
-              {/* Source toggle */}
-              <div className="flex items-center gap-2 mb-3 shrink-0">
-                <span className="text-[10px] font-mono uppercase tracking-wider opacity-50" style={{ color: palette?.text }}>Source</span>
+              {/* Source toggle + import */}
+              <div className="flex items-center justify-between mb-3 shrink-0">
                 <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: palette?.border }}>
                   <button
                     onClick={() => setListMode('true')}
@@ -391,6 +383,13 @@ export function DeckDetailView({
                     All Logged Cards
                   </button>
                 </div>
+                <button
+                  onClick={() => setImportOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
+                  style={{ color: palette?.accent || '#38BDF8', borderColor: `${palette?.accent}55` }}
+                >
+                  <Upload className="w-3.5 h-3.5" /> Import Decklist
+                </button>
               </div>
 
               {/* Mode content */}
@@ -471,6 +470,7 @@ export function DeckDetailView({
                       setImportResult(res);
                       setListMode('true');
                       setImportText('');
+                      onDeckListImported?.();
                     } catch (e: any) {
                       setImportError(String(e));
                     } finally {

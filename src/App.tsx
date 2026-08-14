@@ -1913,6 +1913,16 @@ export default function App() {
           setDeckSearch(deckDetail?.deck_name || '');
           setActiveTab('matches');
         }}
+        onDeckListImported={async () => {
+          // Refresh deck detail (charts follow the True Decklist now).
+          if (!selectedDeckName) return;
+          try {
+            const detail = await invoke<any>('get_deck_detail', { deckName: selectedDeckName });
+            setDeckDetail(detail);
+          } catch (e) {
+            console.error('Failed to refresh deck detail after import:', e);
+          }
+        }}
         formatDateShort={formatDateShort}
       />
 

@@ -71,9 +71,16 @@ function TrueDeckListView({ data, totalMatches, status, palette }: TrueDeckListV
   const cards: CardEntry[] = data?.cards || [];
   const sideboard: CardEntry[] = data?.sideboard || [];
 
+  // Commander (Brawl imports list it first). Split it out so it renders as its
+  // own section at the top; the commander is also part of the deck.
+  const commanderCard = data?.commander_grp_id
+    ? cards.find(c => c.grp_id === data.commander_grp_id)
+    : undefined;
+  const deckCards = commanderCard ? cards.filter(c => c.grp_id !== commanderCard.grp_id) : cards;
+
   // Group main deck by type.
   const groups = new Map<string, CardEntry[]>();
-  for (const c of cards) {
+  for (const c of deckCards) {
     const cat = categorize(c.card_type);
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat)!.push(c);
@@ -133,35 +140,41 @@ function TrueDeckListView({ data, totalMatches, status, palette }: TrueDeckListV
   );
 
   const totalCards = cards.reduce((s, c) => s + c.count, 0);
+  const commanderSymbols = commanderCard ? parseMtgaManaCost(commanderCard.mana_cost || '') : [];
+
+  const renderCommander = () => {
+    if (!commanderCard) return null;
+    return (
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 mb-2 pb-1.5 border-b" style={{ borderColor: `${palette?.border}66` }}>
+          <span className="ms ms-commander shrink-0" style={{ fontSize: 20, color: palette?.text }} />
+          <span className="text-[15px] font-mono uppercase tracking-wider font-bold truncate" style={{ color: palette?.text }}>
+            Commander
+          </span>
+          <span className="text-[12px] font-mono opacity-40 shrink-0">(1)</span>
+        </div>
+        <div className="space-y-0.5">
+          {renderRow(commanderCard)}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
+      {/* Summary */}
       <div className="flex items-center justify-between mb-3 shrink-0">
-        <p className="text-[14px] font-mono uppercase tracking-wider font-bold" style={{ color: palette?.accent }}>
-          True Decklist
-        </p>
         <p className="text-[12px] font-mono opacity-50">
-          {cards.length} distinct • {totalCards} cards
+          {deckCards.length} distinct • {totalCards} cards
           {data?.updated_at ? ` • imported ${new Date(data.updated_at).toLocaleDateString()}` : ''}
         </p>
       </div>
-
-      {/* Stale-mismatch hint */}
-      {status?.missing_count > 0 && (
-        <div className="mb-3 px-3 py-2 rounded-lg border text-[10px] font-mono leading-relaxed shrink-0"
-          style={{ borderColor: `${palette?.accent}44`, backgroundColor: `${palette?.surface}88` }}>
-          <span style={{ color: palette?.text }} className="opacity-80">
-            {status.missing_count} cards seen in recent matches aren't in your imported
-            list — the deck may have changed.
-          </span>
-        </div>
-      )}
 
       {/* Card columns */}
       <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
         <div className="grid gap-x-8 gap-y-5 items-start" style={{ gridTemplateColumns: `repeat(2, minmax(0,1fr))` }}>
           <div className="min-w-0 space-y-5">
+            {renderCommander()}
             {colA.map(renderGroup)}
           </div>
           <div className="min-w-0 space-y-5">

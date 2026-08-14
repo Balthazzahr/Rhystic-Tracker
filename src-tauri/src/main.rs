@@ -591,20 +591,59 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
     // Stage 2 chart data: mana value histogram, card-type distribution, and
     // mana-color distribution. Each card counts ONCE (distinct grp_id) so the
     // distributions reflect deck composition, not match frequency.
-    let chart_rows = sqlx::query(
-        r#"
-        SELECT c.card_type, c.mana_cost, c.color_identity, c.colors
-        FROM match_cards mc
-        JOIN matches m ON mc.match_id = m.id
-        JOIN cards_cache c ON mc.grp_id = c.grp_id
-        WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
-        GROUP BY c.grp_id
-        "#
+    //
+    // When a True Decklist has been imported, the charts follow it — the stored
+    // grp_ids ARE the authoritative deck composition. Otherwise fall back to
+    // aggregated logged cards.
+    let list_row = sqlx::query(
+        "SELECT cards_json FROM deck_lists WHERE deck_name = ?"
     )
     .bind(&deck_name)
-    .fetch_all(db.pool())
+    .fetch_optional(db.pool())
     .await
     .map_err(|e| e.to_string())?;
+
+    let chart_rows = if let Some(row) = list_row {
+        let cards_json: String = row.get("cards_json");
+        let entries: Vec<serde_json::Value> = serde_json::from_str(&cards_json).unwrap_or_default();
+        let grp_ids: Vec<i64> = entries.iter()
+            .filter_map(|e| e.get("grp_id").and_then(|v| v.as_i64()))
+            .collect();
+
+        if grp_ids.is_empty() {
+            Vec::new()
+        } else {
+            // Query card metadata for the stored grp_ids (deck composition).
+            let placeholders = grp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let q = format!(
+                r#"
+                SELECT c.card_type, c.mana_cost, c.color_identity, c.colors
+                FROM cards_cache c
+                WHERE c.grp_id IN ({})
+                "#
+            , placeholders);
+            let mut q = sqlx::query(&q);
+            for id in &grp_ids {
+                q = q.bind(*id);
+            }
+            q.fetch_all(db.pool()).await.map_err(|e| e.to_string())?
+        }
+    } else {
+        sqlx::query(
+            r#"
+            SELECT c.card_type, c.mana_cost, c.color_identity, c.colors
+            FROM match_cards mc
+            JOIN matches m ON mc.match_id = m.id
+            JOIN cards_cache c ON mc.grp_id = c.grp_id
+            WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+            GROUP BY c.grp_id
+            "#
+        )
+        .bind(&deck_name)
+        .fetch_all(db.pool())
+        .await
+        .map_err(|e| e.to_string())?
+    };
 
     // For Brawl decks, the mana-color distribution must stay within the
     // commander's color identity (cards outside it are legacy leaks). Detect
