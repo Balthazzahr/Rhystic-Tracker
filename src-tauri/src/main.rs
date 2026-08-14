@@ -643,24 +643,28 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         let cat = chart_category(ct.as_deref().unwrap_or("Other"));
         *type_map.entry(cat).or_insert(0) += 1;
 
-        // Mana colors (each card counts once per color it has).
-        let mut card_colors: Vec<String> = Vec::new();
-        for src in [ci, cols].into_iter().flatten() {
-            for ch in src.chars() {
-                if !ch.is_ascii_alphanumeric() { continue; }
-                let c = match ch {
-                    '1' | 'W' => "W", '2' | 'U' => "U", '3' | 'B' => "B", '4' | 'R' => "R", '5' | 'G' => "G",
-                    _ => "",
-                };
-                if !c.is_empty() && !card_colors.contains(&c.to_string()) {
-                    card_colors.push(c.to_string());
+        // Mana colors (each card counts once per color it has). Lands are
+        // excluded — this distribution reflects spell colors only.
+        let is_land = ct.as_deref().map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
+        if !is_land {
+            let mut card_colors: Vec<String> = Vec::new();
+            for src in [ci, cols].into_iter().flatten() {
+                for ch in src.chars() {
+                    if !ch.is_ascii_alphanumeric() { continue; }
+                    let c = match ch {
+                        '1' | 'W' => "W", '2' | 'U' => "U", '3' | 'B' => "B", '4' | 'R' => "R", '5' | 'G' => "G",
+                        _ => "",
+                    };
+                    if !c.is_empty() && !card_colors.contains(&c.to_string()) {
+                        card_colors.push(c.to_string());
+                    }
                 }
             }
-        }
-        if card_colors.is_empty() {
-            *color_counts.entry("C".to_string()).or_insert(0) += 1;
-        } else {
-            for c in card_colors { *color_counts.entry(c).or_insert(0) += 1; }
+            if card_colors.is_empty() {
+                *color_counts.entry("C".to_string()).or_insert(0) += 1;
+            } else {
+                for c in card_colors { *color_counts.entry(c).or_insert(0) += 1; }
+            }
         }
     }
 
