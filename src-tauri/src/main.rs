@@ -4,6 +4,7 @@ mod match_assembler;
 mod db;
 mod theme;
 mod card_db;
+mod deck_list;
 
 use std::path::PathBuf;
 use tokio::sync::mpsc;
@@ -1034,6 +1035,203 @@ fn parse_identity(s: String) -> Vec<String> {
     out
 }
 
+/// Imports a pasted MTGA deck export for a given deck, resolving every card to
+/// a grp_id at import time and storing [{grp_id, count}] JSON. Import never
+/// touches match_cards — it is an authoritative canonical list used for the
+/// "True Decklist" view.
+#[tauri::command]
+async fn save_deck_list(deck_name: String, export_text: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let parsed = deck_list::parse_deck_export(db.pool(), &export_text).await?;
+
+    let commander_grp = deck_list::commander_to_grp(db.pool(), parsed.commander.clone()).await
+        .map_err(|e| e.to_string())?;
+    let cards_json = deck_list::cards_to_json(&parsed.cards);
+    let sideboard_json = deck_list::cards_to_json(&parsed.sideboard);
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"
+        INSERT INTO deck_lists (deck_name, cards_json, sideboard_json, commander_grp_id, source, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'export', ?, ?)
+        ON CONFLICT(deck_name) DO UPDATE SET
+            cards_json = excluded.cards_json,
+            sideboard_json = excluded.sideboard_json,
+            commander_grp_id = excluded.commander_grp_id,
+            updated_at = excluded.updated_at
+        "#
+    )
+    .bind(&deck_name)
+    .bind(&cards_json)
+    .bind(&sideboard_json)
+    .bind(commander_grp)
+    .bind(&now)
+    .bind(&now)
+    .execute(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "deck_name": deck_name,
+        "card_count": parsed.cards.len(),
+        "sideboard_count": parsed.sideboard.len(),
+        "commander": parsed.commander,
+        "unresolved": parsed.unresolved,
+        "saved_at": now,
+    }))
+}
+
+/// Returns the stored True Decklist for a deck (resolved grp_ids), with card
+/// metadata joined in, or null if none has been imported.
+#[tauri::command]
+async fn get_deck_list(deck_name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let row = sqlx::query(
+        r#"
+        SELECT cards_json, sideboard_json, commander_grp_id, created_at, updated_at
+        FROM deck_lists WHERE deck_name = ?
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let Some(row) = row else {
+        return Ok(serde_json::json!(null));
+    };
+
+    let cards_json: String = row.get("cards_json");
+    let sideboard_json: Option<String> = row.get("sideboard_json");
+    let commander_grp_id: Option<i64> = row.get("commander_grp_id");
+    let created_at: String = row.get("created_at");
+    let updated_at: String = row.get("updated_at");
+
+    // Join card metadata for the stored grp_ids.
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&cards_json).unwrap_or_default();
+    let mut cards: Vec<serde_json::Value> = Vec::new();
+    for entry in entries {
+        let grp_id: i64 = entry.get("grp_id").and_then(|v| v.as_i64()).unwrap_or(0);
+        let count: i64 = entry.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+        let meta = card_db::get_card_metadata(db.pool(), grp_id).await
+            .map_err(|e| e.to_string())?
+            .unwrap_or(card_db::CardMetadata {
+                grp_id,
+                name: format!("Unknown Card (#{})", grp_id),
+                mana_cost: None, cmc: 0, colors: None, color_identity: None,
+                set_code: None, rarity: 0, collector_number: None, card_type: None,
+            });
+        cards.push(serde_json::json!({
+            "grp_id": grp_id,
+            "count": count,
+            "name": meta.name,
+            "mana_cost": meta.mana_cost,
+            "card_type": meta.card_type,
+            "colors": meta.colors,
+            "color_identity": meta.color_identity,
+            "cmc": meta.cmc,
+            "rarity": meta.rarity,
+            "set_code": meta.set_code,
+        }));
+    }
+
+    let sideboard: Vec<serde_json::Value> = match sideboard_json {
+        Some(sj) => {
+            let entries: Vec<serde_json::Value> = serde_json::from_str(&sj).unwrap_or_default();
+            let mut out = Vec::new();
+            for entry in entries {
+                let grp_id: i64 = entry.get("grp_id").and_then(|v| v.as_i64()).unwrap_or(0);
+                let count: i64 = entry.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                let meta = card_db::get_card_metadata(db.pool(), grp_id).await
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or(card_db::CardMetadata {
+                        grp_id,
+                        name: format!("Unknown Card (#{})", grp_id),
+                        mana_cost: None, cmc: 0, colors: None, color_identity: None,
+                        set_code: None, rarity: 0, collector_number: None, card_type: None,
+                    });
+                out.push(serde_json::json!({
+                    "grp_id": grp_id, "count": count, "name": meta.name,
+                    "mana_cost": meta.mana_cost, "card_type": meta.card_type,
+                    "cmc": meta.cmc, "rarity": meta.rarity, "set_code": meta.set_code,
+                }));
+            }
+            out
+        }
+        None => Vec::new(),
+    };
+
+    Ok(serde_json::json!({
+        "deck_name": deck_name,
+        "commander_grp_id": commander_grp_id,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "cards": cards,
+        "sideboard": sideboard,
+    }))
+}
+
+/// Reports whether a True Decklist exists for a deck and how many of the deck's
+/// logged cards are absent from it (stale-mismatch indicator for the UI).
+#[tauri::command]
+async fn get_deck_list_status(deck_name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let row = sqlx::query(
+        "SELECT cards_json FROM deck_lists WHERE deck_name = ?"
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let Some(row) = row else {
+        return Ok(serde_json::json!({ "has_list": false }));
+    };
+
+    let cards_json: String = row.get("cards_json");
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&cards_json).unwrap_or_default();
+    let stored_names: std::collections::HashSet<String> = {
+        let mut set = std::collections::HashSet::new();
+        for e in entries {
+            if let Some(id) = e.get("grp_id").and_then(|v| v.as_i64()) {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), id).await {
+                    set.insert(meta.name);
+                }
+            }
+        }
+        set
+    };
+
+    // Logged distinct card names for this deck (player side).
+    let logged_rows = sqlx::query(
+        r#"
+        SELECT DISTINCT c.name
+        FROM match_cards mc
+        JOIN matches m ON mc.match_id = m.id
+        JOIN cards_cache c ON mc.grp_id = c.grp_id
+        WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let logged_names: std::collections::HashSet<String> =
+        logged_rows.iter().map(|r| r.get::<String,_>("name")).collect();
+    let missing: Vec<&String> = logged_names.iter()
+        .filter(|n| !stored_names.contains(*n))
+        .collect();
+
+    Ok(serde_json::json!({
+        "has_list": true,
+        "logged_count": logged_names.len(),
+        "stored_count": stored_names.len(),
+        "missing_count": missing.len(),
+    }))
+}
+
 #[tauri::command]
 async fn get_match_cards(match_id: String) -> Result<Vec<serde_json::Value>, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
@@ -1602,6 +1800,9 @@ fn main() {
             get_deck_overview,
             get_deck_detail,
             get_deck_cards,
+            save_deck_list,
+            get_deck_list,
+            get_deck_list_status,
             get_card_info,
             get_commander_info,
             get_opponent_h2h_stats,

@@ -99,6 +99,15 @@ impl DatabaseManager {
             );
             CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
             CREATE INDEX IF NOT EXISTS idx_match_turn_events_match_id ON match_turn_events(match_id);
+            CREATE TABLE IF NOT EXISTS deck_lists (
+                deck_name TEXT PRIMARY KEY,
+                cards_json TEXT NOT NULL,
+                sideboard_json TEXT,
+                commander_grp_id INTEGER,
+                source TEXT DEFAULT 'export',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             "#
         )
         .execute(&pool)

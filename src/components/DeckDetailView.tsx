@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X } from 'lucide-react';
+import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, CheckCircle, AlertTriangle } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
+import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
 import DeckCardList from './DeckCardList';
+import TrueDeckListView from './TrueDeckListView';
 
 interface DeckDetailViewProps {
   isOpen: boolean;
@@ -132,6 +134,40 @@ export function DeckDetailView({
 }: DeckDetailViewProps) {
   const [hoverCmdr, setHoverCmdr] = useState<{ x: number; y: number } | null>(null);
   const [tip, setTip] = useState<Tip | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [deckListData, setDeckListData] = useState<any>(null);
+  const [deckListStatus, setDeckListStatus] = useState<any>(null);
+  const [listMode, setListMode] = useState<'logged' | 'true'>('logged');
+
+  // Load the stored True Decklist + status whenever the deck or import changes.
+  useEffect(() => {
+    if (!isOpen || !deckName) { setDeckListData(null); setDeckListStatus(null); return; }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [list, status] = await Promise.all([
+          invoke<any>('get_deck_list', { deckName }),
+          invoke<any>('get_deck_list_status', { deckName }),
+        ]);
+        if (cancelled) return;
+        setDeckListData(list);
+        setDeckListStatus(status);
+        // Default to True Decklist if one exists, else All Logged Cards.
+        setListMode(prev => {
+          if (prev === 'logged') return list ? 'true' : 'logged';
+          return prev;
+        });
+      } catch (e) {
+        if (!cancelled) { setDeckListData(null); setDeckListStatus(null); }
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [isOpen, deckName, importResult]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -187,9 +223,18 @@ export function DeckDetailView({
           >
             <ChevronLeft className="w-4 h-4" /> Deck Library
           </button>
-          <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (mouse back)">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setImportOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
+              style={{ color: palette?.accent || '#38BDF8', borderColor: `${palette?.accent}55` }}
+            >
+              <Upload className="w-3.5 h-3.5" /> Import Decklist
+            </button>
+            <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (mouse back)">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -325,12 +370,123 @@ export function DeckDetailView({
               </div>
             </div>
 
-            {/* Main content area: categorized decklist (Stage 3) */}
-            <div className="flex-1 p-5 overflow-hidden min-h-0">
-              <DeckCardList deckName={deckName} palette={palette} />
+            {/* Main content area: decklist (True Decklist / All Logged Cards) */}
+            <div className="flex-1 p-5 overflow-hidden min-h-0 flex flex-col">
+              {/* Source toggle */}
+              <div className="flex items-center gap-2 mb-3 shrink-0">
+                <span className="text-[10px] font-mono uppercase tracking-wider opacity-50" style={{ color: palette?.text }}>Source</span>
+                <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: palette?.border }}>
+                  <button
+                    onClick={() => setListMode('true')}
+                    className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors ${listMode === 'true' ? '' : 'opacity-50 hover:opacity-80'}`}
+                    style={{ color: listMode === 'true' ? palette?.accent : palette?.text, backgroundColor: listMode === 'true' ? `${palette?.accent}1a` : 'transparent' }}
+                  >
+                    True Decklist
+                  </button>
+                  <button
+                    onClick={() => setListMode('logged')}
+                    className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors border-l ${listMode === 'logged' ? '' : 'opacity-50 hover:opacity-80'}`}
+                    style={{ color: listMode === 'logged' ? palette?.accent : palette?.text, backgroundColor: listMode === 'logged' ? `${palette?.accent}1a` : 'transparent', borderColor: palette?.border }}
+                  >
+                    All Logged Cards
+                  </button>
+                </div>
+              </div>
+
+              {/* Mode content */}
+              {listMode === 'true' && deckListData ? (
+                <TrueDeckListView
+                  data={deckListData}
+                  totalMatches={detail?.total || 0}
+                  status={deckListStatus}
+                  palette={palette}
+                />
+              ) : (
+                <DeckCardList deckName={deckName} palette={palette} />
+              )}
             </div>
           </div>
         </div>
+
+        {/* Import Decklist dialog */}
+        {importOpen && (
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+            onClick={() => { if (!importBusy) setImportOpen(false); }}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden"
+              style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
+                <div>
+                  <p className="text-sm font-bold font-outfit" style={{ color: palette?.text }}>Import Decklist</p>
+                  <p className="text-[10px] font-mono opacity-50">Paste the deck export from MTGA</p>
+                </div>
+                <button onClick={() => { if (!importBusy) setImportOpen(false); }} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder="Commander&#10;1 Aang, at the Crossroads (TLA) 203&#10;&#10;Deck&#10;1 Cloudshift (JMP) 97&#10;...&#10;&#10;Sideboard&#10;..."
+                  className="w-full h-56 rounded-xl border p-3 font-mono text-xs leading-relaxed focus:outline-none resize-none custom-scrollbar"
+                  style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
+                />
+
+                {importError && (
+                  <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-rose-400">
+                    <AlertTriangle className="w-3.5 h-3.5" /> {importError}
+                  </div>
+                )}
+
+                {importResult && (
+                  <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-emerald-400">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Imported {importResult.card_count} cards
+                    {importResult.sideboard_count ? ` + ${importResult.sideboard_count} sideboard` : ''}
+                    {importResult.unresolved?.length ? `; ${importResult.unresolved.length} unresolved: ${importResult.unresolved.join(', ')}` : ''}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t flex items-center justify-end gap-2 shrink-0" style={{ borderColor: palette?.border }}>
+                <button
+                  onClick={() => setImportOpen(false)}
+                  disabled={importBusy}
+                  className="px-4 py-1.5 rounded-lg border text-xs font-bold opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
+                  style={{ borderColor: palette?.border, color: palette?.text }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setImportBusy(true); setImportError(null); setImportResult(null);
+                    try {
+                      const res = await invoke<any>('save_deck_list', { deckName, exportText: importText });
+                      setImportResult(res);
+                      setListMode('true');
+                      setImportText('');
+                    } catch (e: any) {
+                      setImportError(String(e));
+                    } finally {
+                      setImportBusy(false);
+                    }
+                  }}
+                  disabled={importBusy || !importText.trim()}
+                  className="px-4 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-40"
+                  style={{ color: palette?.accent, borderColor: `${palette?.accent}66`, backgroundColor: `${palette?.accent}1a` }}
+                >
+                  {importBusy ? 'Importing…' : 'Import'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Floating commander card preview on hover */}
         {hoverCmdr && detail.commander_name && (
