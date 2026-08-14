@@ -77,6 +77,19 @@ pub fn parse_mtga_cmc(mana_str: &str) -> i64 {
     cmc
 }
 
+pub fn clean_card_name(raw_name: &str) -> String {
+    let mut cleaned = raw_name.to_string();
+    // Strip XML/HTML tags like <nobr>, </nobr>, <sprite...>, <style...>
+    while let Some(start) = cleaned.find('<') {
+        if let Some(end) = cleaned[start..].find('>') {
+            cleaned.replace_range(start..=start+end, "");
+        } else {
+            break;
+        }
+    }
+    cleaned.trim().to_string()
+}
+
 /// Performs a bulk import of all card metadata from Raw_CardDatabase_*.mtga into cards_cache in rhystic.db
 pub async fn sync_card_cache(pool: &Pool<Sqlite>) -> Result<(usize, u128), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
@@ -119,7 +132,8 @@ pub async fn sync_card_cache(pool: &Pool<Sqlite>) -> Result<(usize, u128), Box<d
 
     for r in rows {
         let grp_id: i64 = r.get("grp_id");
-        let name: String = r.get("name");
+        let raw_name: String = r.get("name");
+        let name = clean_card_name(&raw_name);
         let card_type: Option<String> = r.get("card_type");
         let mana_cost: Option<String> = r.get("mana_cost");
         let colors: Option<String> = r.get("colors");

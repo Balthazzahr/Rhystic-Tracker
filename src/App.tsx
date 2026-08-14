@@ -54,18 +54,21 @@ interface MatchRecord {
   date_str: string;
   format_name: string;
   result: string;
+  result_reason?: string;
   duration_seconds: number;
   turns: number;
   going_first: boolean;
   player_deck_name: string;
   player_commander_id?: number;
   player_life_end?: number;
+  player_mulligans?: number;
   opponent_name?: string;
   opponent_commander_id?: number;
   opponent_mulligans?: number;
   opponent_life_end?: number;
   mana_curve?: number[];
   deck_colors?: string[];
+  opponent_colors?: string[];
 }
 
 export default function App() {
@@ -83,6 +86,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'matches' | 'live' | 'decks' | 'draft' | 'collection' | 'settings'>('matches');
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
+  const [timeFilter, setTimeFilter] = useState<string>('ALL');
   const [resultFilter, setResultFilter] = useState<string>('ALL');
 
   // Match Inspection & Real Data State
@@ -95,6 +99,8 @@ export default function App() {
   const [isFullInfoOpen, setIsFullInfoOpen] = useState<boolean>(false);
   const [targetOpponentName, setTargetOpponentName] = useState<string | null>(null);
   const [isH2HOpen, setIsH2HOpen] = useState<boolean>(false);
+  const [impactfulCards, setImpactfulCards] = useState<any[]>([]);
+  const [impactfulIndex, setImpactfulIndex] = useState<number>(0);
 
   // Hover state for theme selector preview
   const [hoveredThemeId, setHoveredThemeId] = useState<string | null>(null);
@@ -143,10 +149,22 @@ export default function App() {
 
         const currentMatch = matches.find(m => m.match_id === selectedMatchId);
         if (currentMatch) {
-          const commanderInfoRes = await invoke<{ player_commander: any; opponent_commander: any }>('get_match_commanders', {
-            matchId: selectedMatchId
+          const commanderInfoRes = await invoke<{ player_commander: any; opponent_commander: any }>('get_commander_info', {
+            playerCommanderId: currentMatch.player_commander_id ?? null,
+            opponentCommanderId: currentMatch.opponent_commander_id ?? null
           });
           setCommanderInfo(commanderInfoRes);
+        }
+
+        // Fetch impactful cards (cards that dealt damage / caused life swings).
+        try {
+          const impactfulRes = await invoke<any>('get_impactful_cards', { matchId: selectedMatchId });
+          const impactful = (impactfulRes && impactfulRes.cards) ? impactfulRes.cards : [];
+          setImpactfulCards(impactful);
+          setImpactfulIndex(0);
+        } catch (e) {
+          console.error('Failed to fetch impactful cards:', e);
+          setImpactfulCards([]);
         }
       } catch (e) {
         console.error('Failed to fetch match cards:', e);
@@ -155,13 +173,37 @@ export default function App() {
     fetchMatchCards();
   }, [selectedMatchId, matches]);
 
+  // Impactful cards carousel: cycle through cards on a timer.
+  useEffect(() => {
+    if (impactfulCards.length <= 1) return;
+    const timer = setInterval(() => {
+      setImpactfulIndex((prev) => (prev + 1) % impactfulCards.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [impactfulCards]);
+
   const [liveMatchState, setLiveMatchState] = useState<{
     status: string;
     match_id?: string;
     turn?: number;
+    round?: number;
+    format?: string;
     player_life?: number;
     opponent_life?: number;
-    last_event?: string;
+    opponent_name?: string;
+    player_deck_name?: string;
+    player_commander?: { grp_id: number; name: string };
+    opponent_commander?: { grp_id: number; name: string };
+    player_colors?: string[];
+    opponent_colors?: string[];
+    player_cards_seen?: number;
+    opponent_cards_seen?: number;
+    last_event?: { type: string; grp_id: number; seat_id: number; is_player: boolean };
+    recent_events?: { type: string; grp_id: number; seat_id: number; is_player: boolean; name: string; delta?: number }[];
+    just_completed?: boolean;
+    result?: string;
+    result_reason?: string;
+    reason_label?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -179,10 +221,41 @@ export default function App() {
             status: 'IN_MATCH',
             match_id: liveState.match_id,
             turn: liveState.turn || 1,
+            round: liveState.round || 1,
+            format: liveState.format,
             player_life: liveState.player_life ?? 20,
             opponent_life: liveState.opponent_life ?? 20,
-            last_event: liveState.last_event
+            opponent_name: liveState.opponent_name,
+            player_deck_name: liveState.player_deck_name,
+            player_commander: liveState.player_commander,
+            opponent_commander: liveState.opponent_commander,
+            player_colors: liveState.player_colors || [],
+            opponent_colors: liveState.opponent_colors || [],
+            player_cards_seen: liveState.player_cards_seen || 0,
+            opponent_cards_seen: liveState.opponent_cards_seen || 0,
+            last_event: liveState.last_event,
+            recent_events: liveState.recent_events || [],
           });
+        } else if (liveState && liveState.just_completed) {
+          // Keep the HUD up showing the result overlay instead of blanking.
+          setLiveMatchState({
+            status: 'COMPLETED',
+            match_id: liveState.match_id,
+            format: liveState.format,
+            player_deck_name: liveState.player_deck_name,
+            opponent_name: liveState.opponent_name,
+            player_life: liveState.player_life,
+            opponent_life: liveState.opponent_life,
+            just_completed: true,
+            result: liveState.result,
+            result_reason: liveState.result_reason,
+            reason_label: liveState.reason_label,
+            recent_events: [],
+          });
+          if (wasActive) {
+            wasActive = false;
+            await loadData(true);
+          }
         } else {
           setLiveMatchState(null);
           if (wasActive) {
@@ -245,6 +318,13 @@ export default function App() {
 
   // Filter Computations
   const filteredMatches = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay()); // Sunday start
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
     return matches.filter(m => {
       const matchesSearch = 
         m.player_deck_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -254,14 +334,26 @@ export default function App() {
       const matchesFormat = formatFilter === 'ALL' || m.format_name.toUpperCase() === formatFilter.toUpperCase();
       const matchesResult = resultFilter === 'ALL' || m.result.toLowerCase() === resultFilter.toLowerCase();
 
-      return matchesSearch && matchesFormat && matchesResult;
-    });
-  }, [matches, searchTerm, formatFilter, resultFilter]);
+      const matchDate = new Date(m.timestamp);
+      let matchesTime = true;
+      if (timeFilter === 'TODAY') {
+        matchesTime = matchDate >= startOfToday;
+      } else if (timeFilter === 'WEEK') {
+        matchesTime = matchDate >= startOfWeek;
+      } else if (timeFilter === 'MONTH') {
+        matchesTime = matchDate >= startOfMonth;
+      } else if (timeFilter === 'YEAR') {
+        matchesTime = matchDate >= startOfYear;
+      }
 
-  // Aggregate stats over full dataset
-  const winsCount = useMemo(() => matches.filter(m => m.result === 'win').length, [matches]);
-  const lossesCount = useMemo(() => matches.filter(m => m.result === 'loss').length, [matches]);
-  const winrateVal = matches.length > 0 ? ((winsCount / matches.length) * 100).toFixed(1) : '0.0';
+      return matchesSearch && matchesFormat && matchesResult && matchesTime;
+    });
+  }, [matches, searchTerm, formatFilter, resultFilter, timeFilter]);
+
+  // Aggregate stats over the filtered dataset
+  const winsCount = useMemo(() => filteredMatches.filter(m => m.result === 'win').length, [filteredMatches]);
+  const lossesCount = useMemo(() => filteredMatches.filter(m => m.result === 'loss').length, [filteredMatches]);
+  const winrateVal = filteredMatches.length > 0 ? ((winsCount / filteredMatches.length) * 100).toFixed(1) : '0.0';
 
   // Table Virtualization Container Reference
   const parentRef = useRef<HTMLDivElement>(null);
@@ -269,7 +361,7 @@ export default function App() {
   const rowVirtualizer = useVirtualizer({
     count: filteredMatches.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 64, // Exact row height: 64px
+    estimateSize: () => 80, // Exact row height: 80px
     overscan: 10,
   });
 
@@ -297,11 +389,19 @@ export default function App() {
     { value: 'HISTORIC', label: 'Historic' },
   ];
 
+  const timeOptions = [
+    { value: 'ALL', label: 'All Time' },
+    { value: 'YEAR', label: 'This Year' },
+    { value: 'MONTH', label: 'This Month' },
+    { value: 'WEEK', label: 'This Week' },
+    { value: 'TODAY', label: 'Today' },
+  ];
+
   const renderManaHistogram = (curve?: number[]) => {
     const bins = curve || [0, 0, 0, 0, 0, 0, 0];
     const maxVal = Math.max(...bins, 1);
     return (
-      <div className="flex items-end gap-1 h-6 w-20 px-1 py-0.5 rounded bg-black/40 border border-white/5" title={`Mana Curve Bins (1..7+): ${bins.join(', ')}`}>
+      <div className="flex items-end gap-1 h-8 w-24 px-1 py-0.5 rounded bg-black/40 border border-white/5" title={`Mana Curve Bins (1..7+): ${bins.join(', ')}`}>
         {bins.map((val, idx) => {
           const heightPct = Math.max((val / maxVal) * 100, 15);
           return (
@@ -328,6 +428,65 @@ export default function App() {
         {colors.map((c) => (
           <ManaPip key={c} symbol={c} size={14} className="shrink-0" />
         ))}
+      </div>
+    );
+  };
+
+  // Format timestamp as "14 Aug 26 14:52" (day, short month, 2-digit year, HH:MM)
+  const formatDateShort = (ts: string): string => {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts || '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = d.getDate();
+    const mon = months[d.getMonth()];
+    const yr = String(d.getFullYear()).slice(2);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${day} ${mon} ${yr} ${hh}:${mm}`;
+  };
+
+  // Short result reason shown under the victory/defeat icon in the drawer header:
+  // "Opponent Concede" / "Player Concede" / "Player Lost" / "Opponent Lost".
+  const matchReason = (m: MatchRecord): string => {
+    const reason = m.result_reason || '';
+    if (reason.includes('Concede')) {
+      return m.result === 'win' ? 'Opponent Concede' : 'Player Concede';
+    }
+    if (reason.includes('Timeout')) {
+      return m.result === 'win' ? 'Opponent Timeout' : 'Player Timeout';
+    }
+    return m.result === 'win' ? 'Opponent Lost' : 'Player Lost';
+  };
+
+  // Live HUD deck colors: show "-" until colors are known (rather than a colorless
+  // pip, which implies a genuinely colorless deck).
+  const renderLiveDeckColors = (colors?: string[]) => {
+    if (!colors || colors.length === 0) {
+      return <span className="text-xs font-mono opacity-50">-</span>;
+    }
+    return renderDeckColorIdentity(colors);
+  };
+
+  // Render a single live action-feed row, handling life-change entries with
+  // green/red +/- deltas and card play/draw entries with their badge.
+  const renderFeedItem = (e: { type: string; name?: string; delta?: number }, idx: number) => {
+    if (e.type === 'life') {
+      const positive = (e.delta ?? 0) >= 0;
+      return (
+        <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
+          <span className={`px-1 rounded text-[10px] font-bold uppercase ${positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+            LIFE {positive ? `+${e.delta}` : e.delta}
+          </span>
+          <span className={`truncate ${positive ? 'text-emerald-300' : 'text-rose-300'}`}>{e.name}</span>
+        </div>
+      );
+    }
+    return (
+      <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
+        <span className={`px-1 rounded text-[10px] font-bold uppercase ${e.type === 'play' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-purple-500/10 text-purple-400'}`}>
+          {e.type === 'draw' ? 'DRAW' : 'PLAY'}
+        </span>
+        <span className="truncate opacity-90">{e.name}</span>
       </div>
     );
   };
@@ -378,13 +537,13 @@ export default function App() {
                   key={item.id}
                   onClick={() => setActiveTab(item.id as any)}
                   title={isSidebarCollapsed ? item.label : undefined}
-                  className={`w-full flex items-center justify-between py-3 rounded-xl font-medium text-sm transition-all ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'px-3.5'
+                  className={`w-full flex items-center py-3 rounded-xl font-medium text-sm transition-all ${
+                    isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3.5'
                   }`}
                   style={{
                     backgroundColor: isActive ? `${palette?.accent || '#38BDF8'}1F` : 'transparent',
                     color: isActive ? (palette?.accent || '#38BDF8') : (palette?.text || '#F8FAFC'),
-                    borderLeft: !isSidebarCollapsed && isActive ? `4px solid ${palette?.accent || '#38BDF8'}` : '4px solid transparent',
+                    borderLeft: !isSidebarCollapsed && isActive ? `4px solid ${palette?.accent || '#38BDF8'}` : 'none',
                   }}
                 >
                   <div className="flex items-center gap-3">
@@ -484,8 +643,8 @@ export default function App() {
                   MATCH IN PROGRESS — LIVE TRACKING ACTIVE
                 </span>
                 <p className="text-[11px] opacity-80 font-mono">
-                  Turn {liveMatchState.turn || 1} • Your HP: {liveMatchState.player_life ?? 20} • Opp HP: {liveMatchState.opponent_life ?? 20}
-                  {liveMatchState.last_event ? ` • ${liveMatchState.last_event}` : ''}
+                  Round {liveMatchState.round ?? Math.ceil((liveMatchState.turn || 1) / 2)} • Your HP: {liveMatchState.player_life ?? 20} • Opp HP: {liveMatchState.opponent_life ?? 20}
+                  {liveMatchState.last_event ? ` • ${liveMatchState.last_event.is_player ? 'You' : (liveMatchState.opponent_name || 'Opp')} ${liveMatchState.last_event.type === 'draw' ? 'drew' : 'played'}` : ''}
                 </p>
               </div>
             </div>
@@ -524,7 +683,9 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <Activity className="w-6 h-6 animate-pulse" style={{ color: palette?.accent }} />
                 <div>
-                  <h3 className="text-lg font-bold font-outfit uppercase tracking-wide">Live Gameplay Tracker</h3>
+                  <h3 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                    Live Match HUD
+                  </h3>
                   <p className="text-xs opacity-60 font-mono">
                     {liveMatchState ? `Active Game (ID: ${liveMatchState.match_id?.slice(0, 8)}...)` : 'No active match currently detected'}
                   </p>
@@ -538,26 +699,132 @@ export default function App() {
             </div>
 
             {liveMatchState ? (
-              <div className="grid grid-cols-3 gap-6 flex-1 items-center">
-                {/* Player Status */}
-                <div className="p-6 rounded-2xl border bg-black/40 text-center space-y-2" style={{ borderColor: palette?.border }}>
-                  <span className="text-xs font-mono uppercase opacity-60">Your Life</span>
-                  <div className="text-4xl font-black text-emerald-400 font-mono">{liveMatchState.player_life ?? 20} HP</div>
+              <div className="flex-1 flex flex-col space-y-4 relative">
+                {/* Match Result Overlay: shown for a short window after the game ends */}
+                {liveMatchState.just_completed && (
+                  <div className={`absolute inset-0 z-10 rounded-2xl border flex flex-col items-center justify-center space-y-4 backdrop-blur-xl animate-fade-in ${
+                    liveMatchState.result === 'win' ? 'bg-emerald-950/80 border-emerald-500/40' : 'bg-rose-950/80 border-rose-500/40'
+                  }`}>
+                    <div className={`text-6xl font-black font-outfit uppercase tracking-widest ${liveMatchState.result === 'win' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {liveMatchState.result === 'win' ? 'VICTORY' : 'DEFEAT'}
+                    </div>
+                    <div className="text-xl font-bold font-mono" style={{ color: palette?.text }}>
+                      {liveMatchState.reason_label || 'Match Ended'}
+                    </div>
+                    <div className="flex items-center gap-6 text-sm font-mono opacity-80">
+                      <span className="text-emerald-400">{liveMatchState.player_life ?? 20} HP</span>
+                      <span className="opacity-40">VS</span>
+                      <span className="text-rose-400">{liveMatchState.opponent_life ?? 0} HP</span>
+                    </div>
+                    <div className="text-[10px] font-mono uppercase tracking-wider opacity-50">
+                      {liveMatchState.format} • {liveMatchState.opponent_name || 'Opponent'}
+                    </div>
+                  </div>
+                )}
+                {/* Top Row: Match Context — Format, Deck, Opponent, Round */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border bg-black/40" style={{ borderColor: palette?.border }}>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-[11px] font-mono uppercase opacity-60">Format</p>
+                      <p className="text-sm font-bold font-outfit" style={{ color: palette?.accent }}>{liveMatchState.format || '—'}</p>
+                    </div>
+                    <div className="h-8 w-px bg-white/10" />
+                    <div>
+                      <p className="text-[11px] font-mono uppercase opacity-60">Your Deck</p>
+                      <p className="text-sm font-bold truncate max-w-[220px]">{liveMatchState.player_deck_name || '—'}</p>
+                    </div>
+                    <div className="h-8 w-px bg-white/10" />
+                    <div>
+                      <p className="text-[11px] font-mono uppercase opacity-60">Opponent</p>
+                      <p className="text-sm font-bold truncate max-w-[160px]">{liveMatchState.opponent_name || 'Opponent'}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                    ROUND {liveMatchState.round ?? Math.ceil((liveMatchState.turn || 1) / 2)}
+                  </span>
                 </div>
 
-                {/* Turn Status */}
-                <div className="p-6 rounded-2xl border bg-black/40 text-center space-y-2" style={{ borderColor: palette?.border }}>
-                  <span className="text-xs font-mono uppercase opacity-60">Current Turn</span>
-                  <div className="text-4xl font-black font-mono" style={{ color: palette?.accent }}>Turn {liveMatchState.turn ?? 1}</div>
-                  {liveMatchState.last_event && (
-                    <span className="text-[10px] font-mono opacity-60 block truncate">Last: {liveMatchState.last_event}</span>
-                  )}
+                {/* Middle Row: Player vs Opponent — Health on top, live actions below */}
+                <div className="grid grid-cols-2 gap-4 flex-1 items-stretch min-h-0">
+                  {/* Player Panel */}
+                  <div className="p-5 rounded-2xl border bg-black/40 flex flex-col space-y-3 min-h-0" style={{ borderColor: palette?.border }}>
+                    <div className="flex items-center justify-between shrink-0">
+                      <span className="text-sm font-mono uppercase opacity-60">Your Life</span>
+                      <span className="text-xs font-mono opacity-50">{liveMatchState.player_cards_seen ?? 0} cards seen</span>
+                    </div>
+                    <div className="text-5xl font-black text-emerald-400 font-mono shrink-0">{liveMatchState.player_life ?? 20} HP</div>
+
+                    {liveMatchState.format?.toUpperCase() === 'BRAWL' && liveMatchState.player_commander && (
+                      <div className="text-sm shrink-0">
+                        <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Commander</span>
+                        <span className="font-bold">{liveMatchState.player_commander.name}</span>
+                      </div>
+                    )}
+
+                    <div className="shrink-0">
+                      <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Deck Colors</span>
+                      {renderLiveDeckColors(liveMatchState.player_colors)}
+                    </div>
+
+                    {/* Live Action Feed (Player) */}
+                    <div className="flex-1 min-h-0 rounded-xl border p-2 overflow-y-auto custom-scrollbar" style={{ borderColor: `${palette?.border}66`, backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                      <p className="text-[10px] font-mono uppercase opacity-50 mb-1 sticky top-0 bg-black/60 py-0.5">Your Actions</p>
+                      {(liveMatchState.recent_events || []).filter(e => e.is_player).length === 0 ? (
+                        <p className="text-xs font-mono opacity-30">No actions yet</p>
+                      ) : (
+                        (liveMatchState.recent_events || []).filter(e => e.is_player).slice().reverse().map((e, idx) => renderFeedItem(e, idx))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Opponent Panel */}
+                  <div className="p-5 rounded-2xl border bg-black/40 flex flex-col space-y-3 min-h-0" style={{ borderColor: palette?.border }}>
+                    <div className="flex items-center justify-between shrink-0">
+                      <span className="text-sm font-mono uppercase opacity-60">Opponent Life</span>
+                      <span className="text-xs font-mono opacity-50">{liveMatchState.opponent_cards_seen ?? 0} cards seen</span>
+                    </div>
+                    <div className="text-5xl font-black text-rose-400 font-mono shrink-0">{liveMatchState.opponent_life ?? 20} HP</div>
+
+                    {liveMatchState.format?.toUpperCase() === 'BRAWL' && liveMatchState.opponent_commander && (
+                      <div className="text-sm shrink-0">
+                        <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Commander</span>
+                        <span className="font-bold">{liveMatchState.opponent_commander.name}</span>
+                      </div>
+                    )}
+
+                    <div className="shrink-0">
+                      <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Deck Colors</span>
+                      {renderLiveDeckColors(liveMatchState.opponent_colors)}
+                    </div>
+
+                    {/* Live Action Feed (Opponent) */}
+                    <div className="flex-1 min-h-0 rounded-xl border p-2 overflow-y-auto custom-scrollbar" style={{ borderColor: `${palette?.border}66`, backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                      <p className="text-[10px] font-mono uppercase opacity-50 mb-1 sticky top-0 bg-black/60 py-0.5">Opponent Actions</p>
+                      {(liveMatchState.recent_events || []).filter(e => !e.is_player).length === 0 ? (
+                        <p className="text-xs font-mono opacity-30">No actions yet</p>
+                      ) : (
+                        (liveMatchState.recent_events || []).filter(e => !e.is_player).slice().reverse().map((e, idx) => renderFeedItem(e, idx))
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Opponent Status */}
-                <div className="p-6 rounded-2xl border bg-black/40 text-center space-y-2" style={{ borderColor: palette?.border }}>
-                  <span className="text-xs font-mono uppercase opacity-60">Opponent Life</span>
-                  <div className="text-4xl font-black text-rose-400 font-mono">{liveMatchState.opponent_life ?? 20} HP</div>
+                {/* Bottom Row: Last Event Feed */}
+                <div className="p-3.5 rounded-2xl border bg-black/40 flex items-center gap-3" style={{ borderColor: palette?.border }}>
+                  <Activity className="w-4 h-4 shrink-0 animate-pulse" style={{ color: palette?.accent }} />
+                  <span className="text-[11px] font-mono uppercase opacity-50 shrink-0">Last Action</span>
+                  <span className="text-sm font-bold font-mono truncate">
+                    {liveMatchState.last_event ? (
+                      <>
+                        <span style={{ color: liveMatchState.last_event.is_player ? '#38BDF8' : '#FBBF24' }}>
+                          {liveMatchState.last_event.is_player ? 'YOU' : (liveMatchState.opponent_name || 'OPPONENT').toUpperCase()}
+                        </span>
+                        <span className="opacity-60"> {liveMatchState.last_event.type === 'draw' ? 'DREW A CARD' : 'PLAYED A CARD'}</span>
+                      </>
+                    ) : (
+                      <span className="opacity-40">Awaiting first action...</span>
+                    )}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -584,10 +851,9 @@ export default function App() {
             {/* Top Workspace Header Bar */}
             <div className="flex items-center justify-between gap-4 shrink-0">
               <div>
-                <h1 className="text-xl font-bold font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-                  Match History — Recent Games
+                <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                  Match History
                 </h1>
-                <p className="text-xs opacity-60">Showing {filteredMatches.length} of {matchCount} recorded matches from rhystic.db</p>
               </div>
 
               <div className="flex items-center gap-3">
@@ -607,11 +873,11 @@ export default function App() {
             </div>
 
             {/* Top Summary KPI Cards */}
-            <div className="grid grid-cols-4 gap-4 shrink-0">
+            <div className="grid grid-cols-5 gap-4 shrink-0">
               <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
                 <div>
                   <p className="text-[10px] uppercase font-semibold opacity-60">Total Matches</p>
-                  <h3 className="text-2xl font-extrabold font-outfit mt-0.5">{matches.length}</h3>
+                  <h3 className="text-2xl font-extrabold font-outfit mt-0.5">{filteredMatches.length}</h3>
                 </div>
                 <BarChart3 className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
               </div>
@@ -635,12 +901,25 @@ export default function App() {
               {/* Custom Dropdown Component */}
               <div className="p-3.5 rounded-2xl border flex flex-col justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
                 <p className="text-[10px] uppercase font-semibold opacity-60 flex items-center gap-1">
-                  <Filter className="w-3 h-3" style={{ color: palette?.accent }} /> Format Filter
+                  <Filter className="w-3 h-3" style={{ color: palette?.accent }} /> Format
                 </p>
                 <CustomDropdown
                   options={formatOptions}
                   value={formatFilter}
                   onChange={(val) => setFormatFilter(val)}
+                  palette={palette}
+                />
+              </div>
+
+              {/* Time Period Filter Dropdown */}
+              <div className="p-3.5 rounded-2xl border flex flex-col justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+                <p className="text-[10px] uppercase font-semibold opacity-60 flex items-center gap-1">
+                  <Clock className="w-3 h-3" style={{ color: palette?.accent }} /> Period
+                </p>
+                <CustomDropdown
+                  options={timeOptions}
+                  value={timeFilter}
+                  onChange={(val) => setTimeFilter(val)}
                   palette={palette}
                 />
               </div>
@@ -650,15 +929,14 @@ export default function App() {
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
               {/* Sticky Table Header with Rebalanced Column Layout */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
-                <div className="flex items-center uppercase text-[10px] font-semibold py-3 px-4 gap-2" style={{ color: palette?.subtext }}>
-                  <div className="w-[140px] shrink-0">Date</div>
-                  <div className="w-[70px] shrink-0">Result</div>
-                  <div className="w-[85px] shrink-0">Format</div>
-                  {showColorsCol && <div className="w-[60px] shrink-0">Colors</div>}
+                <div className="flex items-center uppercase text-sm font-semibold py-3 px-4 gap-2" style={{ color: palette?.subtext }}>
+                  <div className="w-[160px] shrink-0">Date</div>
+                  <div className="w-[80px] shrink-0">Result</div>
+                  <div className="w-[95px] shrink-0">Format</div>
+                  {showColorsCol && <div className="w-[65px] shrink-0">Colors</div>}
                   <div className="flex-1 min-w-[160px] truncate">Deck Name</div>
-                  <div className="w-[130px] shrink-0 truncate">Opponent</div>
-                  {showCurveCol && <div className="w-[100px] shrink-0">Mana Curve</div>}
-                  <div className="w-[50px] shrink-0 text-right">Turns</div>
+                  <div className="w-[150px] shrink-0 truncate">Opponent</div>
+                  {showCurveCol && <div className="w-[120px] shrink-0">Mana Curve</div>}
                 </div>
               </div>
 
@@ -680,7 +958,7 @@ export default function App() {
                           setSelectedMatchId(m.match_id);
                           setIsDrawerOpenManual(true);
                         }}
-                        className={`absolute top-0 left-0 w-full flex items-center text-xs py-2 px-4 gap-2 border-b transition-colors cursor-pointer hover:bg-white/5 ${
+                        className={`absolute top-0 left-0 w-full flex items-center text-base py-2 px-4 gap-2 border-b transition-colors cursor-pointer hover:bg-white/5 ${
                           selectedMatchId === m.match_id ? 'bg-white/10' : ''
                         }`}
                         style={{
@@ -689,59 +967,54 @@ export default function App() {
                           borderColor: `${palette?.border || '#2A2F3D'}44`,
                         }}
                       >
-                        {/* 1. Date: 140px */}
-                        <div className="w-[140px] shrink-0 opacity-60 font-mono text-[11px] truncate">
-                          {isShortDate ? m.date_str.split(' ')[0] : m.date_str}
+                        {/* 1. Date: 160px */}
+                        <div className="w-[160px] shrink-0 opacity-60 font-mono text-sm truncate">
+                          {formatDateShort(m.timestamp)}
                         </div>
 
-                        {/* 2. Result: 70px */}
-                        <div className="w-[70px] shrink-0">
+                        {/* 2. Result: 80px */}
+                        <div className="w-[80px] shrink-0">
                           {m.result === 'win' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                              <CheckCircle2 className="w-2.5 h-2.5" /> WIN
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                              <CheckCircle2 className="w-3 h-3" /> WIN
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
-                              <XCircle className="w-2.5 h-2.5" /> LOSS
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                              <XCircle className="w-3 h-3" /> LOSS
                             </span>
                           )}
                         </div>
 
-                        {/* 3. Format: 85px */}
-                        <div className="w-[85px] shrink-0 font-semibold truncate">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono border bg-black/40" style={{ borderColor: palette?.border }}>
+                        {/* 3. Format: 95px */}
+                        <div className="w-[95px] shrink-0 font-semibold truncate">
+                          <span className="px-2 py-0.5 rounded text-sm font-mono border bg-black/40" style={{ borderColor: palette?.border }}>
                             {m.format_name}
                           </span>
                         </div>
 
-                        {/* 4. Colors: 60px (2-row wrapped for 5-color decks) */}
+                        {/* 4. Colors: 65px (2-row wrapped for 5-color decks) */}
                         {showColorsCol && (
-                          <div className="w-[60px] shrink-0 overflow-hidden">
+                          <div className="w-[65px] shrink-0 overflow-hidden">
                             {renderDeckColorIdentity(m.deck_colors)}
                           </div>
                         )}
 
-                        {/* 5. Deck Name: flex-1 */}
-                        <div className="flex-1 min-w-[160px] font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
+                        {/* 5. Deck Name: flex-1 (+4 points) */}
+                        <div className="flex-1 min-w-[160px] font-bold text-lg truncate" style={{ color: palette?.accent || '#38BDF8' }}>
                           {m.player_deck_name}
                         </div>
 
-                        {/* 6. Opponent Name: 130px */}
-                        <div className="w-[130px] shrink-0 font-medium opacity-80 truncate">
+                        {/* 6. Opponent Name: 150px */}
+                        <div className="w-[150px] shrink-0 font-medium opacity-80 truncate">
                           {m.opponent_name || 'Opponent'}
                         </div>
 
-                        {/* 7. Mana Curve: 100px */}
+                        {/* 7. Mana Curve: 120px */}
                         {showCurveCol && (
-                          <div className="w-[100px] shrink-0">
+                          <div className="w-[120px] shrink-0">
                             {renderManaHistogram(m.mana_curve)}
                           </div>
                         )}
-
-                        {/* 8. Turns: 50px */}
-                        <div className="w-[50px] shrink-0 text-right font-mono text-xs opacity-70">
-                          {m.turns}
-                        </div>
                       </div>
                     );
                   })}
@@ -774,13 +1047,13 @@ export default function App() {
           isDrawerOverlay 
             ? 'fixed right-0 top-0 bottom-0 z-40 shadow-2xl backdrop-blur-xl' 
             : 'relative z-20'
-        } ${isDrawerOpen ? 'w-[360px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 p-0 border-none pointer-events-none'}`}
+        } ${isDrawerOpen ? 'w-[432px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 p-0 border-none pointer-events-none'}`}
         style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
       >
         <div className="flex flex-col flex-1 space-y-4 overflow-y-auto pr-0.5 custom-scrollbar">
           {/* Drawer Header */}
           <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: palette?.border }}>
-            <p className="text-[10px] font-mono uppercase tracking-wider font-bold" style={{ color: palette?.accent }}>Key Match Stats</p>
+            <p className="flex-1 text-2xl font-black font-outfit uppercase tracking-wide text-center" style={{ color: palette?.text }}>Key Match Stats</p>
             <button 
               onClick={() => setIsDrawerOpenManual(false)}
               className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5"
@@ -794,52 +1067,72 @@ export default function App() {
           {selectedMatch && (
             <div className="space-y-4">
               {/* 2. Fighting-Game-Style VS Header */}
-              <div className="p-4 rounded-2xl border text-center space-y-2 shadow-lg" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                <div className="space-y-1">
+              <div className="p-4 rounded-2xl border text-center space-y-2.5 shadow-lg" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                {/* Player deck name with colors inline */}
+                <div className="flex items-center justify-center gap-2">
                   <button 
                     onClick={() => setActiveTab('decks')}
-                    className="text-base font-extrabold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer block w-full text-center" 
+                    className="text-lg font-extrabold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer text-center max-w-[60%]" 
                     style={{ color: palette?.accent || '#38BDF8' }}
                     title="View Deck Details"
                   >
                     {selectedMatch.player_deck_name}
                   </button>
-                  <p className="text-xs font-mono font-bold opacity-40">VS</p>
+                  <span className="shrink-0">{renderDeckColorIdentity(selectedMatch.deck_colors)}</span>
+                </div>
+
+                <p className="text-sm font-mono font-bold opacity-40">VS</p>
+
+                {/* Opponent name with colors inline */}
+                <div className="flex items-center justify-center gap-2">
                   <button 
                     onClick={() => {
                       setTargetOpponentName(selectedMatch.opponent_name || 'Opponent');
                       setIsH2HOpen(true);
                     }}
-                    className="text-sm font-bold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer block w-full text-center" 
+                    className="text-base font-bold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer text-center max-w-[60%]" 
                     style={{ color: palette?.text }}
                     title="View Opponent Head-to-Head Stats"
                   >
                     {selectedMatch.opponent_name || 'Opponent'}
                   </button>
+                  <span className="shrink-0">{renderDeckColorIdentity(selectedMatch.opponent_colors)}</span>
                 </div>
 
-                {/* Victory / Defeat Status Banner */}
-                <div className="pt-1 flex items-center justify-center">
+                {/* Victory / Defeat Status Banner with reason underneath */}
+                <div className="pt-1 flex flex-col items-center justify-center space-y-1">
                   {selectedMatch.result === 'win' ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-black tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                       <CheckCircle2 className="w-4 h-4" /> VICTORY
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-black tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/30">
                       <XCircle className="w-4 h-4" /> DEFEAT
                     </span>
                   )}
+                  <span className={`text-xs font-mono font-semibold ${selectedMatch.result === 'win' ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>
+                    {matchReason(selectedMatch)}
+                  </span>
+                  {/* Deck Win Streak (moved up under the result) */}
+                  <span className="text-[10px] font-mono opacity-60">
+                    {deckStreak ? (
+                      `${deckStreak.count}${deckStreak.count === 1 ? 'st' : deckStreak.count === 2 ? 'nd' : deckStreak.count === 3 ? 'rd' : 'th'} ${deckStreak.type.toUpperCase()} STREAK`
+                    ) : (
+                      '1st Game'
+                    )}
+                  </span>
                 </div>
               </div>
 
-              {/* 3. Commander Cards Side-by-Side (Brawl Matches Only) */}
-              {selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
-                <div className="p-3 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-60">Commanders</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* Player Commander */}
-                    <div className="p-2 rounded-xl border bg-black/40 text-center space-y-1" style={{ borderColor: palette?.border }}>
-                      <p className="text-[9px] font-mono opacity-50 uppercase">Player</p>
+              {/* 3+4. Combined Player vs Opponent: label, commander (Brawl), then stats */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {/* Player Column */}
+                <div className="p-3.5 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                  <p className="text-xs uppercase font-bold text-emerald-400 font-mono">Player</p>
+
+                  {/* Player Commander (Brawl Only) */}
+                  {selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
+                    <div className="text-center space-y-1">
                       {commanderInfo?.player_commander ? (
                         <>
                           <img 
@@ -847,18 +1140,46 @@ export default function App() {
                             alt={commanderInfo.player_commander.name}
                             className="w-full h-20 object-cover rounded-lg border border-white/10"
                           />
-                          <p className="text-[11px] font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.player_commander.name}</p>
+                          <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.player_commander.name}</p>
                         </>
                       ) : (
-                        <div className="h-20 rounded-lg border border-dashed flex items-center justify-center text-[10px] opacity-40 font-mono" style={{ borderColor: palette?.border }}>
+                        <div className="h-20 rounded-lg border border-dashed flex items-center justify-center text-[11px] opacity-40 font-mono" style={{ borderColor: palette?.border }}>
                           No Cmdr
                         </div>
                       )}
                     </div>
+                  )}
 
-                    {/* Opponent Commander */}
-                    <div className="p-2 rounded-xl border bg-black/40 text-center space-y-1" style={{ borderColor: palette?.border }}>
-                      <p className="text-[9px] font-mono opacity-50 uppercase">Opponent</p>
+                  {/* Player Stats */}
+                  <div className="space-y-1.5">
+                    <div>
+                      <span className="opacity-50 text-[11px]">Order: </span>
+                      <span className="font-bold text-amber-400">{selectedMatch.going_first ? 'Play (1st)' : 'Draw (2nd)'}</span>
+                    </div>
+                    <div>
+                      <span className="opacity-50 text-[11px]">Mulligans: </span>
+                      <span className="font-bold font-mono">{selectedMatch.player_mulligans ?? 0}</span>
+                    </div>
+                    <div>
+                      <span className="opacity-50 text-[11px]">End HP: </span>
+                      <span className="font-bold text-emerald-400 font-mono">{selectedMatch.player_life_end ?? 20} HP</span>
+                    </div>
+                  </div>
+
+                  {/* Player Cards Played */}
+                  <div className="pt-1">
+                    <p className="text-[10px] uppercase opacity-50 mb-1">Cards Played</p>
+                    <span className="font-mono text-sm font-bold">{selectedMatchCards.filter(c => !c.is_opponent).reduce((acc, c) => acc + c.count, 0)} Cards</span>
+                  </div>
+                </div>
+
+                {/* Opponent Column */}
+                <div className="p-3.5 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                  <p className="text-xs uppercase font-bold text-rose-400 font-mono">Opponent</p>
+
+                  {/* Opponent Commander (Brawl Only) */}
+                  {selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
+                    <div className="text-center space-y-1">
                       {commanderInfo?.opponent_commander ? (
                         <>
                           <img 
@@ -866,102 +1187,117 @@ export default function App() {
                             alt={commanderInfo.opponent_commander.name}
                             className="w-full h-20 object-cover rounded-lg border border-white/10"
                           />
-                          <p className="text-[11px] font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.opponent_commander.name}</p>
+                          <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.opponent_commander.name}</p>
                         </>
                       ) : (
-                        <div className="h-20 rounded-lg border border-dashed flex flex-col items-center justify-center text-[9px] opacity-40 font-mono px-1 text-center" style={{ borderColor: palette?.border }}>
+                        <div className="h-20 rounded-lg border border-dashed flex flex-col items-center justify-center text-[10px] opacity-40 font-mono px-1 text-center" style={{ borderColor: palette?.border }}>
                           <span>Uncast /</span>
                           <span>Unknown</span>
                         </div>
                       )}
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {/* 4. Side-by-Side Equal-Weight Player vs Opponent Stats */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                {/* Player Stat Panel */}
-                <div className="p-3 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-[10px] uppercase font-bold text-emerald-400 font-mono">Player Stats</p>
-                  <div className="space-y-1">
+                  {/* Opponent Stats */}
+                  <div className="space-y-1.5">
                     <div>
-                      <span className="opacity-50 text-[10px]">End HP: </span>
-                      <span className="font-bold text-emerald-400 font-mono">{selectedMatch.player_life_end ?? 20} HP</span>
+                      <span className="opacity-50 text-[11px]">Order: </span>
+                      <span className="font-bold text-amber-400">{selectedMatch.going_first ? 'Draw (2nd)' : 'Play (1st)'}</span>
                     </div>
                     <div>
-                      <span className="opacity-50 text-[10px]">Order: </span>
-                      <span className="font-bold text-amber-400">{selectedMatch.going_first ? 'Play (1st)' : 'Draw (2nd)'}</span>
-                    </div>
-                  </div>
-
-                  {/* 5A. Player Mana Curve Mini-Chart */}
-                  <div className="pt-1">
-                    <p className="text-[9px] uppercase opacity-50 mb-1">Mana Curve</p>
-                    {renderManaHistogram(selectedMatch.mana_curve)}
-                  </div>
-                </div>
-
-                {/* Opponent Stat Panel */}
-                <div className="p-3 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-[10px] uppercase font-bold text-rose-400 font-mono">Opponent Stats</p>
-                  <div className="space-y-1">
-                    <div>
-                      <span className="opacity-50 text-[10px]">End HP: </span>
-                      <span className="font-bold text-rose-400 font-mono">{selectedMatch.opponent_life_end ?? 0} HP</span>
-                    </div>
-                    <div>
-                      <span className="opacity-50 text-[10px]">Mulligans: </span>
+                      <span className="opacity-50 text-[11px]">Mulligans: </span>
                       <span className="font-bold font-mono">{selectedMatch.opponent_mulligans ?? 0}</span>
                     </div>
+                    <div>
+                      <span className="opacity-50 text-[11px]">End HP: </span>
+                      <span className="font-bold text-rose-400 font-mono">{selectedMatch.opponent_life_end ?? 0} HP</span>
+                    </div>
                   </div>
 
                   <div className="pt-1">
-                    <p className="text-[9px] uppercase opacity-50 mb-1">Cards Seen</p>
-                    <span className="font-mono text-xs font-bold">{selectedMatchCards.filter(c => c.is_opponent).reduce((acc, c) => acc + c.count, 0)} Cards</span>
+                    <p className="text-[10px] uppercase opacity-50 mb-1">Cards Seen</p>
+                    <span className="font-mono text-sm font-bold">{selectedMatchCards.filter(c => c.is_opponent).reduce((acc, c) => acc + c.count, 0)} Cards</span>
                   </div>
                 </div>
               </div>
 
-              {/* Match Details Bar: Format, Deck Colors, and Deck Win/Loss Streak */}
-              <div className="p-3 rounded-2xl border space-y-2 text-xs" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                <div className="flex items-center justify-between">
-                  <span className="opacity-60 text-[10px] uppercase font-semibold">Deck Color Identity</span>
-                  {renderDeckColorIdentity(selectedMatch.deck_colors)}
-                </div>
-
-                <div className="flex items-center justify-between border-t pt-2" style={{ borderColor: `${palette?.border}66` }}>
-                  <span className="opacity-60 text-[10px] uppercase font-semibold">Deck Win Streak</span>
-                  {deckStreak ? (
-                    <span className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded border ${
-                      deckStreak.type === 'win' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                    }`}>
-                      {deckStreak.count}{deckStreak.count === 1 ? 'st' : deckStreak.count === 2 ? 'nd' : deckStreak.count === 3 ? 'rd' : 'th'} {deckStreak.type.toUpperCase()} STREAK
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[11px] opacity-40">1st Game</span>
-                  )}
-                </div>
-              </div>
-
-              {/* 6. Fixed Sized "Open Full Match Info" Action Button */}
-              <div className="pt-1">
-                <button
-                  onClick={() => setIsFullInfoOpen(true)}
-                  className="w-full box-border py-3 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl border transition-all hover:bg-white/10 truncate"
-                  style={{
-                    backgroundColor: palette?.accent || '#38BDF8',
-                    color: '#000000',
-                    borderColor: palette?.accent || '#38BDF8',
-                  }}
-                >
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Open Full Match Info</span>
-                </button>
+              {/* Impactful Cards Played: full-size card carousel with player attribution */}
+              <div className="p-3.5 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <p className="text-xs font-mono uppercase tracking-wider font-bold opacity-60 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" style={{ color: palette?.accent }} /> Impactful Cards Played
+                </p>
+                {impactfulCards.length === 0 ? (
+                  <div className="p-4 border border-dashed rounded-xl text-center text-[10px] font-mono opacity-40" style={{ borderColor: palette?.border }}>
+                    No impactful plays detected
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(() => {
+                      const card = impactfulCards[Math.min(impactfulIndex, impactfulCards.length - 1)];
+                      const byOpponent = card.is_opponent;
+                      return (
+                        <div className="space-y-1.5">
+                          {/* Card image with green (player) / red (opponent) border (90% width) */}
+                          <div className="mx-auto w-[90%]">
+                            <div className={`rounded-xl overflow-hidden border-2 ${byOpponent ? 'border-rose-500/70' : 'border-emerald-500/70'}`}>
+                              <img
+                                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(card.name)}&format=image&version=normal`}
+                                alt={card.name}
+                                className="w-full h-auto object-contain"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            </div>
+                          </div>
+                          {/* Below the card: just "Player" or "Opponent" */}
+                          <div className={`text-sm font-mono font-bold uppercase tracking-widest text-center ${byOpponent ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {byOpponent ? 'Opponent' : 'Player'}
+                          </div>
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-bold truncate" style={{ color: palette?.text }}>{card.name}</span>
+                            <span className="text-[10px] font-mono opacity-60 shrink-0 ml-2">
+                              {card.total_damage > 0 ? `${card.total_damage} dmg` : (card.max_hit > 0 ? `${card.max_hit} swing` : '')}
+                            </span>
+                          </div>
+                          {/* Carousel dots */}
+                          {impactfulCards.length > 1 && (
+                            <div className="flex items-center justify-center gap-1 pt-0.5">
+                              {impactfulCards.map((_, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => setImpactfulIndex(i)}
+                                  className={`w-1.5 h-1.5 rounded-full transition-all ${i === impactfulIndex ? 'bg-white/80 w-3' : 'bg-white/25 hover:bg-white/50'}`}
+                                  aria-label={`Card ${i + 1}`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
+
+        {/* Bottom-anchored: Open Full Match Info button (always visible at bottom, scrolls under) */}
+        {selectedMatch && (
+          <div className="pt-4 border-t mt-4 shrink-0" style={{ borderColor: `${palette?.border}66` }}>
+            <button
+              onClick={() => setIsFullInfoOpen(true)}
+              className="w-full box-border py-4 px-3 rounded-xl font-extrabold text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl border transition-all hover:bg-white/10 truncate"
+              style={{
+                backgroundColor: palette?.accent || '#38BDF8',
+                color: '#000000',
+                borderColor: palette?.accent || '#38BDF8',
+              }}
+            >
+              <Sparkles className="w-5 h-5 shrink-0" />
+              <span className="truncate">Open Full Match Info</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Dark Overlay Backdrop */}
@@ -980,6 +1316,7 @@ export default function App() {
         cards={selectedMatchCards}
         commanderInfo={commanderInfo}
         palette={palette}
+        impactfulGrpIds={new Set(impactfulCards.map((c) => c.grp_id))}
         onSelectDeck={(deckName) => {
           setIsFullInfoOpen(false);
           setActiveTab('decks');

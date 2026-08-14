@@ -11,6 +11,7 @@ interface FullMatchInfoModalProps {
   cards: CardItem[];
   commanderInfo: any;
   palette: any;
+  impactfulGrpIds?: Set<number>;
   onSelectDeck?: (deckName: string) => void;
   onSelectOpponent?: (opponentName: string) => void;
 }
@@ -22,6 +23,7 @@ export function FullMatchInfoModal({
   cards,
   commanderInfo,
   palette,
+  impactfulGrpIds,
   onSelectDeck,
   onSelectOpponent,
 }: FullMatchInfoModalProps) {
@@ -35,12 +37,13 @@ export function FullMatchInfoModal({
     setMousePos({ x: e.clientX, y: e.clientY });
   };
 
-  // Helper to render deck color identity pips
+  // Helper to render deck color identity pips (accepts either a WUBRG string or array)
   const renderDeckColorIdentity = (colorStr?: any) => {
-    if (!colorStr || typeof colorStr !== 'string' || colorStr === 'C') {
-      return <ManaPip symbol="C" size={16} />;
-    }
-    const colors = colorStr.split('').filter(c => ['W', 'U', 'B', 'R', 'G'].includes(c));
+    const colors = Array.isArray(colorStr)
+      ? colorStr.filter(c => ['W', 'U', 'B', 'R', 'G'].includes(c))
+      : (typeof colorStr === 'string' && colorStr !== 'C')
+        ? colorStr.split('').filter(c => ['W', 'U', 'B', 'R', 'G'].includes(c))
+        : [];
     if (colors.length === 0) {
       return <ManaPip symbol="C" size={16} />;
     }
@@ -53,15 +56,23 @@ export function FullMatchInfoModal({
     );
   };
 
-  // Compute opponent seen colors from cards
-  const opponentColors = Array.from(
-    new Set(
-      cards
-        .filter(c => c.is_opponent && c.colors)
-        .flatMap(c => (c.colors || '').split(''))
-        .filter(c => ['W', 'U', 'B', 'R', 'G'].includes(c))
-    )
-  ).join('');
+  // Derive how the match was won/lost from the MTGA result reason.
+  // "ResultReason_Concede" + result tells us who conceded.
+  const matchOutcome = (m: any): string => {
+    const reason = m.result_reason || '';
+    if (reason.includes('Concede')) {
+      if (m.result === 'win') return 'Victory — Opponent Conceded';
+      if (m.result === 'loss') return 'Defeat — Player Conceded';
+      return 'Match Ended (Concede)';
+    }
+    if (reason.includes('Timeout')) {
+      if (m.result === 'win') return 'Victory — Opponent Timeout';
+      return 'Defeat — Player Timeout';
+    }
+    if (m.result === 'win') return 'Victory';
+    if (m.result === 'loss') return 'Defeat';
+    return 'Match Ended';
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-none">
@@ -183,7 +194,7 @@ export function FullMatchInfoModal({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="opacity-60 text-[10px] uppercase font-semibold">Opponent Colors</span>
-                  {renderDeckColorIdentity(opponentColors || selectedMatch.opponent_colors)}
+                  {renderDeckColorIdentity(selectedMatch.opponent_colors || selectedMatch.opponent_colors_str)}
                 </div>
               </div>
 
@@ -204,6 +215,12 @@ export function FullMatchInfoModal({
                   <span className="opacity-40 px-1 font-normal">vs</span>
                   <span className="text-rose-400">{selectedMatch.opponent_life_end ?? 0} HP</span>
                 </div>
+              </div>
+
+              {/* Item 3B: How the match ended (victory/defeat + who conceded) */}
+              <div className="border-t pt-2 space-y-1" style={{ borderColor: `${palette?.border}66` }}>
+                <span className="opacity-60 text-[10px] uppercase font-semibold">Outcome</span>
+                <span className={`font-mono font-bold text-xs block ${selectedMatch.result === 'win' ? 'text-emerald-400' : 'text-rose-400'}`}>{matchOutcome(selectedMatch)}</span>
               </div>
             </div>
           </div>
@@ -248,6 +265,7 @@ export function FullMatchInfoModal({
                   palette={palette} 
                   onHoverCard={(c) => setHoveredCard(c)}
                   onMouseMove={handleMouseMove}
+                  impactfulGrpIds={impactfulGrpIds}
                 />
               </div>
             )}

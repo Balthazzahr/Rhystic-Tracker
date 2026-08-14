@@ -64,14 +64,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         total_cards
                     );
                 }
-                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, player_life, opponent_life, active_seat } => {
+                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
+                    if turn_number > 0 { assembler.current_turn = turn_number; }
                     for (instance_id, grp_id, owner_seat, zone_id) in objects {
                         assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
                     }
-                    assembler.update_game_state(msg_id, turn_number, player_life, opponent_life, active_seat);
+                    for (instance_id, amount) in damage_events {
+                        assembler.process_damage_event(instance_id, amount);
+                    }
+                    assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                 }
                 ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                    if let Some((record, card_records, turn_event_records)) = assembler.complete_match(winning_team_id, &reason) {
+                    if let Some((record, card_records, turn_event_records, impactful_records)) = assembler.complete_match(winning_team_id, &reason) {
                         println!(
                             "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}",
                             redact_str(&record.match_id),
@@ -80,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             record.player_life_end,
                             record.opponent_life_end
                         );
-                        let _ = db_manager.upsert_match(&record, &card_records, &turn_event_records).await;
+                        let _ = db_manager.upsert_match(&record, &card_records, &turn_event_records, &impactful_records).await;
                         println!("[LIVE TEST RUNNER] Upserted match record into rhystic_dev.db!");
                     }
                 }

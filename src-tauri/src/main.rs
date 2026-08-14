@@ -51,10 +51,9 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
     let query_cards_start = std::time::Instant::now();
     let bulk_rows = sqlx::query(
         r#"
-        SELECT mc.match_id, c.mana_cost, c.color_identity, c.colors, mc.count
+        SELECT mc.match_id, mc.is_opponent, c.mana_cost, c.color_identity, c.colors, mc.count
         FROM match_cards mc
         JOIN cards_cache c ON mc.grp_id = c.grp_id
-        WHERE mc.is_opponent = 0
         "#
     )
     .fetch_all(db.pool())
@@ -63,17 +62,19 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
 
     println!("[PROFILE] Bulk SQL query fetched {} card rows across all matches in {:?}", bulk_rows.len(), query_cards_start.elapsed());
 
-    // Build fast in-memory map of match_id -> (curve, color_set)
+    // Build fast in-memory map of match_id -> (curve, player_colors, opponent_colors)
     use std::collections::{HashMap, HashSet};
     struct MatchCardAggregate {
         curve: Vec<i64>,
         colors: HashSet<String>,
+        opponent_colors: HashSet<String>,
     }
 
     let mut map: HashMap<String, MatchCardAggregate> = HashMap::new();
 
     for r in bulk_rows {
         let match_id: String = r.get("match_id");
+        let is_opponent: bool = r.get("is_opponent");
         let mana_cost: Option<String> = r.get("mana_cost");
         let color_identity: Option<String> = r.get("color_identity");
         let colors: Option<String> = r.get("colors");
@@ -82,6 +83,7 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
         let entry = map.entry(match_id).or_insert_with(|| MatchCardAggregate {
             curve: vec![0i64; 7],
             colors: HashSet::new(),
+            opponent_colors: HashSet::new(),
         });
 
         if let Some(cost) = &mana_cost {
@@ -99,15 +101,38 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
             entry.curve[bin] += count;
         }
 
-        for source_str in [color_identity, colors].into_iter().flatten() {
-            for ch in source_str.chars() {
-                match ch {
-                    '1' | 'W' | 'w' => { entry.colors.insert("W".to_string()); },
-                    '2' | 'U' | 'u' => { entry.colors.insert("U".to_string()); },
-                    '3' | 'B' | 'b' => { entry.colors.insert("B".to_string()); },
-                    '4' | 'R' | 'r' => { entry.colors.insert("R".to_string()); },
-                    '5' | 'G' | 'g' => { entry.colors.insert("G".to_string()); },
-                    _ => {}
+        // Player cards contribute to the mana curve AND player colors; opponent cards
+        // contribute only to opponent colors (opponent curve is not displayed).
+        if !is_opponent {
+            for source_str in [color_identity, colors].into_iter().flatten() {
+                for ch in source_str.chars() {
+                    if !ch.is_ascii_alphanumeric() {
+                        continue;
+                    }
+                    match ch {
+                        '1' | 'W' | 'w' => { entry.colors.insert("W".to_string()); },
+                        '2' | 'U' | 'u' => { entry.colors.insert("U".to_string()); },
+                        '3' | 'B' | 'b' => { entry.colors.insert("B".to_string()); },
+                        '4' | 'R' | 'r' => { entry.colors.insert("R".to_string()); },
+                        '5' | 'G' | 'g' => { entry.colors.insert("G".to_string()); },
+                        _ => {}
+                    }
+                }
+            }
+        } else {
+            for source_str in [color_identity, colors].into_iter().flatten() {
+                for ch in source_str.chars() {
+                    if !ch.is_ascii_alphanumeric() {
+                        continue;
+                    }
+                    match ch {
+                        '1' | 'W' | 'w' => { entry.opponent_colors.insert("W".to_string()); },
+                        '2' | 'U' | 'u' => { entry.opponent_colors.insert("U".to_string()); },
+                        '3' | 'B' | 'b' => { entry.opponent_colors.insert("B".to_string()); },
+                        '4' | 'R' | 'r' => { entry.opponent_colors.insert("R".to_string()); },
+                        '5' | 'G' | 'g' => { entry.opponent_colors.insert("G".to_string()); },
+                        _ => {}
+                    }
                 }
             }
         }
@@ -121,9 +146,15 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
         let curve = agg.as_ref().map(|a| a.curve.clone()).unwrap_or_else(|| vec![0i64; 7]);
         
         let mut colors_arr: Vec<String> = agg
-            .map(|a| a.colors.into_iter().collect())
+            .as_ref()
+            .map(|a| a.colors.iter().cloned().collect())
             .unwrap_or_default();
         colors_arr.sort_by_key(|c| order.iter().position(|&x| x == c).unwrap_or(99));
+
+        let mut opponent_colors_arr: Vec<String> = agg
+            .map(|a| a.opponent_colors.into_iter().collect())
+            .unwrap_or_default();
+        opponent_colors_arr.sort_by_key(|c| order.iter().position(|&x| x == c).unwrap_or(99));
 
         let clean_format = parser::normalize_format(&m.format_name);
 
@@ -133,6 +164,7 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
             "date_str": m.date_str,
             "format_name": clean_format,
             "result": m.result,
+            "result_reason": m.result_reason,
             "duration_seconds": m.duration_seconds,
             "turns": m.turns,
             "going_first": m.going_first,
@@ -145,6 +177,7 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
             "opponent_life_end": m.opponent_life_end,
             "mana_curve": curve,
             "deck_colors": colors_arr,
+            "opponent_colors": opponent_colors_arr,
         }));
     }
 
@@ -315,8 +348,17 @@ async fn get_match_cards(match_id: String) -> Result<Vec<serde_json::Value>, Str
 }
 
 #[tauri::command]
-async fn get_match_turn_events(match_id: String) -> Result<Vec<serde_json::Value>, String> {
+async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    
+    let match_row = sqlx::query("SELECT hero_seat_id, hero_deck_name, opponent_name FROM matches WHERE id = ?")
+        .bind(&match_id)
+        .fetch_optional(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let hero_seat_id: u32 = match_row.as_ref().and_then(|r| r.try_get::<i64, _>("hero_seat_id").ok()).map(|s| s as u32).unwrap_or(1);
+
     let rows = sqlx::query(
         r#"
         SELECT e.turn_number, e.seat_id, e.event_type, e.grp_id, e.timestamp,
@@ -327,12 +369,12 @@ async fn get_match_turn_events(match_id: String) -> Result<Vec<serde_json::Value
         ORDER BY e.turn_number ASC, e.id ASC
         "#
     )
-    .bind(match_id)
+    .bind(&match_id)
     .fetch_all(db.pool())
     .await
     .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::new();
+    let mut events = Vec::new();
     for r in rows {
         let turn_number: i64 = r.get("turn_number");
         let seat_id: i64 = r.get("seat_id");
@@ -343,9 +385,10 @@ async fn get_match_turn_events(match_id: String) -> Result<Vec<serde_json::Value
         let card_type: Option<String> = r.get("card_type");
         let mana_cost: Option<String> = r.get("mana_cost");
 
-        result.push(serde_json::json!({
+        events.push(serde_json::json!({
             "turn_number": turn_number,
             "seat_id": seat_id,
+            "is_player": (seat_id as u32) == hero_seat_id,
             "event_type": event_type,
             "grp_id": grp_id,
             "timestamp": timestamp,
@@ -355,7 +398,139 @@ async fn get_match_turn_events(match_id: String) -> Result<Vec<serde_json::Value
         }));
     }
 
-    Ok(result)
+    Ok(serde_json::json!({
+        "hero_seat_id": hero_seat_id,
+        "events": events
+    }))
+}
+
+#[tauri::command]
+async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+    let hero_row = sqlx::query("SELECT hero_seat_id FROM matches WHERE id = ?")
+        .bind(&match_id)
+        .fetch_optional(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+    let hero_seat_id: i64 = hero_row.as_ref().and_then(|r| r.try_get("hero_seat_id").ok()).unwrap_or(1);
+
+    // 1. Damage-tracked impactful cards (dealt damage during the match).
+    let rows = sqlx::query(
+        r#"
+        SELECT i.grp_id, i.seat_id, i.total_damage, i.max_hit,
+               c.name, c.card_type, c.mana_cost, c.rarity
+        FROM match_impactful_cards i
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.match_id = ?
+        "#
+    )
+    .bind(&match_id)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2. High-mana cards that were actually PLAYED (cast) in the match, even if they
+    //    dealt no damage. MTGA does not emit damage annotations for non-damaging cards,
+    //    so we derive them from the play timeline + cards_cache mana cost.
+    let played_rows = sqlx::query(
+        r#"
+        SELECT DISTINCT e.grp_id, e.seat_id,
+               c.name, c.card_type, c.mana_cost, c.rarity
+        FROM match_turn_events e
+        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
+        WHERE e.match_id = ? AND e.event_type = 'play'
+        "#
+    )
+    .bind(&match_id)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Merge: keep damage cards as-is; add high-CMC played cards not already present.
+    let mut result: Vec<serde_json::Value> = Vec::new();
+    let mut seen_grp: std::collections::HashSet<i64> = std::collections::HashSet::new();
+
+    for r in rows {
+        let grp_id: i64 = r.get("grp_id");
+        let seat_id: i64 = r.get("seat_id");
+        let total_damage: i64 = r.get("total_damage");
+        let max_hit: i64 = r.get("max_hit");
+        let name: Option<String> = r.get("name");
+        let card_type: Option<String> = r.get("card_type");
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let rarity: Option<i64> = r.get("rarity");
+
+        // Resolve mana value via get_card_metadata which falls back to parsing
+        // the stored mana cost when cmc is 0 in the cache.
+        let cmc = card_db::get_card_metadata(db.pool(), grp_id)
+            .await.ok().flatten().map(|c| c.cmc).unwrap_or(0);
+
+        // Impactful threshold: at least 6 total damage dealt, OR cast for 5+ CMC.
+        if total_damage < 6 && cmc < 5 {
+            continue;
+        }
+
+        seen_grp.insert(grp_id);
+        result.push(serde_json::json!({
+            "grp_id": grp_id,
+            "seat_id": seat_id,
+            "is_opponent": seat_id != 0 && seat_id != hero_seat_id,
+            "total_damage": total_damage,
+            "max_hit": max_hit,
+            "cmc": cmc,
+            "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
+            "card_type": card_type,
+            "mana_cost": mana_cost,
+            "rarity": rarity.unwrap_or(0),
+        }));
+    }
+
+    for r in played_rows {
+        let grp_id: i64 = r.get("grp_id");
+        if seen_grp.contains(&grp_id) {
+            continue;
+        }
+        let seat_id: i64 = r.get("seat_id");
+        let name: Option<String> = r.get("name");
+        let card_type: Option<String> = r.get("card_type");
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let rarity: Option<i64> = r.get("rarity");
+
+        let cmc = card_db::get_card_metadata(db.pool(), grp_id)
+            .await.ok().flatten().map(|c| c.cmc).unwrap_or(0);
+
+        // Only include high-mana plays (5+ CMC) that weren't already flagged by damage.
+        if cmc < 5 {
+            continue;
+        }
+
+        seen_grp.insert(grp_id);
+        result.push(serde_json::json!({
+            "grp_id": grp_id,
+            "seat_id": seat_id,
+            "is_opponent": seat_id != 0 && seat_id != hero_seat_id,
+            "total_damage": 0,
+            "max_hit": 0,
+            "cmc": cmc,
+            "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
+            "card_type": card_type,
+            "mana_cost": mana_cost,
+            "rarity": rarity.unwrap_or(0),
+        }));
+    }
+
+    // Sort: damage cards first (by damage), then high-mana cards.
+    result.sort_by(|a, b| {
+        let da = a.get("total_damage").and_then(|v| v.as_i64()).unwrap_or(0);
+        let db_ = b.get("total_damage").and_then(|v| v.as_i64()).unwrap_or(0);
+        db_.cmp(&da)
+    });
+
+    Ok(serde_json::json!({
+        "hero_seat_id": hero_seat_id,
+        "cards": result
+    }))
 }
 
 #[derive(Clone)]
@@ -365,19 +540,162 @@ pub struct SharedMatchState(pub std::sync::Arc<tokio::sync::Mutex<MatchAssembler
 async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Result<serde_json::Value, String> {
     let assembler = state.0.lock().await;
     if let Some(active) = &assembler.active_match {
+        // Round = a full cycle where each player takes one turn. MTGA's turnNumber
+        // increments once per player-turn, so Round 1 = turns 1 & 2, Round 2 = turns 3 & 4, etc.
+        let round = (assembler.current_turn + 1) / 2;
+        let last_event = assembler.turn_events.last().map(|e| serde_json::json!({
+            "type": e.event_type,
+            "grp_id": e.grp_id,
+            "seat_id": e.seat_id,
+            "is_player": e.seat_id == assembler.player_seat_id,
+        }));
+
+        // Build a merged chronological feed of card actions + life changes for the live HUD.
+        let mut recent_events: Vec<serde_json::Value> = Vec::new();
+        {
+            let db_for_names = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+            // Build all feed entries tagged with their record sequence so card actions
+            // and life changes interleave in the correct chronological order.
+            let mut merged: Vec<(u64, serde_json::Value)> = Vec::new();
+
+            for (e, seq) in assembler.turn_events.iter().zip(assembler.turn_event_seqs.iter()) {
+                let name = card_db::get_card_metadata(db_for_names.pool(), e.grp_id as i64)
+                    .await.ok().flatten().map(|c| c.name).unwrap_or_else(|| format!("#{}", e.grp_id));
+                merged.push((*seq, serde_json::json!({
+                    "type": e.event_type,
+                    "seat_id": e.seat_id,
+                    "is_player": e.seat_id == assembler.player_seat_id,
+                    "name": name,
+                    "grp_id": e.grp_id,
+                })));
+            }
+
+            for (turn, old, new, seat, seq) in assembler.life_events.iter() {
+                let delta = new - old;
+                merged.push((*seq, serde_json::json!({
+                    "type": "life",
+                    "seat_id": seat,
+                    "is_player": *seat == assembler.player_seat_id,
+                    "name": format!("{} → {} ({} {})", old, new, if delta >= 0 { "+" } else { "" }, delta),
+                    "delta": delta,
+                    "turn": turn,
+                    "grp_id": 0,
+                })));
+            }
+
+            merged.sort_by_key(|(seq, _)| *seq);
+            // Keep only the most recent 30 entries.
+            let mstart = merged.len().saturating_sub(30);
+            recent_events = merged.into_iter().skip(mstart).map(|(_, ev)| ev).collect();
+        }
+
+        // Resolve commander names and deck colors from the card cache so the HUD can
+        // display them without an extra IPC round-trip.
+        let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+        let player_cmdr = if let Some(gid) = active.player_commander_id {
+            card_db::get_card_metadata(db.pool(), gid as i64).await.ok().flatten()
+        } else { None };
+        let opp_cmdr = if let Some(gid) = active.opponent_commander_id {
+            card_db::get_card_metadata(db.pool(), gid as i64).await.ok().flatten()
+        } else { None };
+
+        let mut player_colors: Vec<String> = Vec::new();
+        let mut opp_colors: Vec<String> = Vec::new();
+        let order = ["W", "U", "B", "R", "G"];
+
+        // Aggregate colors from cards seen so far (live deck color identity).
+        {
+            use std::collections::HashSet;
+            let mut ps = HashSet::new();
+            let mut os = HashSet::new();
+            for gid in assembler.player_cards_seen.keys() {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), *gid as i64).await {
+                    for src in [meta.color_identity, meta.colors].into_iter().flatten() {
+                        for ch in src.chars() {
+                            if !ch.is_ascii_alphanumeric() { continue; }
+                            match ch {
+                                '1' | 'W' => { ps.insert("W".to_string()); },
+                                '2' | 'U' => { ps.insert("U".to_string()); },
+                                '3' | 'B' => { ps.insert("B".to_string()); },
+                                '4' | 'R' => { ps.insert("R".to_string()); },
+                                '5' | 'G' => { ps.insert("G".to_string()); },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            for gid in assembler.opp_cards_seen.keys() {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), *gid as i64).await {
+                    for src in [meta.color_identity, meta.colors].into_iter().flatten() {
+                        for ch in src.chars() {
+                            if !ch.is_ascii_alphanumeric() { continue; }
+                            match ch {
+                                '1' | 'W' => { os.insert("W".to_string()); },
+                                '2' | 'U' => { os.insert("U".to_string()); },
+                                '3' | 'B' => { os.insert("B".to_string()); },
+                                '4' | 'R' => { os.insert("R".to_string()); },
+                                '5' | 'G' => { os.insert("G".to_string()); },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            player_colors = order.iter().filter(|c| ps.contains(**c)).map(|c| c.to_string()).collect();
+            opp_colors = order.iter().filter(|c| os.contains(**c)).map(|c| c.to_string()).collect();
+        }
+
         Ok(serde_json::json!({
             "is_active": true,
             "match_id": active.match_id,
             "format": active.format_name,
             "turn": assembler.current_turn,
+            "round": round,
             "player_life": assembler.current_player_life,
             "opponent_life": assembler.current_opp_life,
             "opponent_name": active.opponent_name.as_deref().unwrap_or("Opponent"),
             "player_deck_name": active.player_deck_name,
+            "player_commander": player_cmdr.map(|c| serde_json::json!({"grp_id": c.grp_id, "name": c.name})),
+            "opponent_commander": opp_cmdr.map(|c| serde_json::json!({"grp_id": c.grp_id, "name": c.name})),
+            "player_colors": player_colors,
+            "opponent_colors": opp_colors,
+            "player_cards_seen": assembler.player_cards_seen.len(),
+            "opponent_cards_seen": assembler.opp_cards_seen.len(),
             "turn_events_count": assembler.turn_events.len(),
-            "last_event": assembler.turn_events.last().map(|e| format!("{} (#{})", e.event_type.to_uppercase(), e.grp_id))
+            "last_event": last_event,
+            "recent_events": recent_events,
         }))
     } else {
+        // No active match. If a match just completed, keep reporting its result
+        // for a short window (e.g. 30s) so the HUD can show a result overlay.
+        if let Some((record, completed_at)) = &assembler.last_completed {
+            let elapsed = chrono::Utc::now().signed_duration_since(*completed_at);
+            if elapsed.num_seconds() < 30 {
+                let reason = record.result_reason.as_deref().unwrap_or("");
+                let reason_label = if reason.contains("Concede") {
+                    if record.result == "win" { "Opponent Conceded" } else { "Player Conceded" }
+                } else if reason.contains("Timeout") {
+                    "Time Expired"
+                } else {
+                    if record.result == "win" { "Victory" } else { "Defeat" }
+                };
+                return Ok(serde_json::json!({
+                    "is_active": false,
+                    "just_completed": true,
+                    "result": record.result,
+                    "result_reason": record.result_reason,
+                    "reason_label": reason_label,
+                    "match_id": record.match_id,
+                    "format": record.format_name,
+                    "player_deck_name": record.player_deck_name,
+                    "opponent_name": record.opponent_name,
+                    "player_life": record.player_life_end.unwrap_or(20),
+                    "opponent_life": record.opponent_life_end.unwrap_or(0),
+                }));
+            }
+        }
         Ok(serde_json::json!({
             "is_active": false
         }))
@@ -477,24 +795,35 @@ fn main() {
                                             total_cards
                                         );
                                     }
-                                    ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, player_life, opponent_life, active_seat } => {
+                                    ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
+                                        // Advance the turn BEFORE processing objects so plays/draws in this
+                                        // message are attributed to the correct turn. MTGA only emits turnNumber
+                                        // at turn boundaries, so without this, cards played in later turns get
+                                        // stamped with the previous turn (causing impossible "round 1" plays).
+                                        if turn_number > 0 {
+                                            assembler.current_turn = turn_number;
+                                        }
                                         for (instance_id, grp_id, owner_seat, zone_id) in objects {
                                             assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
                                         }
-                                        assembler.update_game_state(msg_id, turn_number, player_life, opponent_life, active_seat);
+                                        for (instance_id, amount) in damage_events {
+                                            assembler.process_damage_event(instance_id, amount);
+                                        }
+                                        assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                                     }
                                     ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                                        if let Some((record, card_records, turn_events)) = assembler.complete_match(winning_team_id, &reason) {
+                                        if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
                                             println!(
-                                                "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}",
+                                                "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
                                                 redact_str(&record.match_id),
                                                 record.result,
                                                 reason,
                                                 record.player_life_end,
                                                 record.opponent_life_end,
-                                                turn_events.len()
+                                                turn_events.len(),
+                                                impactful.len()
                                             );
-                                            let _ = db_manager.upsert_match(&record, &card_records, &turn_events).await;
+                                            let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
                                         }
                                     }
                                     ParsedEvent::Unknown => {}
@@ -510,9 +839,18 @@ fn main() {
                                     assembler.start_match(match_id.clone(), format_name.clone());
                                     assembler.update_reserved_players(&reserved_players);
                                 }
+                                ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
+                                    assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
+                                    println!(
+                                        "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
+                                        deck_name,
+                                        commander_id,
+                                        total_cards
+                                    );
+                                }
                                 ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                                    if let Some((record, card_records, turn_events)) = assembler.complete_match(winning_team_id, &reason) {
-                                        let _ = db_manager.upsert_match(&record, &card_records, &turn_events).await;
+                                    if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                                        let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
                                     }
                                 }
                                 _ => {}
@@ -534,6 +872,7 @@ fn main() {
             get_opponent_matches,
             get_match_cards,
             get_match_turn_events,
+            get_impactful_cards,
             get_live_match_state
         ])
         .run(tauri::generate_context!())

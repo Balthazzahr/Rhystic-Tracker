@@ -7,6 +7,7 @@ import { RenderManaCost } from '../utils/manaUtils';
 interface TurnEventItem {
   turn_number: number;
   seat_id: number;
+  is_player?: boolean;
   event_type: 'play' | 'draw' | string;
   grp_id: number;
   timestamp: string;
@@ -22,6 +23,7 @@ interface MatchTimelineProps {
   result: string;
   palette: any;
   cards: CardItem[];
+  opponentName?: string;
   onHoverCard?: (card: CardItem | null) => void;
 }
 
@@ -32,17 +34,24 @@ export function MatchTimeline({
   result,
   palette,
   cards,
+  opponentName,
   onHoverCard,
 }: MatchTimelineProps) {
   const [turnEvents, setTurnEvents] = useState<TurnEventItem[]>([]);
+  const [heroSeatId, setHeroSeatId] = useState<number>(goingFirst ? 1 : 2);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
       try {
-        const events = await invoke<TurnEventItem[]>('get_match_turn_events', { matchId });
-        setTurnEvents(events);
+        const res = await invoke<any>('get_match_turn_events', { matchId });
+        if (res && Array.isArray(res.events)) {
+          setTurnEvents(res.events);
+          setHeroSeatId(res.hero_seat_id || (goingFirst ? 1 : 2));
+        } else if (Array.isArray(res)) {
+          setTurnEvents(res);
+        }
       } catch (e) {
         console.error('Failed to fetch match turn events:', e);
         setTurnEvents([]);
@@ -51,32 +60,60 @@ export function MatchTimeline({
       }
     };
     fetchEvents();
-  }, [matchId]);
+  }, [matchId, goingFirst]);
 
-  // Group turn events by turn_number
-  const eventsByTurn = React.useMemo(() => {
-    const map: Record<number, TurnEventItem[]> = {};
+  // Group turn events by round. MTGA's turnNumber increments once per player-turn,
+  // so a "round" (both players having taken a turn) spans two turn numbers:
+  // Round 1 = turns 1 & 2, Round 2 = turns 3 & 4, etc.
+  const eventsByRound = React.useMemo(() => {
+    const map: Record<number, { player: TurnEventItem[]; opponent: TurnEventItem[] }> = {};
     for (const ev of turnEvents) {
-      if (!map[ev.turn_number]) {
-        map[ev.turn_number] = [];
+      const round = Math.ceil(ev.turn_number / 2);
+      if (!map[round]) {
+        map[round] = { player: [], opponent: [] };
       }
-      map[ev.turn_number].push(ev);
+      const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
+      (isPlayer ? map[round].player : map[round].opponent).push(ev);
     }
     return map;
-  }, [turnEvents]);
+  }, [turnEvents, heroSeatId]);
+
+  const renderEventRow = (ev: TurnEventItem, isPlayer: boolean) => (
+    <div
+      key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.timestamp}`}
+      onMouseEnter={() => onHoverCard && onHoverCard({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type })}
+      onMouseLeave={() => onHoverCard && onHoverCard(null)}
+      className="text-xs flex items-center justify-between p-1.5 rounded hover:bg-white/10 cursor-pointer group"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+          ev.event_type === 'play' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+        }`}>
+          {ev.event_type === 'draw' ? 'draw' : 'play'}
+        </span>
+        <span className="font-semibold text-xs truncate" style={{ color: palette?.text }}>{ev.name}</span>
+      </div>
+      <RenderManaCost costStr={ev.mana_cost} size={12} />
+    </div>
+  );
 
   return (
-    <div className="flex flex-col h-full space-y-3">
-      {/* Items 8 & 9: Prominent Header Banner Showing Play/Draw Order and Total Turns */}
-      <div className="p-3 rounded-xl border flex items-center justify-between text-xs font-mono" style={{ backgroundColor: `${palette?.surface}CC`, borderColor: palette?.border }}>
+    <div className="h-full flex flex-col space-y-4 p-4 rounded-2xl border" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+      {/* Header Bar */}
+      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: `${palette?.border}88` }}>
         <div className="flex items-center gap-2">
-          <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-          <span className="opacity-60">Order: </span>
-          <span className="font-bold text-amber-400">{goingFirst ? 'Went First (Play)' : 'Went Second (Draw)'}</span>
+          <Play className="w-4 h-4" style={{ color: palette?.accent }} />
+          <h3 className="font-bold text-sm font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+            Match Play Timeline
+          </h3>
         </div>
-        <div>
-          <span className="opacity-60">Duration: </span>
-          <span className="font-bold">{turns} Turns</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono opacity-60">Total Events: {turnEvents.length}</span>
+          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase ${
+            result === 'win' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+          }`}>
+            {result}
+          </span>
         </div>
       </div>
 
@@ -85,7 +122,6 @@ export function MatchTimeline({
         {loading ? (
           <div className="p-8 text-center text-xs opacity-40 font-mono">Loading turn timeline...</div>
         ) : turnEvents.length === 0 ? (
-          /* Item 7: Legacy Match Message (No Fabricated Modulo Slices) */
           <div className="p-8 border border-dashed rounded-2xl text-center space-y-2" style={{ backgroundColor: `${palette?.surface}44`, borderColor: palette?.border }}>
             <AlertCircle className="w-6 h-6 mx-auto opacity-40 text-amber-400" />
             <p className="text-xs font-bold font-outfit" style={{ color: palette?.text }}>
@@ -96,43 +132,52 @@ export function MatchTimeline({
             </p>
           </div>
         ) : (
-          /* Live Turn-by-Turn Events Stream */
-          Object.entries(eventsByTurn).map(([turnStr, evList]) => {
-            const turnNum = parseInt(turnStr, 10);
+          Object.entries(eventsByRound).map(([roundStr, cols]) => {
+            const roundNum = parseInt(roundStr, 10);
+            const playerCount = cols.player.length;
+            const opponentCount = cols.opponent.length;
+            if (playerCount === 0 && opponentCount === 0) return null;
+
             return (
-              <div 
-                key={turnNum}
+              <div
+                key={roundNum}
                 className="p-3 rounded-xl border space-y-2"
                 style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}88` }}
               >
                 <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: `${palette?.border}44` }}>
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border" style={{ borderColor: palette?.border, color: palette?.accent }}>
-                    Turn {turnNum}
+                    Round {roundNum}
                   </span>
                   <span className="text-[9px] font-mono opacity-50">
-                    {turnNum % 2 === (goingFirst ? 1 : 0) ? 'Player Turn' : 'Opponent Turn'}
+                    {`Turn ${roundNum * 2 - 1} + ${roundNum * 2}`}
                   </span>
                 </div>
 
-                <div className="space-y-1 pl-1">
-                  {evList.map((ev, idx) => (
-                    <div 
-                      key={idx}
-                      onMouseEnter={() => onHoverCard && onHoverCard({ grp_id: ev.grp_id, is_opponent: ev.seat_id !== 1, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type })}
-                      onMouseLeave={() => onHoverCard && onHoverCard(null)}
-                      className="text-xs flex items-center justify-between p-1.5 rounded hover:bg-white/10 cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded border ${
-                          ev.event_type === 'play' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-sky-500/10 text-sky-400 border-sky-500/30'
-                        }`}>
-                          {ev.event_type}
-                        </span>
-                        <span className="font-semibold text-xs" style={{ color: palette?.text }}>{ev.name}</span>
-                      </div>
-                      <RenderManaCost costStr={ev.mana_cost} size={12} />
+                {/* Two-column: Player vs Opponent actions for this round */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Player Column */}
+                  <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
+                    <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                      You ({playerCount})
                     </div>
-                  ))}
+                    {playerCount === 0 ? (
+                      <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                    ) : (
+                      cols.player.map((ev) => renderEventRow(ev, true))
+                    )}
+                  </div>
+
+                  {/* Opponent Column */}
+                  <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
+                    <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                      {(opponentName || 'Opponent')} ({opponentCount})
+                    </div>
+                    {opponentCount === 0 ? (
+                      <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                    ) : (
+                      cols.opponent.map((ev) => renderEventRow(ev, false))
+                    )}
+                  </div>
                 </div>
               </div>
             );

@@ -37,15 +37,19 @@ fn main() {
                 ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, .. } => {
                     assembler.set_deck(deck_name, commander_id, main_deck);
                 }
-                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, player_life, opponent_life, active_seat } => {
+                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
+                    if turn_number > 0 { assembler.current_turn = turn_number; }
                     for (instance_id, grp_id, owner_seat, zone_id) in objects {
                         assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
                     }
-                    assembler.update_game_state(msg_id, turn_number, player_life, opponent_life, active_seat);
+                    for (instance_id, amount) in damage_events {
+                        assembler.process_damage_event(instance_id, amount);
+                    }
+                    assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                 }
                 ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
                     let res = assembler.complete_match(winning_team_id, &reason);
-                    if let Some((record, _cards, turn_events)) = res {
+                    if let Some((record, _cards, turn_events, _impactful)) = res {
                         println!("\n=== OFFLINE TEST MATCH COMPLETED ===");
                         println!("Match ID: {}", record.match_id);
                         println!("Player Deck: {:?}", record.player_deck_name);

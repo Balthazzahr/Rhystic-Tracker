@@ -13,7 +13,7 @@ pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
     MatchCreated { match_id: String, format_name: String, reserved_players: serde_json::Value },
     DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32> },
-    GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, player_life: Option<i32>, opponent_life: Option<i32>, active_seat: u32 },
+    GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, life_by_seat: Vec<(u32, i32)>, active_seat: u32, damage_events: Vec<(u32, i32)> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
     Unknown,
 }
@@ -109,29 +109,33 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                 let mut main_deck = Vec::new();
                 let mut commander_id = None;
 
-                if let Some(req_str) = v.get("request").and_then(|r| r.as_str()) {
-                    if let Ok(req_val) = serde_json::from_str::<serde_json::Value>(req_str) {
-                        if let Some(summary) = req_val.get("Summary") {
-                            if let Some(name) = summary.get("Name").and_then(|n| n.as_str()) {
-                                deck_name = name.to_string();
-                            }
+                let target_obj = if let Some(req_str) = v.get("request").and_then(|r| r.as_str()) {
+                    serde_json::from_str::<serde_json::Value>(req_str).ok()
+                } else {
+                    Some(v.clone())
+                };
+
+                if let Some(obj) = target_obj {
+                    if let Some(summary) = obj.get("Summary").or_else(|| obj.get("CourseDeckSummary")) {
+                        if let Some(name) = summary.get("Name").and_then(|n| n.as_str()) {
+                            deck_name = name.to_string();
                         }
-                        if let Some(deck) = req_val.get("Deck") {
-                            if let Some(main) = deck.get("MainDeck").and_then(|m| m.as_array()) {
-                                for card in main {
-                                    if let Some(cid) = card.get("cardId").and_then(|c| c.as_u64()) {
-                                        let qty = card.get("quantity").and_then(|q| q.as_u64()).unwrap_or(1);
-                                        for _ in 0..qty {
-                                            main_deck.push(cid as u32);
-                                        }
+                    }
+                    if let Some(deck) = obj.get("Deck").or_else(|| obj.get("CourseDeck")) {
+                        if let Some(main) = deck.get("MainDeck").and_then(|m| m.as_array()) {
+                            for card in main {
+                                if let Some(cid) = card.get("cardId").and_then(|c| c.as_u64()) {
+                                    let qty = card.get("quantity").and_then(|q| q.as_u64()).unwrap_or(1);
+                                    for _ in 0..qty {
+                                        main_deck.push(cid as u32);
                                     }
                                 }
                             }
-                            if let Some(cmd) = deck.get("CommandZone").and_then(|c| c.as_array()) {
-                                if let Some(first) = cmd.first() {
-                                    if let Some(cid) = first.get("cardId").and_then(|c| c.as_u64()) {
-                                        commander_id = Some(cid as u32);
-                                    }
+                        }
+                        if let Some(cmd) = deck.get("CommandZone").and_then(|c| c.as_array()) {
+                            if let Some(first) = cmd.first() {
+                                if let Some(cid) = first.get("cardId").and_then(|c| c.as_u64()) {
+                                    commander_id = Some(cid as u32);
                                 }
                             }
                         }
@@ -164,30 +168,52 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     .and_then(|m| m.as_array());
 
                 if let Some(msgs) = messages {
+                    // A single log line can contain MANY GameStateMessage entries (one per
+                    // zone/state change). We must accumulate objects from ALL of them instead
+                    // of returning on the first one that has content, otherwise per-turn draws
+                    // and plays that appear in later messages on the same line are dropped.
+                    let mut batch: Vec<(u32, Option<u32>, Option<u32>, u32)> = Vec::new();
+                    let mut last_turn = 0u32;
+                    let mut last_active = 1u32;
+                    let mut life_by_seat: Vec<(u32, i32)> = Vec::new();
+                    let mut damage_events: Vec<(u32, i32)> = Vec::new();
+                    let mut any_content = false;
+
                     for msg in msgs {
                         if msg.get("type").and_then(|t| t.as_str()) == Some("GREMessageType_GameStateMessage") {
                             let msg_id = msg.get("msgId").and_then(|m| m.as_u64());
                             if let Some(gsm) = msg.get("gameStateMessage") {
-                                let mut batch = Vec::new();
-                                if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
-                                    for obj in objs {
-                                        if let (Some(inst_id), Some(zone_id)) = (
-                                            obj.get("instanceId").and_then(|i| i.as_u64()),
-                                            obj.get("zoneId").and_then(|z| z.as_u64())
-                                        ) {
-                                            let grp_id = obj.get("grpId").and_then(|g| g.as_u64()).map(|g| g as u32);
-                                            let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
-                                            batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32));
-                                        }
-                                    }
-                                }
+                                 if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
+                                     for obj in objs {
+                                         let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                                         // Only extract card objects (ignore raw abilities)
+                                         if obj_type.contains("Card") || obj_type.is_empty() {
+                                             if let (Some(inst_id), Some(zone_id)) = (
+                                                 obj.get("instanceId").and_then(|i| i.as_u64()),
+                                                 obj.get("zoneId").and_then(|z| z.as_u64())
+                                             ) {
+                                                 let grp_id = obj.get("grpId")
+                                                     .or_else(|| obj.get("overlayGrpId"))
+                                                     .or_else(|| obj.get("objectSourceGrpId"))
+                                                     .and_then(|g| g.as_u64())
+                                                     .map(|g| g as u32);
+                                                 let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
+                                                 batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32));
+                                             }
+                                         }
+                                     }
+                                 }
 
                                 let turn_info = gsm.get("turnInfo");
                                 let turn_number = turn_info.and_then(|t| t.get("turnNumber")).and_then(|n| n.as_u64()).unwrap_or(0) as u32;
-                                let active_seat = turn_info.and_then(|t| t.get("activeSeatId")).and_then(|s| s.as_u64()).unwrap_or(1) as u32;
-
-                                let mut player_life = None;
-                                let mut opponent_life = None;
+                                if turn_number > 0 {
+                                    last_turn = turn_number;
+                                    let active_seat = turn_info
+                                        .and_then(|t| t.get("activeSeatId").or_else(|| t.get("activePlayer")))
+                                        .and_then(|s| s.as_u64())
+                                        .unwrap_or(1) as u32;
+                                    last_active = active_seat;
+                                }
 
                                 if let Some(players) = gsm.get("players").and_then(|p| p.as_array()) {
                                     for p in players {
@@ -195,28 +221,69 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                             .or_else(|| p.get("systemSeatId"))
                                             .and_then(|s| s.as_u64())
                                             .unwrap_or(0);
-                                        
-                                        let life = p.get("lifeTotal").and_then(|l| l.as_i64()).map(|l| l as i32);
-                                        if seat_id == 1 {
-                                            player_life = life;
-                                        } else if seat_id == 2 {
-                                            opponent_life = life;
+
+                                        if let Some(life) = p.get("lifeTotal").and_then(|l| l.as_i64()).map(|l| l as i32) {
+                                            if seat_id > 0 {
+                                                life_by_seat.push((seat_id as u32, life));
+                                            }
                                         }
                                     }
                                 }
 
-                                if !batch.is_empty() || turn_number > 0 || player_life.is_some() || opponent_life.is_some() {
-                                    return ParsedEvent::GameStateUpdateCombined {
-                                        msg_id,
-                                        objects: batch,
-                                        turn_number,
-                                        player_life,
-                                        opponent_life,
-                                        active_seat,
-                                    };
+                                // Extract impactful-play annotations for damage attribution.
+                                // We use ONLY AnnotationType_DamageDealt, which MTGA emits once per
+                                // damaging source (so multi-attacker combat splits correctly across
+                                // each card). AnnotationType_ModifiedLife is deliberately NOT used:
+                                // it attributes the total life change to a single affectorId even
+                                // when the swing came from several cards, which misattributes damage.
+                                if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
+                                    for a in anns {
+                                        let ann_type = a.get("type").and_then(|t| t.as_array())
+                                            .and_then(|arr| arr.first())
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or("");
+                                        if !ann_type.contains("DamageDealt") {
+                                            continue;
+                                        }
+                                        let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                        if affector_id == 0 {
+                                            continue;
+                                        }
+                                        // details[].key == "damage", valueInt32 = amount.
+                                        if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                            for d in details {
+                                                let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                if key == "damage" {
+                                                    let amount = d.get("valueInt32").and_then(|v| v.as_array())
+                                                        .and_then(|arr| arr.first())
+                                                        .and_then(|x| x.as_i64())
+                                                        .unwrap_or(0) as i32;
+                                                    if amount != 0 {
+                                                        damage_events.push((affector_id, amount));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
+
+                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() {
+                                    any_content = true;
+                                }
+                                let _ = msg_id;
                             }
                         }
+                    }
+
+                    if any_content {
+                        return ParsedEvent::GameStateUpdateCombined {
+                            msg_id: None,
+                            objects: batch,
+                            turn_number: last_turn,
+                            life_by_seat,
+                            active_seat: last_active,
+                            damage_events,
+                        };
                     }
                 }
             }
@@ -299,5 +366,26 @@ mod tests {
         assert_eq!(normalize_format("MWM_SpecialEvent"), "Midweek Magic");
         assert_eq!(normalize_format("PremierDraft_WOE_2023"), "Limited");
         assert_eq!(normalize_format("AIBotMatch_Rebalanced"), "Bot Match");
+    }
+
+    #[test]
+    fn test_game_state_accumulates_objects_across_messages_on_one_line() {
+        // A single MTGA log line can contain many GameStateMessage entries. The parser
+        // must accumulate objects from ALL of them (not return on the first one) so that
+        // per-turn draws/plays that appear in later messages on the same line are kept.
+        let line = r#"[UnityCrossThreadLogger]==> {"greToClientEvent":{"greToClientMessages":[
+            {"type":"GREMessageType_GameStateMessage","msgId":1,"gameStateMessage":{"type":"GameStateType_Diff","gameObjects":[{"instanceId":100,"grpId":83677,"type":"GameObjectType_Card","zoneId":35,"ownerSeatId":2}]}},
+            {"type":"GREMessageType_GameStateMessage","msgId":2,"gameStateMessage":{"type":"GameStateType_Diff","turnInfo":{"turnNumber":3,"activePlayer":2},"gameObjects":[{"instanceId":200,"grpId":91549,"type":"GameObjectType_Card","zoneId":35,"ownerSeatId":2}]}}
+        ]}}"#;
+
+        match parse_line(line) {
+            ParsedEvent::GameStateUpdateCombined { objects, turn_number, .. } => {
+                assert_eq!(objects.len(), 2, "should accumulate objects from both messages");
+                assert_eq!(turn_number, 3, "should use the turn from the latest message");
+                assert!(objects.iter().any(|(inst, _, _, _)| *inst == 200));
+                assert!(objects.iter().any(|(inst, _, _, _)| *inst == 100));
+            }
+            other => panic!("expected GameStateUpdateCombined, got {:?}", other),
+        }
     }
 }

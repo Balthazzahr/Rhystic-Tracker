@@ -1,6 +1,6 @@
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use chrono::{DateTime, Utc};
-use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord};
+use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord, MatchImpactfulRecord};
 
 pub struct DatabaseManager {
     pool: Pool<Sqlite>,
@@ -46,6 +46,7 @@ impl DatabaseManager {
                 duration_seconds INTEGER NOT NULL,
                 turns INTEGER NOT NULL,
                 going_first BOOLEAN NOT NULL,
+                hero_seat_id INTEGER NOT NULL DEFAULT 1,
                 hero_deck_name TEXT,
                 hero_commander_id INTEGER,
                 hero_life_end INTEGER,
@@ -53,6 +54,7 @@ impl DatabaseManager {
                 opponent_commander_id INTEGER,
                 opponent_mulligans INTEGER,
                 opponent_life_end INTEGER,
+                result_reason TEXT,
                 raw_payload TEXT
             );
             CREATE TABLE IF NOT EXISTS match_cards (
@@ -86,31 +88,57 @@ impl DatabaseManager {
                 timestamp TEXT NOT NULL,
                 FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS match_impactful_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL,
+                grp_id INTEGER NOT NULL,
+                seat_id INTEGER NOT NULL,
+                total_damage INTEGER NOT NULL DEFAULT 0,
+                max_hit INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
             CREATE INDEX IF NOT EXISTS idx_match_turn_events_match_id ON match_turn_events(match_id);
             "#
         )
         .execute(&pool)
         .await?;
 
+        // Migration: add result_reason column to matches for existing databases created
+        // before the win/loss reason capture feature was introduced.
+        let col_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('matches') WHERE name = 'result_reason'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if col_check.is_none() {
+            sqlx::query("ALTER TABLE matches ADD COLUMN result_reason TEXT")
+                .execute(&pool)
+                .await?;
+            println!("[DB MIGRATION] Added result_reason column to matches table");
+        }
+
         Ok(Self { pool, db_filename })
     }
 
-    pub async fn upsert_match(&self, match_rec: &MatchRecord, cards: &[MatchCardRecord], turn_events: &[MatchTurnEventRecord]) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn upsert_match(&self, match_rec: &MatchRecord, cards: &[MatchCardRecord], turn_events: &[MatchTurnEventRecord], impactful: &[MatchImpactfulRecord]) -> Result<(), Box<dyn std::error::Error>> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
             r#"
             INSERT INTO matches (
-                id, timestamp, date_str, format, result, duration_seconds, turns, going_first,
+                id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_seat_id,
                 hero_deck_name, hero_commander_id, hero_life_end, opponent_name, opponent_commander_id,
-                opponent_mulligans, opponent_life_end, raw_payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                opponent_mulligans, opponent_life_end, result_reason, raw_payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 result = excluded.result,
                 duration_seconds = excluded.duration_seconds,
                 turns = excluded.turns,
                 hero_life_end = excluded.hero_life_end,
-                opponent_life_end = excluded.opponent_life_end
+                opponent_life_end = excluded.opponent_life_end,
+                result_reason = excluded.result_reason
             "#
         )
         .bind(&match_rec.match_id)
@@ -121,6 +149,7 @@ impl DatabaseManager {
         .bind(match_rec.duration_seconds as i64)
         .bind(match_rec.turns as i64)
         .bind(match_rec.going_first)
+        .bind(match_rec.hero_seat_id as i64)
         .bind(&match_rec.player_deck_name)
         .bind(match_rec.player_commander_id.map(|c| c as i64))
         .bind(match_rec.player_life_end)
@@ -128,6 +157,7 @@ impl DatabaseManager {
         .bind(match_rec.opponent_commander_id.map(|c| c as i64))
         .bind(match_rec.opponent_mulligans.map(|m| m as i64))
         .bind(match_rec.opponent_life_end)
+        .bind(&match_rec.result_reason)
         .bind("{}")
         .execute(&mut *tx)
         .await?;
@@ -166,6 +196,23 @@ impl DatabaseManager {
             .await?;
         }
 
+        // Save impactful card records (damage/life swings attributed to specific cards)
+        for imp in impactful {
+            sqlx::query(
+                r#"
+                INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit)
+                VALUES (?, ?, ?, ?, ?)
+                "#
+            )
+            .bind(&match_rec.match_id)
+            .bind(imp.grp_id as i64)
+            .bind(imp.seat_id as i64)
+            .bind(imp.total_damage as i64)
+            .bind(imp.max_hit as i64)
+            .execute(&mut *tx)
+            .await?;
+        }
+
         tx.commit().await?;
         Ok(())
     }
@@ -191,7 +238,7 @@ impl DatabaseManager {
             r#"
             SELECT id, timestamp, date_str, format, result, duration_seconds, turns, going_first,
                    hero_deck_name, hero_commander_id, hero_life_end, opponent_name, opponent_commander_id,
-                   opponent_mulligans, opponent_life_end
+                   opponent_mulligans, opponent_life_end, result_reason
             FROM matches
             ORDER BY timestamp DESC
             LIMIT ?
@@ -220,6 +267,7 @@ impl DatabaseManager {
                 duration_seconds: row.get::<i64, _>("duration_seconds") as u32,
                 turns: row.get::<i64, _>("turns") as u32,
                 going_first: row.get("going_first"),
+                hero_seat_id: row.try_get::<i64, _>("hero_seat_id").unwrap_or(1) as u32,
                 player_deck_name: row.get("hero_deck_name"),
                 player_commander_id: row.get::<Option<i64>, _>("hero_commander_id").map(|c| c as u32),
                 player_life_end: row.get("hero_life_end"),
@@ -227,6 +275,7 @@ impl DatabaseManager {
                 opponent_commander_id: row.get::<Option<i64>, _>("opponent_commander_id").map(|c| c as u32),
                 opponent_mulligans: row.get::<Option<i64>, _>("opponent_mulligans").map(|m| m as u32),
                 opponent_life_end: row.get("opponent_life_end"),
+                result_reason: row.try_get("result_reason").ok(),
             }
         }).collect();
 
