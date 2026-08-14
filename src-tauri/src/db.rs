@@ -370,8 +370,17 @@ impl DatabaseManager {
 mod tests {
     use super::*;
 
+    // RHYSTIC_ENV is process-global, so tests that mutate it must not run in
+    // parallel. A static lock serializes them to avoid a race.
+    static ENV_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.get_or_init(|| std::sync::Mutex::new(())).lock().unwrap()
+    }
+
     #[tokio::test]
     async fn test_db_isolation_defaults_to_dev() {
+        let _guard = env_lock();
         std::env::set_var("RHYSTIC_ENV", "development");
         let db = DatabaseManager::init().await.expect("Failed to init DB");
         assert_eq!(db.db_filename, "rhystic_dev.db");
@@ -379,6 +388,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_db_isolation_requires_explicit_production_env() {
+        let _guard = env_lock();
         std::env::set_var("RHYSTIC_ENV", "production");
         let db = DatabaseManager::init().await.expect("Failed to init DB");
         assert_eq!(db.db_filename, "rhystic.db");

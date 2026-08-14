@@ -236,6 +236,7 @@ mod tests {
                 set_code TEXT,
                 rarity INTEGER NOT NULL,
                 collector_number TEXT,
+                card_type TEXT,
                 last_updated TEXT NOT NULL
             );
             "#
@@ -247,13 +248,15 @@ mod tests {
         sqlx::query(
             r#"
             INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number, last_updated)
-            VALUES (69530, 'Bolas''s Citadel', 'o3oBoBoB', 6, 'B', 'B', 'WAR', 4, '79', DATETIME('now'));
+            VALUES (69530, 'Bolas''s Citadel', 'o3oBoBoB', 0, 'B', 'B', 'WAR', 4, '79', DATETIME('now'));
             "#
         )
         .execute(&pool)
         .await
         .unwrap();
 
+        // cmc is 0 in the cache but the card costs 6 — get_card_metadata must
+        // backfill it from the mana cost (o3oBoBoB = 3 + B + B + B = 6).
         let card = get_card_metadata(&pool, 69530).await.unwrap().expect("Card should exist in cache");
         assert_eq!(card.name, "Bolas's Citadel");
         assert_eq!(card.cmc, 6);
