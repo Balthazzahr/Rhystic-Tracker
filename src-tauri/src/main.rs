@@ -352,10 +352,10 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         let mut colors: HashSet<String> = HashSet::new();
         let mut curve = vec![0i64; 7];
         // Color-identity pollution guard: only count a card's colors toward the deck's
-        // identity if it appeared in >=10% of the deck's matches (min 2). This filters
+        // identity if it appeared in >=20% of the deck's matches (min 2). This filters
         // one-off anomalies (stolen/borrowed cards, legacy is_opponent mislabels) while
         // preserving genuine multicolor decks. Mana curve still uses all cards-seen.
-        let color_min_count = std::cmp::max(2i64, (total as f64 * 0.10).round() as i64);
+        let color_min_count = std::cmp::max(2i64, (total as f64 * 0.20).round() as i64);
         for card in &card_rows {
             let cdeck: String = card.get("deck_name");
             if cdeck != deck_name { continue; }
