@@ -1025,11 +1025,11 @@ export default function App() {
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
                 <div className="flex items-center py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
                   <div className="flex-1 min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
-                  <div className="w-[70px] shrink-0">{renderDeckColHeader('Colors', 'colors')}</div>
-                  <div className="w-[100px] shrink-0">{renderDeckColHeader('Format', 'format')}</div>
-                  <div className="w-[90px] shrink-0 text-right">{renderDeckColHeader('Games', 'games')}</div>
-                  <div className="w-[90px] shrink-0 text-right">{renderDeckColHeader('W/L', 'record')}</div>
-                  <div className="w-[90px] shrink-0 text-right">{renderDeckColHeader('Win Rate', 'winrate')}</div>
+                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('Colors', 'colors')}</div>
+                  <div className="w-[80px] shrink-0 text-center">{renderDeckColHeader('Format', 'format')}</div>
+                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('Games', 'games')}</div>
+                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('W/L', 'record')}</div>
+                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
                 </div>
               </div>
 
@@ -1052,35 +1052,23 @@ export default function App() {
                             borderColor: `${palette?.border || '#2A2F3D'}44`,
                           }}
                         >
-                          {/* Deck Art + Name + Commander breakdown */}
+                          {/* Deck Art + Name (left-aligned) */}
                           <div className="flex-1 min-w-[200px] flex items-center gap-3">
                             {renderDeckArt(d)}
                             <div className="min-w-0">
-                              <div className="text-sm font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
+                              <div className="text-lg font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
                                 {d.deck_name}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                                {(d.commanders || []).map((c: any, i: number) => (
-                                  <span key={i} className="text-[9px] font-mono px-1 py-0.5 rounded border" style={{ borderColor: `${palette?.border}66`, color: palette?.subtext }}>
-                                    {c.name} <span className="opacity-60">×{c.count}</span>
-                                  </span>
-                                ))}
-                                {(d.commanders || []).length === 0 && (
-                                  <span className="text-[9px] font-mono px-1 py-0.5 rounded border opacity-40" style={{ borderColor: palette?.border }}>
-                                    No Commander
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </div>
 
                           {/* Colors */}
-                          <div className="w-[70px] shrink-0 flex justify-center">
+                          <div className="w-[90px] shrink-0 flex justify-center">
                             {renderDeckColorIdentity(d.colors)}
                           </div>
 
-                          {/* Format chips */}
-                          <div className="w-[100px] shrink-0 flex flex-wrap gap-1">
+                          {/* Format chips (centered) */}
+                          <div className="w-[80px] shrink-0 flex flex-wrap gap-1 justify-center">
                             {(d.formats || []).map((f: any, i: number) => (
                               <span key={i} className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 border" style={{ borderColor: palette?.border, color: palette?.subtext }}>
                                 {f.format}
@@ -1089,17 +1077,17 @@ export default function App() {
                           </div>
 
                           {/* Games */}
-                          <div className="w-[90px] shrink-0 text-right font-mono text-sm font-bold" style={{ color: palette?.text }}>
+                          <div className="w-[90px] shrink-0 text-center font-mono text-sm font-bold" style={{ color: palette?.text }}>
                             {d.total_matches}
                           </div>
 
                           {/* W/L */}
-                          <div className="w-[90px] shrink-0 text-right font-mono text-sm font-bold" style={{ color: palette?.text }}>
+                          <div className="w-[90px] shrink-0 text-center font-mono text-sm font-bold" style={{ color: palette?.text }}>
                             {d.wins}/{d.losses}
                           </div>
 
                           {/* Win Rate */}
-                          <div className={`w-[90px] shrink-0 text-right font-mono text-sm font-bold ${parseFloat(d.winrate) >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <div className={`w-[90px] shrink-0 text-center font-mono text-sm font-bold ${parseFloat(d.winrate) >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {d.winrate}
                           </div>
                         </div>
