@@ -4,18 +4,25 @@ import { ManaPip } from '../components/ManaPip';
 export function parseMtgaManaCost(costStr?: string): string[] {
   if (!costStr) return [];
 
-  // Handle standard MTG bracketed notation e.g. "{3}{W}{U}"
+  // Handle standard MTG bracketed notation e.g. "{3}{W}{U}", "{G/W}", "{W/P}".
   const bracketMatches = costStr.match(/\{[^}]+\}/g);
   if (bracketMatches) {
     return bracketMatches.map(m => m.replace(/[{}]/g, ''));
   }
 
-  // Handle MTGA raw encoded string notation e.g. "o3oWoU", "o5oBoBoB", "o0", "o15"
+  // Handle MTGA raw encoded string notation e.g. "o3oWoU", "o5oBoBoB", "o(G/W)",
+  // "o0", "o15". A parenthesized group is a single hybrid/phyrexian symbol.
   if (costStr.includes('o')) {
     const parts = costStr.split('o').filter(p => p.trim().length > 0);
     const symbols: string[] = [];
     for (const p of parts) {
       const upper = p.toUpperCase();
+      // Parenthesized hybrid / phyrexian symbol e.g. "(G/W)", "(W/P)", "(2/W)".
+      if (upper.startsWith('(') && upper.endsWith(')')) {
+        const inner = upper.slice(1, -1);
+        symbols.push(inner);
+        continue;
+      }
       // If it's a numeric cost e.g. "5" or "12"
       if (/^\d+$/.test(upper)) {
         if (upper !== '0') {

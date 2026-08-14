@@ -297,7 +297,7 @@ export function FullMatchInfoModal({
             }}
           >
             <div 
-              className="p-2 rounded-2xl border shadow-2xl bg-black/90 backdrop-blur-md w-56 space-y-2"
+              className="p-2 rounded-2xl border shadow-2xl bg-black/90 backdrop-blur-md w-[340px] space-y-2"
               style={{ borderColor: palette?.accent || '#38BDF8' }}
             >
               <img

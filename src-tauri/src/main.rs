@@ -605,6 +605,47 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
     .await
     .map_err(|e| e.to_string())?;
 
+    // For Brawl decks, the mana-color distribution must stay within the
+    // commander's color identity (cards outside it are legacy leaks). Detect
+    // the format + dominant commander identity so off-identity cards are
+    // excluded from the color counts.
+    let format_row = sqlx::query(
+        "SELECT format FROM matches WHERE hero_deck_name = ? LIMIT 1"
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+    let is_brawl = format_row.as_ref()
+        .and_then(|r| r.get::<Option<String>,_>("format"))
+        .map(|f| f.eq_ignore_ascii_case("brawl"))
+        .unwrap_or(false);
+
+    let mut commander_identity: Vec<String> = Vec::new();
+    if is_brawl {
+        let cmd_row = sqlx::query(
+            r#"
+            SELECT c.color_identity FROM (
+                SELECT m.hero_commander_id, COUNT(*) as n
+                FROM matches m
+                WHERE m.hero_deck_name = ? AND m.hero_commander_id IS NOT NULL
+                GROUP BY m.hero_commander_id
+                ORDER BY n DESC LIMIT 1
+            ) top
+            JOIN cards_cache c ON top.hero_commander_id = c.grp_id
+            "#
+        )
+        .bind(&deck_name)
+        .fetch_optional(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+        if let Some(r) = cmd_row {
+            if let Some(ci) = r.get::<Option<String>,_>("color_identity") {
+                commander_identity = parse_identity(ci);
+            }
+        }
+    }
+
     // Mana value histogram: bin by CMC (same bins as overview curve).
     let mut curve = vec![0i64; 7];
     // Card type distribution: map primary type (last keyword wins).
@@ -647,6 +688,13 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         // excluded — this distribution reflects spell colors only.
         let is_land = ct.as_deref().map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
         if !is_land {
+            // Brawl color-identity guard: cards outside the commander's identity
+            // are legacy leaks and must not pollute the color distribution.
+            if is_brawl && !commander_identity.is_empty() {
+                let card_identity = parse_identity(ci.clone().unwrap_or_default());
+                let within = card_identity.is_empty() || card_identity.iter().all(|c| commander_identity.contains(c));
+                if !within { continue; }
+            }
             let mut card_colors: Vec<String> = Vec::new();
             for src in [ci, cols].into_iter().flatten() {
                 for ch in src.chars() {
@@ -804,6 +852,186 @@ async fn get_opponent_matches(opponent_name: String) -> Result<Vec<serde_json::V
     }
 
     Ok(result)
+}
+
+/// Aggregates every distinct card the player logged while playing a deck
+/// ("All Logged Cards"). Cards are grouped by resolved name (printings merged),
+/// with a canonical grp_id for art, the max copies seen in any single match
+/// (the practical deck count), the summed copies across all matches, and how
+/// many of the deck's matches the card appeared in.
+///
+/// For Brawl decks, a commander color-identity filter is applied: cards whose
+/// identity includes a color outside the commander's identity are dropped as
+/// they cannot be part of the deck (a byproduct of legacy is_opponent logging
+/// leaks). Colorless cards are always kept.
+#[tauri::command]
+async fn get_deck_cards(deck_name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+    // Determine the deck's format (single-format per deck in practice).
+    let format: Option<String> = sqlx::query(
+        r#"
+        SELECT format FROM matches WHERE hero_deck_name = ? LIMIT 1
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|e| e.to_string())?
+    .map(|r| r.get("format"));
+
+    let is_brawl = format.as_deref().map(|f| f.eq_ignore_ascii_case("brawl")).unwrap_or(false);
+
+    // Dominant commander color identity for Brawl decks.
+    let mut commander_identity: Vec<String> = Vec::new();
+    let mut commander_name: Option<String> = None;
+    let mut commander_grp_id: Option<i64> = None;
+    let mut commander_mana_cost: Option<String> = None;
+    let mut commander_rarity: Option<i64> = None;
+    if is_brawl {
+        let cmd_row = sqlx::query(
+            r#"
+            SELECT c.name, c.grp_id, c.color_identity, c.mana_cost, c.rarity FROM (
+                SELECT m.hero_commander_id, COUNT(*) as n
+                FROM matches m
+                WHERE m.hero_deck_name = ? AND m.hero_commander_id IS NOT NULL
+                GROUP BY m.hero_commander_id
+                ORDER BY n DESC LIMIT 1
+            ) top
+            JOIN cards_cache c ON top.hero_commander_id = c.grp_id
+            "#
+        )
+        .bind(&deck_name)
+        .fetch_optional(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if let Some(r) = cmd_row {
+            let ci: Option<String> = r.get("color_identity");
+            if let Some(ci) = ci {
+                commander_identity = parse_identity(ci);
+            }
+            commander_name = r.get("name");
+            commander_grp_id = r.get("grp_id");
+            commander_mana_cost = r.get("mana_cost");
+            commander_rarity = r.get("rarity");
+        }
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT c.name,
+               MIN(c.grp_id) as grp_id,
+               MAX(mc.count) as max_count,
+               SUM(mc.count) as total_count,
+               COUNT(DISTINCT mc.match_id) as match_freq,
+               c.mana_cost, c.card_type, c.colors, c.color_identity, c.cmc, c.rarity, c.set_code
+        FROM match_cards mc
+        JOIN matches m ON mc.match_id = m.id
+        JOIN cards_cache c ON mc.grp_id = c.grp_id
+        WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+        GROUP BY c.name
+        ORDER BY c.name ASC
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let total_matches: i64 = sqlx::query(
+        r#"
+        SELECT COUNT(*) as n FROM matches WHERE hero_deck_name = ?
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_one(db.pool())
+    .await
+    .map_err(|e| e.to_string())?
+    .get("n");
+
+    let mut cards: Vec<serde_json::Value> = Vec::new();
+    let mut filtered_identity: i64 = 0;
+    for r in &rows {
+        let name: Option<String> = r.get("name");
+        let grp_id: i64 = r.get("grp_id");
+        let max_count: i64 = r.get("max_count");
+        let total_count: i64 = r.get("total_count");
+        let match_freq: i64 = r.get("match_freq");
+
+        // Brawl color-identity filter: drop cards outside the commander's identity.
+        if is_brawl && !commander_identity.is_empty() {
+            let ci: Option<String> = r.get("color_identity");
+            let card_identity = parse_identity(ci.unwrap_or_default());
+            let within = card_identity.is_empty() || card_identity.iter().all(|c| commander_identity.contains(c));
+            if !within {
+                filtered_identity += 1;
+                continue;
+            }
+        }
+
+        // Brawl singleton rule: only one copy of any card except basic lands.
+        // Legacy logs sometimes recorded inflated counts (e.g. 3x of a singleton
+        // Brawl card); the true-deck upload will fix that at the source, but for
+        // now display Brawl decks as the rules dictate. Lands keep their count.
+        let card_type = r.get::<Option<String>,_>("card_type");
+        let is_land = card_type.as_deref().map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
+        let display_count = if is_brawl && !is_land {
+            std::cmp::min(max_count, 1)
+        } else {
+            max_count
+        };
+
+        cards.push(serde_json::json!({
+            "grp_id": grp_id,
+            "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
+            "max_count": display_count,
+            "total_count": total_count,
+            "match_freq": match_freq,
+            "mana_cost": r.get::<Option<String>,_>("mana_cost"),
+            "card_type": card_type,
+            "colors": r.get::<Option<String>,_>("colors"),
+            "color_identity": r.get::<Option<String>,_>("color_identity"),
+            "cmc": r.get::<i64,_>("cmc"),
+            "rarity": r.get::<i64,_>("rarity"),
+            "set_code": r.get::<Option<String>,_>("set_code"),
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "deck_name": deck_name,
+        "format": format,
+        "is_brawl": is_brawl,
+        "commander_name": commander_name,
+        "commander_grp_id": commander_grp_id,
+        "commander_mana_cost": commander_mana_cost,
+        "commander_rarity": commander_rarity,
+        "commander_identity": commander_identity,
+        "filtered_identity_count": filtered_identity,
+        "total_matches": total_matches,
+        "cards": cards,
+        "card_count": cards.len(),
+    }))
+}
+
+/// Parses an MTGA color_identity string (comma-separated codes, 1=W 2=U 3=B 4=R
+/// 5=G) into a list of color letters. Colorless/empty returns an empty list.
+fn parse_identity(s: String) -> Vec<String> {
+    let mut out = Vec::new();
+    for ch in s.chars() {
+        let c = match ch {
+            '1' | 'W' => "W",
+            '2' | 'U' => "U",
+            '3' | 'B' => "B",
+            '4' | 'R' => "R",
+            '5' | 'G' => "G",
+            _ => "",
+        };
+        if !c.is_empty() && !out.iter().any(|o| o == c) {
+            out.push(c.to_string());
+        }
+    }
+    out
 }
 
 #[tauri::command]
@@ -1373,6 +1601,7 @@ fn main() {
             get_deck_stats,
             get_deck_overview,
             get_deck_detail,
+            get_deck_cards,
             get_card_info,
             get_commander_info,
             get_opponent_h2h_stats,

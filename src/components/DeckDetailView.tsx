@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { ManaPip } from './ManaPip';
+import DeckCardList from './DeckCardList';
 
 interface DeckDetailViewProps {
   isOpen: boolean;
@@ -324,11 +325,9 @@ export function DeckDetailView({
               </div>
             </div>
 
-            {/* Main content area: reserved for the decklist (Stage 3/4) */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
-              <div className="rounded-2xl border border-dashed p-8 text-center text-xs font-mono opacity-40" style={{ borderColor: palette?.border }}>
-                Decklist (full card list) arriving in Stage 3.
-              </div>
+            {/* Main content area: categorized decklist (Stage 3) */}
+            <div className="flex-1 p-5 overflow-hidden min-h-0">
+              <DeckCardList deckName={deckName} palette={palette} />
             </div>
           </div>
         </div>
@@ -336,8 +335,8 @@ export function DeckDetailView({
         {/* Floating commander card preview on hover */}
         {hoverCmdr && detail.commander_name && (
           <div
-            className="fixed pointer-events-none z-[60] w-48 rounded-xl overflow-hidden border shadow-2xl transition-opacity duration-150"
-            style={{ left: `${hoverCmdr.x + 18}px`, top: `${Math.min(hoverCmdr.y - 100, window.innerHeight - 360)}px`, borderColor: palette?.border }}
+            className="fixed pointer-events-none z-[60] w-[340px] rounded-xl overflow-hidden border shadow-2xl transition-opacity duration-150"
+            style={{ left: `${hoverCmdr.x + 18}px`, top: `${Math.min(hoverCmdr.y - 100, window.innerHeight - 560)}px`, borderColor: palette?.border }}
           >
             <img src={scryfallCardUrl(detail.commander_name)} alt={detail.commander_name} className="w-full" />
           </div>
