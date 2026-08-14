@@ -28,6 +28,7 @@ import { MatchTimeline } from './components/MatchTimeline';
 import { HoverArtPreview } from './components/HoverArtPreview';
 import { FullMatchInfoModal } from './components/FullMatchInfoModal';
 import { OpponentH2HModal } from './components/OpponentH2HModal';
+import { DeckDetailView } from './components/DeckDetailView';
 import logoImg from './assets/logo.png';
 
 interface ManaTheme {
@@ -102,6 +103,8 @@ export default function App() {
   const [impactfulCards, setImpactfulCards] = useState<any[]>([]);
   const [impactfulIndex, setImpactfulIndex] = useState<number>(0);
   const [deckOverview, setDeckOverview] = useState<any[]>([]);
+  const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null);
+  const [deckDetail, setDeckDetail] = useState<any>(null);
   const [deckSearch, setDeckSearch] = useState('');
   const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
   const [commanderSearch, setCommanderSearch] = useState('');
@@ -155,6 +158,21 @@ export default function App() {
       console.error('Failed to load deck overview:', e);
     }
   };
+
+  // Load deck detail when a deck is selected.
+  useEffect(() => {
+    if (!selectedDeckName) { setDeckDetail(null); return; }
+    const fetchDetail = async () => {
+      try {
+        const detail = await invoke<any>('get_deck_detail', { deckName: selectedDeckName });
+        setDeckDetail(detail);
+      } catch (e) {
+        console.error('Failed to load deck detail:', e);
+        setDeckDetail(null);
+      }
+    };
+    fetchDetail();
+  }, [selectedDeckName]);
 
   const [commanderInfo, setCommanderInfo] = useState<{ player_commander: any; opponent_commander: any } | null>(null);
 
@@ -425,9 +443,9 @@ export default function App() {
     };
     const triName: Record<string, string> = {
       // Shards
-      WUG: 'Bant', WUB: 'Esper', UBR: 'Grixis', BRG: 'Jund', RGW: 'Naya',
+      WUG: 'Bant', WUB: 'Esper', UBR: 'Grixis', BRG: 'Jund', WRG: 'Naya',
       // Wedges
-      WBG: 'Abzan', WUR: 'Jeskai', BGU: 'Sultai', WBR: 'Mardu', GUR: 'Temur',
+      WBG: 'Abzan', WUR: 'Jeskai', UBG: 'Sultai', WBR: 'Mardu', URG: 'Temur',
     };
 
     const monoCounts: Record<string, number> = {};
@@ -1097,9 +1115,26 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center space-y-3 opacity-50">
-                <Sparkles className="w-8 h-8 animate-bounce" style={{ color: palette?.accent }} />
-                <p className="text-xs font-mono">Launch a match in MTGA — Rhystic Tracker will automatically display live turn numbers, life totals, and played cards here in real time!</p>
+              <div className="flex-1 relative flex flex-col items-center justify-center overflow-hidden">
+                {/* Large desaturated, semi-transparent Rhystic Tracker logo in the background */}
+                <img
+                  src={logoImg}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-contain opacity-20"
+                  style={{ filter: 'grayscale(100%) saturate(0%)' }}
+                />
+
+                {/* IDLE / WAITING FOR MATCH pill */}
+                <div className="relative z-10 px-8 py-3 rounded-full border bg-black/60 backdrop-blur-md shadow-2xl" style={{ borderColor: palette?.border }}>
+                  <span className="text-sm font-black font-mono uppercase tracking-widest" style={{ color: palette?.subtext }}>
+                    Idle / Waiting for Match
+                  </span>
+                </div>
+
+                {/* Launch prompt at the bottom */}
+                <div className="absolute bottom-8 left-0 right-0 z-10 text-center">
+                  <p className="text-sm font-mono opacity-60">Launch a match to start tracking stats</p>
+                </div>
               </div>
             )}
           </div>
@@ -1309,7 +1344,8 @@ export default function App() {
               </div>
             )}
 
-            {/* Deck Overview — Virtualized Sortable Table */}
+            {/* Deck Library content: table (no deck selected) OR Deck Detail view */}
+            {!selectedDeckName ? (
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
               {/* Table Header */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
@@ -1334,7 +1370,7 @@ export default function App() {
                       return (
                         <div
                           key={d.deck_name}
-                          onClick={() => setActiveTab('decks')}
+                          onClick={() => setSelectedDeckName(d.deck_name)}
                           className="absolute top-0 left-0 w-full flex items-center gap-3 px-4 border-b transition-colors cursor-pointer hover:bg-white/5"
                           style={{
                             height: `${virtualRow.size}px`,
@@ -1387,6 +1423,25 @@ export default function App() {
                 )}
               </div>
             </div>
+            ) : (
+            <DeckDetailView
+              deckName={selectedDeckName}
+              detail={deckDetail}
+              palette={palette}
+              onBack={() => setSelectedDeckName(null)}
+              onSelectMatch={(matchId) => {
+                setSelectedMatchId(matchId);
+                setIsDrawerOpenManual(true);
+              }}
+              onViewAll={() => {
+                setDeckSearch(selectedDeckName);
+                setActiveTab('matches');
+              }}
+              renderDeckArt={renderDeckArt}
+              renderDeckColorIdentity={renderDeckColorIdentity}
+              formatDateShort={formatDateShort}
+            />
+            )}
           </div>
         )}
 

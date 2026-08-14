@@ -440,6 +440,168 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     Ok(result)
 }
 
+/// Full detail for a single deck (Deck Detail view, Stage 1):
+/// base W-L / winrate, play vs draw split, dominant commander, deck colors,
+/// and the 5 most recent matches.
+#[tauri::command]
+async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+    // Base stats.
+    let base_row = sqlx::query(
+        r#"
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+               SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses
+        FROM matches
+        WHERE hero_deck_name = ?
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let total: i64 = base_row.as_ref().map(|r| r.get("total")).unwrap_or(0);
+    let wins: i64 = base_row.as_ref().map(|r| r.get("wins")).unwrap_or(0);
+    let losses: i64 = base_row.as_ref().map(|r| r.get("losses")).unwrap_or(0);
+    let winrate = if total > 0 { (wins as f64 / total as f64) * 100.0 } else { 0.0 };
+
+    // Play vs draw split (going_first = 1 play, 0 draw). Exclude NULL (unknown
+    // order, legacy matches) from both buckets.
+    let split_rows = sqlx::query(
+        r#"
+        SELECT going_first,
+               SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+               SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses
+        FROM matches
+        WHERE hero_deck_name = ? AND going_first IS NOT NULL
+        GROUP BY going_first
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut play = serde_json::json!({ "wins": 0, "losses": 0 });
+    let mut draw = serde_json::json!({ "wins": 0, "losses": 0 });
+    for r in &split_rows {
+        let gf: bool = r.get("going_first");
+        let w: i64 = r.get("wins");
+        let l: i64 = r.get("losses");
+        let obj = if gf { &mut play } else { &mut draw };
+        obj["wins"] = serde_json::json!(w);
+        obj["losses"] = serde_json::json!(l);
+    }
+
+    // Dominant commander (top by count, printings merged), with a grp_id for art.
+    let commander_row = sqlx::query(
+        r#"
+        SELECT commander_name, grp_id FROM (
+            SELECT c.name as commander_name, MIN(m.hero_commander_id) as grp_id, COUNT(*) as n,
+                   ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, c.name ASC) as rn
+            FROM matches m
+            JOIN cards_cache c ON m.hero_commander_id = c.grp_id
+            WHERE m.hero_deck_name = ?
+              AND m.hero_commander_id IS NOT NULL
+            GROUP BY c.name
+        ) WHERE rn = 1
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+    let commander_name: Option<String> = commander_row.as_ref().map(|r| r.get("commander_name"));
+    let commander_grp_id: Option<i64> = commander_row.as_ref().map(|r| r.get("grp_id"));
+
+    // Deck colors using the 20% relative-frequency threshold (same as overview).
+    let deck_total: i64 = total;
+    let color_min_count = std::cmp::max(2i64, (deck_total as f64 * 0.20).round() as i64);
+    let color_rows = sqlx::query(
+        r#"
+        SELECT c.color_identity, c.colors, SUM(mc.count) as count
+        FROM match_cards mc
+        JOIN matches m ON mc.match_id = m.id
+        JOIN cards_cache c ON mc.grp_id = c.grp_id
+        WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+        GROUP BY m.hero_deck_name, c.grp_id, c.color_identity, c.colors
+        HAVING SUM(mc.count) >= ?
+        "#
+    )
+    .bind(&deck_name)
+    .bind(color_min_count)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let order = ["W", "U", "B", "R", "G"];
+    use std::collections::HashSet;
+    let mut colors: HashSet<String> = HashSet::new();
+    for r in &color_rows {
+        let ci: Option<String> = r.get("color_identity");
+        let cols: Option<String> = r.get("colors");
+        for src in [ci, cols].into_iter().flatten() {
+            for ch in src.chars() {
+                if !ch.is_ascii_alphanumeric() { continue; }
+                match ch {
+                    '1' | 'W' => { colors.insert("W".to_string()); },
+                    '2' | 'U' => { colors.insert("U".to_string()); },
+                    '3' | 'B' => { colors.insert("B".to_string()); },
+                    '4' | 'R' => { colors.insert("R".to_string()); },
+                    '5' | 'G' => { colors.insert("G".to_string()); },
+                    _ => {}
+                }
+            }
+        }
+    }
+    let colors_arr: Vec<String> = order.iter()
+        .filter(|c| colors.contains(**c)).map(|c| c.to_string()).collect();
+
+    // Last 5 matches.
+    let recent_rows = sqlx::query(
+        r#"
+        SELECT id, timestamp, opponent_name, result, hero_life_end, opponent_life_end, going_first
+        FROM matches
+        WHERE hero_deck_name = ?
+        ORDER BY timestamp DESC
+        LIMIT 5
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut recent: Vec<serde_json::Value> = Vec::new();
+    for r in recent_rows {
+        recent.push(serde_json::json!({
+            "match_id": r.get::<String,_>("id"),
+            "timestamp": r.get::<String,_>("timestamp"),
+            "opponent_name": r.get::<Option<String>,_>("opponent_name"),
+            "result": r.get::<String,_>("result"),
+            "hero_life_end": r.get::<Option<i64>,_>("hero_life_end"),
+            "opponent_life_end": r.get::<Option<i64>,_>("opponent_life_end"),
+            "going_first": r.get::<Option<bool>,_>("going_first"),
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "deck_name": deck_name,
+        "total": total,
+        "wins": wins,
+        "losses": losses,
+        "winrate": format!("{:.1}%", winrate),
+        "play": play,
+        "draw": draw,
+        "commander_name": commander_name,
+        "commander_grp_id": commander_grp_id,
+        "colors": colors_arr,
+        "recent_matches": recent,
+    }))
+}
+
 #[tauri::command]
 async fn get_card_info(grp_id: i64) -> Result<Option<card_db::CardMetadata>, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
@@ -1115,6 +1277,7 @@ fn main() {
             get_recent_matches, 
             get_deck_stats,
             get_deck_overview,
+            get_deck_detail,
             get_card_info,
             get_commander_info,
             get_opponent_h2h_stats,
