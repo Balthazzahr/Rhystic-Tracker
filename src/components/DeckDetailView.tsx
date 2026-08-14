@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
@@ -148,6 +148,29 @@ export function DeckDetailView({
   const [deckListData, setDeckListData] = useState<any>(null);
   const [deckListStatus, setDeckListStatus] = useState<any>(null);
   const [listMode, setListMode] = useState<'logged' | 'true'>('logged');
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<'true' | 'logged'>('true');
+  const [exportText, setExportText] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  // Load the export text whenever the dialog opens or the mode changes.
+  useEffect(() => {
+    if (!exportOpen || !deckName) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await invoke<any>('export_decklist', { deckName, source: exportMode });
+        if (!cancelled) {
+          setExportText(res?.text || '');
+          setCopied(false);
+        }
+      } catch {
+        if (!cancelled) setExportText('');
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [exportOpen, exportMode, deckName, importResult]);
 
   // Load the stored True Decklist + status whenever the deck or import changes.
   useEffect(() => {
@@ -387,13 +410,24 @@ export function DeckDetailView({
                     All Logged Cards
                   </button>
                 </div>
-                <button
-                  onClick={() => setImportOpen(true)}
-                  className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
-                  style={{ color: palette?.accent || '#38BDF8', borderColor: `${palette?.accent}55` }}
-                >
-                  <Upload className="w-3.5 h-3.5" /> Import Decklist
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setImportOpen(true)}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
+                    style={{ color: '#34D399', borderColor: '#34D39955' }}
+                    title="Import a decklist from MTGA"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Import
+                  </button>
+                  <button
+                    onClick={() => setExportOpen(true)}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
+                    style={{ color: '#F97316', borderColor: '#F9731655' }}
+                    title="Export this deck in MTGA format"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Export
+                  </button>
+                </div>
               </div>
 
               {/* Mode content */}
@@ -503,6 +537,84 @@ export function DeckDetailView({
                 >
                   {importBusy ? 'Importing…' : 'Import'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Export Decklist dialog */}
+        {exportOpen && (
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-text"
+            onClick={() => setExportOpen(false)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden"
+              style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
+                <div>
+                  <p className="text-sm font-bold font-outfit" style={{ color: palette?.text }}>Export Decklist</p>
+                  <p className="text-[10px] font-mono opacity-50">MTGA-compatible format — select and copy, or use the button below</p>
+                </div>
+                <button onClick={() => setExportOpen(false)} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                {/* Source toggle */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider opacity-50" style={{ color: palette?.text }}>Export</span>
+                  <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: palette?.border }}>
+                    <button
+                      onClick={() => { setExportMode('true'); setCopied(false); }}
+                      className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors ${exportMode === 'true' ? '' : 'opacity-50 hover:opacity-80'}`}
+                      style={{ color: exportMode === 'true' ? palette?.accent : palette?.text, backgroundColor: exportMode === 'true' ? `${palette?.accent}1a` : 'transparent' }}
+                    >
+                      True Decklist
+                    </button>
+                    <button
+                      onClick={() => { setExportMode('logged'); setCopied(false); }}
+                      className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors border-l ${exportMode === 'logged' ? '' : 'opacity-50 hover:opacity-80'}`}
+                      style={{ color: exportMode === 'logged' ? palette?.accent : palette?.text, backgroundColor: exportMode === 'logged' ? `${palette?.accent}1a` : 'transparent', borderColor: palette?.border }}
+                    >
+                      All Logged Cards
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  value={exportText}
+                  readOnly
+                  onFocus={(e) => e.target.select()}
+                  className="w-full h-64 rounded-xl border p-3 font-mono text-xs leading-relaxed focus:outline-none resize-none custom-scrollbar select-text"
+                  style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
+                />
+
+                <div className="flex items-center justify-end gap-2">
+                  {copied && (
+                    <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Copied
+                    </span>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setCopied(false);
+                      const res = await invoke<any>('export_decklist', { deckName, source: exportMode });
+                      if (res && res.text) {
+                        setExportText(res.text);
+                        await navigator.clipboard.writeText(res.text);
+                        setCopied(true);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-colors"
+                    style={{ color: '#F97316', borderColor: '#F9731666', backgroundColor: '#F973161a' }}
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy to Clipboard
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -1279,6 +1279,94 @@ async fn get_deck_list_status(deck_name: String) -> Result<serde_json::Value, St
     }))
 }
 
+/// Exports a deck in the exact MTGA clipboard format the import accepts:
+/// optional Commander section, then Deck, then optional Sideboard, with each
+/// line "N Name (SET) collector_number". `source` selects the True Decklist
+/// (from deck_lists) or All Logged Cards (aggregated from match_cards).
+#[tauri::command]
+async fn export_decklist(deck_name: String, source: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let use_true = source.eq_ignore_ascii_case("true");
+
+    // Collect (grp_id, count) pairs for the chosen source.
+    let mut commander_grp: Option<i64> = None;
+    let mut entries: Vec<(i64, i64)> = Vec::new();
+
+    if use_true {
+        let row = sqlx::query(
+            "SELECT cards_json, sideboard_json, commander_grp_id FROM deck_lists WHERE deck_name = ?"
+        )
+        .bind(&deck_name)
+        .fetch_optional(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let Some(row) = row else {
+            return Ok(serde_json::json!({ "error": "No true decklist imported for this deck", "text": "" }));
+        };
+
+        commander_grp = row.get("commander_grp_id");
+        let cards_json: String = row.get("cards_json");
+        let v: Vec<serde_json::Value> = serde_json::from_str(&cards_json).unwrap_or_default();
+        for e in v {
+            let grp = e.get("grp_id").and_then(|x| x.as_i64()).unwrap_or(0);
+            let count = e.get("count").and_then(|x| x.as_i64()).unwrap_or(1);
+            if grp > 0 { entries.push((grp, count)); }
+        }
+    } else {
+        // Aggregated logged cards: distinct by name, canonical grp_id, sum of
+        // per-match max copies as the count.
+        let rows = sqlx::query(
+            r#"
+            SELECT c.name, MIN(c.grp_id) as grp_id, MAX(mc.count) as max_count
+            FROM match_cards mc
+            JOIN matches m ON mc.match_id = m.id
+            JOIN cards_cache c ON mc.grp_id = c.grp_id
+            WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+            GROUP BY c.name
+            ORDER BY c.name ASC
+            "#
+        )
+        .bind(&deck_name)
+        .fetch_all(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+        for r in &rows {
+            let grp: i64 = r.get("grp_id");
+            let count: i64 = r.get("max_count");
+            entries.push((grp, count));
+        }
+    }
+
+    // Format: "Commander\n1 Name (SET) num\n\nDeck\n...".
+    let mut lines: Vec<String> = Vec::new();
+    if let Some(cgrp) = commander_grp {
+        if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), cgrp).await {
+            if let (Some(set), Some(num)) = (meta.set_code, meta.collector_number) {
+                lines.push("Commander".to_string());
+                lines.push(format!("1 {} ({}) {}", meta.name, set, num));
+            }
+        }
+    }
+
+    lines.push("Deck".to_string());
+    for (grp, count) in &entries {
+        if commander_grp == Some(*grp) { continue; } // commander already listed
+        if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), *grp).await {
+            match (meta.set_code, meta.collector_number) {
+                (Some(set), Some(num)) => {
+                    lines.push(format!("{} {} ({}) {}", count, meta.name, set, num));
+                }
+                _ => {
+                    lines.push(format!("{} {}", count, meta.name));
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({ "text": lines.join("\n") }))
+}
+
 #[tauri::command]
 async fn get_match_cards(match_id: String) -> Result<Vec<serde_json::Value>, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
@@ -1850,6 +1938,7 @@ fn main() {
             save_deck_list,
             get_deck_list,
             get_deck_list_status,
+            export_decklist,
             get_card_info,
             get_commander_info,
             get_opponent_h2h_stats,
