@@ -690,8 +690,16 @@ export default function App() {
   const scryfallArtUrl = (name: string) =>
     `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
+  // Win-rate gradient color: red (0%) → yellow (50%) → green (100%), with a
+  // smooth interpolation between the stops (HSL hue 0 → 60 → 120).
+  const winRateColor = (rate: string): string => {
+    const pct = Math.max(0, Math.min(100, parseFloat(rate) || 0));
+    const hue = (pct / 100) * 120; // 0=red, 60=yellow, 120=green
+    return `hsl(${hue} 85% 55%)`;
+  };
+
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
-  // highest-CMC card (non-commander). Falls back to a placeholder on load error.
+  // random non-land card (non-commander). Falls back to a placeholder on load error.
   const renderDeckArt = (d: any, size: string = 'w-10 h-10') => {
     const artName = d.top_commander_name || d.top_card_name;
     if (!artName) {
@@ -1349,11 +1357,11 @@ export default function App() {
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
                 <div className="flex items-center py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
                   <div className="flex-1 min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
-                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('Colors', 'colors')}</div>
-                  <div className="w-[80px] shrink-0 text-center">{renderDeckColHeader('Format', 'format')}</div>
-                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('Games', 'games')}</div>
-                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('W/L', 'record')}</div>
-                  <div className="w-[90px] shrink-0 text-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
+                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('Colors', 'colors')}</div>
+                  <div className="w-[100px] shrink-0 text-center">{renderDeckColHeader('Format', 'format')}</div>
+                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('Games', 'games')}</div>
+                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('W/L', 'record')}</div>
+                  <div className="w-[110px] shrink-0 text-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
                 </div>
               </div>
 
@@ -1401,17 +1409,19 @@ export default function App() {
                           </div>
 
                           {/* Games */}
-                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: palette?.text }}>
+                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
                             {d.total_matches}
                           </div>
 
                           {/* W/L */}
-                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: palette?.text }}>
-                            {d.wins}/{d.losses}
+                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold">
+                            <span className="text-emerald-400">{d.wins}</span>
+                            <span className="opacity-50" style={{ color: palette?.subtext }}> / </span>
+                            <span className="text-rose-400">{d.losses}</span>
                           </div>
 
                           {/* Win Rate */}
-                          <div className={`w-[110px] shrink-0 text-center font-mono text-base font-bold ${parseFloat(d.winrate) >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <div className="w-[110px] shrink-0 text-center font-mono text-base font-bold" style={{ color: winRateColor(d.winrate) }}>
                             {d.winrate}
                           </div>
                         </div>
