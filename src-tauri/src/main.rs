@@ -192,6 +192,242 @@ async fn get_deck_stats() -> Result<Vec<serde_json::Value>, String> {
     db.get_deck_stats().await.map_err(|e| e.to_string())
 }
 
+/// Rich per-deck overview for the Decks & Stats view: base W-L plus format
+/// breakdown, commander breakdown (grouped by resolved name, printings merged),
+/// color identity, and a mana curve derived from cards seen across the deck's matches.
+#[tauri::command]
+async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+    // 1. Base stats per deck (mirrors get_deck_stats).
+    let base_rows = sqlx::query(
+        r#"
+        SELECT
+            hero_deck_name as deck_name,
+            COUNT(*) as total_matches,
+            SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses
+        FROM matches
+        WHERE hero_deck_name IS NOT NULL AND hero_deck_name != ''
+        GROUP BY hero_deck_name
+        ORDER BY total_matches DESC
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2. Format breakdown per deck.
+    let format_rows = sqlx::query(
+        r#"
+        SELECT hero_deck_name as deck_name, format, COUNT(*) as n
+        FROM matches
+        WHERE hero_deck_name IS NOT NULL AND hero_deck_name != ''
+        GROUP BY hero_deck_name, format
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. Commander breakdown per deck: group by RESOLVED NAME (merge printings),
+    //    count matches per commander, join cards_cache for the name.
+    let commander_rows = sqlx::query(
+        r#"
+        SELECT m.hero_deck_name as deck_name, c.name as commander_name,
+               COUNT(*) as n
+        FROM matches m
+        LEFT JOIN cards_cache c ON m.hero_commander_id = c.grp_id
+        WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
+          AND m.hero_commander_id IS NOT NULL
+        GROUP BY m.hero_deck_name, c.name
+        ORDER BY m.hero_deck_name, n DESC
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3b. Dominant commander per deck (top by count), including a grp_id for art lookup.
+    let top_commander_rows = sqlx::query(
+        r#"
+        SELECT deck_name, commander_name, grp_id, n FROM (
+            SELECT m.hero_deck_name as deck_name, c.name as commander_name,
+                   MIN(m.hero_commander_id) as grp_id, COUNT(*) as n,
+                   ROW_NUMBER() OVER (PARTITION BY m.hero_deck_name ORDER BY COUNT(*) DESC, c.name ASC) as rn
+            FROM matches m
+            JOIN cards_cache c ON m.hero_commander_id = c.grp_id
+            WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
+              AND m.hero_commander_id IS NOT NULL
+            GROUP BY m.hero_deck_name, c.name
+        ) WHERE rn = 1
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3c. Highest-CMC card per deck from cards seen (for non-commander decks).
+    //     Tie-break by name ASC for deterministic selection.
+    let top_card_rows = sqlx::query(
+        r#"
+        SELECT deck_name, card_name, grp_id, cmc FROM (
+            SELECT m.hero_deck_name as deck_name, c.name as card_name,
+                   MIN(c.grp_id) as grp_id, MAX(c.cmc) as cmc,
+                   ROW_NUMBER() OVER (PARTITION BY m.hero_deck_name ORDER BY c.cmc DESC, c.name ASC) as rn
+            FROM match_cards mc
+            JOIN matches m ON mc.match_id = m.id
+            JOIN cards_cache c ON mc.grp_id = c.grp_id
+            WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
+              AND mc.is_opponent = 0 AND c.cmc > 0
+            GROUP BY m.hero_deck_name, c.name, c.grp_id, c.cmc
+        ) WHERE rn = 1
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4. Colors + mana curve per deck from cards seen (match_cards -> cards_cache).
+    //    We reuse the numeric-enum color mapping and parse_mtga_cmc for the curve.
+    let card_rows = sqlx::query(
+        r#"
+        SELECT m.hero_deck_name as deck_name, c.mana_cost, c.color_identity, c.colors, mc.count
+        FROM match_cards mc
+        JOIN matches m ON mc.match_id = m.id
+        JOIN cards_cache c ON mc.grp_id = c.grp_id
+        WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
+          AND mc.is_opponent = 0
+        "#
+    )
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Assemble.
+    let order = ["W", "U", "B", "R", "G"];
+    let mut result = Vec::new();
+    for row in base_rows {
+        let deck_name: String = row.get("deck_name");
+        let total: i64 = row.get("total_matches");
+        let wins: i64 = row.get("wins");
+        let losses: i64 = row.get("losses");
+        let winrate = if total > 0 { (wins as f64 / total as f64) * 100.0 } else { 0.0 };
+
+        // Format breakdown.
+        let mut formats: Vec<serde_json::Value> = Vec::new();
+        for f in &format_rows {
+            let fdeck: String = f.get("deck_name");
+            if fdeck == deck_name {
+                formats.push(serde_json::json!({
+                    "format": f.get::<String,_>("format"),
+                    "count": f.get::<i64,_>("n"),
+                }));
+            }
+        }
+        formats.sort_by(|a, b| {
+            b.get("count").and_then(|v| v.as_i64()).unwrap_or(0)
+                .cmp(&a.get("count").and_then(|v| v.as_i64()).unwrap_or(0))
+        });
+
+        // Commander breakdown (names merged across printings).
+        let mut commanders: Vec<serde_json::Value> = Vec::new();
+        for c in &commander_rows {
+            let cdeck: String = c.get("deck_name");
+            if cdeck == deck_name {
+                commanders.push(serde_json::json!({
+                    "name": c.get::<String,_>("commander_name"),
+                    "count": c.get::<i64,_>("n"),
+                }));
+            }
+        }
+
+        // Colors + curve.
+        use std::collections::HashSet;
+        let mut colors: HashSet<String> = HashSet::new();
+        let mut curve = vec![0i64; 7];
+        for card in &card_rows {
+            let cdeck: String = card.get("deck_name");
+            if cdeck != deck_name { continue; }
+            let mana_cost: Option<String> = card.get("mana_cost");
+            let color_identity: Option<String> = card.get("color_identity");
+            let colors_str: Option<String> = card.get("colors");
+            let count: i64 = card.get("count");
+
+            if let Some(cost) = &mana_cost {
+                let cmc = card_db::parse_mtga_cmc(cost);
+                let bin = match cmc as usize {
+                    0 => 0,
+                    1 => 0,
+                    2 => 1,
+                    3 => 2,
+                    4 => 3,
+                    5 => 4,
+                    6 => 5,
+                    _ => 6,
+                };
+                curve[bin] += count;
+            }
+            for src in [color_identity, colors_str].into_iter().flatten() {
+                for ch in src.chars() {
+                    if !ch.is_ascii_alphanumeric() { continue; }
+                    match ch {
+                        '1' | 'W' => { colors.insert("W".to_string()); },
+                        '2' | 'U' => { colors.insert("U".to_string()); },
+                        '3' | 'B' => { colors.insert("B".to_string()); },
+                        '4' | 'R' => { colors.insert("R".to_string()); },
+                        '5' | 'G' => { colors.insert("G".to_string()); },
+                        _ => {}
+                    }
+                }
+            }
+        }
+        let mut colors_arr: Vec<String> = order.iter()
+            .filter(|c| colors.contains(**c)).map(|c| c.to_string()).collect();
+
+        // Dominant commander (top by count) + highest-CMC card for art/representation.
+        let mut top_commander_name: Option<String> = None;
+        let mut top_commander_grp: Option<i64> = None;
+        for tc in &top_commander_rows {
+            let tdeck: String = tc.get("deck_name");
+            if tdeck == deck_name {
+                top_commander_name = tc.get("commander_name");
+                top_commander_grp = tc.get("grp_id");
+                break;
+            }
+        }
+        let mut top_card_name: Option<String> = None;
+        let mut top_card_grp: Option<i64> = None;
+        for tc in &top_card_rows {
+            let tdeck: String = tc.get("deck_name");
+            if tdeck == deck_name {
+                top_card_name = tc.get("card_name");
+                top_card_grp = tc.get("grp_id");
+                break;
+            }
+        }
+
+        result.push(serde_json::json!({
+            "deck_name": deck_name,
+            "total_matches": total,
+            "wins": wins,
+            "losses": losses,
+            "winrate": format!("{:.1}%", winrate),
+            "formats": formats,
+            "commanders": commanders,
+            "colors": colors_arr,
+            "mana_curve": curve,
+            "top_commander_name": top_commander_name,
+            "top_commander_grp_id": top_commander_grp,
+            "top_card_name": top_card_name,
+            "top_card_grp_id": top_card_grp,
+        }));
+        let _ = &mut colors_arr;
+    }
+
+    Ok(result)
+}
+
 #[tauri::command]
 async fn get_card_info(grp_id: i64) -> Result<Option<card_db::CardMetadata>, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
@@ -866,6 +1102,7 @@ fn main() {
             get_matches_count, 
             get_recent_matches, 
             get_deck_stats,
+            get_deck_overview,
             get_card_info,
             get_commander_info,
             get_opponent_h2h_stats,

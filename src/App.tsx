@@ -101,6 +101,11 @@ export default function App() {
   const [isH2HOpen, setIsH2HOpen] = useState<boolean>(false);
   const [impactfulCards, setImpactfulCards] = useState<any[]>([]);
   const [impactfulIndex, setImpactfulIndex] = useState<number>(0);
+  const [deckOverview, setDeckOverview] = useState<any[]>([]);
+  const [deckSearch, setDeckSearch] = useState('');
+  const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
+  const [deckSortKey, setDeckSortKey] = useState<string>('total_matches');
+  const [deckSortDir, setDeckSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Hover state for theme selector preview
   const [hoveredThemeId, setHoveredThemeId] = useState<string | null>(null);
@@ -134,6 +139,15 @@ export default function App() {
       }
     } catch (e) {
       console.error('Failed to load SQLite match data:', e);
+    }
+  };
+
+  const loadDeckOverview = async () => {
+    try {
+      const decks = await invoke<any[]>('get_deck_overview');
+      setDeckOverview(decks);
+    } catch (e) {
+      console.error('Failed to load deck overview:', e);
     }
   };
 
@@ -209,6 +223,7 @@ export default function App() {
   useEffect(() => {
     loadTheme(activeThemeId);
     loadData();
+    loadDeckOverview();
 
     let wasActive = false;
 
@@ -355,6 +370,94 @@ export default function App() {
   const lossesCount = useMemo(() => filteredMatches.filter(m => m.result === 'loss').length, [filteredMatches]);
   const winrateVal = filteredMatches.length > 0 ? ((winsCount / filteredMatches.length) * 100).toFixed(1) : '0.0';
 
+  // Commander filter options (unique commander names across all decks)
+  const commanderOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of deckOverview) {
+      for (const c of (d.commanders || [])) {
+        if (c.name) names.add(c.name);
+      }
+    }
+    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
+    return [{ value: 'ALL', label: 'All Commanders' }, ...sorted.map(n => ({ value: n, label: n }))];
+  }, [deckOverview]);
+
+  // Filtered deck list: by search term and commander filter
+  const filteredDecks = useMemo(() => {
+    const WUBRG = ['W', 'U', 'B', 'R', 'G'];
+    const colorRank = (c: string[]) => {
+      if (!c || c.length === 0) return 999;
+      let min = 999;
+      for (const ch of c) {
+        const idx = WUBRG.indexOf(ch);
+        if (idx !== -1 && idx < min) min = idx;
+      }
+      return min;
+    };
+
+    const list = deckOverview.filter(d => {
+      const matchesSearch = d.deck_name.toLowerCase().includes(deckSearch.toLowerCase());
+      const matchesCommander = commanderFilter === 'ALL' || (d.commanders || []).some(c => c.name === commanderFilter);
+      return matchesSearch && matchesCommander;
+    });
+
+    const dir = deckSortDir === 'asc' ? 1 : -1;
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (deckSortKey) {
+        case 'deck_name':
+          cmp = (a.deck_name || '').localeCompare(b.deck_name || '');
+          break;
+        case 'colors':
+          cmp = colorRank(a.colors) - colorRank(b.colors);
+          break;
+        case 'format': {
+          const af = (a.formats || [])[0]?.format || '';
+          const bf = (b.formats || [])[0]?.format || '';
+          cmp = af.localeCompare(bf);
+          break;
+        }
+        case 'games':
+          cmp = (a.total_matches || 0) - (b.total_matches || 0);
+          break;
+        case 'record': {
+          const aw = a.wins || 0, al = a.losses || 0;
+          const bw = b.wins || 0, bl = b.losses || 0;
+          cmp = (aw - al) - (bw - bl);
+          break;
+        }
+        case 'winrate': {
+          const awr = parseFloat(a.winrate) || 0;
+          const bwr = parseFloat(b.winrate) || 0;
+          cmp = awr - bwr;
+          break;
+        }
+        default:
+          cmp = (a.total_matches || 0) - (b.total_matches || 0);
+      }
+      return cmp * dir;
+    });
+    return list;
+  }, [deckOverview, deckSearch, commanderFilter, deckSortKey, deckSortDir]);
+
+  // Deck table virtualization (separate from the match history virtualizer)
+  const deckTableParentRef = useRef<HTMLDivElement>(null);
+  const deckRowVirtualizer = useVirtualizer({
+    count: filteredDecks.length,
+    getScrollElement: () => deckTableParentRef.current,
+    estimateSize: () => 72, // Exact row height: 72px
+    overscan: 10,
+  });
+
+  const toggleDeckSort = (key: string) => {
+    if (deckSortKey === key) {
+      setDeckSortDir(deckSortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setDeckSortKey(key);
+      setDeckSortDir('desc');
+    }
+  };
+
   // Table Virtualization Container Reference
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -443,6 +546,51 @@ export default function App() {
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     return `${day} ${mon} ${yr} ${hh}:${mm}`;
+  };
+
+  // Scryfall art crop URL for a card name (same named-card endpoint HoverArtPreview uses).
+  const scryfallArtUrl = (name: string) =>
+    `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+
+  // Representative art thumbnail for a deck row: dominant commander (Brawl) or
+  // highest-CMC card (non-commander). Falls back to a placeholder on load error.
+  const renderDeckArt = (d: any, size: string = 'w-10 h-10') => {
+    const artName = d.top_commander_name || d.top_card_name;
+    if (!artName) {
+      return (
+        <div className={`${size} rounded-lg bg-black/40 border shrink-0 flex items-center justify-center`} style={{ borderColor: palette?.border }}>
+          <Layers className="w-4 h-4 opacity-30" />
+        </div>
+      );
+    }
+    return (
+      <img
+        src={scryfallArtUrl(artName)}
+        alt={artName}
+        className={`${size} rounded-lg object-cover shrink-0 border`}
+        style={{ borderColor: `${palette?.border}66` }}
+        loading="lazy"
+        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+      />
+    );
+  };
+
+  // Sortable column header: click to toggle asc/desc.
+  const renderDeckColHeader = (label: string, sortKey: string) => {
+    const active = deckSortKey === sortKey;
+    return (
+      <button
+        onClick={() => toggleDeckSort(sortKey)}
+        className="flex items-center gap-1 hover:opacity-100 transition-opacity uppercase text-xs font-semibold"
+        style={{ color: active ? (palette?.accent || '#38BDF8') : palette?.subtext }}
+        title={`Sort by ${label}`}
+      >
+        {label}
+        <span className="text-[9px] font-mono opacity-70">
+          {active ? (deckSortDir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    );
   };
 
   // Short result reason shown under the victory/defeat icon in the drawer header:
@@ -838,10 +986,129 @@ export default function App() {
 
         {/* VIEW 4: Decks & Stats */}
         {activeTab === 'decks' && (
-          <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
-            <Layers className="w-10 h-10 opacity-40" style={{ color: palette?.accent }} />
-            <h3 className="text-lg font-bold">Deck Performance & Stats</h3>
-            <p className="text-xs opacity-60 max-w-sm">Aggregated deck winrates and archetype breakdown from rhystic.db...</p>
+          <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-4 shrink-0">
+              <div>
+                <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                  Decks &amp; Stats
+                </h1>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Deck Search */}
+                <div className="relative w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+                  <input
+                    type="text"
+                    placeholder="Search decks..."
+                    value={deckSearch}
+                    onChange={(e) => setDeckSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border bg-black/30 focus:outline-none"
+                    style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+                  />
+                </div>
+                {/* Commander Filter */}
+                <div className="w-48">
+                  <CustomDropdown
+                    options={commanderOptions}
+                    value={commanderFilter}
+                    onChange={(val) => setCommanderFilter(val)}
+                    palette={palette}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Deck Overview — Virtualized Sortable Table */}
+            <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
+              {/* Table Header */}
+              <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
+                <div className="flex items-center py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
+                  <div className="flex-1 min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
+                  <div className="w-[70px] shrink-0">{renderDeckColHeader('Colors', 'colors')}</div>
+                  <div className="w-[100px] shrink-0">{renderDeckColHeader('Format', 'format')}</div>
+                  <div className="w-[90px] shrink-0 text-right">{renderDeckColHeader('Games', 'games')}</div>
+                  <div className="w-[90px] shrink-0 text-right">{renderDeckColHeader('W/L', 'record')}</div>
+                  <div className="w-[90px] shrink-0 text-right">{renderDeckColHeader('Win Rate', 'winrate')}</div>
+                </div>
+              </div>
+
+              {/* Virtualized Rows */}
+              <div ref={deckTableParentRef} className="flex-1 overflow-y-auto relative custom-scrollbar">
+                {filteredDecks.length === 0 ? (
+                  <div className="p-10 text-center text-xs opacity-40 font-mono">No decks match the current filters</div>
+                ) : (
+                  <div style={{ height: `${deckRowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+                    {deckRowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const d = filteredDecks[virtualRow.index];
+                      return (
+                        <div
+                          key={d.deck_name}
+                          onClick={() => setActiveTab('decks')}
+                          className="absolute top-0 left-0 w-full flex items-center gap-3 px-4 border-b transition-colors cursor-pointer hover:bg-white/5"
+                          style={{
+                            height: `${virtualRow.size}px`,
+                            transform: `translateY(${virtualRow.start}px)`,
+                            borderColor: `${palette?.border || '#2A2F3D'}44`,
+                          }}
+                        >
+                          {/* Deck Art + Name + Commander breakdown */}
+                          <div className="flex-1 min-w-[200px] flex items-center gap-3">
+                            {renderDeckArt(d)}
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
+                                {d.deck_name}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                {(d.commanders || []).map((c: any, i: number) => (
+                                  <span key={i} className="text-[9px] font-mono px-1 py-0.5 rounded border" style={{ borderColor: `${palette?.border}66`, color: palette?.subtext }}>
+                                    {c.name} <span className="opacity-60">×{c.count}</span>
+                                  </span>
+                                ))}
+                                {(d.commanders || []).length === 0 && (
+                                  <span className="text-[9px] font-mono px-1 py-0.5 rounded border opacity-40" style={{ borderColor: palette?.border }}>
+                                    No Commander
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Colors */}
+                          <div className="w-[70px] shrink-0 flex justify-center">
+                            {renderDeckColorIdentity(d.colors)}
+                          </div>
+
+                          {/* Format chips */}
+                          <div className="w-[100px] shrink-0 flex flex-wrap gap-1">
+                            {(d.formats || []).map((f: any, i: number) => (
+                              <span key={i} className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 border" style={{ borderColor: palette?.border, color: palette?.subtext }}>
+                                {f.format}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Games */}
+                          <div className="w-[90px] shrink-0 text-right font-mono text-sm font-bold" style={{ color: palette?.text }}>
+                            {d.total_matches}
+                          </div>
+
+                          {/* W/L */}
+                          <div className="w-[90px] shrink-0 text-right font-mono text-sm font-bold" style={{ color: palette?.text }}>
+                            {d.wins}/{d.losses}
+                          </div>
+
+                          {/* Win Rate */}
+                          <div className={`w-[90px] shrink-0 text-right font-mono text-sm font-bold ${parseFloat(d.winrate) >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {d.winrate}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
