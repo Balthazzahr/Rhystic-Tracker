@@ -119,6 +119,43 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added result_reason column to matches table");
         }
 
+        // Migration: backfill cards_cache.cmc from mana_cost. Early imports stored cmc=0
+        // for every card. Recompute using the same parse_mtga_cmc() logic the rest of the
+        // app relies on. Truly idempotent: only updates rows where the recomputed cmc
+        // differs from the stored value, so genuine 0-cost cards (mana_cost 'o0' -> cmc 0)
+        // are skipped on subsequent startups.
+        let stale_rows = sqlx::query(
+            r#"
+            SELECT grp_id, mana_cost
+            FROM cards_cache
+            WHERE cmc = 0 AND mana_cost IS NOT NULL AND mana_cost != ''
+            "#
+        )
+        .fetch_all(&pool)
+        .await?;
+
+        let mut backfilled = 0usize;
+        if !stale_rows.is_empty() {
+            let mut tx = pool.begin().await?;
+            for row in &stale_rows {
+                let grp_id: i64 = row.get("grp_id");
+                let mana_cost: String = row.get("mana_cost");
+                let cmc = crate::card_db::parse_mtga_cmc(&mana_cost);
+                if cmc != 0 {
+                    sqlx::query("UPDATE cards_cache SET cmc = ? WHERE grp_id = ?")
+                        .bind(cmc)
+                        .bind(grp_id)
+                        .execute(&mut *tx)
+                        .await?;
+                    backfilled += 1;
+                }
+            }
+            tx.commit().await?;
+            if backfilled > 0 {
+                println!("[DB MIGRATION] Backfilled cmc for {} cards in cards_cache", backfilled);
+            }
+        }
+
         Ok(Self { pool, db_filename })
     }
 
