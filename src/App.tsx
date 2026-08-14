@@ -1344,8 +1344,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Deck Library content: table (no deck selected) OR Deck Detail view */}
-            {!selectedDeckName ? (
+            {/* Deck Library content: table */}
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
               {/* Table Header */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
@@ -1423,25 +1422,6 @@ export default function App() {
                 )}
               </div>
             </div>
-            ) : (
-            <DeckDetailView
-              deckName={selectedDeckName}
-              detail={deckDetail}
-              palette={palette}
-              onBack={() => setSelectedDeckName(null)}
-              onSelectMatch={(matchId) => {
-                setSelectedMatchId(matchId);
-                setIsDrawerOpenManual(true);
-              }}
-              onViewAll={() => {
-                setDeckSearch(selectedDeckName);
-                setActiveTab('matches');
-              }}
-              renderDeckArt={renderDeckArt}
-              renderDeckColorIdentity={renderDeckColorIdentity}
-              formatDateShort={formatDateShort}
-            />
-            )}
           </div>
         )}
 
@@ -1916,6 +1896,25 @@ export default function App() {
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 transition-opacity"
         />
       )}
+
+      {/* Deck Detail Modal (overlay, browser-style back) */}
+      <DeckDetailView
+        isOpen={!!selectedDeckName}
+        deckName={selectedDeckName || ''}
+        detail={deckDetail}
+        palette={palette}
+        onBack={() => setSelectedDeckName(null)}
+        onSelectMatch={(matchId) => {
+          setSelectedMatchId(matchId);
+          setIsDrawerOpenManual(true);
+        }}
+        onViewAll={() => {
+          setSelectedDeckName(null);
+          setDeckSearch(deckDetail?.deck_name || '');
+          setActiveTab('matches');
+        }}
+        formatDateShort={formatDateShort}
+      />
 
       {/* Stage 5B: Full Match Info Overlay Modal */}
       <FullMatchInfoModal
