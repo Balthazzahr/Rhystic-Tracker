@@ -289,15 +289,20 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     .map_err(|e| e.to_string())?;
 
     // 4. Colors + mana curve per deck from cards seen (match_cards -> cards_cache).
-    //    We reuse the numeric-enum color mapping and parse_mtga_cmc for the curve.
+    //    Aggregate by grp_id so `count` is the total occurrences across ALL of the
+    //    deck's matches (mc.count is per-match, usually 1, which would make the
+    //    relative-frequency threshold compare 1 against a 10+ cutoff and fail for
+    //    every card -> empty colors). This mirrors the verified aggregation.
     let card_rows = sqlx::query(
         r#"
-        SELECT m.hero_deck_name as deck_name, c.mana_cost, c.color_identity, c.colors, mc.count
+        SELECT m.hero_deck_name as deck_name, c.mana_cost, c.color_identity, c.colors,
+               SUM(mc.count) as count
         FROM match_cards mc
         JOIN matches m ON mc.match_id = m.id
         JOIN cards_cache c ON mc.grp_id = c.grp_id
         WHERE m.hero_deck_name IS NOT NULL AND m.hero_deck_name != ''
           AND mc.is_opponent = 0
+        GROUP BY m.hero_deck_name, c.grp_id, c.mana_cost, c.color_identity, c.colors
         "#
     )
     .fetch_all(db.pool())
