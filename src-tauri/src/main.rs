@@ -349,7 +349,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     // 4d. Brawl commander color identity per deck (for filtering logged cards).
     let brawl_cmd_rows = sqlx::query(
         r#"
-        SELECT m.hero_deck_name as deck_name, c.color_identity FROM (
+        SELECT top.hero_deck_name as deck_name, c.color_identity FROM (
             SELECT m.hero_deck_name, m.hero_commander_id,
                    ROW_NUMBER() OVER (PARTITION BY m.hero_deck_name ORDER BY COUNT(*) DESC) as rn
             FROM matches m
