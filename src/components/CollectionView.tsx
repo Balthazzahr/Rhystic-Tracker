@@ -108,7 +108,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return saved === 'small' ? 'small' : 'large';
   });
 
-  const pageSize = view === 'table' ? 100 : cardSize === 'small' ? 42 : 20;
+  const pageSize = view === 'table' ? 100 : cardSize === 'small' ? 28 : 15;
 
   useEffect(() => {
     localStorage.setItem('collectionView', view);
@@ -312,7 +312,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       <button
         key={card.grp_id}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative aspect-[63/88] rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.03] hover:z-10 hover:shadow-xl flex flex-col"
+        className="group relative w-full h-full rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl flex flex-col"
         style={{
           borderColor: isOwned ? rarity.color : `${palette?.border}88`,
           borderWidth: 1,
@@ -698,8 +698,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           </div>
         ) : (
           <div
-            className="grid gap-3 pb-4"
-            style={{ gridTemplateColumns: cardSize === 'small' ? 'repeat(8, minmax(0,1fr))' : 'repeat(4, minmax(0,1fr))' }}
+            className="grid h-full gap-2"
+            style={{
+              gridTemplateColumns: cardSize === 'small' ? 'repeat(7, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))',
+              gridTemplateRows: cardSize === 'small' ? 'repeat(4, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
+              gridAutoRows: 'minmax(0, 1fr)',
+            }}
           >
             {cards.map(renderCardTile)}
           </div>
