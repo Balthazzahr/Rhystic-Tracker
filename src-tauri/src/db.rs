@@ -109,6 +109,19 @@ impl DatabaseManager {
     pub fn pool(&self) -> &Pool<Sqlite> {
         &self.pool
     }
+
+    /// Pure mapping from RHYSTIC_ENV to the DB filename. Kept as a standalone
+    /// function (and tested without calling `init()`) so the production-mode
+    /// logic is verified without ever opening a production handle in a test.
+    fn resolve_db_filename(env_mode: &str) -> String {
+        if env_mode.to_lowercase() == "production" {
+            println!("[DB SECURITY] Running in PRODUCTION mode -> Connecting to rhystic.db");
+            "rhystic.db".to_string()
+        } else {
+            println!("[DB SECURITY] Running in DEV mode (Default) -> Connecting to rhystic_dev.db");
+            "rhystic_dev.db".to_string()
+        }
+    }
     pub async fn init() -> Result<Self, Box<dyn std::error::Error>> {
         // TEST SAFETY GUARD: Under `cargo test` this code path is the ONLY way a
         // test can obtain a database handle, so it is forced to a hardcoded
@@ -129,14 +142,8 @@ impl DatabaseManager {
         tokio::fs::create_dir_all(&db_dir).await?;
 
         let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
-        
-        let db_filename = if env_mode.to_lowercase() == "production" {
-            println!("[DB SECURITY] Running in PRODUCTION mode -> Connecting to rhystic.db");
-            "rhystic.db".to_string()
-        } else {
-            println!("[DB SECURITY] Running in DEV mode (Default) -> Connecting to rhystic_dev.db");
-            "rhystic_dev.db".to_string()
-        };
+
+        let db_filename = Self::resolve_db_filename(&env_mode);
 
         #[cfg(test)]
         {
@@ -610,28 +617,24 @@ mod tests {
         ENV_LOCK.get_or_init(|| std::sync::Mutex::new(())).lock().unwrap()
     }
 
-    #[tokio::test]
-    async fn test_db_isolation_defaults_to_dev() {
-        let _guard = env_lock();
-        std::env::set_var("RHYSTIC_ENV", "development");
-        let db = DatabaseManager::init().await.expect("Failed to init DB");
-        assert_eq!(db.db_filename, "rhystic_dev.db");
-        // Structural guarantee: tests must never resolve the real config dir.
-        let real = dirs::config_dir().map(|d| d.join("rhystic-tracker")).unwrap_or_default();
-        assert_ne!(
-            std::env::temp_dir().join("rhystic-tracker-test"),
-            real,
-            "test-only DB dir must not equal the real config dir"
-        );
+    #[test]
+    fn test_db_isolation_defaults_to_dev() {
+        // Filename mapping: unset/unknown env defaults to the dev DB name.
+        // Pure check — no production (or real dev) handle is opened.
+        assert_eq!(DatabaseManager::resolve_db_filename("development"), "rhystic_dev.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("garbage"), "rhystic_dev.db");
     }
 
-    #[tokio::test]
-    async fn test_db_isolation_requires_explicit_production_env() {
-        let _guard = env_lock();
-        std::env::set_var("RHYSTIC_ENV", "production");
-        let db = DatabaseManager::init().await.expect("Failed to init DB");
-        assert_eq!(db.db_filename, "rhystic.db");
-        std::env::set_var("RHYSTIC_ENV", "development");
+    #[test]
+    fn test_db_isolation_requires_explicit_production_env() {
+        // Tests the pure filename mapping WITHOUT ever opening a production DB
+        // handle: a test must never call init() with RHYSTIC_ENV=production
+        // against a live path. (The init()-time guard additionally redirects
+        // any such call to /tmp, but this test doesn't rely on that.)
+        assert_eq!(DatabaseManager::resolve_db_filename("production"), "rhystic.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("PRODUCTION"), "rhystic.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("development"), "rhystic_dev.db");
+        assert_eq!(DatabaseManager::resolve_db_filename(""), "rhystic_dev.db");
     }
 
     #[tokio::test]
