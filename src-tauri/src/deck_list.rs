@@ -200,10 +200,31 @@ pub async fn commander_to_grp(pool: &Pool<Sqlite>, name: Option<String>) -> Resu
 mod tests {
     use super::*;
 
+    /// Seeds the specific cards the deck-export tests resolve, so tests are
+    /// self-contained and never depend on the real dev/production DB contents.
+    async fn seed_test_cards(db: &crate::db::DatabaseManager) {
+        // grp_id, name, set_code, collector_number, card_type
+        let cards: &[(i64, &str, &str, &str, &str)] = &[
+            (69530, "Aang, at the Crossroads", "TLA", "203", "Creature"),
+            (61595, "Cloudshift", "JMP", "97", "Instant"),
+            (83677, "Forest", "UNF", "239", "Land"),
+            (91549, "Bloom Tender", "SPG", "0", "Creature"),
+            (92001, "The Mind Stone", "MSH", "21", "Artifact"),
+        ];
+        for (grp_id, name, set_code, collector_number, card_type) in cards {
+            sqlx::query(
+                "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number, card_type, last_updated) \
+                 VALUES (?, ?, '', 0, '', '', ?, 0, ?, ?, DATETIME('now'))"
+            )
+            .bind(grp_id).bind(name).bind(set_code).bind(collector_number).bind(card_type)
+            .execute(db.pool()).await.expect("seed card");
+        }
+    }
+
     #[tokio::test]
     async fn test_real_export_resolves() {
-        // Uses the production DB path through the same DatabaseManager the app uses.
         let db = crate::db::DatabaseManager::init().await.expect("db init");
+        seed_test_cards(&db).await;
         let sample = "Commander\n1 Aang, at the Crossroads (TLA) 203\n\nDeck\n1 Cloudshift (JMP) 97\n5 Forest (UNF) 239\n1 Bloom Tender (SPG) 0\n1 The Mind Stone (MSH) 21\n";
         let parsed = parse_deck_export(db.pool(), sample).await.expect("parse");
         assert_eq!(parsed.commander.as_deref(), Some("Aang, at the Crossroads"));
@@ -216,6 +237,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_and_read_roundtrip() {
         let db = crate::db::DatabaseManager::init().await.expect("db init");
+        seed_test_cards(&db).await;
         let deck = "TEST Deck Roundtrip";
         let sample = "Deck\n1 Cloudshift (JMP) 97\n5 Forest (UNF) 239\n";
         let parsed = parse_deck_export(db.pool(), sample).await.expect("parse");
@@ -241,6 +263,7 @@ mod tests {
         // Export format now includes an About/Name header (Moxfield convention).
         // Verify the import parser tolerates it and still resolves the deck.
         let db = crate::db::DatabaseManager::init().await.expect("db init");
+        seed_test_cards(&db).await;
         let sample = "About\nName Test Deck\n\nCommander\n1 Aang, at the Crossroads (TLA) 203\n\nDeck\n1 Cloudshift (JMP) 97\n";
         let parsed = parse_deck_export(db.pool(), sample).await.expect("parse");
         assert!(parsed.unresolved.is_empty(), "unresolved: {:?}", parsed.unresolved);
