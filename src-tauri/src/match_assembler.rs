@@ -54,7 +54,14 @@ pub struct MatchAssembler {
     pub player_seat_id: u32,
     pub player_user_id: Option<String>,
     pub cached_deck_name: Option<String>,
+    pub cached_deck_id: Option<String>,
     pub cached_commander_id: Option<u32>,
+    /// True when the current (or cached) deck is a legitimate user deck, not a
+    /// preset. Only legitimate matches feed the draw-based collection.
+    pub match_legitimate: bool,
+    /// grp_ids of my cards drawn from my own library into my hand during a
+    /// legitimate match. Drained by the tailer into collection_cards.
+    pub collection_draws: Vec<u32>,
     pub current_player_life: i32,
     pub current_opp_life: i32,
     pub player_cards_seen: HashMap<u32, u32>,
@@ -80,7 +87,10 @@ impl MatchAssembler {
             player_seat_id: 1,
             player_user_id: None,
             cached_deck_name: None,
+            cached_deck_id: None,
             cached_commander_id: None,
+            match_legitimate: false,
+            collection_draws: Vec::new(),
             current_player_life: 20,
             current_opp_life: 20,
             player_cards_seen: HashMap::new(),
@@ -118,6 +128,15 @@ impl MatchAssembler {
         self.turn_event_seqs.clear();
         self.feed_seq = 0;
         self.player_seat_id = 1;
+        self.collection_draws.clear();
+
+        // Legitimacy is based on the cached deck (submitted pre-match via
+        // EventSetDeckV2). If no deck identity is known (e.g. course-deck /
+        // DeckSelect path), the match is treated as NOT legitimate.
+        self.match_legitimate = self.cached_deck_name.as_deref()
+            .map(crate::deck_legitimacy::preset_deck_reason)
+            .unwrap_or(Some("no deck identity"))
+            .is_none();
 
         let deck_name = self.cached_deck_name.clone().unwrap_or_else(|| "Selected Deck".to_string());
         let commander_id = self.cached_commander_id;
@@ -173,8 +192,12 @@ impl MatchAssembler {
         }
     }
 
-    pub fn set_deck(&mut self, deck_name: String, commander_id: Option<u32>, main_deck: Vec<u32>) {
+    pub fn set_deck(&mut self, deck_name: String, deck_id: Option<String>, commander_id: Option<u32>, main_deck: Vec<u32>) {
         self.cached_deck_name = Some(deck_name.clone());
+        if deck_id.is_some() {
+            self.cached_deck_id = deck_id;
+        }
+        self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
         if commander_id.is_some() {
             self.cached_commander_id = commander_id;
         }
@@ -187,6 +210,12 @@ impl MatchAssembler {
         for grp_id in main_deck {
             *self.player_cards_seen.entry(grp_id).or_insert(0) += 1;
         }
+    }
+
+    /// Drain the grp_ids of cards I drew from my own library into my hand during
+    /// this (legitimate) match. Consumed by the tailer to feed collection_cards.
+    pub fn drain_collection_draws(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.collection_draws)
     }
 
     pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32) -> Option<(u32, u32, String)> {
@@ -227,13 +256,31 @@ impl MatchAssembler {
         let previous_zone = self.instance_zone_map.get(&instance_id).copied();
         self.instance_zone_map.insert(instance_id, zone_id);
 
-        // Determine event type from zone transition
-        let is_hand = zone_id == 31 || zone_id == 35;
+        // Zone IDs (verified against real MTGA logs):
+        //   Hand = 31/35, Library = 32/36, Battlefield = 28, Stack = 27,
+        //   Graveyard = 33, Exile = 29, Command = 26, Sideboard = 34.
+        const LIBRARY_ZONES: [u32; 2] = [32, 36];
+        const HAND_ZONES: [u32; 2] = [31, 35];
+
+        // Determine event type from zone transition.
+        // "draw" is strictly a card entering hand from the player's own library
+        // (natural draws, tutors, searches) OR a card already in hand that we're
+        // first learning about (opening hand — which also came from our library).
+        // Cards entering hand from graveyard/exile/stack, cast-from-opponent-
+        // library effects, spell copies, and tokens are NOT draws and do NOT
+        // indicate ownership. Borrowed cards (opponent-owned, stolen into hand)
+        // carry the opponent's ownerSeatId and are excluded downstream.
+        let is_hand = HAND_ZONES.contains(&zone_id);
+        let was_library = previous_zone.map(|p| LIBRARY_ZONES.contains(&p)).unwrap_or(false);
+        let learned_in_hand = learning_grp_now && is_hand
+            && previous_zone.map(|p| HAND_ZONES.contains(&p)).unwrap_or(false);
         let is_play_zone = zone_id == 27 || zone_id == 28;
 
         let mut event_type = None;
         if is_hand && (previous_zone != Some(zone_id) || (previous_zone.is_some() && learning_grp_now)) {
-            event_type = Some("draw".to_string());
+            if was_library || learned_in_hand {
+                event_type = Some("draw".to_string());
+            }
         } else if is_play_zone && previous_zone != Some(zone_id) {
             event_type = Some("play".to_string());
         }
@@ -246,6 +293,13 @@ impl MatchAssembler {
                 let is_opponent = seat_id != self.player_seat_id;
                 let target_map = if is_opponent { &mut self.opp_cards_seen } else { &mut self.player_cards_seen };
                 *target_map.entry(resolved_grp_id).or_insert(0) += 1;
+
+                // Collection signal: a draw of MY card (from my library into my
+                // hand) during a legitimate match. Borrowed cards (stolen from
+                // opponent) carry the opponent's ownerSeatId and are excluded.
+                if etype == "draw" && !is_opponent && self.match_legitimate {
+                    self.collection_draws.push(resolved_grp_id);
+                }
 
                 self.turn_events.push(MatchTurnEventRecord {
                     turn_number: self.current_turn,
@@ -388,12 +442,14 @@ mod tests {
         // 1. Simulate Event 3 (DeckSubmitted) arriving BEFORE Event 2 (MatchCreated)
         assembler.set_deck(
             "Dying Lands".to_string(),
+            None,
             Some(91719),
             vec![101, 102, 103],
         );
 
         assert_eq!(assembler.cached_deck_name, Some("Dying Lands".to_string()));
         assert_eq!(assembler.cached_commander_id, Some(91719));
+        assert!(assembler.match_legitimate);
 
         // 2. Simulate Event 2 (MatchCreated) arriving AFTER Event 3
         assembler.start_match("test-match-uuid-123".to_string(), "Brawl".to_string());

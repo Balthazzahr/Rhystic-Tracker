@@ -6,6 +6,7 @@ mod theme;
 mod card_db;
 mod deck_list;
 mod settings;
+mod deck_legitimacy;
 
 use tokio::sync::mpsc;
 use std::path::PathBuf;
@@ -1098,6 +1099,17 @@ async fn get_card_info_by_name(name: String) -> Result<Option<card_db::CardMetad
     card_db::get_card_metadata_by_name(db.pool(), &name).await.map_err(|e| e.to_string())
 }
 
+/// Manual collection correction (backend capability this milestone; UI lands
+/// with the Collection milestone). Sets a card's owned_count to an explicit
+/// value clamped to [0,4]. A value of 0 removes the card from the collection.
+#[tauri::command]
+async fn update_collection_card_count(grp_id: i64, count: i64) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.set_collection_card_count(grp_id, count).await.map_err(|e| e.to_string())?;
+    let owned = db.is_card_owned(grp_id).await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "grp_id": grp_id, "owned": owned }))
+}
+
 #[tauri::command]
 async fn get_commander_info(
     player_commander_id: Option<i64>, 
@@ -1417,6 +1429,15 @@ async fn save_deck_list(deck_name: String, export_text: String) -> Result<serde_
     .execute(db.pool())
     .await
     .map_err(|e| e.to_string())?;
+
+    // Feed the draw-based collection from the TrueDeckList upload: each maindeck
+    // card's owned_count is raised to max(current, min(listed, 4)) — monotonic,
+    // never decreased (5th+ copies convert to Vault/gems in Arena, not ownership).
+    for (grp_id, count) in &parsed.cards {
+        if *grp_id > 0 {
+            let _ = db.upsert_collection_from_decklist(*grp_id, *count).await;
+        }
+    }
 
     Ok(serde_json::json!({
         "deck_name": deck_name,
@@ -2109,6 +2130,26 @@ async fn run_tailer_supervisor(
     }
 }
 
+/// Record the submitted deck for a completed match in the `match_decks` audit
+/// table (retained indefinitely). Used to detect preset decks that slip through
+/// the keyword rules.
+async fn record_match_deck_audit(
+    db_manager: &std::sync::Arc<DatabaseManager>,
+    assembler: &MatchAssembler,
+    match_id: &str,
+) {
+    let deck_name = assembler.cached_deck_name.clone();
+    let deck_id = assembler.cached_deck_id.clone();
+    let (preset, reason) = match deck_name.as_deref() {
+        Some(name) => match crate::deck_legitimacy::preset_deck_reason(name) {
+            Some(r) => (true, Some(r)),
+            None => (false, None),
+        },
+        None => (true, Some("no deck identity")),
+    };
+    let _ = db_manager.upsert_match_deck(match_id, deck_name.as_deref(), deck_id.as_deref(), preset, reason).await;
+}
+
 /// Process tailer events (line parsing / JSON buffering / match assembly).
 async fn process_tailer_events(
     mut rx: mpsc::Receiver<TailerEvent>,
@@ -2165,13 +2206,15 @@ async fn process_tailer_events(
                                 redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
                             );
                         }
-                        ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
-                            assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
+                        ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, deck_id, total_cards } => {
+                            assembler.set_deck(deck_name.clone(), deck_id.clone(), commander_id, main_deck.clone());
                             println!(
-                                "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
+                                "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Deck ID = {:?}, Commander GRPID = {:?}, Total Cards = {}, Legitimate = {}",
                                 deck_name,
+                                deck_id,
                                 commander_id,
-                                total_cards
+                                total_cards,
+                                assembler.match_legitimate
                             );
                         }
                         ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
@@ -2189,6 +2232,12 @@ async fn process_tailer_events(
                                 assembler.process_damage_event(instance_id, amount);
                             }
                             assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
+                            let draws = assembler.drain_collection_draws();
+                            if !draws.is_empty() {
+                                for g in draws {
+                                    let _ = db_manager.add_collection_draw(g as i64).await;
+                                }
+                            }
                         }
                         ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
                             if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
@@ -2203,6 +2252,7 @@ async fn process_tailer_events(
                                     impactful.len()
                                 );
                                 let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
+                                record_match_deck_audit(&db_manager, &assembler, &record.match_id).await;
                             }
                         }
                         ParsedEvent::Unknown => {}
@@ -2218,18 +2268,21 @@ async fn process_tailer_events(
                         assembler.start_match(match_id.clone(), format_name.clone());
                         assembler.update_reserved_players(&reserved_players);
                     }
-                    ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
-                        assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
+                    ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, deck_id, total_cards } => {
+                        assembler.set_deck(deck_name.clone(), deck_id.clone(), commander_id, main_deck.clone());
                         println!(
-                            "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
+                            "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Deck ID = {:?}, Commander GRPID = {:?}, Total Cards = {}, Legitimate = {}",
                             deck_name,
+                            deck_id,
                             commander_id,
-                            total_cards
+                            total_cards,
+                            assembler.match_legitimate
                         );
                     }
                     ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
                         if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
                             let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
+                            record_match_deck_audit(&db_manager, &assembler, &record.match_id).await;
                         }
                     }
                     _ => {}
@@ -2285,6 +2338,7 @@ fn main() {
             export_decklist,
             get_card_info,
             get_card_info_by_name,
+            update_collection_card_count,
             get_commander_info,
             get_opponent_h2h_stats,
             get_opponent_matches,

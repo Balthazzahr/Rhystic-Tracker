@@ -55,13 +55,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
                     );
                 }
-                ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
-                    assembler.set_deck(deck_name.clone(), commander_id, main_deck);
+                ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, deck_id, total_cards } => {
+                    assembler.set_deck(deck_name.clone(), deck_id.clone(), commander_id, main_deck);
                     println!(
-                        "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
+                        "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Deck ID = {:?}, Commander GRPID = {:?}, Total Cards = {}, Legitimate = {}",
                         deck_name,
+                        deck_id,
                         commander_id,
-                        total_cards
+                        total_cards,
+                        assembler.match_legitimate
                     );
                 }
                 ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {

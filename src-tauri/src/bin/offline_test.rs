@@ -38,7 +38,7 @@ fn main() {
                     assembler.update_reserved_players(&reserved_players);
                 }
                 ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, .. } => {
-                    assembler.set_deck(deck_name, commander_id, main_deck);
+                    assembler.set_deck(deck_name, None, commander_id, main_deck);
                 }
                 ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
                     if turn_number > 0 { assembler.current_turn = turn_number; }
