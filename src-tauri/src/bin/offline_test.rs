@@ -6,7 +6,10 @@ use rhystic_tracker::match_assembler::MatchAssembler;
 use rhystic_tracker::parser::{parse_line, ParsedEvent};
 
 fn main() {
-    let log_path = PathBuf::from("/mnt/Games/SteamLibrary/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+    let log_path = std::env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("Player.log"));
     println!("Reading existing raw log: {:?}", log_path);
 
     let file = File::open(log_path).expect("Failed to open Player.log");

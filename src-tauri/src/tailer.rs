@@ -14,6 +14,68 @@ pub enum TailerEvent {
     Rotated,
 }
 
+/// Returns the first MTGA Player.log found from the standard install locations,
+/// including Wine/Proton prefixes (Steam compatdata). Returns None if none exist
+/// yet (the tailer will wait for the file to appear). Set RHYSTIC_MTGA_LOG to
+/// point at a specific file.
+pub fn discover_log_path() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("RHYSTIC_MTGA_LOG") {
+        if !explicit.is_empty() {
+            return Some(PathBuf::from(explicit));
+        }
+    }
+
+    // Candidate Steam library roots (both native layout and mounted libraries).
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join(".local/share/Steam"));
+        roots.push(home.join(".steam/steam"));
+        roots.push(home.join(".steam/root"));
+    }
+    // Any mounted Steam library folders (e.g. /mnt/*/SteamLibrary).
+    if let Ok(entries) = std::fs::read_dir("/mnt") {
+        for entry in entries.flatten() {
+            let p = entry.path().join("SteamLibrary");
+            if p.join("steamapps").exists() {
+                roots.push(p);
+            }
+        }
+    }
+    roots.dedup();
+
+    // 1. Native Linux layout: MTGA_Data/Downloads/Player.log
+    let native = roots.iter().flat_map(|r| {
+        [
+            r.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log"),
+            r.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log"),
+        ]
+    });
+    if let Some(p) = native.into_iter().find(|p| p.exists()) {
+        return Some(p);
+    }
+
+    // 2. Wine/Proton compatdata prefixes:
+    //    <root>/steamapps/compatdata/*/pfx/drive_c/users/*/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log
+    for root in &roots {
+        let compat_dir = root.join("steamapps/compatdata");
+        let Ok(appids) = std::fs::read_dir(&compat_dir) else { continue };
+        for app in appids.flatten() {
+            let users_dir = app.path().join("pfx/drive_c/users");
+            let Ok(users) = std::fs::read_dir(&users_dir) else { continue };
+            for user in users.flatten() {
+                let p = user
+                    .path()
+                    .join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 pub struct FileTailer {
     path: PathBuf,
     sender: mpsc::Sender<TailerEvent>,

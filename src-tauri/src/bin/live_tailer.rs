@@ -18,9 +18,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_manager = DatabaseManager::init().await?;
     println!("[LIVE TEST RUNNER] Initialized database: {}", db_manager.db_filename);
 
-    let log_path = PathBuf::from(
-        "/mnt/Games/SteamLibrary/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log"
-    );
+    let log_path = rhystic_tracker::tailer::discover_log_path()
+        .or_else(|| std::env::args().nth(1).map(PathBuf::from))
+        .unwrap_or_default();
 
     let (tx, mut rx) = mpsc::channel::<TailerEvent>(2000);
     let tailer = FileTailer::new_from_end(log_path, tx);

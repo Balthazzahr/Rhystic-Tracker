@@ -7,13 +7,20 @@ with strict validation and NULL handling for legacy matches.
 
 import os
 import sys
+import os
+import sys
 import json
 import sqlite3
 import hashlib
 from pathlib import Path
 from datetime import datetime
 
-OLD_PROJECT_DATA = Path("/home/davepople/Projects/MTGA Pro Tracker/data")
+# Legacy project data directory. Override with --old-data <path> or the
+# RHYSTIC_OLD_DATA environment variable.
+_old_data = os.environ.get("RHYSTIC_OLD_DATA")
+if "--old-data" in sys.argv:
+    _old_data = sys.argv[sys.argv.index("--old-data") + 1]
+OLD_PROJECT_DATA = Path(_old_data) if _old_data else Path("mtga-pro-tracker-data")
 OLD_DB_PATH = OLD_PROJECT_DATA / "db/mtga_collection.db"
 OLD_STATE_PATH = OLD_PROJECT_DATA / "state/mtga_tracker_enhanced_state.json"
 

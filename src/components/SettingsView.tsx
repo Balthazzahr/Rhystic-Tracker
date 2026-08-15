@@ -22,7 +22,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setActiveThemeId 
 }) => {
   const [logPath, setLogPath] = useState(
-    "/mnt/Games/SteamLibrary/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log"
+    ""
   );
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -34,7 +34,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const manaThemeOptions = [
     { id: 'white', label: 'White (Order)', symbol: 'W', color: '#F8F6D8' },
     { id: 'blue', label: 'Blue (Progress)', symbol: 'U', color: '#38BDF8' },
-    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#A855F7' },
+    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#8E59C1' },
     { id: 'red', label: 'Red (Chaos)', symbol: 'R', color: '#F87171' },
     { id: 'green', label: 'Green (Nature)', symbol: 'G', color: '#34D399' },
   ];
@@ -59,11 +59,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <h3 className="text-base font-bold">MTGA Log Path Configuration</h3>
         </div>
         <p className="text-xs opacity-70 leading-relaxed">
-          Specify the file system path to MTG Arena's active <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">Player.log</code> for real-time game state parsing.
+          MTG Arena's active <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">Player.log</code> is auto-detected on launch from the standard Steam and Wine/Proton install locations. Set a custom path here if needed (or use the <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">RHYSTIC_MTGA_LOG</code> environment variable).
         </p>
 
         <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase opacity-60">Active Player.log Path</label>
+          <label className="text-xs font-semibold uppercase opacity-60">Active Player.log Path (auto-detected)</label>
           <div className="flex gap-3">
             <input
               type="text"
