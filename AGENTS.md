@@ -8,7 +8,7 @@ This project is published to a **public GitHub repository** (`Balthazzahr/Rhysti
 - Suggested flow:
   1. Confirm with the user that the milestone is final.
   2. Stage and commit in **logical commits** (e.g. `feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`) rather than one giant commit.
-  3. Push to `origin master`.
+  3. Push to `origin master` — note the local branch is `master` but the remote default is `main`, so push explicitly: `git push origin HEAD:main`.
 - **After every milestone commit/push, also build the release on the local system** — the user launches the app through their shell launcher (`~/.local/share/applications/rhystic-tracker.desktop` → `launch.sh` → `src-tauri/target/release/rhystic-tracker`). So each milestone must produce a fresh release binary:
   - `npm run build` (frontend → `dist/`)
   - `source ~/.cargo/env && cargo build --release` (from `src-tauri/`) so `launch.sh` picks up the new build.
