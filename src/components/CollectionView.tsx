@@ -83,7 +83,10 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [busyGrp, setBusyGrp] = useState<number | null>(null);
 
   const [search, setSearch] = useState('');
-  const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'unowned'>('all');
+  const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'unowned'>(() => {
+    const saved = localStorage.getItem('collectionOwnedFilter');
+    return saved === 'all' || saved === 'unowned' ? saved : 'owned';
+  });
   const [selectedSets, setSelectedSets] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
@@ -111,6 +114,10 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     localStorage.setItem('collectionView', view);
     localStorage.setItem('collectionCardSize', cardSize);
   }, [view, cardSize]);
+
+  useEffect(() => {
+    localStorage.setItem('collectionOwnedFilter', ownedFilter);
+  }, [ownedFilter]);
 
   // Load available set metadata (present in the collection) once.
   useEffect(() => {
@@ -206,6 +213,35 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     setter(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   };
 
+  // Clicking a table column header sets the sort key and toggles direction.
+  const sortByColumn = (key: string) => {
+    if (sort === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSort(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortArrow = (key: string) => {
+    if (sort !== key) return <span className="opacity-0 group-hover:opacity-60">↕</span>;
+    return sortDir === 'asc' ? '▲' : '▼';
+  };
+
+  // Column sort keys map to backend sort values.
+  const colSortKey = (label: string): string | null => {
+    switch (label) {
+      case 'Name': return 'name';
+      case 'Cost': return 'cmc';
+      case 'MV': return 'cmc';
+      case 'Type': return null;
+      case 'Set': return 'set';
+      case 'Rarity': return 'rarity';
+      case 'Owned': return 'count';
+      default: return null;
+    }
+  };
+
   const sortedSets = useMemo(() => {
     const q = setNameQuery.trim().toLowerCase();
     const filtered = setOptions.filter((s) =>
@@ -269,7 +305,6 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const renderCardTile = (card: CollectionCard) => {
     const isOwned = card.owned_count > 0;
     const rarity = RARITY_INFO[card.rarity] || { label: '-', color: '#9CA3AF' };
-    const symbols = parseMtgaManaCost(card.mana_cost || '');
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
     const small = cardSize === 'small';
 
@@ -277,43 +312,45 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       <button
         key={card.grp_id}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative rounded-2xl border overflow-hidden text-left transition-all hover:scale-[1.03] hover:z-10 hover:shadow-xl flex flex-col"
+        className="group relative aspect-[63/88] rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.03] hover:z-10 hover:shadow-xl flex flex-col"
         style={{
           borderColor: isOwned ? rarity.color : `${palette?.border}88`,
-          minHeight: small ? 120 : 190,
+          borderWidth: 1,
+          borderStyle: 'solid',
           backgroundImage: card.name ? `url(${scryfallArtUrl(card.name)})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
       >
-        {/* Scrim so text stays readable over the art */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/55 to-black/20" />
-        <div className="relative flex-1 flex flex-col p-2.5" style={{ minHeight: small ? 120 : 190 }}>
+        {/* Full-card art; scrim only at the bottom so text stays readable */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
+
+        {/* Card text overlaid on the art (name + type line), like a real card */}
+        <div className="relative mt-auto p-1.5 flex flex-col gap-1">
           <div className="flex items-start justify-between gap-1">
-            <p className="font-bold leading-snug line-clamp-2" style={{ color: '#FFF', fontSize: small ? 11 : 13 }}>
+            <p
+              className="font-bold leading-tight"
+              style={{ color: '#FFF', fontSize: small ? 9 : 11, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
+            >
               {cardName}
             </p>
-            <span className="shrink-0 flex items-center gap-0.5 drop-shadow">
-              {symbols.length > 0 ? (
-                symbols.map((s, i) => <ManaFontPip key={i} symbol={s} size={small ? 13 : 16} />)
-              ) : (
-                <span className="text-[10px] font-mono opacity-50">—</span>
-              )}
-            </span>
+            {card.card_type ? (
+              <span
+                className="shrink-0 text-[8px] font-mono uppercase opacity-80 text-right"
+                style={{ color: '#FFF', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
+              >
+                {card.card_type.split('—')[0].trim()}
+              </span>
+            ) : null}
           </div>
-
-          <div className="mt-auto pt-2">
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[10px] font-mono uppercase font-semibold" style={{ color: rarity.color }}>
-                {rarity.label}
-              </span>
-              <span className="text-[10px] font-mono opacity-60 truncate">
-                {card.set_name || card.set_code || '—'}
-              </span>
-            </div>
-            <div className="mt-1.5 flex items-center justify-between border-t" style={{ borderColor: 'rgba(255,255,255,0.15)' }}>
-              {renderOwnedControl(card)}
-            </div>
+          <div
+            className="flex items-center justify-between gap-1 pt-0.5 border-t"
+            style={{ borderColor: 'rgba(255,255,255,0.2)' }}
+          >
+            <span className="text-[8px] font-mono uppercase font-semibold" style={{ color: rarity.color }}>
+              {rarity.label}
+            </span>
+            {renderOwnedControl(card)}
           </div>
         </div>
       </button>
@@ -632,13 +669,26 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             <table className="w-full text-left border-collapse" style={{ color: palette?.text }}>
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide font-semibold" style={{ color: palette?.subtext, backgroundColor: `${palette?.surface}` }}>
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2">Cost</th>
-                  <th className="px-3 py-2">MV</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Set</th>
-                  <th className="px-3 py-2">Rarity</th>
-                  <th className="px-3 py-2">Owned</th>
+                  {['Name', 'Cost', 'MV', 'Type', 'Set', 'Rarity', 'Owned'].map((col) => {
+                    const key = colSortKey(col);
+                    const sortable = key != null;
+                    return (
+                      <th key={col} className="px-3 py-2">
+                        {sortable ? (
+                          <button
+                            onClick={() => sortByColumn(key!)}
+                            className="group flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold hover:opacity-100"
+                            style={{ color: sort === key ? (palette?.accent || '#38BDF8') : palette?.subtext }}
+                          >
+                            {col}
+                            <span className="text-[9px]">{sortArrow(key!)}</span>
+                          </button>
+                        ) : (
+                          col
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -649,7 +699,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         ) : (
           <div
             className="grid gap-3 pb-4"
-            style={{ gridTemplateColumns: cardSize === 'small' ? 'repeat(8, 1fr)' : 'repeat(4, 1fr)' }}
+            style={{ gridTemplateColumns: cardSize === 'small' ? 'repeat(8, minmax(0,1fr))' : 'repeat(4, minmax(0,1fr))' }}
           >
             {cards.map(renderCardTile)}
           </div>

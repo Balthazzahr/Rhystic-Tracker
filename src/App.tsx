@@ -103,7 +103,14 @@ export default function App() {
   const [isDrawerOpenManual, setIsDrawerOpenManual] = useState<boolean>(false);
 
   // Navigation & Filter State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>(() => {
+    const saved = localStorage.getItem('activeTab');
+    const valid = ['dashboard', 'matches', 'live', 'decks', 'collection', 'settings'];
+    return valid.includes(saved || '') ? (saved as any) : 'dashboard';
+  });
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');
