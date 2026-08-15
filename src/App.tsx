@@ -37,6 +37,7 @@ import { OpponentH2HModal } from './components/OpponentH2HModal';
 import { DeckDetailView } from './components/DeckDetailView';
 import { DashboardView } from './components/DashboardView';
 import { CardNameTooltip } from './components/CardNameTooltip';
+import CollectionView from './components/CollectionView';
 import logoImg from './assets/logo.png';
 import symbolIcon from './assets/symbolIcon.png';
 
@@ -907,6 +908,14 @@ export default function App() {
     return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
   };
 
+  // Collection completion color: green at 100%, amber mid, red at low.
+  const ownedPctColor = (pct: number | null): string => {
+    if (pct == null) return `${palette?.subtext || '#94A3B8'}`;
+    if (pct >= 100) return '#34D399';
+    if (pct >= 50) return '#FBBF24';
+    return '#F87171';
+  };
+
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
   // random non-land card (non-commander). Clicking opens the card overlay.
   const renderDeckArt = (d: any, size: string = 'w-10 h-10') => {
@@ -1222,13 +1231,7 @@ export default function App() {
 
         {/* VIEW 2: Collection */}
         {activeTab === 'collection' && (
-          <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
-            <Sparkles className="w-10 h-10 opacity-40 animate-bounce" style={{ color: palette?.accent }} />
-            <h3 className="text-lg font-bold">Feature Coming Soon (v2 Scope)</h3>
-            <p className="text-xs opacity-60 max-w-sm">
-              Local card collection binder & deck completion tracking will arrive in v2.
-            </p>
-          </div>
+          <CollectionView palette={palette} onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)} />
         )}
 
         {/* VIEW 3: Live Match HUD (Stage 4) */}
@@ -1741,18 +1744,28 @@ export default function App() {
                               </span>
                             </div>
 
-                            {/* Bottom bar: format + win rate */}
-                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 flex items-center justify-between gap-2 bg-black/70 backdrop-blur-sm">
-                              {fmtChip ? (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}>
-                                  {fmt}
+                            {/* Bottom bar: format + win rate + % owned */}
+                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                {fmtChip ? (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}>
+                                    {fmt}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono opacity-40">—</span>
+                                )}
+                                <span className="text-[13px] font-extrabold font-outfit shrink-0" style={{ color: winRateColor(d.winrate) }}>
+                                  WR: {d.winrate}
                                 </span>
-                              ) : (
-                                <span className="text-[10px] font-mono opacity-40">—</span>
-                              )}
-                              <span className="text-[13px] font-extrabold font-outfit shrink-0" style={{ color: winRateColor(d.winrate) }}>
-                                WR: {d.winrate}
-                              </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${d.owned_pct ?? 0}%`, backgroundColor: ownedPctColor(d.owned_pct) }} />
+                                </div>
+                                <span className="text-[10px] font-mono shrink-0" style={{ color: ownedPctColor(d.owned_pct) }}>
+                                  {d.owned_pct != null ? `${d.owned_pct}% owned` : '—'}
+                                </span>
+                              </div>
                             </div>
                           </button>
                         );
@@ -1797,6 +1810,7 @@ export default function App() {
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Games', 'games')}</div>
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('W/L', 'record')}</div>
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
+                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Owned', '')}</div>
                 </div>
               </div>
 
@@ -1878,6 +1892,23 @@ export default function App() {
                           {/* Win Rate */}
                           <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold" style={{ color: winRateColor(d.winrate) }}>
                             {d.winrate}
+                          </div>
+
+                          {/* Owned */}
+                          <div className="w-[130px] shrink-0 flex flex-col items-center justify-center gap-0.5">
+                            {d.owned_pct != null ? (
+                              <>
+                                <span className="text-[13px] font-mono font-bold" style={{ color: ownedPctColor(d.owned_pct) }}>
+                                  {d.owned_pct}% owned
+                                </span>
+                                <div className="w-16 h-1 rounded-full bg-white/10 overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${d.owned_pct}%`, backgroundColor: ownedPctColor(d.owned_pct) }} />
+                                </div>
+                                <span className="text-[9px] font-mono opacity-50">{d.owned_cards}/{d.total_ownedable} cards</span>
+                              </>
+                            ) : (
+                              <span className="text-sm font-mono opacity-40">—</span>
+                            )}
                           </div>
                         </div>
                       );

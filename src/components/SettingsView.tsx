@@ -7,7 +7,8 @@ import {
   Check, 
   FileText,
   AlertCircle,
-  Search
+  Search,
+  RefreshCw
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -28,6 +29,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [browseSuccess, setBrowseSuccess] = useState(false);
   const [loadingPath, setLoadingPath] = useState(true);
+
+  const [setMetaStatus, setSetMetaStatus] = useState<{ known_count: number; last_updated: string | null } | null>(null);
+  const [setMetaBusy, setSetMetaBusy] = useState(false);
+  const [setMetaResult, setSetMetaResult] = useState<string | null>(null);
+  const [setMetaError, setSetMetaError] = useState<string | null>(null);
+
+  // Load set metadata status on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await invoke<any>('get_set_metadata');
+        if (!cancelled && res) {
+          setSetMetaStatus({ known_count: res.known_count || 0, last_updated: res.last_updated || null });
+        }
+      } catch (e) {
+        console.error('Failed to load set metadata status:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch Scryfall set list and persist names + release dates locally.
+  const handleRefreshSets = async () => {
+    setSetMetaBusy(true);
+    setSetMetaResult(null);
+    setSetMetaError(null);
+    try {
+      const resp = await fetch('https://api.scryfall.com/sets');
+      if (!resp.ok) throw new Error(`Scryfall responded ${resp.status}`);
+      const data = await resp.json();
+      const sets = (data.data || []).map((s: any) => ({
+        code: s.code,
+        name: s.name,
+        released_at: s.released_at || null,
+      }));
+      const res = await invoke<any>('refresh_set_metadata', { sets });
+      setSetMetaResult(`Updated ${res.updated || 0} sets`);
+      const status = await invoke<any>('get_set_metadata');
+      if (status) setSetMetaStatus({ known_count: status.known_count || 0, last_updated: status.last_updated || null });
+    } catch (e) {
+      console.error('Failed to refresh set metadata:', e);
+      setSetMetaError(String(e));
+    } finally {
+      setSetMetaBusy(false);
+    }
+  };
 
   // Load the currently active log path (stored override or auto-detected).
   useEffect(() => {
@@ -231,7 +279,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Section 4: Wizards of the Coast & Scryfall Legal Attribution Notice */}
+      {/* Section 4: Set Metadata (names + release dates) */}
+      <div
+        className="p-6 rounded-2xl border space-y-3 shadow-xl"
+        style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5" style={{ color: palette?.accent }} />
+            <h3 className="text-base font-bold">Set Metadata</h3>
+          </div>
+          <button
+            onClick={handleRefreshSets}
+            disabled={setMetaBusy}
+            className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 disabled:opacity-50"
+            style={{ backgroundColor: palette?.accent, color: '#0B0C10' }}
+          >
+            <RefreshCw className={`w-4 h-4 ${setMetaBusy ? 'animate-spin' : ''}`} />
+            {setMetaBusy ? 'Updating…' : 'Update Set Lists'}
+          </button>
+        </div>
+        <p className="text-xs opacity-70">
+          Fetches set names and release dates from Scryfall so the Collection view can label sets and sort
+          them by release date. Runs once automatically; press the button again after a new set launches.
+        </p>
+        <div className="grid grid-cols-2 gap-4 pt-1">
+          <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
+            <p className="text-[10px] uppercase font-semibold opacity-60">Known Sets</p>
+            <p className="text-xl font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
+              {setMetaStatus?.known_count ?? '—'}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
+            <p className="text-[10px] uppercase font-semibold opacity-60">Last Updated</p>
+            <p className="text-xs font-mono opacity-80 mt-1.5">
+              {setMetaStatus?.last_updated ? new Date(setMetaStatus.last_updated).toLocaleString() : 'Never'}
+            </p>
+          </div>
+        </div>
+        {setMetaResult && (
+          <p className="text-xs font-mono text-emerald-400">{setMetaResult}</p>
+        )}
+        {setMetaError && (
+          <p className="text-xs font-mono text-rose-400 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5" /> {setMetaError}
+          </p>
+        )}
+      </div>
+
+      {/* Section 5: Wizards of the Coast & Scryfall Legal Attribution Notice */}
       <div 
         className="p-6 rounded-2xl border space-y-3 shadow-xl bg-black/30"
         style={{ borderColor: palette?.border || '#2A2F3D' }}

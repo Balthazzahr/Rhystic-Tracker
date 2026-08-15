@@ -47,7 +47,7 @@ export function CustomDropdown({ options, value, onChange, palette }: CustomDrop
 
       {isOpen && (
         <div
-          className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border shadow-2xl py-1 overflow-hidden"
+          className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
           style={{
             backgroundColor: palette?.surface || '#1A1D24',
             borderColor: palette?.border || '#2A2F3D',

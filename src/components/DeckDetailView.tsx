@@ -25,6 +25,13 @@ const scryfallCardUrl = (name: string) =>
 const scryfallArtUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
+const ownedPctColor = (pct: number | null): string => {
+  if (pct == null) return '#94A3B8';
+  if (pct >= 100) return '#34D399';
+  if (pct >= 50) return '#FBBF24';
+  return '#F87171';
+};
+
 // Mana value histogram (bins 0, 1, 2, 3, 4, 5, 6, 7+). Bars fill the full
 // cell height; each bar shows its mana value label underneath, hover shows count.
 type Tip = { text: string; x: number; y: number };
@@ -153,6 +160,7 @@ export function DeckDetailView({
   const [exportMode, setExportMode] = useState<'true' | 'logged'>('true');
   const [exportText, setExportText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [ownedStats, setOwnedStats] = useState<any>(null);
 
   // Load the export text whenever the dialog opens or the mode changes.
   useEffect(() => {
@@ -193,6 +201,22 @@ export function DeckDetailView({
         });
       } catch (e) {
         if (!cancelled) { setDeckListData(null); setDeckListStatus(null); }
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [isOpen, deckName, importResult]);
+
+  // "% owned" collection completion for this deck.
+  useEffect(() => {
+    if (!isOpen || !deckName) { setOwnedStats(null); return; }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const stats = await invoke<any>('get_deck_owned_stats', { deckName });
+        if (!cancelled) setOwnedStats(stats);
+      } catch (e) {
+        if (!cancelled) setOwnedStats(null);
       }
     };
     load();
@@ -340,6 +364,29 @@ export function DeckDetailView({
                     <h3 className="text-3xl font-extrabold font-outfit mt-0.5">{detail.wins} - {detail.losses}</h3>
                   </div>
                   <Layers className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
+                </div>
+
+                {/* Collection completion (% owned) */}
+                <div className="rounded-2xl border p-3 space-y-1.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">Collection</p>
+                  {ownedStats && ownedStats.total_cards > 0 ? (
+                    <>
+                      <h3 className="text-3xl font-extrabold font-outfit mt-0.5" style={{ color: ownedPctColor(ownedStats.owned_pct) }}>
+                        {ownedStats.owned_pct}%
+                      </h3>
+                      <p className="text-[11px] font-mono opacity-60">
+                        {ownedStats.owned_cards} / {ownedStats.total_cards} cards owned
+                        {ownedStats.has_list ? '' : ' (logged)'}
+                      </p>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${ownedStats.owned_pct}%`, backgroundColor: ownedPctColor(ownedStats.owned_pct) }} />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-[11px] font-mono opacity-40 leading-relaxed">
+                      No data — import a decklist or play matches to estimate completion
+                    </p>
+                  )}
                 </div>
 
                 {/* Win rate by position */}
