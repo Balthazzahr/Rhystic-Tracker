@@ -44,11 +44,8 @@ pub fn discover_log_path() -> Option<PathBuf> {
     roots.dedup();
 
     // 1. Native Linux layout: MTGA_Data/Downloads/Player.log
-    let native = roots.iter().flat_map(|r| {
-        [
-            r.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log"),
-            r.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log"),
-        ]
+    let native = roots.iter().map(|r| {
+        r.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log")
     });
     if let Some(p) = native.into_iter().find(|p| p.exists()) {
         return Some(p);
@@ -62,6 +59,28 @@ pub fn discover_log_path() -> Option<PathBuf> {
         for app in appids.flatten() {
             let users_dir = app.path().join("pfx/drive_c/users");
             let Ok(users) = std::fs::read_dir(&users_dir) else { continue };
+            for user in users.flatten() {
+                let p = user
+                    .path()
+                    .join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    // 3. Standalone Wine (no Steam): default prefix + user profile.
+    if let Some(home) = dirs::home_dir() {
+        let p = home.join(
+            ".wine/drive_c/users/Public/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log",
+        );
+        if p.exists() {
+            return Some(p);
+        }
+        // Fall back to the first real user under the default prefix.
+        let users_dir = home.join(".wine/drive_c/users");
+        if let Ok(users) = std::fs::read_dir(&users_dir) {
             for user in users.flatten() {
                 let p = user
                     .path()

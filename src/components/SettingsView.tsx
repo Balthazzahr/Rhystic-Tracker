@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   FolderOpen, 
   Palette, 
@@ -6,8 +6,11 @@ import {
   ShieldCheck, 
   Check, 
   FileText,
-  AlertCircle
+  AlertCircle,
+  Search
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import { ManaPip } from './ManaPip';
 
 interface SettingsViewProps {
@@ -21,14 +24,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   activeThemeId, 
   setActiveThemeId 
 }) => {
-  const [logPath, setLogPath] = useState(
-    ""
-  );
+  const [logPath, setLogPath] = useState("");
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [browseSuccess, setBrowseSuccess] = useState(false);
+  const [loadingPath, setLoadingPath] = useState(true);
 
-  const handleSaveConfig = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+  // Load the currently active log path (stored override or auto-detected).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const path = await invoke<string>('get_log_path');
+        if (!cancelled) setLogPath(path);
+      } catch (e) {
+        console.error('Failed to load log path:', e);
+      } finally {
+        if (!cancelled) setLoadingPath(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleSaveConfig = async () => {
+    try {
+      const effective = await invoke<string>('set_log_path', { path: logPath });
+      setLogPath(effective);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (e) {
+      console.error('Failed to save log path:', e);
+      setSavedSuccess(false);
+    }
+  };
+
+  // Open a native file picker; auto-applies the selection immediately.
+  const handleBrowse = async () => {
+    try {
+      const selected = await open({
+        title: 'Select MTG Arena Player.log',
+        filters: [{ name: 'Player Log', extensions: ['log'] }],
+        multiple: false,
+      });
+      if (typeof selected === 'string' && selected) {
+        const effective = await invoke<string>('set_log_path', { path: selected });
+        setLogPath(effective);
+        setBrowseSuccess(true);
+        setTimeout(() => setBrowseSuccess(false), 3000);
+      }
+    } catch (e) {
+      console.error('Failed to pick log path:', e);
+    }
   };
 
   const manaThemeOptions = [
@@ -59,23 +104,65 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <h3 className="text-base font-bold">MTGA Log Path Configuration</h3>
         </div>
         <p className="text-xs opacity-70 leading-relaxed">
-          MTG Arena's active <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">Player.log</code> is auto-detected on launch from the standard Steam and Wine/Proton install locations. Set a custom path here if needed (or use the <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">RHYSTIC_MTGA_LOG</code> environment variable).
+          MTG Arena's active <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">Player.log</code> is auto-detected on launch from the standard Steam and Wine/Proton install locations. If it can't be found, use <strong>Browse</strong> to select it manually — picking a file applies it immediately.
         </p>
 
+        {/* Where to find Player.log — common install scenarios */}
+        <div className="rounded-xl border p-3.5 space-y-2.5" style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, backgroundColor: 'rgba(0,0,0,0.2)' }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: palette?.accent }}>
+            Where to find Player.log
+          </p>
+          <div className="text-[11px] font-mono space-y-1.5 leading-relaxed">
+            <div>
+              <span className="opacity-60">Steam (Proton):</span>{' '}
+              <span className="break-all" style={{ color: palette?.text }}>
+                &lt;SteamLibrary&gt;/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log
+              </span>
+            </div>
+            <div>
+              <span className="opacity-60">Steam (native Linux):</span>{' '}
+              <span className="break-all" style={{ color: palette?.text }}>
+                &lt;SteamLibrary&gt;/steamapps/common/MTGA/MTGA_Data/Downloads/Player.log
+              </span>
+            </div>
+            <div>
+              <span className="opacity-60">Without Steam (Wine):</span>{' '}
+              <span className="break-all" style={{ color: palette?.text }}>
+                &lt;wine-prefix&gt;/drive_c/users/&lt;user&gt;/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log
+              </span>
+            </div>
+          </div>
+          <p className="text-[10px] font-mono opacity-50">
+            Tip: <code className="opacity-80">SteamLibrary</code> is wherever your Steam games folder lives (e.g. <code className="opacity-80">~/Steam</code>, <code className="opacity-80">~/.local/share/Steam</code>, or a mounted drive). Use Browse to point at it directly if auto-detection misses it.
+          </p>
+        </div>
+
         <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase opacity-60">Active Player.log Path (auto-detected)</label>
+          <label className="text-xs font-semibold uppercase opacity-60">Active Player.log Path</label>
           <div className="flex gap-3">
-            <input
-              type="text"
-              value={logPath}
-              onChange={(e) => setLogPath(e.target.value)}
-              className="flex-1 px-4 py-2.5 rounded-xl border text-xs font-mono bg-black/30 focus:outline-none"
-              style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
-            />
+            <div className="flex-1 relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+              <input
+                type="text"
+                value={logPath}
+                onChange={(e) => setLogPath(e.target.value)}
+                placeholder={loadingPath ? 'Loading…' : 'No log detected — use Browse to select'}
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs font-mono bg-black/30 focus:outline-none"
+                style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+              />
+            </div>
             <button
-              onClick={handleSaveConfig}
+              onClick={handleBrowse}
               className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95"
               style={{ backgroundColor: palette?.accent, color: '#0B0C10' }}
+            >
+              {browseSuccess ? <Check className="w-4 h-4" /> : <FolderOpen className="w-4 h-4" />}
+              {browseSuccess ? 'Applied' : 'Browse…'}
+            </button>
+            <button
+              onClick={handleSaveConfig}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 border"
+              style={{ backgroundColor: `${palette?.surface || '#1A1D24'}99`, borderColor: palette?.border, color: palette?.text }}
             >
               {savedSuccess ? <Check className="w-4 h-4" /> : null}
               {savedSuccess ? 'Saved' : 'Save Config'}

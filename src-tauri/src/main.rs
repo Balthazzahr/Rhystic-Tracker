@@ -5,14 +5,17 @@ mod db;
 mod theme;
 mod card_db;
 mod deck_list;
+mod settings;
 
 use tokio::sync::mpsc;
+use std::path::PathBuf;
 use tailer::{FileTailer, TailerEvent};
 use parser::{parse_line, ParsedEvent};
 use match_assembler::{MatchAssembler, MatchRecord};
 use db::DatabaseManager;
 use theme::{get_mana_theme, ManaTheme};
 use tauri::Emitter;
+use tauri::Manager;
 use sqlx::Row;
 
 fn redact_str(s: &str) -> String {
@@ -27,6 +30,48 @@ fn redact_str(s: &str) -> String {
 fn get_active_theme(theme_id: String) -> ManaTheme {
     get_mana_theme(&theme_id)
 }
+
+// Resolve the effective MTGA log path: stored override > RHYSTIC_MTGA_LOG >
+// auto-discovery. Returns an empty string when none can be found.
+fn resolve_effective_log_path() -> String {
+    let settings = settings::load_settings();
+    if let Some(p) = settings.mtga_log_path.as_deref() {
+        if !p.is_empty() {
+            return p.to_string();
+        }
+    }
+    if let Ok(p) = std::env::var("RHYSTIC_MTGA_LOG") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    tailer::discover_log_path()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// Shared runtime state so the frontend can query the active log path and have
+/// the tailer restart when the user changes it.
+pub struct LogPathState {
+    pub path_tx: tokio::sync::watch::Sender<String>,
+}
+
+#[tauri::command]
+fn get_log_path(state: tauri::State<LogPathState>) -> String {
+    state.path_tx.borrow().clone()
+}
+
+#[tauri::command]
+fn set_log_path(state: tauri::State<LogPathState>, path: String) -> Result<String, String> {
+    let trimmed = path.trim().to_string();
+    let mut settings = settings::load_settings();
+    settings.mtga_log_path = if trimmed.is_empty() { None } else { Some(trimmed.clone()) };
+    settings::save_settings(&settings)?;
+    let effective = resolve_effective_log_path();
+    state.path_tx.send(effective.clone()).map_err(|_| "log path channel closed".to_string())?;
+    Ok(effective)
+}
+
 
 #[tauri::command]
 async fn get_matches_count() -> Result<i64, String> {
@@ -2028,6 +2073,172 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
     }
 }
 
+/// Restartable tailer supervisor. Reads the current effective log path from the
+/// watch channel, runs the tailer + event processing, and restarts whenever the
+/// path changes (e.g. after the user picks a new Player.log in Settings).
+async fn run_tailer_supervisor(
+    mut path_rx: tokio::sync::watch::Receiver<String>,
+    db_manager: std::sync::Arc<DatabaseManager>,
+    assembler_ref: std::sync::Arc<tokio::sync::Mutex<MatchAssembler>>,
+) {
+    loop {
+        let path = PathBuf::from(path_rx.borrow().clone());
+        println!("[TAILER] Supervisor starting tailer for path: {:?}", path);
+
+        let (tx, rx) = mpsc::channel::<TailerEvent>(2000);
+        let tailer = FileTailer::new_from_end(path, tx);
+        let stop_handle = tailer.stop_handle();
+
+        let tailer_task = tokio::spawn(tailer.run());
+        let processing_task = tokio::spawn(process_tailer_events(rx, db_manager.clone(), assembler_ref.clone()));
+
+        // Wait for either a path change (restart) or the event stream to end.
+        // tokio::select! cancels the non-selected branches when one completes.
+        tokio::select! {
+            _ = path_rx.changed() => {
+                println!("[TAILER] Log path changed; restarting tailer");
+                stop_handle.store(false, std::sync::atomic::Ordering::Relaxed);
+                let _ = tailer_task.await;
+            }
+            _ = processing_task => {
+                println!("[TAILER] Event stream ended; restarting tailer");
+                stop_handle.store(false, std::sync::atomic::Ordering::Relaxed);
+                let _ = tailer_task.await;
+            }
+        }
+    }
+}
+
+/// Process tailer events (line parsing / JSON buffering / match assembly).
+async fn process_tailer_events(
+    mut rx: mpsc::Receiver<TailerEvent>,
+    db_manager: std::sync::Arc<DatabaseManager>,
+    assembler_ref: std::sync::Arc<tokio::sync::Mutex<MatchAssembler>>,
+) {
+    let mut json_buffer = String::new();
+    let mut brace_depth = 0;
+    let mut in_json = false;
+
+    while let Some(event) = rx.recv().await {
+        if let TailerEvent::Line(line) = event {
+            let trimmed = line.trim();
+
+            if !in_json && trimmed.starts_with('{') {
+                in_json = true;
+                json_buffer.clear();
+            }
+
+            if in_json {
+                json_buffer.push_str(&line);
+                json_buffer.push('\n');
+
+                for ch in line.chars() {
+                    if ch == '{' { brace_depth += 1; }
+                    else if ch == '}' { brace_depth -= 1; }
+                }
+
+                if brace_depth <= 0 {
+                    in_json = false;
+                    brace_depth = 0;
+                    let payload_str = json_buffer.clone();
+                    json_buffer.clear();
+
+                    let mut assembler = assembler_ref.lock().await;
+
+                    match parse_line(&payload_str) {
+                        ParsedEvent::Auth { screen_name, client_id } => {
+                            assembler.set_player_user_id(client_id.clone());
+                            println!(
+                                "[EVENT 1: AUTH] Authenticated User: screen_name = \"{}\", client_id = \"{}\"",
+                                redact_str(&screen_name),
+                                redact_str(&client_id)
+                            );
+                        }
+                        ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
+                            assembler.start_match(match_id.clone(), format_name.clone());
+                            assembler.update_reserved_players(&reserved_players);
+                            println!(
+                                "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Player Seat = {}, Opponent = \"{}\"",
+                                redact_str(&match_id),
+                                format_name,
+                                assembler.player_seat_id,
+                                redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
+                            );
+                        }
+                        ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
+                            assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
+                            println!(
+                                "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
+                                deck_name,
+                                commander_id,
+                                total_cards
+                            );
+                        }
+                        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
+                            // Advance the turn BEFORE processing objects so plays/draws in this
+                            // message are attributed to the correct turn. MTGA only emits turnNumber
+                            // at turn boundaries, so without this, cards played in later turns get
+                            // stamped with the previous turn (causing impossible "round 1" plays).
+                            if turn_number > 0 {
+                                assembler.current_turn = turn_number;
+                            }
+                            for (instance_id, grp_id, owner_seat, zone_id) in objects {
+                                assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
+                            }
+                            for (instance_id, amount) in damage_events {
+                                assembler.process_damage_event(instance_id, amount);
+                            }
+                            assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
+                        }
+                        ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
+                            if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                                println!(
+                                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
+                                    redact_str(&record.match_id),
+                                    record.result,
+                                    reason,
+                                    record.player_life_end,
+                                    record.opponent_life_end,
+                                    turn_events.len(),
+                                    impactful.len()
+                                );
+                                let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
+                            }
+                        }
+                        ParsedEvent::Unknown => {}
+                    }
+                }
+            } else {
+                let mut assembler = assembler_ref.lock().await;
+                match parse_line(&line) {
+                    ParsedEvent::Auth { screen_name, client_id } => {
+                        assembler.set_player_user_id(client_id.clone());
+                    }
+                    ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
+                        assembler.start_match(match_id.clone(), format_name.clone());
+                        assembler.update_reserved_players(&reserved_players);
+                    }
+                    ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
+                        assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
+                        println!(
+                            "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
+                            deck_name,
+                            commander_id,
+                            total_cards
+                        );
+                    }
+                    ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
+                        if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                            let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     // CRITICAL: Must be set BEFORE GTK/WebKit initializes any display connections to prevent DMA-BUF Wayland protocol crashes on NVIDIA drivers
     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
@@ -2037,158 +2248,33 @@ fn main() {
 
     // Launch Tauri Native App Window with tokio async setup
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(shared_state)
         .setup(move |app| {
-            let app_handle = app.handle().clone();
             let assembler_ref = shared_assembler.clone();
+
+            // Watch channel: set_log_path() pushes a new effective path and the
+            // supervisor restarts the tailer on it.
+            let (path_tx, path_rx) = tokio::sync::watch::channel(resolve_effective_log_path());
+            app.manage(LogPathState { path_tx });
 
             tauri::async_runtime::spawn(async move {
                 let db_manager = match DatabaseManager::init().await {
-                    Ok(d) => d,
+                    Ok(d) => std::sync::Arc::new(d),
                     Err(e) => {
                         eprintln!("[ERROR] DB init failed: {}", e);
                         return;
                     }
                 };
 
-                let log_path = tailer::discover_log_path().unwrap_or_default();
-
-                let (tx, mut rx) = mpsc::channel::<TailerEvent>(2000);
-                let tailer = FileTailer::new_from_end(log_path, tx);
-
-                tokio::spawn(async move {
-                    tailer.run().await;
-                });
-
-                let mut json_buffer = String::new();
-                let mut brace_depth = 0;
-                let mut in_json = false;
-
-                while let Some(event) = rx.recv().await {
-                    if let TailerEvent::Line(line) = event {
-                        let trimmed = line.trim();
-
-                        if !in_json && trimmed.starts_with('{') {
-                            in_json = true;
-                            json_buffer.clear();
-                        }
-
-                        if in_json {
-                            json_buffer.push_str(&line);
-                            json_buffer.push('\n');
-
-                            for ch in line.chars() {
-                                if ch == '{' { brace_depth += 1; }
-                                else if ch == '}' { brace_depth -= 1; }
-                            }
-
-                            if brace_depth <= 0 {
-                                in_json = false;
-                                brace_depth = 0;
-                                let payload_str = json_buffer.clone();
-                                json_buffer.clear();
-
-                                let mut assembler = assembler_ref.lock().await;
-
-                                match parse_line(&payload_str) {
-                                    ParsedEvent::Auth { screen_name, client_id } => {
-                                        assembler.set_player_user_id(client_id.clone());
-                                        println!(
-                                            "[EVENT 1: AUTH] Authenticated User: screen_name = \"{}\", client_id = \"{}\"",
-                                            redact_str(&screen_name),
-                                            redact_str(&client_id)
-                                        );
-                                    }
-                                    ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-                                        assembler.start_match(match_id.clone(), format_name.clone());
-                                        assembler.update_reserved_players(&reserved_players);
-                                        println!(
-                                            "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Player Seat = {}, Opponent = \"{}\"",
-                                            redact_str(&match_id),
-                                            format_name,
-                                            assembler.player_seat_id,
-                                            redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
-                                        );
-                                    }
-                                    ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
-                                        assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
-                                        println!(
-                                            "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
-                                            deck_name,
-                                            commander_id,
-                                            total_cards
-                                        );
-                                    }
-                                    ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
-                                        // Advance the turn BEFORE processing objects so plays/draws in this
-                                        // message are attributed to the correct turn. MTGA only emits turnNumber
-                                        // at turn boundaries, so without this, cards played in later turns get
-                                        // stamped with the previous turn (causing impossible "round 1" plays).
-                                        if turn_number > 0 {
-                                            assembler.current_turn = turn_number;
-                                        }
-                                        for (instance_id, grp_id, owner_seat, zone_id) in objects {
-                                            assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
-                                        }
-                                        for (instance_id, amount) in damage_events {
-                                            assembler.process_damage_event(instance_id, amount);
-                                        }
-                                        assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
-                                    }
-                                    ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                                        if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
-                                            println!(
-                                                "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
-                                                redact_str(&record.match_id),
-                                                record.result,
-                                                reason,
-                                                record.player_life_end,
-                                                record.opponent_life_end,
-                                                turn_events.len(),
-                                                impactful.len()
-                                            );
-                                            let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
-                                        }
-                                    }
-                                    ParsedEvent::Unknown => {}
-                                }
-                            }
-                        } else {
-                            let mut assembler = assembler_ref.lock().await;
-                            match parse_line(&line) {
-                                ParsedEvent::Auth { screen_name, client_id } => {
-                                    assembler.set_player_user_id(client_id.clone());
-                                }
-                                ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-                                    assembler.start_match(match_id.clone(), format_name.clone());
-                                    assembler.update_reserved_players(&reserved_players);
-                                }
-                                ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, total_cards } => {
-                                    assembler.set_deck(deck_name.clone(), commander_id, main_deck.clone());
-                                    println!(
-                                        "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Commander GRPID = {:?}, Total Cards = {}",
-                                        deck_name,
-                                        commander_id,
-                                        total_cards
-                                    );
-                                }
-                                ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                                    if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
-                                        let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                }
+                run_tailer_supervisor(path_rx, db_manager, assembler_ref).await;
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_active_theme, 
-            get_matches_count, 
-            get_recent_matches, 
+            get_active_theme,
+            get_matches_count,
+            get_recent_matches,
             get_deck_stats,
             get_deck_overview,
             get_deck_detail,
@@ -2205,7 +2291,9 @@ fn main() {
             get_match_cards,
             get_match_turn_events,
             get_impactful_cards,
-            get_live_match_state
+            get_live_match_state,
+            get_log_path,
+            set_log_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
