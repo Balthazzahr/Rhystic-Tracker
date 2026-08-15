@@ -12,7 +12,7 @@ pub struct AuthPayload {
 pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
     MatchCreated { match_id: String, format_name: String, reserved_players: serde_json::Value },
-    DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32> },
+    DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32>, deck_id: Option<String> },
     GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, life_by_seat: Vec<(u32, i32)>, active_seat: u32, damage_events: Vec<(u32, i32)> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
     Unknown,
@@ -101,11 +101,15 @@ pub fn parse_line(line: &str) -> ParsedEvent {
     }
 
     // 3. Deck Selection / Submission (Event 3)
-    if line.contains("EventSetDeckV3") || line.contains("deckSubmit") {
+    // Real Arena logs emit `EventSetDeckV2` (and older/newer `EventSetDeck` /
+    // `EventSetDeckV3` variants). Previously the parser keyed only on V3/deckSubmit,
+    // which never appears, silently mislabeling every match as "Selected Deck".
+    if line.contains("EventSetDeck") || line.contains("deckSubmit") {
         if let Some(start) = line.find('{') {
             let json_str = &line[start..];
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
                 let mut deck_name = String::new();
+                let mut deck_id = None;
                 let mut main_deck = Vec::new();
                 let mut commander_id = None;
 
@@ -119,6 +123,9 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     if let Some(summary) = obj.get("Summary").or_else(|| obj.get("CourseDeckSummary")) {
                         if let Some(name) = summary.get("Name").and_then(|n| n.as_str()) {
                             deck_name = name.to_string();
+                        }
+                        if let Some(id) = summary.get("DeckId").and_then(|d| d.as_str()) {
+                            deck_id = Some(id.to_string());
                         }
                     }
                     if let Some(deck) = obj.get("Deck").or_else(|| obj.get("CourseDeck")) {
@@ -152,6 +159,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                         total_cards,
                         main_deck,
                         commander_id,
+                        deck_id,
                     };
                 }
             }
@@ -386,6 +394,36 @@ mod tests {
                 assert!(objects.iter().any(|(inst, _, _, _)| *inst == 100));
             }
             other => panic!("expected GameStateUpdateCombined, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eventsetdeck_v2_parses_deck_id_and_name() {
+        // Real Arena logs emit EventSetDeckV2 with Summary.DeckId + Summary.Name.
+        // Previously the parser keyed only on EventSetDeckV3/deckSubmit, silently
+        // labeling every match "Selected Deck".
+        let line = r#"[UnityCrossThreadLogger]==> EventSetDeckV2 {"id":"abc","request":"{\"EventName\":\"Play_Brawl_Historic\",\"Summary\":{\"DeckId\":\"5338cece-283c-4b13-9e06-0e456f39d18c\",\"Name\":\"Artifact Affinity Burn\",\"IsNetDeck\":false},\"Deck\":{\"MainDeck\":[{\"cardId\":75662,\"quantity\":2},{\"cardId\":83789,\"quantity\":1}],\"CommandZone\":[{\"cardId\":91039,\"quantity\":1}]}}"}"#;
+
+        match parse_line(line) {
+            ParsedEvent::DeckSubmitted { deck_name, deck_id, commander_id, main_deck, total_cards } => {
+                assert_eq!(deck_name, "Artifact Affinity Burn");
+                assert_eq!(deck_id.as_deref(), Some("5338cece-283c-4b13-9e06-0e456f39d18c"));
+                assert_eq!(commander_id, Some(91039));
+                assert_eq!(main_deck.len(), 3);
+                assert_eq!(total_cards, 3);
+            }
+            other => panic!("expected DeckSubmitted, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_eventsetdeck_v2_response_line_ignored() {
+        // The `<== EventSetDeckV2(id)` acknowledgement line has no JSON body and
+        // must not be mistaken for a deck submission.
+        let line = "[UnityCrossThreadLogger]<== EventSetDeckV2(02dfca08-fdc0-4432-9727-3bac97e3e96e)";
+        match parse_line(line) {
+            ParsedEvent::Unknown => {}
+            other => panic!("expected Unknown for bare response line, got {:?}", other),
         }
     }
 }
