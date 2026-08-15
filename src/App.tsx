@@ -16,7 +16,11 @@ import {
   Filter,
   ListFilter,
   Clock,
-  X
+  X,
+  LayoutDashboard,
+  Table,
+  LayoutGrid,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
@@ -31,7 +35,10 @@ import { HoverArtPreview } from './components/HoverArtPreview';
 import { FullMatchInfoModal } from './components/FullMatchInfoModal';
 import { OpponentH2HModal } from './components/OpponentH2HModal';
 import { DeckDetailView } from './components/DeckDetailView';
+import { DashboardView } from './components/DashboardView';
+import { CardNameTooltip } from './components/CardNameTooltip';
 import logoImg from './assets/logo.png';
+import symbolIcon from './assets/symbolIcon.png';
 
 interface ManaTheme {
   id: string;
@@ -78,15 +85,24 @@ export default function App() {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // Responsive Breakpoints
-  const DRAWER_BREAKPOINT = 1200;
   const SIDEBAR_BREAKPOINT = 900;
 
-  // Manual Overrides
-  const [isSidebarCollapsedManual, setIsSidebarCollapsedManual] = useState<boolean | null>(null);
+  // Manual Overrides (sidebar collapse persisted)
+  const [isSidebarCollapsedManual, setIsSidebarCollapsedManual] = useState<boolean | null>(() => {
+    const saved = localStorage.getItem('sidebarCollapsed');
+    if (saved === 'true') return true;
+    if (saved === 'false') return false;
+    return null;
+  });
+  useEffect(() => {
+    if (isSidebarCollapsedManual !== null) {
+      localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsedManual));
+    }
+  }, [isSidebarCollapsedManual]);
   const [isDrawerOpenManual, setIsDrawerOpenManual] = useState<boolean>(false);
 
   // Navigation & Filter State
-  const [activeTab, setActiveTab] = useState<'matches' | 'live' | 'decks' | 'deckstats' | 'draft' | 'collection' | 'settings'>('matches');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');
@@ -108,6 +124,34 @@ export default function App() {
   const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null);
   const [deckDetail, setDeckDetail] = useState<any>(null);
   const [deckCardOverlay, setDeckCardOverlay] = useState<any>(null);
+
+  // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
+  // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
+  // local cards cache so the detail panel always has complete info.
+  const openCardOverlay = async (card: any, isCommander: boolean) => {
+    const hasMeta =
+      card &&
+      (card.cmc !== undefined || card.mana_cost !== undefined) &&
+      (card.set_code !== undefined || card.rarity !== undefined);
+    if (card && !hasMeta) {
+      try {
+        let meta: any = null;
+        if (card.grp_id) {
+          meta = await invoke('get_card_info', { grpId: card.grp_id });
+        }
+        if (!meta && card.name) {
+          meta = await invoke('get_card_info_by_name', { name: card.name });
+        }
+        if (meta) {
+          setDeckCardOverlay({ card: { ...card, ...meta }, isCommander });
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to enrich card metadata:', e);
+      }
+    }
+    setDeckCardOverlay({ card, isCommander });
+  };
   const [deckSearch, setDeckSearch] = useState('');
   const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
   const [commanderSearch, setCommanderSearch] = useState('');
@@ -115,8 +159,67 @@ export default function App() {
   const [deckColorFilter, setDeckColorFilter] = useState<string[]>([]);
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
   const [commanderSearchOpen, setCommanderSearchOpen] = useState<boolean>(false);
-  const [deckSortKey, setDeckSortKey] = useState<string>('total_matches');
-  const [deckSortDir, setDeckSortDir] = useState<'asc' | 'desc'>('desc');
+  const [deckSortKey, setDeckSortKey] = useState<string>(() => localStorage.getItem('deckSortKey') || 'total_matches');
+  const [deckSortDir, setDeckSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('deckSortDir') === 'asc' ? 'asc' : 'desc'));
+  useEffect(() => {
+    localStorage.setItem('deckSortKey', deckSortKey);
+    localStorage.setItem('deckSortDir', deckSortDir);
+  }, [deckSortKey, deckSortDir]);
+
+  // Deck Library view mode: 'cards' (default) or 'table', persisted locally.
+  const [deckView, setDeckView] = useState<'cards' | 'table'>(() => {
+    const saved = localStorage.getItem('deckLibraryView');
+    return saved === 'table' ? 'table' : 'cards';
+  });
+  const [deckCardSort, setDeckCardSort] = useState<string>(() => localStorage.getItem('deckCardSort') || 'deck_name');
+  const [deckCardSortDir, setDeckCardSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('deckCardSortDir') === 'desc' ? 'desc' : 'asc'));
+  useEffect(() => {
+    localStorage.setItem('deckCardSort', deckCardSort);
+    localStorage.setItem('deckCardSortDir', deckCardSortDir);
+  }, [deckCardSort, deckCardSortDir]);
+  const [showCardSortMenu, setShowCardSortMenu] = useState<boolean>(false);
+  const cardSortRef = useRef<HTMLDivElement>(null);
+
+  // Close the card sorting dropdown when clicking anywhere outside it.
+  useEffect(() => {
+    if (!showCardSortMenu) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (cardSortRef.current && !cardSortRef.current.contains(e.target as Node)) {
+        setShowCardSortMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [showCardSortMenu]);
+
+  // Card view size checkpoint: number of cards across (3..6), persisted locally.
+  // Rightmost = 3 across (largest), leftmost = 6 across (smallest).
+  const [cardCols, setCardCols] = useState<number>(() => {
+    const saved = parseInt(localStorage.getItem('deckCardCols') || '', 10);
+    return saved >= 3 && saved <= 6 ? saved : 5;
+  });
+  useEffect(() => {
+    localStorage.setItem('deckCardCols', String(cardCols));
+  }, [cardCols]);
+  // Measure the available width of the card area to derive the base card width.
+  const cardAreaRef = useRef<HTMLDivElement>(null);
+  const [cardAreaWidth, setCardAreaWidth] = useState(0);
+  useEffect(() => {
+    const el = cardAreaRef.current;
+    if (!el) return;
+    const measure = () => setCardAreaWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [deckView]);
+  // Cards snap to fill `cardCols` across (with 16px gaps), 4:3 ratio.
+  const containerW = cardAreaWidth > 0 ? cardAreaWidth : 1200;
+  const cardWidth = (containerW - (cardCols - 1) * 16) / cardCols;
+
+  useEffect(() => {
+    localStorage.setItem('deckLibraryView', deckView);
+  }, [deckView]);
 
   // Hover state for theme selector preview
   const [hoveredThemeId, setHoveredThemeId] = useState<string | null>(null);
@@ -125,9 +228,16 @@ export default function App() {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = useState<number>(1000);
 
-  // Mana Theme Engine State
-  const [activeThemeId, setActiveThemeId] = useState<string>('blue');
+  // Mana Theme Engine State (persisted)
+  const [activeThemeId, setActiveThemeId] = useState<string>(() => {
+    const saved = localStorage.getItem('activeThemeId');
+    return ['white', 'blue', 'black', 'red', 'green'].includes(saved || '') ? (saved as string) : 'blue';
+  });
   const [palette, setPalette] = useState<ManaTheme | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('activeThemeId', activeThemeId);
+  }, [activeThemeId]);
 
   // Load Mana Theme via Tauri IPC
   const loadTheme = async (themeId: string) => {
@@ -339,7 +449,17 @@ export default function App() {
     : windowWidth < SIDEBAR_BREAKPOINT;
 
   const isDrawerOpen = isDrawerOpenManual;
-  const isDrawerOverlay = windowWidth < DRAWER_BREAKPOINT;
+
+  // Close the right drawer with Escape when it is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDrawerOpen) {
+        setIsDrawerOpenManual(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDrawerOpen]);
 
   // Selected Match Object
   const selectedMatch = useMemo(() => {
@@ -519,7 +639,10 @@ export default function App() {
     };
 
     const list = deckOverview.filter(d => {
-      const matchesSearch = d.deck_name.toLowerCase().includes(deckSearch.toLowerCase());
+      const q = deckSearch.toLowerCase();
+      const matchesDeckName = d.deck_name.toLowerCase().includes(q);
+      const matchesCommanderSearch = (d.commanders || []).some((c: any) => (c.name || '').toLowerCase().includes(q));
+      const matchesSearch = q === '' || matchesDeckName || matchesCommanderSearch;
 
       // Commander filter: 'ALL' -> no filter; 'N/A' -> only decks with no commander;
       // specific name -> only decks that include that commander (non-commander decks drop out).
@@ -589,6 +712,28 @@ export default function App() {
     return list;
   }, [deckOverview, deckSearch, commanderFilter, deckFormatFilter, deckColorFilter, deckSortKey, deckSortDir]);
 
+  // Card view ordering (independent of the table's sort): name / winrate / games / format.
+  const sortedCardDecks = useMemo(() => {
+    const dir = deckCardSortDir === 'asc' ? 1 : -1;
+    return [...filteredDecks].sort((a, b) => {
+      let cmp = 0;
+      switch (deckCardSort) {
+        case 'winrate':
+          cmp = (parseFloat(a.winrate) || 0) - (parseFloat(b.winrate) || 0);
+          break;
+        case 'games':
+          cmp = (a.total_matches || 0) - (b.total_matches || 0);
+          break;
+        case 'format':
+          cmp = ((a.formats || [])[0]?.format || '').localeCompare((b.formats || [])[0]?.format || '');
+          break;
+        default:
+          cmp = (a.deck_name || '').localeCompare(b.deck_name || '');
+      }
+      return cmp * dir;
+    });
+  }, [filteredDecks, deckCardSort, deckCardSortDir]);
+
   // Deck table virtualization (separate from the match history virtualizer)
   const deckTableParentRef = useRef<HTMLDivElement>(null);
   const deckRowVirtualizer = useVirtualizer({
@@ -620,19 +765,17 @@ export default function App() {
   const manaThemeOptions = [
     { id: 'white', label: 'White (Order)', symbol: 'W', color: '#F8F6D8' },
     { id: 'blue', label: 'Blue (Progress)', symbol: 'U', color: '#38BDF8' },
-    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#A855F7' },
+    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#8E59C1' },
     { id: 'red', label: 'Red (Chaos)', symbol: 'R', color: '#F87171' },
     { id: 'green', label: 'Green (Nature)', symbol: 'G', color: '#34D399' },
   ];
 
   const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'decks', label: 'Deck Library', icon: Layers },
     { id: 'matches', label: 'Match History', icon: Swords },
     { id: 'live', label: 'Live Match HUD', icon: Activity },
-    { id: 'decks', label: 'Deck Library', icon: Layers },
-    { id: 'deckstats', label: 'Play Stats', icon: BarChart3 },
-    { id: 'draft', label: 'Draft (v2)', icon: Sparkles, badge: 'SOON' },
-    { id: 'collection', label: 'Collection (v2)', icon: BookOpen, badge: 'SOON' },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'collection', label: 'Collection', icon: BookOpen },
   ];
 
   const formatOptions = [
@@ -683,6 +826,31 @@ export default function App() {
         ))}
       </div>
     );
+  };
+
+  // MTGA rarity codes: 0=unknown/token, 1=Land, 2=Common, 3=Uncommon, 4=Rare, 5=Mythic.
+  const cardRarityLabel = (r: number): string => {
+    const labels: Record<number, string> = {
+      1: 'Land',
+      2: 'Common',
+      3: 'Uncommon',
+      4: 'Rare',
+      5: 'Mythic',
+    };
+    return labels[r] ?? '-';
+  };
+
+  // Rarity colors matching the rest of the app: white common, silver uncommon,
+  // gold rare, orange mythic.
+  const cardRarityColor = (r: number): string => {
+    const colors: Record<number, string> = {
+      1: '#9CA3AF',
+      2: '#E5E7EB',
+      3: '#CBD5E1',
+      4: '#D4AF37',
+      5: '#F97316',
+    };
+    return colors[r] ?? '#9CA3AF';
   };
 
   // Muted format-chip colors, inspired by the mana pip palette but toned down.
@@ -747,7 +915,7 @@ export default function App() {
       e.stopPropagation();
       const entry = d.key_cards?.find((k: any) => k.name === artName)
         || (artName ? { name: artName, grp_id: d.top_commander_grp_id || d.top_card_grp_id } : null);
-      if (entry) setDeckCardOverlay({ card: entry, isCommander: d.top_commander_name === artName });
+      if (entry) openCardOverlay(entry, d.top_commander_name === artName);
     };
     if (!artName) {
       return (
@@ -757,15 +925,17 @@ export default function App() {
       );
     }
     return (
-      <img
-        src={scryfallArtUrl(artName)}
-        alt={artName}
-        onClick={openOverlay}
-        className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70`}
-        style={{ borderColor: `${palette?.border}66` }}
-        loading="lazy"
-        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-      />
+      <CardNameTooltip name={artName}>
+        <img
+          src={scryfallArtUrl(artName)}
+          alt={artName}
+          onClick={openOverlay}
+          className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70`}
+          style={{ borderColor: `${palette?.border}66` }}
+          loading="lazy"
+          onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+        />
+      </CardNameTooltip>
     );
   };
 
@@ -843,36 +1013,48 @@ export default function App() {
   return (
     <div 
       className="flex h-screen overflow-hidden select-none min-w-[768px] relative transition-colors duration-200"
-      style={{ backgroundColor: palette?.base || '#0B0C10', color: palette?.text || '#F8FAFC' }}
+      style={{
+        backgroundColor: palette?.base || '#0B0C10',
+        color: palette?.text || '#F8FAFC',
+        ['--rt-accent' as any]: palette?.accent || '#38BDF8',
+        ['--rt-accent-hover' as any]: palette?.accent_hover || '#7DD3FC',
+        ['--rt-border' as any]: palette?.border || '#2A2F3D',
+        ['--rt-track' as any]: palette?.surface || '#1A1D24',
+        ['--rt-base' as any]: palette?.base || '#0B0C10',
+      }}
     >
-      {/* COLUMN 1: Left Sidebar */}
+      {/* COLUMN 1: Left Sidebar (in-flow bar) */}
       <aside 
         className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-all duration-300 ease-in-out z-20"
         style={{ 
           backgroundColor: palette?.mantle || '#12141A', 
           borderColor: palette?.border || '#2A2F3D',
-          width: isSidebarCollapsed ? '72px' : '260px'
+          width: isSidebarCollapsed ? '72px' : '220px'
         }}
       >
-        <div className="space-y-6">
-          {/* Logo Brand Section */}
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Logo Brand Section: symbol icon always shown, centered. */}
           <div 
-            className={`py-3 border-b flex items-center justify-center transition-all ${
+            className={`flex items-center justify-center shrink-0 transition-all pt-3 pb-5 ${
               isSidebarCollapsed ? 'px-0' : 'px-2'
             }`}
-            style={{ borderColor: palette?.border || '#2A2F3D' }}
           >
             <img 
-              src={logoImg} 
+              src={symbolIcon} 
               alt="Rhystic Tracker" 
-              className={`w-full object-contain drop-shadow-md transition-all ${
-                isSidebarCollapsed ? 'max-h-8' : 'max-h-12'
+              className={`object-contain drop-shadow-md transition-all ${
+                isSidebarCollapsed ? 'h-8' : 'h-[75px]'
               }`}
             />
           </div>
 
-          {/* Navigation Links */}
-          <nav className="space-y-1.5">
+          {/* Navigation Links — fills remaining height; when collapsed the group
+              centers vertically, sliding to the middle of the sidebar. */}
+          <nav className={`transition-all duration-300 ease-in-out ${
+            isSidebarCollapsed
+              ? 'flex-1 flex flex-col justify-center space-y-0.5'
+              : 'space-y-1.5'
+          }`}>
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -913,13 +1095,9 @@ export default function App() {
         {/* Sidebar Footer: Color-Lit Mana Theme Selector */}
         <div className="space-y-3">
           <div 
-            className={`p-2.5 rounded-xl border flex items-center transition-all ${
-              isSidebarCollapsed ? 'flex-col space-y-2' : 'justify-between gap-1'
+            className={`flex items-center transition-all ${
+              isSidebarCollapsed ? 'flex-col space-y-1' : 'justify-center gap-0.5'
             }`}
-            style={{ 
-              backgroundColor: `${palette?.surface || '#1A1D24'}99`, 
-              borderColor: palette?.border || '#2A2F3D' 
-            }}
           >
             {manaThemeOptions.map((t) => {
               const isSelected = activeThemeId === t.id;
@@ -948,25 +1126,43 @@ export default function App() {
             })}
           </div>
 
-          <button 
-            onClick={() => setIsSidebarCollapsedManual(!isSidebarCollapsed)}
-            className="w-full py-2 px-3 border rounded-xl font-mono text-xs flex items-center justify-center gap-2 transition-all hover:bg-white/5"
-            style={{ 
-              backgroundColor: `${palette?.surface || '#1A1D24'}99`,
-              borderColor: palette?.border || '#2A2F3D',
-              color: palette?.subtext || '#94A3B8'
-            }}
-            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isSidebarCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
-            ) : (
-              <>
+          <div className={`flex items-stretch gap-2 ${
+            isSidebarCollapsed ? 'flex-col-reverse' : 'flex-row'
+          }`}>
+            {/* Collapse menu icon button */}
+            <button 
+              onClick={() => setIsSidebarCollapsedManual(!isSidebarCollapsed)}
+              className="flex-1 py-2 border rounded-xl flex items-center justify-center transition-all hover:bg-white/5"
+              style={{ 
+                backgroundColor: `${palette?.surface || '#1A1D24'}99`,
+                borderColor: palette?.border || '#2A2F3D',
+                color: palette?.subtext || '#94A3B8'
+              }}
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {isSidebarCollapsed ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
                 <ChevronLeft className="w-4 h-4" />
-                <span className="text-[11px] uppercase tracking-wider font-semibold">Collapse Menu</span>
-              </>
-            )}
-          </button>
+              )}
+            </button>
+
+            {/* Settings icon pill button */}
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className={`flex-1 py-2 border rounded-xl flex items-center justify-center transition-all hover:bg-white/5 ${
+                activeTab === 'settings' ? '' : 'opacity-70'
+              }`}
+              style={{ 
+                backgroundColor: activeTab === 'settings' ? `${palette?.accent || '#38BDF8'}1F` : `${palette?.surface || '#1A1D24'}99`,
+                borderColor: activeTab === 'settings' ? (palette?.accent || '#38BDF8') : (palette?.border || '#2A2F3D'),
+                color: activeTab === 'settings' ? (palette?.accent || '#38BDF8') : (palette?.subtext || '#94A3B8')
+              }}
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -998,7 +1194,24 @@ export default function App() {
           </div>
         )}
         
-        {/* VIEW 1: Settings Screen */}
+        {/* VIEW 1: Dashboard (default landing view) */}
+        {activeTab === 'dashboard' && (
+          <DashboardView
+            matches={matches}
+            deckOverview={deckOverview}
+            palette={palette}
+            formatOptions={formatOptions}
+            timeOptions={timeOptions}
+            onSelectMatch={(matchId) => {
+              setSelectedMatchId(matchId);
+              setIsDrawerOpenManual(true);
+            }}
+            onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
+            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+          />
+        )}
+
+        {/* VIEW 2: Settings Screen */}
         {activeTab === 'settings' && (
           <SettingsView 
             palette={palette} 
@@ -1007,40 +1220,35 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 2: Decks & Collection */}
-        {(activeTab === 'draft' || activeTab === 'collection') && (
+        {/* VIEW 2: Collection */}
+        {activeTab === 'collection' && (
           <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
             <Sparkles className="w-10 h-10 opacity-40 animate-bounce" style={{ color: palette?.accent }} />
             <h3 className="text-lg font-bold">Feature Coming Soon (v2 Scope)</h3>
             <p className="text-xs opacity-60 max-w-sm">
-              {activeTab === 'draft' 
-                ? '17Lands live draft assistant & pick evaluator integration will arrive in v2.'
-                : 'Local card collection binder & deck completion tracking will arrive in v2.'}
+              Local card collection binder & deck completion tracking will arrive in v2.
             </p>
           </div>
         )}
 
         {/* VIEW 3: Live Match HUD (Stage 4) */}
         {activeTab === 'live' && (
-          <div className="flex-1 border rounded-2xl p-6 flex flex-col justify-between space-y-6" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
-            <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: `${palette?.border}66` }}>
-              <div className="flex items-center gap-3">
-                <Activity className="w-6 h-6 animate-pulse" style={{ color: palette?.accent }} />
-                <div>
-                  <h3 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-                    Live Match HUD
-                  </h3>
-                  <p className="text-xs opacity-60 font-mono">
-                    {liveMatchState ? `Active Game (ID: ${liveMatchState.match_id?.slice(0, 8)}...)` : 'No active match currently detected'}
-                  </p>
-                </div>
-              </div>
-              <span className={`text-xs font-mono font-bold px-3 py-1 rounded-full border ${
-                liveMatchState ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-white/5 opacity-50 border-white/10'
-              }`}>
-                {liveMatchState ? 'MATCH IN PROGRESS' : 'IDLE / WAITING FOR MATCH'}
-              </span>
+          <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
+            {/* Header (outside content cell, matches Deck Library / Match History) */}
+            <div className="flex items-center justify-between gap-4 shrink-0">
+              <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                Live Match HUD
+              </h1>
             </div>
+
+            <div className="flex-1 border rounded-2xl p-6 flex flex-col justify-between space-y-6 min-h-0 overflow-hidden" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
+              {/* Content cell title: pulsing icon + waiting for match */}
+              <div className="flex items-center gap-3 shrink-0">
+                <Activity className="w-6 h-6 animate-pulse" style={{ color: palette?.accent }} />
+                <h3 className="text-lg font-bold font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                  {liveMatchState ? 'Match in Progress' : 'Waiting for Match'}
+                </h3>
+              </div>
 
             {liveMatchState ? (
               <div className="flex-1 flex flex-col space-y-4 relative">
@@ -1173,20 +1381,28 @@ export default function App() {
               </div>
             ) : (
               <div className="flex-1 relative flex flex-col items-center justify-center overflow-hidden">
-                {/* Large desaturated, semi-transparent Rhystic Tracker logo in the background */}
+                {/* Large desaturated, semi-transparent Rhystic Tracker logo (top third, ~50% smaller) */}
                 <img
                   src={logoImg}
                   alt=""
-                  className="absolute inset-0 w-full h-full object-contain opacity-20"
+                  className="absolute top-[14%] left-1/2 -translate-x-1/2 w-[50%] object-contain opacity-20"
                   style={{ filter: 'grayscale(100%) saturate(0%)' }}
                 />
 
-                {/* IDLE / WAITING FOR MATCH pill */}
-                <div className="relative z-10 px-8 py-3 rounded-full border bg-black/60 backdrop-blur-md shadow-2xl" style={{ borderColor: palette?.border }}>
-                  <span className="text-sm font-black font-mono uppercase tracking-widest" style={{ color: palette?.subtext }}>
+                {/* IDLE / WAITING FOR MATCH pill (exact center of the cell, ~150% larger) */}
+                <div className="relative z-10 px-12 py-[18px] rounded-full border bg-black/60 backdrop-blur-md shadow-2xl" style={{ borderColor: palette?.border }}>
+                  <span className="text-xl font-black font-mono uppercase tracking-widest" style={{ color: palette?.subtext }}>
                     Idle / Waiting for Match
                   </span>
                 </div>
+
+                {/* Symbol icon (bottom third, diminished + semi-transparent) */}
+                <img
+                  src={symbolIcon}
+                  alt=""
+                  className="absolute bottom-[8%] left-1/2 -translate-x-1/2 w-[22%] object-contain opacity-15"
+                  style={{ filter: 'grayscale(100%) saturate(0%)' }}
+                />
 
                 {/* Launch prompt at the bottom */}
                 <div className="absolute bottom-8 left-0 right-0 z-10 text-center">
@@ -1194,12 +1410,13 @@ export default function App() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         )}
 
         {/* VIEW 4A: Deck Library */}
         {activeTab === 'decks' && (
-          <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
+          <div className="flex-1 relative flex flex-col space-y-4 overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between gap-4 shrink-0">
               <div>
@@ -1220,6 +1437,81 @@ export default function App() {
                     style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
                   />
                 </div>
+                {/* Sorting Button (card view only) */}
+                {deckView === 'cards' && (
+                  <div className="relative" ref={cardSortRef}>
+                    <button
+                      onClick={() => setShowCardSortMenu(!showCardSortMenu)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5"
+                      style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                    >
+                      <ArrowUpDown className="w-3.5 h-3.5" style={{ color: palette?.accent }} />
+                      Sorting
+                    </button>
+                    {showCardSortMenu && (
+                      <div
+                        className="absolute right-0 top-full mt-2 z-30 rounded-xl border shadow-xl p-2 w-48"
+                        style={{ backgroundColor: palette?.mantle, borderColor: palette?.border }}
+                      >
+                        {[
+                          { value: 'deck_name', label: 'Deck Name' },
+                          { value: 'games', label: 'Games Played' },
+                          { value: 'winrate', label: 'Win Rate' },
+                          { value: 'format', label: 'Format' },
+                        ].map((opt) => {
+                          const active = deckCardSort === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              onClick={() => {
+                                if (active) {
+                                  setDeckCardSortDir(deckCardSortDir === 'asc' ? 'desc' : 'asc');
+                                } else {
+                                  setDeckCardSort(opt.value);
+                                  setDeckCardSortDir('asc');
+                                }
+                              }}
+                              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white/5"
+                              style={{ color: active ? (palette?.accent || '#38BDF8') : palette?.text, backgroundColor: active ? `${palette?.accent || '#38BDF8'}15` : 'transparent' }}
+                            >
+                              {opt.label}
+                              {active && (
+                                <span className="text-[10px] font-mono opacity-80">
+                                  {deckCardSortDir === 'asc' ? '▲' : '▼'}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* View Toggle: Table / Cards */}
+                <div className="flex items-center rounded-xl border overflow-hidden" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
+                  <button
+                    onClick={() => setDeckView('cards')}
+                    title="Card View"
+                    className={`flex items-center justify-center px-3 py-2 transition-all ${
+                      deckView === 'cards' ? '' : 'opacity-50 hover:opacity-100'
+                    }`}
+                    style={{ color: deckView === 'cards' ? (palette?.accent || '#38BDF8') : palette?.text, backgroundColor: deckView === 'cards' ? `${palette?.accent || '#38BDF8'}1F` : 'transparent' }}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setDeckView('table')}
+                    title="Table View"
+                    className={`flex items-center justify-center px-3 py-2 transition-all ${
+                      deckView === 'table' ? '' : 'opacity-50 hover:opacity-100'
+                    }`}
+                    style={{ color: deckView === 'table' ? (palette?.accent || '#38BDF8') : palette?.text, backgroundColor: deckView === 'table' ? `${palette?.accent || '#38BDF8'}1F` : 'transparent', borderLeft: `1px solid ${palette?.border || '#2A2F3D'}` }}
+                  >
+                    <Table className="w-4 h-4" />
+                  </button>
+                </div>
+
                 {/* Filters Button */}
                 <button
                   onClick={() => setShowFilterPanel(!showFilterPanel)}
@@ -1285,6 +1577,9 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Separator under the KPI row */}
+            <div className="shrink-0 h-px w-full" style={{ backgroundColor: `${palette?.border || '#2A2F3D'}66` }} />
 
             {/* Filter Panel (dropdown) */}
             {showFilterPanel && (
@@ -1401,7 +1696,96 @@ export default function App() {
               </div>
             )}
 
-            {/* Deck Library content: table */}
+            {/* Deck Library content: card view */}
+            {deckView === 'cards' ? (
+              <>
+                <div ref={cardAreaRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                  {sortedCardDecks.length === 0 ? (
+                    <div className="p-10 text-center text-xs opacity-40 font-mono">No decks match the current filters</div>
+                  ) : (
+                    /* Centered flex-wrap grid so partial rows stay center-justified */
+                    <div className="flex flex-wrap justify-center content-start items-start gap-4">
+                      {sortedCardDecks.map((d) => {
+                        const artName = d.top_commander_name || d.top_card_name;
+                        const fmt = (d.formats || [])[0]?.format;
+                        const fmtChip = fmt ? formatChipColor(fmt) : null;
+                        return (
+                          <button
+                            key={d.deck_name}
+                            onClick={() => setSelectedDeckName(d.deck_name)}
+                            className="group relative rounded-xl border overflow-hidden shadow-lg text-left transition-all duration-200 hover:scale-[1.03] hover:ring-2 hover:ring-sky-400/60 cursor-pointer shrink-0"
+                            style={{ width: cardWidth, height: Math.round(cardWidth * 3 / 4), borderColor: `${palette?.border || '#2A2F3D'}88` }}
+                          >
+                            {/* Artwork fills the whole card */}
+                            {artName ? (
+                              <img
+                                src={scryfallArtUrl(artName)}
+                                alt={artName}
+                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                loading="lazy"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: `${palette?.mantle || '#12141A'}99` }}>
+                                <Layers className="w-8 h-8 opacity-30" style={{ color: palette?.accent }} />
+                              </div>
+                            )}
+
+                            {/* Top bar: deck name + color identity pips */}
+                            <div className="absolute top-0 left-0 right-0 px-3 py-2 flex items-center justify-between gap-2 bg-black/70 backdrop-blur-sm">
+                              <span className="text-[15px] font-bold leading-tight truncate" style={{ color: palette?.text || '#F8FAFC' }}>
+                                {d.deck_name}
+                              </span>
+                              <span className="shrink-0 flex items-center gap-0.5">
+                                {renderDeckColorIdentity(d.colors, 15)}
+                              </span>
+                            </div>
+
+                            {/* Bottom bar: format + win rate */}
+                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 flex items-center justify-between gap-2 bg-black/70 backdrop-blur-sm">
+                              {fmtChip ? (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}>
+                                  {fmt}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono opacity-40">—</span>
+                              )}
+                              <span className="text-[13px] font-extrabold font-outfit shrink-0" style={{ color: winRateColor(d.winrate) }}>
+                                WR: {d.winrate}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Card size checkpoint slider (floating pill, bottom-right) */}
+                <div className="absolute bottom-4 right-4 z-50 rounded-full border shadow-2xl bg-black/85 backdrop-blur-md px-3 py-2 flex items-center gap-2"
+                  style={{ borderColor: palette?.border, width: '25%', minWidth: '180px' }}>
+                  <LayoutGrid className="w-4 h-4 shrink-0" style={{ color: palette?.accent }} />
+                  <div className="flex-1 relative">
+                    <input
+                      type="range"
+                      min={0}
+                      max={3}
+                      step={1}
+                      value={6 - cardCols}
+                      onChange={(e) => setCardCols(6 - parseInt(e.target.value, 10))}
+                      className="w-full"
+                      style={{ accentColor: palette?.accent || '#38BDF8' }}
+                      title={`${cardCols} cards across`}
+                    />
+                    <div className="flex justify-between px-[3px] -mt-0.5">
+                      {[0, 1, 2, 3].map((i) => (
+                        <span key={i} className="w-0.5 h-1.5 rounded-full" style={{ backgroundColor: palette?.border || '#2A2F3D' }} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
               {/* Table Header */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
@@ -1448,16 +1832,17 @@ export default function App() {
                           {/* Key Cards (low-priority column — drops first on narrow widths) */}
                           <div className="hidden xl:flex w-[170px] shrink-0 items-center justify-center gap-1.5">
                             {(d.key_cards || []).slice(0, 3).map((k: any) => (
-                              <img
-                                key={k.grp_id}
-                                src={scryfallArtUrl(k.name)}
-                                alt={k.name}
-                                onClick={(e) => { e.stopPropagation(); setDeckCardOverlay({ card: k, isCommander: false }); }}
-                                className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70 z-10"
-                                style={{ borderColor: `${palette?.border}66` }}
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-                              />
+                              <CardNameTooltip key={k.grp_id} name={k.name}>
+                                <img
+                                  src={scryfallArtUrl(k.name)}
+                                  alt={k.name}
+                                  onClick={(e) => { e.stopPropagation(); openCardOverlay(k, false); }}
+                                  className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70 z-10"
+                                  style={{ borderColor: `${palette?.border}66` }}
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                                />
+                              </CardNameTooltip>
                             ))}
                           </div>
 
@@ -1501,15 +1886,7 @@ export default function App() {
                 )}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* VIEW 4B: Play Stats */}
-        {activeTab === 'deckstats' && (
-          <div className="flex-1 border border-dashed rounded-2xl flex flex-col items-center justify-center p-8 text-center space-y-3" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
-            <BarChart3 className="w-10 h-10 opacity-40" style={{ color: palette?.accent }} />
-            <h3 className="text-lg font-bold">Play Stats — Coming Soon</h3>
-            <p className="text-xs opacity-60 max-w-sm">Aggregated play statistics will arrive in a future iteration.</p>
+            )}
           </div>
         )}
 
@@ -1709,13 +2086,11 @@ export default function App() {
         )}
       </main>
 
-      {/* COLUMN 3: Lightweight Key Match Stats Summary Drawer */}
+      {/* COLUMN 3: Lightweight Key Match Stats Summary Drawer (fixed overlay above content) */}
       <aside 
-        className={`h-full border-l p-5 flex flex-col justify-between shrink-0 transition-all duration-300 ease-in-out ${
-          isDrawerOverlay 
-            ? 'fixed right-0 top-0 bottom-0 z-40 shadow-2xl backdrop-blur-xl' 
-            : 'relative z-20'
-        } ${isDrawerOpen ? 'w-[432px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 p-0 border-none pointer-events-none'}`}
+        className={`fixed right-0 top-0 bottom-0 border-l p-5 flex flex-col justify-between transition-all duration-300 ease-in-out z-40 shadow-2xl backdrop-blur-xl ${
+          isDrawerOpen ? 'w-[432px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 p-0 border-none pointer-events-none'
+        }`}
         style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
       >
         <div className="flex flex-col flex-1 space-y-4 overflow-y-auto pr-0.5 custom-scrollbar">
@@ -1968,8 +2343,8 @@ export default function App() {
         )}
       </aside>
 
-      {/* Dark Overlay Backdrop */}
-      {isDrawerOverlay && isDrawerOpen && (
+      {/* Dark Overlay Backdrop for the right drawer */}
+      {isDrawerOpen && (
         <div 
           onClick={() => setIsDrawerOpenManual(false)}
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 transition-opacity"
@@ -2078,10 +2453,14 @@ export default function App() {
                 </p>
               )}
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                <div>
-                  <p className="text-[9px] font-mono uppercase opacity-50">Mana Value</p>
-                  <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{deckCardOverlay.card.cmc || 0}</p>
-                </div>
+                {deckCardOverlay.card.rarity !== undefined && (
+                  <div>
+                    <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
+                    <p className="text-[13px] font-mono font-bold" style={{ color: cardRarityColor(deckCardOverlay.card.rarity) }}>
+                      {cardRarityLabel(deckCardOverlay.card.rarity)}
+                    </p>
+                  </div>
+                )}
                 {deckCardOverlay.card.set_code && (
                   <div>
                     <p className="text-[9px] font-mono uppercase opacity-50">Set</p>

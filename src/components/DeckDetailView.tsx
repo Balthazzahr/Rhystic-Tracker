@@ -3,6 +3,7 @@ import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
+import { CardNameTooltip } from './CardNameTooltip';
 import DeckCardList from './DeckCardList';
 import TrueDeckListView from './TrueDeckListView';
 
@@ -282,13 +283,15 @@ export function DeckDetailView({
                         {detail.commander_name}
                       </button>
                     </div>
-                    <img
-                      src={scryfallArtUrl(detail.commander_name)}
-                      alt={detail.commander_name}
-                      className="w-20 h-20 rounded-xl object-cover border"
-                      style={{ borderColor: `${palette?.border}66` }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-                    />
+                    <CardNameTooltip name={detail.commander_name}>
+                      <img
+                        src={scryfallArtUrl(detail.commander_name)}
+                        alt={detail.commander_name}
+                        className="w-20 h-20 rounded-xl object-cover border"
+                        style={{ borderColor: `${palette?.border}66` }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                      />
+                    </CardNameTooltip>
                   </div>
                 )}
 

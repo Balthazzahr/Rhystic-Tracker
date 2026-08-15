@@ -282,11 +282,14 @@ impl DatabaseManager {
     pub async fn get_recent_matches(&self, limit: i64) -> Result<Vec<MatchRecord>, Box<dyn std::error::Error>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, timestamp, date_str, format, result, duration_seconds, turns, going_first,
-                   hero_deck_name, hero_commander_id, hero_life_end, opponent_name, opponent_commander_id,
-                   opponent_mulligans, opponent_life_end, result_reason
-            FROM matches
-            ORDER BY timestamp DESC
+            SELECT m.id, m.timestamp, m.date_str, m.format, m.result, m.duration_seconds, m.turns, m.going_first,
+                   m.hero_deck_name, m.hero_commander_id, m.hero_life_end, m.opponent_name, m.opponent_commander_id,
+                   m.opponent_mulligans, m.opponent_life_end, m.result_reason,
+                   pc.name as hero_commander_name, oc.name as opponent_commander_name
+            FROM matches m
+            LEFT JOIN cards_cache pc ON m.hero_commander_id = pc.grp_id
+            LEFT JOIN cards_cache oc ON m.opponent_commander_id = oc.grp_id
+            ORDER BY m.timestamp DESC
             LIMIT ?
             "#
         )
@@ -316,9 +319,11 @@ impl DatabaseManager {
                 hero_seat_id: row.try_get::<i64, _>("hero_seat_id").unwrap_or(1) as u32,
                 player_deck_name: row.get("hero_deck_name"),
                 player_commander_id: row.get::<Option<i64>, _>("hero_commander_id").map(|c| c as u32),
+                player_commander_name: row.get("hero_commander_name"),
                 player_life_end: row.get("hero_life_end"),
                 opponent_name: row.get("opponent_name"),
                 opponent_commander_id: row.get::<Option<i64>, _>("opponent_commander_id").map(|c| c as u32),
+                opponent_commander_name: row.get("opponent_commander_name"),
                 opponent_mulligans: row.get::<Option<i64>, _>("opponent_mulligans").map(|m| m as u32),
                 opponent_life_end: row.get("opponent_life_end"),
                 result_reason: row.try_get("result_reason").ok(),

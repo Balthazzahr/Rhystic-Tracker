@@ -19,7 +19,15 @@ pub struct CardMetadata {
 }
 
 /// Locates the MTGA installation root and selects the most recently modified Raw_CardDatabase_*.mtga file.
+/// Set RHYSTIC_MTGA_RAW_DIR to point at a specific Raw folder.
 pub fn find_latest_raw_card_db() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("RHYSTIC_MTGA_RAW_DIR") {
+        if !dir.is_empty() {
+            let dir = PathBuf::from(dir);
+            return find_latest_in_dir(&dir);
+        }
+    }
+
     let mut candidate_dirs = Vec::new();
 
     if let Some(home) = dirs::home_dir() {
@@ -27,27 +35,30 @@ pub fn find_latest_raw_card_db() -> Option<PathBuf> {
         candidate_dirs.push(home.join(".steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads/Raw"));
         candidate_dirs.push(home.join(".wine/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads/Raw"));
     }
-    candidate_dirs.push(PathBuf::from("/mnt/Games/SteamLibrary/steamapps/common/MTGA/MTGA_Data/Downloads/Raw"));
 
+    candidate_dirs
+        .into_iter()
+        .find_map(|dir| find_latest_in_dir(&dir))
+}
+
+fn find_latest_in_dir(dir: &PathBuf) -> Option<PathBuf> {
     let mut latest_file: Option<(PathBuf, std::time::SystemTime)> = None;
 
-    for dir in candidate_dirs {
-        if let Ok(entries) = fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                    if file_name.starts_with("Raw_CardDatabase_") && file_name.ends_with(".mtga") {
-                        if let Ok(meta) = entry.metadata() {
-                            if let Ok(mod_time) = meta.modified() {
-                                match &latest_file {
-                                    Some((_, newest_time)) if mod_time > *newest_time => {
-                                        latest_file = Some((path, mod_time));
-                                    }
-                                    None => {
-                                        latest_file = Some((path, mod_time));
-                                    }
-                                    _ => {}
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if file_name.starts_with("Raw_CardDatabase_") && file_name.ends_with(".mtga") {
+                    if let Ok(meta) = entry.metadata() {
+                        if let Ok(mod_time) = meta.modified() {
+                            match &latest_file {
+                                Some((_, newest_time)) if mod_time > *newest_time => {
+                                    latest_file = Some((path, mod_time));
                                 }
+                                None => {
+                                    latest_file = Some((path, mod_time));
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -182,6 +193,51 @@ pub async fn get_card_metadata(pool: &Pool<Sqlite>, grp_id: i64) -> Result<Optio
         "#
     )
     .bind(grp_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(r) = row {
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let raw_cmc: i64 = r.get("cmc");
+        let cmc = if raw_cmc == 0 && mana_cost.is_some() {
+            parse_mtga_cmc(mana_cost.as_deref().unwrap())
+        } else {
+            raw_cmc
+        };
+
+        Ok(Some(CardMetadata {
+            grp_id: r.get("grp_id"),
+            name: r.get("name"),
+            card_type: r.get("card_type"),
+            mana_cost: mana_cost,
+            cmc: cmc,
+            colors: r.get("colors"),
+            color_identity: r.get("color_identity"),
+            set_code: r.get("set_code"),
+            rarity: r.get("rarity"),
+            collector_number: r.get("collector_number"),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Looks up a card by exact name (prefers a non-land exact match if multiple
+/// printings exist). Used to enrich lightweight card references (name only).
+pub async fn get_card_metadata_by_name(
+    pool: &Pool<Sqlite>,
+    name: &str,
+) -> Result<Option<CardMetadata>, Box<dyn std::error::Error>> {
+    let row = sqlx::query(
+        r#"
+        SELECT grp_id, name, card_type, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number
+        FROM cards_cache
+        WHERE name = ?
+        ORDER BY CASE WHEN lower(card_type) NOT LIKE '%land%' THEN 0 ELSE 1 END, grp_id ASC
+        LIMIT 1
+        "#
+    )
+    .bind(name)
     .fetch_optional(pool)
     .await?;
 

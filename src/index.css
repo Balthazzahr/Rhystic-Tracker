@@ -12,7 +12,7 @@
 
 body {
   margin: 0;
-  background-color: #0B0C10;
+  background-color: var(--rt-base, #0B0C10);
   color: #C5C6C7;
   font-family: 'Inter', sans-serif;
 }
@@ -21,21 +21,68 @@ body {
   font-family: 'Outfit', sans-serif;
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar (theme-driven via --rt-* vars set on the app root) */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B0C10;
+  background: var(--rt-base, #0B0C10);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1F2833;
+  background: var(--rt-border, #1F2833);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #45A29E;
+  background: var(--rt-accent-hover, #45A29E);
 }
+
+/* Themed range sliders (accent color follows the active mana theme) */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--rt-track, #1F2833);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--rt-track, #1F2833);
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--rt-accent, #38BDF8);
+  border: 2px solid #0B0C10;
+  box-shadow: 0 0 6px var(--rt-accent, #38BDF8);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--rt-accent, #38BDF8);
+  border: 2px solid #0B0C10;
+  box-shadow: 0 0 6px var(--rt-accent, #38BDF8);
+}
+
+input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--rt-track, #1F2833);
+}
+
