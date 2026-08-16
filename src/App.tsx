@@ -42,6 +42,23 @@ import CollectionView from './components/CollectionView';
 import logoImg from './assets/logo.png';
 import symbolIcon from './assets/symbolIcon.png';
 
+// In-memory cache of Scryfall card JSON (keyed by card name) so repeated overlay
+// opens don't re-hit the rate-limited API while the app is running.
+const scryfallCardCache = new Map<string, any>();
+
+// Key a printing uniquely by set + collector number (the dropdown value).
+const printingKey = (p: any) => `${p.set_code}|${p.collector_number}`;
+
+// Build the Scryfall image URL for a specific printing. The /cards/{set}/{cn}
+// image endpoint resolves to that exact printing; fall back to the named URL
+// (newest printing) when set/collector are missing.
+const scryfallPrintingImageUrl = (name: string, p?: any): string => {
+  if (p && p.set_code && p.collector_number) {
+    return `https://api.scryfall.com/cards/${String(p.set_code).toLowerCase()}/${encodeURIComponent(String(p.collector_number))}?format=image&version=normal`;
+  }
+  return `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
+};
+
 interface ManaTheme {
   id: string;
   name: string;
@@ -133,6 +150,12 @@ export default function App() {
   const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null);
   const [deckDetail, setDeckDetail] = useState<any>(null);
   const [deckCardOverlay, setDeckCardOverlay] = useState<any>(null);
+  const [overlayPrintings, setOverlayPrintings] = useState<any[]>([]);
+  const [overlayPrintingsLoading, setOverlayPrintingsLoading] = useState(false);
+  const [overlayStats, setOverlayStats] = useState<any>(null);
+  const [overlayScryfall, setOverlayScryfall] = useState<any>(null);
+  const [overlayScryfallLoading, setOverlayScryfallLoading] = useState(false);
+  const [overlaySelected, setOverlaySelected] = useState<string | null>(null);
 
   // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
   // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
@@ -347,6 +370,55 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDeckCardOverlay(null); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, [deckCardOverlay]);
+
+  // Fetch printings + stats (IPC) and Scryfall card JSON whenever the overlay opens.
+  useEffect(() => {
+    setOverlayPrintings([]);
+    setOverlayPrintingsLoading(false);
+    setOverlayStats(null);
+    setOverlayScryfall(null);
+    setOverlayScryfallLoading(false);
+    setOverlaySelected(null);
+    const name = deckCardOverlay?.card?.name as string | undefined;
+    if (!name) return;
+    let cancelled = false;
+
+    setOverlayPrintingsLoading(true);
+    (async () => {
+      try {
+        const res = await invoke<any>('get_card_printings', { name });
+        if (cancelled) return;
+        const printings = res?.printings || [];
+        setOverlayPrintings(printings);
+        setOverlayStats(res?.stats || null);
+        if (printings.length > 0) setOverlaySelected(printingKey(printings[0]));
+      } catch (e) {
+        console.error('Failed to fetch card printings:', e);
+      } finally {
+        if (!cancelled) setOverlayPrintingsLoading(false);
+      }
+    })();
+
+    setOverlayScryfallLoading(true);
+    (async () => {
+      try {
+        let data = scryfallCardCache.get(name);
+        if (!data) {
+          const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          data = await resp.json();
+          scryfallCardCache.set(name, data);
+        }
+        if (!cancelled) setOverlayScryfall(data);
+      } catch (e) {
+        console.error('Failed to fetch Scryfall card:', e);
+      } finally {
+        if (!cancelled) setOverlayScryfallLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [deckCardOverlay]);
 
   const [liveMatchState, setLiveMatchState] = useState<{
@@ -2461,44 +2533,179 @@ export default function App() {
               <X className="w-4 h-4" /> Close
             </button>
 
-            <div className="w-[340px] rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
-              <img
-                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(deckCardOverlay.card.name)}&format=image&version=normal`}
-                alt={deckCardOverlay.card.name}
-                className="w-full"
-              />
-            </div>
-
-            <div className="mt-3 w-[340px] rounded-xl border p-4 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{deckCardOverlay.card.name}</p>
-                <span className="shrink-0 flex items-center gap-0.5">
-                  {parseMtgaManaCost(deckCardOverlay.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
-                </span>
+            <div className="flex flex-row flex-wrap items-start justify-center gap-5 max-w-full">
+              {/* Card image + set/art selector */}
+              <div className="w-[340px] shrink-0">
+                <div className="rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
+                  <img
+                    src={scryfallPrintingImageUrl(
+                      deckCardOverlay.card.name,
+                      overlayPrintings.find((p) => printingKey(p) === overlaySelected)
+                    )}
+                    alt={deckCardOverlay.card.name}
+                    className="w-full"
+                  />
+                </div>
+                <select
+                  value={overlaySelected ?? ''}
+                  onChange={(e) => setOverlaySelected(e.target.value || null)}
+                  disabled={overlayPrintings.length === 0}
+                  className="mt-2 w-full rounded-lg border px-2.5 py-2 text-xs font-mono outline-none disabled:opacity-50"
+                  style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
+                >
+                  {overlayPrintings.length === 0 ? (
+                    <option value="">
+                      {overlayPrintingsLoading ? 'Loading printings…' : 'No printings found'}
+                    </option>
+                  ) : (
+                    overlayPrintings.map((p) => (
+                      <option key={printingKey(p)} value={printingKey(p)}>
+                        {p.set_name ? `${p.set_name} (${p.set_code})` : p.set_code}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
-              {deckCardOverlay.isCommander && (
-                <p className="text-[11px] font-mono uppercase tracking-wide" style={{ color: palette?.accent || '#38BDF8' }}>Commander</p>
-              )}
-              {deckCardOverlay.card.card_type && (
-                <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
-                  {deckCardOverlay.card.card_type}
-                </p>
-              )}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                {deckCardOverlay.card.rarity !== undefined && (
-                  <div>
-                    <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
-                    <p className="text-[13px] font-mono font-bold" style={{ color: cardRarityColor(deckCardOverlay.card.rarity) }}>
-                      {cardRarityLabel(deckCardOverlay.card.rarity)}
-                    </p>
+
+              {/* Info panel */}
+              <div
+                className="w-[400px] max-w-full max-h-[80vh] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3"
+                style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{deckCardOverlay.card.name}</p>
+                  <span className="shrink-0 flex items-center gap-0.5">
+                    {parseMtgaManaCost(deckCardOverlay.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
+                  </span>
+                </div>
+                {deckCardOverlay.isCommander && (
+                  <p className="text-[11px] font-mono uppercase tracking-wide" style={{ color: palette?.accent || '#38BDF8' }}>Commander</p>
+                )}
+                {deckCardOverlay.card.card_type && (
+                  <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
+                    {deckCardOverlay.card.card_type}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
+                  {(() => {
+                    const sel = overlayPrintings.find((p) => printingKey(p) === overlaySelected);
+                    const rarity = sel?.rarity ?? deckCardOverlay.card.rarity;
+                    return (
+                      <>
+                        <div>
+                          <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
+                          <p className="text-[13px] font-mono font-bold" style={{ color: cardRarityColor(rarity) }}>
+                            {cardRarityLabel(rarity)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
+                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
+                            {sel?.set_name ? `${sel.set_name} (${sel.set_code})` : (sel?.set_code || deckCardOverlay.card.set_code)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-mono uppercase opacity-50">Decks</p>
+                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
+                            {overlayStats ? overlayStats.deck_count : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-mono uppercase opacity-50">Impactful</p>
+                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
+                            {overlayStats ? overlayStats.times_impactful : '—'}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-[9px] font-mono uppercase opacity-50">Damage</p>
+                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
+                            {overlayStats
+                              ? `${overlayStats.total_damage}${overlayStats.max_hit > 0 ? ` (max ${overlayStats.max_hit})` : ''}`
+                              : '—'}
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {overlayStats?.decks?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {overlayStats.decks.slice(0, 12).map((d: string, i: number) => (
+                      <span
+                        key={i}
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
+                        style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.subtext, backgroundColor: 'rgba(0,0,0,0.25)' }}
+                      >
+                        {d}
+                      </span>
+                    ))}
+                    {overlayStats.decks.length > 12 && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 opacity-60" style={{ color: palette?.subtext }}>
+                        +{overlayStats.decks.length - 12} more
+                      </span>
+                    )}
                   </div>
                 )}
-                {deckCardOverlay.card.set_code && (
-                  <div>
-                    <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
-                    <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{deckCardOverlay.card.set_code}</p>
+
+                <div className="shrink-0 h-px" style={{ backgroundColor: `${palette?.border || '#2A2F3D'}66` }} />
+
+                {overlayScryfallLoading && (
+                  <div className="flex items-center gap-2 py-1">
+                    <div
+                      className="w-4 h-4 rounded-full border-2 border-white/20 animate-spin"
+                      style={{ borderTopColor: palette?.accent || '#38BDF8' }}
+                    />
+                    <span className="text-[11px] font-mono opacity-60" style={{ color: palette?.text }}>Loading card details…</span>
                   </div>
                 )}
+
+                {overlayScryfall && (() => {
+                  const scry = overlayScryfall;
+                  const face = scry.card_faces?.[0] || null;
+                  const oracleText = scry.oracle_text || face?.oracle_text || '';
+                  const flavorText = scry.flavor_text || face?.flavor_text || '';
+                  const power = scry.power ?? face?.power;
+                  const toughness = scry.toughness ?? face?.toughness;
+                  const loyalty = scry.loyalty ?? face?.loyalty;
+                  const keywords: string[] = scry.keywords || [];
+                  return (
+                    <>
+                      {oracleText && (
+                        <div>
+                          <p className="text-[9px] font-mono uppercase opacity-50">Oracle Text</p>
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: palette?.text }}>{oracleText}</p>
+                        </div>
+                      )}
+                      {flavorText && (
+                        <div>
+                          <p className="text-[9px] font-mono uppercase opacity-50">Flavor</p>
+                          <p className="text-xs italic leading-relaxed opacity-70" style={{ color: palette?.text }}>{flavorText}</p>
+                        </div>
+                      )}
+                      {(power !== undefined && toughness !== undefined) && (
+                        <p className="text-xs font-mono font-bold" style={{ color: palette?.text }}>P/T: {power} / {toughness}</p>
+                      )}
+                      {loyalty !== undefined && (
+                        <p className="text-xs font-mono font-bold" style={{ color: palette?.text }}>Loyalty: {loyalty}</p>
+                      )}
+                      {keywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {keywords.map((k) => (
+                            <span
+                              key={k}
+                              className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
+                              style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.accent || '#38BDF8' }}
+                            >
+                              {k}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

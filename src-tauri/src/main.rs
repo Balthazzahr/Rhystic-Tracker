@@ -1134,6 +1134,106 @@ async fn get_card_info_by_name(name: String) -> Result<Option<card_db::CardMetad
     card_db::get_card_metadata_by_name(db.pool(), &name).await.map_err(|e| e.to_string())
 }
 
+/// Every printing of a card (by name) with per-printing set info, plus stats
+/// aggregated across all printings: how many decks contain it, how often it was
+/// an impactful card, and total/max damage dealt. Used by the card viewer's
+/// set/art selector and the stats sidebar.
+#[tauri::command]
+async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let pool = db.pool();
+
+    // All printings of this card name in the local cache, joined with set metadata.
+    let printings_rows = sqlx::query(
+        r#"
+        SELECT c.grp_id, c.name, c.mana_cost, c.cmc, c.colors, c.color_identity,
+               c.set_code, c.rarity, c.card_type, c.collector_number,
+               sm.name as set_name, sm.released_at as set_released_at
+        FROM cards_cache c
+        LEFT JOIN sets_metadata sm ON c.set_code = sm.set_code
+        WHERE c.name = ?
+        ORDER BY sm.released_at DESC, c.set_code ASC
+        "#
+    )
+    .bind(&name)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if printings_rows.is_empty() {
+        return Ok(serde_json::json!({ "printings": [], "stats": null }));
+    }
+
+    let grp_ids: Vec<i64> = printings_rows.iter().map(|r| r.get::<i64, _>("grp_id")).collect();
+    let placeholders = grp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
+    // Decks containing this card (any printing).
+    let decks_sql = format!(
+        r#"
+        SELECT dl.deck_name as deck_name
+        FROM deck_lists dl, json_each(dl.cards_json) je
+        WHERE je.value->>'grp_id' IN ({})
+        ORDER BY dl.deck_name
+        "#,
+        placeholders
+    );
+    let mut decks_q = sqlx::query_as::<_, (String,)>(&decks_sql);
+    for id in &grp_ids {
+        decks_q = decks_q.bind(*id);
+    }
+    let decks = decks_q.fetch_all(pool).await.map_err(|e| e.to_string())?;
+
+    // Impactful-card stats aggregated across all printings.
+    let impactful_sql = format!(
+        r#"
+        SELECT COUNT(*) as times_impactful,
+               COALESCE(SUM(total_damage), 0) as total_damage,
+               COALESCE(MAX(max_hit), 0) as max_hit
+        FROM match_impactful_cards
+        WHERE grp_id IN ({})
+        "#,
+        placeholders
+    );
+    let mut impactful_q = sqlx::query_as::<_, (i64, i64, i64)>(&impactful_sql);
+    for id in &grp_ids {
+        impactful_q = impactful_q.bind(*id);
+    }
+    let impactful = impactful_q.fetch_one(pool).await.map_err(|e| e.to_string())?;
+
+    let printings: Vec<serde_json::Value> = printings_rows.iter().map(|r| {
+        let raw_cmc: i64 = r.get("cmc");
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let cmc = if raw_cmc == 0 { card_db::parse_mtga_cmc(mana_cost.as_deref().unwrap_or("")) } else { raw_cmc };
+        serde_json::json!({
+            "grp_id": r.get::<i64, _>("grp_id"),
+            "name": r.get::<Option<String>, _>("name"),
+            "mana_cost": mana_cost,
+            "cmc": cmc,
+            "colors": r.get::<Option<String>, _>("colors"),
+            "color_identity": r.get::<Option<String>, _>("color_identity"),
+            "set_code": r.get::<Option<String>, _>("set_code"),
+            "set_name": r.get::<Option<String>, _>("set_name"),
+            "set_released_at": r.get::<Option<String>, _>("set_released_at"),
+            "rarity": r.get::<i64, _>("rarity"),
+            "card_type": r.get::<Option<String>, _>("card_type"),
+            "collector_number": r.get::<Option<String>, _>("collector_number"),
+        })
+    }).collect();
+
+    let decks_list: Vec<String> = decks.iter().map(|(d,)| d.clone()).collect();
+
+    Ok(serde_json::json!({
+        "printings": printings,
+        "stats": {
+            "deck_count": decks_list.len(),
+            "decks": decks_list,
+            "times_impactful": impactful.0,
+            "total_damage": impactful.1,
+            "max_hit": impactful.2,
+        },
+    }))
+}
+
 /// Manual collection correction (backend capability this milestone; UI lands
 /// with the Collection milestone). Sets a card's owned_count to an explicit
 /// value clamped to [0,4]. A value of 0 removes the card from the collection.
@@ -2960,6 +3060,7 @@ fn main() {
             export_decklist,
             get_card_info,
             get_card_info_by_name,
+            get_card_printings,
             update_collection_card_count,
             get_collection,
             get_set_metadata,
