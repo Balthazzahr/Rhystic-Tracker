@@ -322,10 +322,13 @@ export default function App() {
     if (!deckToDelete) return;
     try {
       await invoke('delete_deck', { deckName: deckToDelete });
-      // Close the (possibly open) deck detail and refresh the overview.
+      // Close the (possibly open) deck detail, refresh the deck overview, and
+      // refresh match history (matches for the deleted deck were removed from
+      // the DB, so the Match History tab must update too).
       if (selectedDeckName === deckToDelete) setSelectedDeckName(null);
       setDeckToDelete(null);
       await loadDeckOverview();
+      await loadData();
     } catch (e) {
       console.error('Failed to delete deck:', e);
       setDeckToDelete(null);
