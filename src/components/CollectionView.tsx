@@ -708,7 +708,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         ) : (
           <div
             ref={gridWrapRef}
-            className="flex-1 min-h-0 flex flex-wrap content-center items-start justify-center gap-3 overflow-y-auto custom-scrollbar"
+            className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
             style={{ paddingTop: 4, paddingBottom: 4 }}
           >
             {cards.map(renderCardTile)}
