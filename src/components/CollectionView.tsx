@@ -112,16 +112,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return saved === 'small' ? 'small' : 'large';
   });
 
-  // Fixed card footprint (exact image ratio 63:88). Cards never scale with the
-  // window — extra space becomes padding, and new rows/columns appear only when
-  // enough room accumulates for another full card. Sized so the current default
-  // window (1701x1392, 1433px content) fills with 6 across (large) / 7 across
-  // (small) leaving ~5px/3px of horizontal padding.
-  const CARD_W_LARGE = 228;
+  // Small cards use a fixed footprint (exact image ratio 63:88). Large cards are
+  // sized dynamically: always exactly 3 rows, tall enough to fill the grid height
+  // (top-to-bottom, minimal padding), keeping the exact 63:88 ratio so the number
+  // of columns adjusts to the available width.
   const CARD_W_SMALL = 194;
   const CARD_RATIO = 88 / 63;
-  const cardW = cardSize === 'small' ? CARD_W_SMALL : CARD_W_LARGE;
-  const cardH = Math.round(cardW * CARD_RATIO);
   const GRID_GAP = 12;
 
   const gridWrapRef = useRef<HTMLDivElement>(null);
@@ -148,8 +144,22 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return () => ro.disconnect();
   }, [view]);
 
+  // Large: exactly 3 rows filling the vertical space. cardH = (h - 2*gap)/3,
+  // then cardW derives from the exact 63:88 ratio. Small: fixed footprint.
+  // The grid wrap carries 4px top + 4px bottom padding, so subtract it.
+  const LARGE_ROWS = 3;
+  const GRID_WRAP_PAD = 8;
+  const largeCardH = gridSize.h > (LARGE_ROWS - 1) * GRID_GAP + GRID_WRAP_PAD
+    ? (gridSize.h - (LARGE_ROWS - 1) * GRID_GAP - GRID_WRAP_PAD) / LARGE_ROWS
+    : 0;
+  const largeCardW = largeCardH > 0 ? (largeCardH * 63) / 88 : 0;
+  const cardW = cardSize === 'small' ? CARD_W_SMALL : largeCardW;
+  const cardH = cardSize === 'small' ? Math.round(CARD_W_SMALL * CARD_RATIO) : largeCardH;
+
   const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
-  const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
+  const rows = cardSize === 'small'
+    ? (gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1)
+    : LARGE_ROWS;
   // Page size is client-side only; the backend fetch is decoupled from it.
   const pageSize = view === 'table' ? 100 : cols * rows;
 
