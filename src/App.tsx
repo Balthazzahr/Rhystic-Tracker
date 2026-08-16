@@ -20,7 +20,6 @@ import {
   LayoutDashboard,
   Table,
   LayoutGrid,
-  ArrowUpDown,
   Trash2,
   ZoomIn,
   ZoomOut,
@@ -199,18 +198,7 @@ export default function App() {
     setDeckCardOverlay({ card, isCommander });
   };
   const [deckSearch, setDeckSearch] = useState('');
-  const [commanderFilter, setCommanderFilter] = useState<string>('ALL');
-  const [commanderSearch, setCommanderSearch] = useState('');
-  const [deckFormatFilter, setDeckFormatFilter] = useState<string>('ALL');
   const [deckColorFilter, setDeckColorFilter] = useState<string[]>([]);
-  const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
-  const [commanderSearchOpen, setCommanderSearchOpen] = useState<boolean>(false);
-  const [deckSortKey, setDeckSortKey] = useState<string>(() => localStorage.getItem('deckSortKey') || 'total_matches');
-  const [deckSortDir, setDeckSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('deckSortDir') === 'asc' ? 'asc' : 'desc'));
-  useEffect(() => {
-    localStorage.setItem('deckSortKey', deckSortKey);
-    localStorage.setItem('deckSortDir', deckSortDir);
-  }, [deckSortKey, deckSortDir]);
 
   // Deck Library view mode: 'cards' (default) or 'table', persisted locally.
   const [deckView, setDeckView] = useState<'cards' | 'table'>(() => {
@@ -223,20 +211,6 @@ export default function App() {
     localStorage.setItem('deckCardSort', deckCardSort);
     localStorage.setItem('deckCardSortDir', deckCardSortDir);
   }, [deckCardSort, deckCardSortDir]);
-  const [showCardSortMenu, setShowCardSortMenu] = useState<boolean>(false);
-  const cardSortRef = useRef<HTMLDivElement>(null);
-
-  // Close the card sorting dropdown when clicking anywhere outside it.
-  useEffect(() => {
-    if (!showCardSortMenu) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (cardSortRef.current && !cardSortRef.current.contains(e.target as Node)) {
-        setShowCardSortMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [showCardSortMenu]);
 
   // Deck card size: two levels (small / large) matching the Card Library.
   // Small = fixed landscape footprint; large = fills the grid height with a
@@ -267,21 +241,29 @@ export default function App() {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [deckView]);
-  // Landscape deck card ratio (wider than tall). Small uses a fixed footprint;
-  // large fills the height with DECK_LARGE_ROWS rows, width derived from ratio.
+  }, [deckView, activeTab]);
+  // Landscape deck card ratio (wider than tall). Small uses a fixed footprint
+  // with DECK_SMALL_ROWS rows; large fills the height with DECK_LARGE_ROWS rows
+  // and widens slightly (up to DECK_LARGE_WIDEN) to reduce side padding.
   const DECK_RATIO = 3 / 2;
   const DECK_LARGE_ROWS = 4;
+  const DECK_SMALL_ROWS = 6;
   const DECK_GAP = 16;
   const DECK_WRAP_PAD = 0; // grid has no vertical padding
+  const DECK_LARGE_HEIGHT_SHRINK = 0.97; // small height reduction (no-overflow margin)
+  const DECK_LARGE_WIDEN = 1.15; // allow cards to be up to 15% wider than 3:2
   const deckLargeCardH = cardArea.h > (DECK_LARGE_ROWS - 1) * DECK_GAP + DECK_WRAP_PAD
-    ? (cardArea.h - (DECK_LARGE_ROWS - 1) * DECK_GAP - DECK_WRAP_PAD) / DECK_LARGE_ROWS
+    ? ((cardArea.h - (DECK_LARGE_ROWS - 1) * DECK_GAP - DECK_WRAP_PAD) / DECK_LARGE_ROWS) * DECK_LARGE_HEIGHT_SHRINK
     : 0;
-  const deckLargeCardW = deckLargeCardH > 0 ? deckLargeCardH * DECK_RATIO : 0;
-  const deckCardW = deckCardSize === 'small' ? 260 : deckLargeCardW;
-  const deckCardH = deckCardSize === 'small'
-    ? Math.round(260 / DECK_RATIO)
-    : deckLargeCardH;
+  const deckLargeCardW = deckLargeCardH > 0
+    ? Math.min(deckLargeCardH * DECK_RATIO * DECK_LARGE_WIDEN, deckLargeCardH * DECK_RATIO + 60)
+    : 0;
+  // Small: fixed 260px wide landscape footprint.
+  const deckSmallCardW = 260;
+  const deckSmallCardH = Math.round(deckSmallCardW / DECK_RATIO);
+  const deckRows = deckCardSize === 'small' ? DECK_SMALL_ROWS : DECK_LARGE_ROWS;
+  const deckCardW = deckCardSize === 'small' ? deckSmallCardW : deckLargeCardW;
+  const deckCardH = deckCardSize === 'small' ? deckSmallCardH : deckLargeCardH;
 
   useEffect(() => {
     localStorage.setItem('deckLibraryView', deckView);
@@ -685,108 +667,7 @@ export default function App() {
   const lossesCount = useMemo(() => filteredMatches.filter(m => m.result === 'loss').length, [filteredMatches]);
   const winrateVal = filteredMatches.length > 0 ? ((winsCount / filteredMatches.length) * 100).toFixed(1) : '0.0';
 
-  // Commander filter options (unique commander names across all decks)
-  const commanderOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const d of deckOverview) {
-      for (const c of (d.commanders || [])) {
-        if (c.name) names.add(c.name);
-      }
-    }
-    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
-    return [
-      { value: 'ALL', label: 'All Commanders' },
-      { value: 'N/A', label: 'No Commander (N/A)' },
-      ...sorted.map(n => ({ value: n, label: n })),
-    ];
-  }, [deckOverview]);
-
-  // Commander type-ahead: narrowed list based on the search text.
-  const commanderSearchResults = useMemo(() => {
-    const q = commanderSearch.toLowerCase().trim();
-    const results = commanderOptions.filter(o => o.value !== 'ALL' && (o.value === 'N/A' || o.label.toLowerCase().includes(q)));
-    return results.slice(0, 30);
-  }, [commanderOptions, commanderSearch]);
-
-  // Deck Library KPI computations (client-side from deckOverview).
-  const deckKPIs = useMemo(() => {
-    // Canonical WUBRG order for order-independent combo keys.
-    const WUBRG = ['W', 'U', 'B', 'R', 'G'];
-    const canon = (cols: string[]) => [...cols].sort((a, b) => WUBRG.indexOf(a) - WUBRG.indexOf(b)).join('');
-
-    // Most common format across decks.
-    const formatCounts: Record<string, number> = {};
-    for (const d of deckOverview) {
-      const f = (d.formats || [])[0]?.format;
-      if (f) formatCounts[f] = (formatCounts[f] || 0) + 1;
-    }
-    let topFormat = '—';
-    let topFormatCount = 0;
-    for (const [f, c] of Object.entries(formatCounts)) {
-      if (c > topFormatCount) { topFormat = f; topFormatCount = c; }
-    }
-
-    // Color configuration tallies. Exclude decks with 0 resolved colors (colorless or
-    // all-below-threshold) so they don't count toward any color bucket.
-    const colorName: Record<string, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
-    const dualName: Record<string, string> = {
-      WU: 'Azorius', WB: 'Orzhov', WR: 'Boros', WG: 'Selesnya',
-      UB: 'Dimir', UR: 'Izzet', UG: 'Simic', BR: 'Rakdos', BG: 'Golgari', RG: 'Gruul',
-    };
-    const triName: Record<string, string> = {
-      // Shards
-      WUG: 'Bant', WUB: 'Esper', UBR: 'Grixis', BRG: 'Jund', WRG: 'Naya',
-      // Wedges
-      WBG: 'Abzan', WUR: 'Jeskai', UBG: 'Sultai', WBR: 'Mardu', URG: 'Temur',
-    };
-
-    const monoCounts: Record<string, number> = {};
-    const dualCounts: Record<string, number> = {};
-    const triCounts: Record<string, number> = {};
-    for (const d of deckOverview) {
-      const cols = d.colors || [];
-      if (cols.length === 0) continue;
-      if (cols.length === 1) {
-        monoCounts[cols[0]] = (monoCounts[cols[0]] || 0) + 1;
-      } else if (cols.length === 2) {
-        const key = canon(cols);
-        dualCounts[key] = (dualCounts[key] || 0) + 1;
-      } else if (cols.length === 3) {
-        const key = canon(cols);
-        triCounts[key] = (triCounts[key] || 0) + 1;
-      }
-      // 4-color and 5-color (Domain) are intentionally skipped.
-    }
-
-    let topMono = '—';
-    let topMonoKey = '';
-    let topMonoCount = 0;
-    for (const [c, n] of Object.entries(monoCounts)) {
-      if (n > topMonoCount) { topMono = colorName[c] || c; topMonoKey = c; topMonoCount = n; }
-    }
-    let topDual = '—';
-    let topDualKey = '';
-    let topDualCount = 0;
-    for (const [c, n] of Object.entries(dualCounts)) {
-      if (n > topDualCount) { topDual = dualName[c] || c; topDualKey = c; topDualCount = n; }
-    }
-    let topTri = '—';
-    let topTriKey = '';
-    let topTriCount = 0;
-    for (const [c, n] of Object.entries(triCounts)) {
-      if (n > topTriCount) { topTri = triName[c] || c; topTriKey = c; topTriCount = n; }
-    }
-
-    return {
-      total: deckOverview.length,
-      topFormat,
-      topMono, topMonoKey,
-      topDual, topDualKey,
-      topTri, topTriKey,
-    };
-  }, [deckOverview]);
-
-  // Filtered deck list: by search term and commander filter
+  // Filtered deck list: by search term, color identity, and sort.
   const filteredDecks = useMemo(() => {
     const WUBRG = ['W', 'U', 'B', 'R', 'G'];
     const colorRank = (c: string[]) => {
@@ -805,18 +686,6 @@ export default function App() {
       const matchesCommanderSearch = (d.commanders || []).some((c: any) => (c.name || '').toLowerCase().includes(q));
       const matchesSearch = q === '' || matchesDeckName || matchesCommanderSearch;
 
-      // Commander filter: 'ALL' -> no filter; 'N/A' -> only decks with no commander;
-      // specific name -> only decks that include that commander (non-commander decks drop out).
-      let matchesCommander = true;
-      if (commanderFilter === 'N/A') {
-        matchesCommander = !(d.commanders || []).some(c => c.name);
-      } else if (commanderFilter !== 'ALL') {
-        matchesCommander = (d.commanders || []).some(c => c.name === commanderFilter);
-      }
-
-      // Format filter: match if deck has that format.
-      const matchesFormat = deckFormatFilter === 'ALL' || (d.formats || []).some(f => f.format === deckFormatFilter);
-
       // Color filter: EXACT match on the full color identity.
       // - 'C' (colorless) selected -> only decks with 0 resolved colors
       // - otherwise the deck's colors must exactly equal the selected set
@@ -831,13 +700,13 @@ export default function App() {
         }
       }
 
-      return matchesSearch && matchesCommander && matchesFormat && matchesColor;
+      return matchesSearch && matchesColor;
     });
 
-    const dir = deckSortDir === 'asc' ? 1 : -1;
+    const dir = deckCardSortDir === 'asc' ? 1 : -1;
     list.sort((a, b) => {
       let cmp = 0;
-      switch (deckSortKey) {
+      switch (deckCardSort) {
         case 'deck_name':
           cmp = (a.deck_name || '').localeCompare(b.deck_name || '');
           break;
@@ -871,36 +740,17 @@ export default function App() {
       return cmp * dir;
     });
     return list;
-  }, [deckOverview, deckSearch, commanderFilter, deckFormatFilter, deckColorFilter, deckSortKey, deckSortDir]);
+  }, [deckOverview, deckSearch, deckColorFilter, deckCardSort, deckCardSortDir]);
 
-  // Card view ordering (independent of the table's sort): name / winrate / games / format.
-  const sortedCardDecks = useMemo(() => {
-    const dir = deckCardSortDir === 'asc' ? 1 : -1;
-    return [...filteredDecks].sort((a, b) => {
-      let cmp = 0;
-      switch (deckCardSort) {
-        case 'winrate':
-          cmp = (parseFloat(a.winrate) || 0) - (parseFloat(b.winrate) || 0);
-          break;
-        case 'games':
-          cmp = (a.total_matches || 0) - (b.total_matches || 0);
-          break;
-        case 'format':
-          cmp = ((a.formats || [])[0]?.format || '').localeCompare((b.formats || [])[0]?.format || '');
-          break;
-        default:
-          cmp = (a.deck_name || '').localeCompare(b.deck_name || '');
-      }
-      return cmp * dir;
-    });
-  }, [filteredDecks, deckCardSort, deckCardSortDir]);
+  // Card view uses the same filtered+sorted deck list as the table.
+  const sortedCardDecks = filteredDecks;
 
   // Deck card view pagination: show only rows × cols that fit the grid (no
   // scrolling), and page like the Card Library (incl. mouse wheel).
   const deckCols = cardArea.w > 0 && deckCardW > 0
     ? Math.max(1, Math.floor((cardArea.w + DECK_GAP) / (deckCardW + DECK_GAP)))
     : 1;
-  const deckPageSize = deckCols * DECK_LARGE_ROWS;
+  const deckPageSize = deckCols * deckRows;
   const [deckPage, setDeckPage] = useState(1);
   const deckTotalPages = Math.max(1, Math.ceil(sortedCardDecks.length / deckPageSize));
   const safeDeckPage = Math.min(deckPage, deckTotalPages);
@@ -909,10 +759,7 @@ export default function App() {
   // Reset to page 1 when filters/sort/page-size change.
   const deckPageKey = [
     deckSearch,
-    deckFormatFilter,
     deckColorFilter.join(','),
-    commanderFilter,
-    commanderSearch,
     deckCardSort,
     deckCardSortDir,
     deckView,
@@ -924,6 +771,12 @@ export default function App() {
 
   // Mouse wheel flips the deck card page (scroll down = next, up = prev).
   const deckWheelRef = useRef<HTMLDivElement>(null);
+  const deckPageDirRef = useRef<'next' | 'prev'>('next');
+  const goDeckPage = (dir: 'next' | 'prev') => {
+    deckPageDirRef.current = dir;
+    if (dir === 'next') setDeckPage((p) => Math.min(deckTotalPages, p + 1));
+    else setDeckPage((p) => Math.max(1, p - 1));
+  };
   useEffect(() => {
     const el = deckWheelRef.current;
     if (!el || deckView !== 'cards') return;
@@ -934,13 +787,31 @@ export default function App() {
       if (Math.abs(e.deltaY) < 10) return;
       e.preventDefault();
       lock = true;
-      if (e.deltaY > 0) setDeckPage((p) => Math.min(deckTotalPages, p + 1));
-      else setDeckPage((p) => Math.max(1, p - 1));
+      if (e.deltaY > 0) goDeckPage('next');
+      else goDeckPage('prev');
       setTimeout(() => { lock = false; }, 450);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [deckView, deckTotalPages]);
+
+  // Deck page-turn animation: same approach as the Card Library — the grid stays
+  // mounted and the animation is replayed via the Web Animations API (cancelling
+  // any in-flight one first) so it never double-fires or overlaps.
+  const deckGridAnimRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = deckGridAnimRef.current;
+    if (!el || deckView !== 'cards') return;
+    el.getAnimations().forEach((a) => a.cancel());
+    const next = deckPageDirRef.current === 'next';
+    el.animate(
+      [
+        { opacity: 0.25, transform: next ? 'translateX(14px)' : 'translateX(-14px)' },
+        { opacity: 1, transform: 'translateX(0)' },
+      ],
+      { duration: 250, easing: 'ease-out' },
+    );
+  }, [deckPage, deckView]);
 
   // Deck table virtualization (separate from the match history virtualizer)
   const deckTableParentRef = useRef<HTMLDivElement>(null);
@@ -952,11 +823,11 @@ export default function App() {
   });
 
   const toggleDeckSort = (key: string) => {
-    if (deckSortKey === key) {
-      setDeckSortDir(deckSortDir === 'asc' ? 'desc' : 'asc');
+    if (deckCardSort === key) {
+      setDeckCardSortDir(deckCardSortDir === 'asc' ? 'desc' : 'asc');
     } else {
-      setDeckSortKey(key);
-      setDeckSortDir('desc');
+      setDeckCardSort(key);
+      setDeckCardSortDir('desc');
     }
   };
 
@@ -980,10 +851,10 @@ export default function App() {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'decks', label: 'Deck Library', icon: Layers, nerdIcon: 'nf-fa-box_archive' },
     { id: 'matches', label: 'Match History', icon: Swords },
-    { id: 'live', label: 'Live Match HUD', icon: Activity },
     { id: 'collection', label: 'Card Library', icon: BookOpen, nerdIcon: 'nf-md-cards' },
+    { id: 'decks', label: 'Deck Library', icon: Layers, nerdIcon: 'nf-fa-box_archive' },
+    { id: 'live', label: 'Live Match HUD', icon: Activity },
   ];
 
   const formatOptions = [
@@ -1135,7 +1006,7 @@ export default function App() {
           version="art_crop"
           alt={artName}
           onClick={openOverlay}
-          className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70`}
+          className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 theme-ring-strong`}
           style={{ borderColor: `${palette?.border}66` }}
         />
       </CardNameTooltip>
@@ -1144,7 +1015,7 @@ export default function App() {
 
   // Sortable column header: click to toggle asc/desc (no-op when sortKey empty).
   const renderDeckColHeader = (label: string, sortKey: string) => {
-    const active = sortKey ? deckSortKey === sortKey : false;
+    const active = sortKey ? deckCardSort === sortKey : false;
     return (
       <button
         onClick={() => sortKey && toggleDeckSort(sortKey)}
@@ -1155,7 +1026,7 @@ export default function App() {
         {label}
         {sortKey && (
           <span className="text-[9px] font-mono opacity-70">
-            {active ? (deckSortDir === 'asc' ? '▲' : '▼') : '↕'}
+            {active ? (deckCardSortDir === 'asc' ? '▲' : '▼') : '↕'}
           </span>
         )}
       </button>
@@ -1629,282 +1500,122 @@ export default function App() {
                   Deck Library
                 </h1>
               </div>
-              <div className="flex items-center gap-3">
-                {/* Deck Search */}
-                <div className="relative w-64">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
-                  <input
-                    type="text"
-                    placeholder="Search decks..."
-                    value={deckSearch}
-                    onChange={(e) => setDeckSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border bg-black/30 focus:outline-none"
-                    style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
-                  />
-                </div>
-                {/* Sorting Button (card view only) */}
-                {deckView === 'cards' && (
-                  <div className="relative" ref={cardSortRef}>
-                    <button
-                      onClick={() => setShowCardSortMenu(!showCardSortMenu)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5"
-                      style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-                    >
-                      <ArrowUpDown className="w-3.5 h-3.5" style={{ color: palette?.accent }} />
-                      Sorting
-                    </button>
-                    {showCardSortMenu && (
-                      <div
-                        className="absolute right-0 top-full mt-2 z-30 rounded-xl border shadow-xl p-2 w-48"
-                        style={{ backgroundColor: palette?.mantle, borderColor: palette?.border }}
-                      >
-                        {[
-                          { value: 'deck_name', label: 'Deck Name' },
-                          { value: 'games', label: 'Games Played' },
-                          { value: 'winrate', label: 'Win Rate' },
-                          { value: 'format', label: 'Format' },
-                        ].map((opt) => {
-                          const active = deckCardSort === opt.value;
-                          return (
-                            <button
-                              key={opt.value}
-                              onClick={() => {
-                                if (active) {
-                                  setDeckCardSortDir(deckCardSortDir === 'asc' ? 'desc' : 'asc');
-                                } else {
-                                  setDeckCardSort(opt.value);
-                                  setDeckCardSortDir('asc');
-                                }
-                              }}
-                              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white/5"
-                              style={{ color: active ? (palette?.accent || '#38BDF8') : palette?.text, backgroundColor: active ? `${palette?.accent || '#38BDF8'}15` : 'transparent' }}
-                            >
-                              {opt.label}
-                              {active && (
-                                <span className="text-[10px] font-mono opacity-80">
-                                  {deckCardSortDir === 'asc' ? '▲' : '▼'}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+            </div>
+
+            {/* Top bar (matches the Card Library filter bar) */}
+            <div
+              className="shrink-0 rounded-2xl border p-2.5 flex items-center gap-2.5"
+              style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+            >
+              {/* Search */}
+              <div className="relative w-64 shrink-0">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+                <input
+                  type="text"
+                  placeholder="Search decks..."
+                  value={deckSearch}
+                  onChange={(e) => setDeckSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border bg-black/30 focus:outline-none"
+                  style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+                />
+                {deckSearch.length > 0 && (
+                  <button
+                    onClick={() => setDeckSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors hover:bg-white/10"
+                    style={{ color: palette?.text }}
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
+              </div>
 
-                {/* View Toggle: Table / Cards */}
-                <div className="flex items-center rounded-xl border overflow-hidden" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
-                  <button
-                    onClick={() => setDeckView('cards')}
-                    title="Card View"
-                    className={`flex items-center justify-center px-3 py-2 transition-all ${
-                      deckView === 'cards' ? '' : 'opacity-50 hover:opacity-100'
-                    }`}
-                    style={{ color: deckView === 'cards' ? (palette?.accent || '#38BDF8') : palette?.text, backgroundColor: deckView === 'cards' ? `${palette?.accent || '#38BDF8'}1F` : 'transparent' }}
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setDeckView('table')}
-                    title="Table View"
-                    className={`flex items-center justify-center px-3 py-2 transition-all ${
-                      deckView === 'table' ? '' : 'opacity-50 hover:opacity-100'
-                    }`}
-                    style={{ color: deckView === 'table' ? (palette?.accent || '#38BDF8') : palette?.text, backgroundColor: deckView === 'table' ? `${palette?.accent || '#38BDF8'}1F` : 'transparent', borderLeft: `1px solid ${palette?.border || '#2A2F3D'}` }}
-                  >
-                    <Table className="w-4 h-4" />
-                  </button>
-                </div>
+              {/* Color pips: multi-select, toggles deckColorFilter (exact match). */}
+              <div className="flex items-center gap-1.5 pl-0.5">
+                {['W', 'U', 'B', 'R', 'G', 'C'].map((c) => {
+                  const active = deckColorFilter.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setDeckColorFilter(prev => active ? prev.filter(x => x !== c) : [...prev, c])}
+                      className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                      title={c === 'C' ? 'Colorless' : `Filter ${c}`}
+                    >
+                      <ManaPip symbol={c} size={22} />
+                    </button>
+                  );
+                })}
+              </div>
 
-                {/* Filters Button */}
+              <div className="flex-1" />
+
+              {/* Sort dropdown with embedded direction toggle: clicking an item
+                  once selects it ascending; clicking the same item again toggles
+                  direction. The selected item is prefixed with an up/down arrow. */}
+              <div className="w-44">
+                <CustomDropdown
+                  options={[
+                    { value: 'deck_name', label: 'Deck Name' },
+                    { value: 'games', label: 'Games Played' },
+                    { value: 'winrate', label: 'Win Rate' },
+                    { value: 'format', label: 'Format' },
+                  ].map((o) => ({
+                    value: o.value,
+                    label: deckCardSort === o.value
+                      ? `${deckCardSortDir === 'asc' ? '▲' : '▼'} ${o.label}`
+                      : o.label,
+                  }))}
+                  value={deckCardSort}
+                  onChange={(val) => {
+                    if (val === deckCardSort) {
+                      setDeckCardSortDir(deckCardSortDir === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setDeckCardSort(val);
+                      setDeckCardSortDir('asc');
+                    }
+                  }}
+                  palette={palette}
+                />
+              </div>
+
+              {/* View toggle */}
+              <div className="flex items-center rounded-xl border overflow-hidden" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
                 <button
-                  onClick={() => setShowFilterPanel(!showFilterPanel)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 ${
-                    showFilterPanel || deckFormatFilter !== 'ALL' || deckColorFilter.length > 0 || commanderFilter !== 'ALL' ? 'opacity-100' : 'opacity-70'
-                  }`}
-                  style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                  onClick={() => setDeckView('cards')}
+                  title="Card view"
+                  className={`flex items-center justify-center px-2.5 py-2 transition-all ${deckView === 'cards' ? '' : 'opacity-50 hover:opacity-100'}`}
+                  style={{ color: palette?.text }}
                 >
-                  <Filter className="w-3.5 h-3.5" style={{ color: palette?.accent }} />
-                  Filters
-                  {(deckFormatFilter !== 'ALL' || deckColorFilter.length > 0 || commanderFilter !== 'ALL') && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  )}
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setDeckView('table')}
+                  title="Table view"
+                  className={`flex items-center justify-center px-2.5 py-2 transition-all ${deckView === 'table' ? '' : 'opacity-50 hover:opacity-100'}`}
+                  style={{ color: palette?.text }}
+                >
+                  <Table className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Card size toggle (cards view only): the icon shows what you'll
+                  switch TO — zoom-in when currently small, zoom-out when large. */}
+              {deckView === 'cards' && (
+                <button
+                  onClick={() => setDeckCardSize(deckCardSize === 'small' ? 'large' : 'small')}
+                  className="flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all hover:bg-white/5"
+                  style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                  title={deckCardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards'}
+                >
+                  {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
+                </button>
+              )}
             </div>
-
-            {/* Deck Library KPI Boxes */}
-            <div className="grid grid-cols-5 gap-4 shrink-0">
-              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
-                <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Total Decks</p>
-                  <h3 className="text-2xl font-extrabold font-outfit mt-0.5">{deckKPIs.total}</h3>
-                </div>
-                <BarChart3 className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
-              </div>
-
-              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
-                <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Format</p>
-                  <h3 className="text-xl font-extrabold font-outfit mt-0.5" style={{ color: palette?.accent || '#38BDF8' }}>{deckKPIs.topFormat}</h3>
-                </div>
-                <Filter className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
-              </div>
-
-              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
-                <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Mono-Color</p>
-                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topMono}</h3>
-                </div>
-                {deckKPIs.topMonoKey ? <ManaPip symbol={deckKPIs.topMonoKey as any} size={20} className="opacity-40" /> : <span className="text-[10px] opacity-30">—</span>}
-              </div>
-
-              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
-                <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Dual-Color</p>
-                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topDual}</h3>
-                </div>
-                <div className="flex gap-0.5">
-                  {(deckKPIs.topDualKey || '').split('').map((c) => <ManaPip key={c} symbol={c as any} size={20} className="opacity-40" />)}
-                  {!deckKPIs.topDualKey && <span className="text-[10px] opacity-30">—</span>}
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl border flex items-center justify-between shadow-lg" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
-                <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Most Common Tri-Color</p>
-                  <h3 className="text-xl font-extrabold font-outfit mt-0.5">{deckKPIs.topTri}</h3>
-                </div>
-                <div className="flex gap-0.5">
-                  {(deckKPIs.topTriKey || '').split('').map((c) => <ManaPip key={c} symbol={c as any} size={20} className="opacity-40" />)}
-                  {!deckKPIs.topTriKey && <span className="text-[10px] opacity-30">—</span>}
-                </div>
-              </div>
-            </div>
-
-            {/* Separator under the KPI row */}
-            <div className="shrink-0 h-px w-full" style={{ backgroundColor: `${palette?.border || '#2A2F3D'}66` }} />
-
-            {/* Filter Panel (dropdown) */}
-            {showFilterPanel && (
-              <div className="shrink-0 rounded-2xl border shadow-xl p-4 space-y-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                <div className="flex items-center justify-between">
-                  <Filter className="w-4 h-4" style={{ color: palette?.accent }} />
-                  <button
-                    onClick={() => { setShowFilterPanel(false); setDeckFormatFilter('ALL'); setDeckColorFilter([]); setCommanderFilter('ALL'); setCommanderSearch(''); }}
-                    className="text-[10px] font-mono opacity-60 hover:opacity-100 underline"
-                  >
-                    Clear all
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-6">
-                  {/* Format filter */}
-                  <div>
-                    <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Format</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        onClick={() => setDeckFormatFilter('ALL')}
-                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                          deckFormatFilter === 'ALL' ? 'opacity-100' : 'opacity-50 hover:opacity-100'
-                        }`}
-                        style={{ backgroundColor: deckFormatFilter === 'ALL' ? `${palette?.accent || '#38BDF8'}25` : 'transparent', borderColor: deckFormatFilter === 'ALL' ? (palette?.accent || '#38BDF8') : palette?.border, color: deckFormatFilter === 'ALL' ? (palette?.accent || '#38BDF8') : palette?.text }}
-                      >
-                        All
-                      </button>
-                      {Array.from(new Set(deckOverview.flatMap((d: any) => (d.formats || []).map((f: any) => f.format)))).sort().map((f) => (
-                        <button
-                          key={f}
-                          onClick={() => setDeckFormatFilter(deckFormatFilter === f ? 'ALL' : f)}
-                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                            deckFormatFilter === f ? 'opacity-100' : 'opacity-50 hover:opacity-100'
-                          }`}
-                          style={{ backgroundColor: deckFormatFilter === f ? `${palette?.accent || '#38BDF8'}25` : 'transparent', borderColor: deckFormatFilter === f ? (palette?.accent || '#38BDF8') : palette?.border, color: deckFormatFilter === f ? (palette?.accent || '#38BDF8') : palette?.text }}
-                        >
-                          {f}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Color filter (multi-select, exact-match) */}
-                  <div>
-                    <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Color Identity</p>
-                    <div className="flex items-center gap-2">
-                      {['W', 'U', 'B', 'R', 'G'].map((c) => {
-                        const active = deckColorFilter.includes(c);
-                        return (
-                          <button
-                            key={c}
-                            onClick={() => {
-                              setDeckColorFilter(prev => active ? prev.filter(x => x !== c) : [...prev, c]);
-                            }}
-                            className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
-                            title={`Toggle ${c}`}
-                          >
-                            <ManaPip symbol={c} size={24} />
-                          </button>
-                        );
-                      })}
-                      {/* Colorless option */}
-                      <button
-                        onClick={() => {
-                          setDeckColorFilter(prev => prev.includes('C') ? prev.filter(x => x !== 'C') : [...prev, 'C']);
-                        }}
-                        className={`transition-all ${deckColorFilter.includes('C') ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
-                        title="Toggle Colorless"
-                      >
-                        <ManaPip symbol="C" size={24} />
-                      </button>
-                    </div>
-                    <p className="text-[9px] font-mono opacity-40 mt-2">Exact match on full color identity</p>
-                  </div>
-
-                  {/* Commander filter (type-ahead) */}
-                  <div>
-                    <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Commander (Brawl only)</p>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Search commander..."
-                        value={commanderSearch}
-                        onChange={(e) => setCommanderSearch(e.target.value)}
-                        onFocus={() => setCommanderSearchOpen(true)}
-                        onBlur={() => setTimeout(() => setCommanderSearchOpen(false), 150)}
-                        className="w-full pl-3 pr-3 py-1.5 text-xs rounded-lg border bg-black/30 focus:outline-none"
-                        style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
-                      />
-                      {commanderSearchOpen && commanderSearchResults.length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border shadow-2xl overflow-y-auto max-h-56 custom-scrollbar" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                          {commanderSearchResults.map((o) => {
-                            const isSelected = commanderFilter === o.value;
-                            return (
-                              <button
-                                key={o.value}
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => { setCommanderFilter(o.value); setCommanderSearch(o.value === 'N/A' ? '' : o.label); setCommanderSearchOpen(false); }}
-                                className="w-full text-left px-3 py-2 text-xs font-medium transition-colors hover:bg-white/10 flex items-center justify-between"
-                                style={{ color: isSelected ? (palette?.accent || '#38BDF8') : (palette?.text || '#F8FAFC') }}
-                              >
-                                <span className="truncate">{o.label}</span>
-                                {isSelected && <span className="text-[10px] font-mono">✓</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[9px] font-mono opacity-40 mt-2">Selecting a commander hides non-commander decks</p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Deck Library content: card view */}
             {deckView === 'cards' ? (
               <>
-                <div ref={cardAreaRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
+                <div ref={cardAreaRef} className="flex-1 min-h-0 overflow-hidden">
                   {sortedCardDecks.length === 0 ? (
                     <div className="p-10 text-center text-xs opacity-40 font-mono">No decks match the current filters</div>
                   ) : (
@@ -1913,7 +1624,11 @@ export default function App() {
                       ref={deckWheelRef}
                       className="h-full min-h-0 flex flex-wrap justify-center content-center items-start gap-4"
                     >
-                      {deckDisplayed.map((d) => {
+                      <div
+                        ref={deckGridAnimRef}
+                        className="h-full min-h-0 w-full flex flex-wrap justify-center content-center items-start gap-4"
+                      >
+                        {deckDisplayed.map((d) => {
                         const artName = d.top_commander_name || d.top_card_name;
                         const fmt = (d.formats || [])[0]?.format;
                         const fmtChip = fmt ? formatChipColor(fmt) : null;
@@ -1921,7 +1636,7 @@ export default function App() {
                           <button
                             key={d.deck_name}
                             onClick={() => setSelectedDeckName(d.deck_name)}
-                            className="group relative rounded-xl border overflow-hidden shadow-lg text-left transition-all duration-200 hover:scale-[1.03] hover:ring-2 hover:ring-sky-400/60 cursor-pointer shrink-0"
+                            className="group relative rounded-xl border overflow-hidden shadow-lg text-left transition-colors duration-200 hover:ring-2 theme-ring cursor-pointer shrink-0"
                             style={{ width: deckCardW, height: deckCardH, borderColor: `${palette?.border || '#2A2F3D'}88` }}
                           >
                             {/* Artwork fills the whole card */}
@@ -1940,7 +1655,7 @@ export default function App() {
 
                             {/* Top bar: deck name + color identity pips. Hovering
                                 the title reveals a red delete-deck button. */}
-                            <div className="absolute top-0 left-0 right-0 px-3 py-2 flex items-center justify-between gap-2 bg-black/70 backdrop-blur-sm">
+                            <div className="absolute top-0 left-0 right-0 px-3 py-2 flex items-center justify-between gap-2 bg-black/70 backdrop-blur-sm transition-colors duration-200 group-hover:bg-black/50">
                               <span className="text-[15px] font-bold leading-tight truncate group/title flex items-center gap-1.5" style={{ color: palette?.text || '#F8FAFC' }}>
                                 <span className="truncate">{d.deck_name}</span>
                                 <button
@@ -1961,7 +1676,7 @@ export default function App() {
                             </div>
 
                             {/* Bottom bar: deck source icon + format + win rate */}
-                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm">
+                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm transition-colors duration-200 group-hover:bg-black/50">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="flex items-center gap-1.5 min-w-0">
                                   {/* Source indicator: grey log icon when only
@@ -1990,6 +1705,7 @@ export default function App() {
                           </button>
                         );
                       })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1998,7 +1714,7 @@ export default function App() {
                 {deckTotalPages > 1 && (
                   <div className="shrink-0 flex items-center justify-center gap-4 pt-1">
                     <button
-                      onClick={() => setDeckPage((p) => Math.max(1, p - 1))}
+                      onClick={() => goDeckPage('prev')}
                       disabled={safeDeckPage <= 1}
                       className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
                       style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
@@ -2009,7 +1725,7 @@ export default function App() {
                       Page {safeDeckPage} of {deckTotalPages} • {sortedCardDecks.length} decks
                     </span>
                     <button
-                      onClick={() => setDeckPage((p) => Math.min(deckTotalPages, p + 1))}
+                      onClick={() => goDeckPage('next')}
                       disabled={safeDeckPage >= deckTotalPages}
                       className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
                       style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
@@ -2018,21 +1734,6 @@ export default function App() {
                     </button>
                   </div>
                 )}
-
-                {/* Deck card size toggle (floating pill, bottom-right): magnifier
-                    icon shows what you'll switch TO — zoom-in when small, zoom-out
-                    when large. */}
-                <div className="absolute bottom-4 right-4 z-50 rounded-full border shadow-2xl bg-black/85 backdrop-blur-md px-3 py-2 flex items-center gap-2"
-                  style={{ borderColor: palette?.border }}>
-                  <button
-                    onClick={() => setDeckCardSize(deckCardSize === 'small' ? 'large' : 'small')}
-                    className="flex items-center justify-center p-1.5 rounded-full transition-colors hover:bg-white/10"
-                    style={{ color: palette?.text }}
-                    title={deckCardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards'}
-                  >
-                    {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
-                  </button>
-                </div>
               </>
             ) : (
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
@@ -2088,7 +1789,7 @@ export default function App() {
                                   version="art_crop"
                                   alt={k.name}
                                   onClick={(e) => { e.stopPropagation(); openCardOverlay(k, false); }}
-                                  className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70 z-10"
+                                  className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:ring-2 theme-ring-strong z-10"
                                   style={{ borderColor: `${palette?.border}66` }}
                                 />
                               </CardNameTooltip>
@@ -2629,11 +2330,13 @@ export default function App() {
           setActiveTab('matches');
         }}
         onDeckListImported={async () => {
-          // Refresh deck detail (charts follow the True Decklist now).
+          // Refresh deck detail (charts follow the True Decklist now) AND the
+          // deck overview, so the true-decklist source icon updates live.
           if (!selectedDeckName) return;
           try {
             const detail = await invoke<any>('get_deck_detail', { deckName: selectedDeckName });
             setDeckDetail(detail);
+            await loadDeckOverview();
           } catch (e) {
             console.error('Failed to refresh deck detail after import:', e);
           }
