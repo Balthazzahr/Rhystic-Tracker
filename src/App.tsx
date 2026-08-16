@@ -21,6 +21,8 @@ import {
   Table,
   LayoutGrid,
   ArrowUpDown,
+  Trash2,
+  ScrollText,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
@@ -149,6 +151,7 @@ export default function App() {
   const [impactfulIndex, setImpactfulIndex] = useState<number>(0);
   const [deckOverview, setDeckOverview] = useState<any[]>([]);
   const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null);
+  const [deckToDelete, setDeckToDelete] = useState<string | null>(null);
   const [deckDetail, setDeckDetail] = useState<any>(null);
   const [deckCardOverlay, setDeckCardOverlay] = useState<any>(null);
   const [overlayPrintings, setOverlayPrintings] = useState<any[]>([]);
@@ -305,6 +308,22 @@ export default function App() {
       setDeckOverview(decks);
     } catch (e) {
       console.error('Failed to load deck overview:', e);
+    }
+  };
+
+  // Delete a deck: removes its true decklist (if any) and all its match history.
+  // Cards stay in the library's collection — only the deck + its matches go.
+  const confirmDeleteDeck = async () => {
+    if (!deckToDelete) return;
+    try {
+      await invoke('delete_deck', { deckName: deckToDelete });
+      // Close the (possibly open) deck detail and refresh the overview.
+      if (selectedDeckName === deckToDelete) setSelectedDeckName(null);
+      setDeckToDelete(null);
+      await loadDeckOverview();
+    } catch (e) {
+      console.error('Failed to delete deck:', e);
+      setDeckToDelete(null);
     }
   };
 
@@ -1014,14 +1033,6 @@ export default function App() {
       b = yellow[2] + (green[2] - yellow[2]) * t;
     }
     return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-  };
-
-  // Collection completion color: green at 100%, amber mid, red at low.
-  const ownedPctColor = (pct: number | null): string => {
-    if (pct == null) return `${palette?.subtext || '#94A3B8'}`;
-    if (pct >= 100) return '#34D399';
-    if (pct >= 50) return '#FBBF24';
-    return '#F87171';
   };
 
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
@@ -1840,36 +1851,52 @@ export default function App() {
                               </div>
                             )}
 
-                            {/* Top bar: deck name + color identity pips */}
+                            {/* Top bar: deck name + color identity pips. Hovering
+                                the title reveals a red delete-deck button. */}
                             <div className="absolute top-0 left-0 right-0 px-3 py-2 flex items-center justify-between gap-2 bg-black/70 backdrop-blur-sm">
-                              <span className="text-[15px] font-bold leading-tight truncate" style={{ color: palette?.text || '#F8FAFC' }}>
-                                {d.deck_name}
+                              <span className="text-[15px] font-bold leading-tight truncate group/title flex items-center gap-1.5" style={{ color: palette?.text || '#F8FAFC' }}>
+                                <span className="truncate">{d.deck_name}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeckToDelete(d.deck_name);
+                                  }}
+                                  className="opacity-0 group-hover/title:opacity-100 shrink-0 p-1 rounded-md transition-opacity hover:bg-red-500/20"
+                                  style={{ color: '#F87171' }}
+                                  title="Delete deck"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </span>
                               <span className="shrink-0 flex items-center gap-0.5">
                                 {renderDeckColorIdentity(d.colors, 15)}
                               </span>
                             </div>
 
-                            {/* Bottom bar: format + win rate + % owned */}
-                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm space-y-1">
+                            {/* Bottom bar: deck source icon + format + win rate */}
+                            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm">
                               <div className="flex items-center justify-between gap-2">
-                                {fmtChip ? (
-                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}>
-                                    {fmt}
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  {/* Source indicator: grey log icon when only
+                                      logged cards exist; gold cards icon when a
+                                      true decklist is uploaded. */}
+                                  <span
+                                    className="shrink-0 flex items-center justify-center"
+                                    style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF' }}
+                                    title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
+                                  >
+                                    {d.has_list ? <Layers className="w-3.5 h-3.5" /> : <ScrollText className="w-3.5 h-3.5" />}
                                   </span>
-                                ) : (
-                                  <span className="text-[10px] font-mono opacity-40">—</span>
-                                )}
+                                  {fmtChip ? (
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}>
+                                      {fmt}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-mono opacity-40">—</span>
+                                  )}
+                                </span>
                                 <span className="text-[13px] font-extrabold font-outfit shrink-0" style={{ color: winRateColor(d.winrate) }}>
                                   WR: {d.winrate}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-                                  <div className="h-full rounded-full" style={{ width: `${d.owned_pct ?? 0}%`, backgroundColor: ownedPctColor(d.owned_pct) }} />
-                                </div>
-                                <span className="text-[10px] font-mono shrink-0" style={{ color: ownedPctColor(d.owned_pct) }}>
-                                  {d.owned_pct != null ? `${d.owned_pct}% owned` : '—'}
                                 </span>
                               </div>
                             </div>
@@ -1916,7 +1943,7 @@ export default function App() {
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Games', 'games')}</div>
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('W/L', 'record')}</div>
                   <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
-                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Owned', '')}</div>
+                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Source', '')}</div>
                 </div>
               </div>
 
@@ -1999,21 +2026,16 @@ export default function App() {
                             {d.winrate}
                           </div>
 
-                          {/* Owned */}
-                          <div className="w-[130px] shrink-0 flex flex-col items-center justify-center gap-0.5">
-                            {d.owned_pct != null ? (
-                              <>
-                                <span className="text-[13px] font-mono font-bold" style={{ color: ownedPctColor(d.owned_pct) }}>
-                                  {d.owned_pct}% owned
-                                </span>
-                                <div className="w-16 h-1 rounded-full bg-white/10 overflow-hidden">
-                                  <div className="h-full rounded-full" style={{ width: `${d.owned_pct}%`, backgroundColor: ownedPctColor(d.owned_pct) }} />
-                                </div>
-                                <span className="text-[9px] font-mono opacity-50">{d.owned_cards}/{d.total_ownedable} cards</span>
-                              </>
-                            ) : (
-                              <span className="text-sm font-mono opacity-40">—</span>
-                            )}
+                          {/* Source: gold cards icon if true decklist, grey log
+                              icon if only logged cards. */}
+                          <div className="w-[130px] shrink-0 flex items-center justify-center">
+                            <span
+                              className="flex items-center justify-center"
+                              style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF' }}
+                              title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
+                            >
+                              {d.has_list ? <Layers className="w-4 h-4" /> : <ScrollText className="w-4 h-4" />}
+                            </span>
                           </div>
                         </div>
                       );
@@ -2766,6 +2788,46 @@ export default function App() {
                   );
                 })()}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete-deck confirmation modal */}
+      {deckToDelete && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+          onClick={() => setDeckToDelete(null)}
+        >
+          <div
+            className="w-[420px] max-w-full rounded-2xl border shadow-2xl p-6 space-y-4"
+            style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold font-outfit" style={{ color: '#F87171' }}>
+              Delete Deck
+            </h3>
+            <p className="text-sm leading-relaxed" style={{ color: palette?.text }}>
+              Deleting <strong>{deckToDelete}</strong> will also delete all of its match history.
+            </p>
+            <p className="text-sm" style={{ color: palette?.text }}>
+              Are you sure?
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                onClick={() => setDeckToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold border transition-colors hover:bg-white/5"
+                style={{ borderColor: palette?.border, color: palette?.text }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteDeck}
+                className="px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                style={{ backgroundColor: '#DC2626', color: '#FFF' }}
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>

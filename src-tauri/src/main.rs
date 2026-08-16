@@ -751,6 +751,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
 
         result.push(serde_json::json!({
             "deck_name": deck_name,
+            "has_list": true_list_grps.contains_key(&deck_name),
             "total_matches": total,
             "wins": wins,
             "losses": losses,
@@ -2192,6 +2193,39 @@ async fn save_deck_list(deck_name: String, export_text: String) -> Result<serde_
     }))
 }
 
+/// Delete a deck entirely: removes its True Decklist (if any) and ALL of its
+/// match history from the database. The match tables cascade via FK
+/// (match_cards / match_turn_events / match_impactful_cards / match_decks all
+/// reference matches with ON DELETE CASCADE). Deleting a deck does NOT touch
+/// collection_cards — cards remain owned in the library even though the deck is
+/// gone.
+#[tauri::command]
+async fn delete_deck(deck_name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+    // Remove the True Decklist row (no-op if there was none).
+    sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?")
+        .bind(&deck_name)
+        .execute(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Remove the deck's matches (cascades to match_cards, turn_events,
+    // impactful_cards, and the match_decks audit rows).
+    let match_result = sqlx::query("DELETE FROM matches WHERE hero_deck_name = ?")
+        .bind(&deck_name)
+        .execute(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let deleted_matches = match_result.rows_affected();
+
+    Ok(serde_json::json!({
+        "deck_name": deck_name,
+        "deleted_matches": deleted_matches,
+    }))
+}
+
 /// Returns the stored True Decklist for a deck (resolved grp_ids), with card
 /// metadata joined in, or null if none has been imported.
 #[tauri::command]
@@ -3076,6 +3110,7 @@ fn main() {
             get_deck_detail,
             get_deck_cards,
             save_deck_list,
+            delete_deck,
             get_deck_list,
             get_deck_list_status,
             export_decklist,
@@ -3496,5 +3531,43 @@ mod tests {
         assert_eq!(res.get("total_cards").and_then(|v| v.as_i64()).unwrap(), 0);
         assert_eq!(res.get("owned_cards").and_then(|v| v.as_i64()).unwrap(), 0);
         assert_eq!(res.get("owned_pct").and_then(|v| v.as_f64()).unwrap(), 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_deck_sql_removes_list_and_matches_keeps_collection() {
+        let db = DatabaseManager::init().await.expect("db init");
+        let pool = db.pool();
+
+        seed_card(pool, 1001, "Knight of Dawn", "o2oW", "1", "LEA", 4, "Creature").await;
+        seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":4}]"#).await;
+        set_owned(pool, 1001, 4).await;
+        seed_match(pool, "m1", "My Deck").await;
+        seed_match_card(pool, "m1", 1001, false, 2).await;
+        seed_match(pool, "m2", "My Deck").await;
+
+        // Verify data exists before delete.
+        let before_matches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM matches WHERE hero_deck_name='My Deck'").fetch_one(pool).await.unwrap();
+        assert_eq!(before_matches, 2);
+        let before_list: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deck_lists WHERE deck_name='My Deck'").fetch_one(pool).await.unwrap();
+        assert_eq!(before_list, 1);
+        let before_owned: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM collection_cards WHERE grp_id=1001 AND owned_count>0").fetch_one(pool).await.unwrap();
+        assert_eq!(before_owned, 1);
+
+        // Mirror delete_deck's SQL: remove the decklist, then the matches.
+        sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?").bind("My Deck").execute(pool).await.unwrap();
+        let match_result = sqlx::query("DELETE FROM matches WHERE hero_deck_name = ?").bind("My Deck").execute(pool).await.unwrap();
+        assert_eq!(match_result.rows_affected(), 2);
+
+        // Deck list + matches gone (cascade cleans match_cards).
+        let after_list: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deck_lists WHERE deck_name='My Deck'").fetch_one(pool).await.unwrap();
+        assert_eq!(after_list, 0);
+        let after_matches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM matches WHERE hero_deck_name='My Deck'").fetch_one(pool).await.unwrap();
+        assert_eq!(after_matches, 0);
+        let after_match_cards: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM match_cards WHERE match_id='m1'").fetch_one(pool).await.unwrap();
+        assert_eq!(after_match_cards, 0);
+
+        // Collection ownership is untouched.
+        let after_owned: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM collection_cards WHERE grp_id=1001 AND owned_count>0").fetch_one(pool).await.unwrap();
+        assert_eq!(after_owned, 1);
     }
 }
