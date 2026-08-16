@@ -52,13 +52,27 @@ export function CustomDropdown({ options, value, onChange, palette }: CustomDrop
       if (pos && (e.target as HTMLElement).closest?.('[data-rt-dropdown-menu]')) return;
       setIsOpen(false);
     };
-    const handleScroll = () => setIsOpen(false);
+    // Close when the page/overlay scrolls, but NOT when the user scrolls the
+    // menu's own scrollable list (wheel or drag) — that must stay usable.
+    const handleScroll = (e: Event) => {
+      if (pos && (e.target as HTMLElement)?.closest?.('[data-rt-dropdown-menu]')) return;
+      setIsOpen(false);
+    };
+    // Block wheel events that would scroll the page when the cursor is over
+    // the menu, so the list scrolls instead of the overlay/page underneath.
+    const handleWheel = (e: WheelEvent) => {
+      if (pos && (e.target as HTMLElement)?.closest?.('[data-rt-dropdown-menu]')) {
+        e.stopPropagation();
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('wheel', handleWheel, true);
     window.addEventListener('resize', () => setIsOpen(false));
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('wheel', handleWheel, true);
       window.removeEventListener('resize', () => setIsOpen(false));
     };
   }, [pos]);
