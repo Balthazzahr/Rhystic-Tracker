@@ -271,7 +271,7 @@ export default function App() {
   // Landscape deck card ratio (wider than tall). Small uses a fixed footprint;
   // large fills the height with DECK_LARGE_ROWS rows, width derived from ratio.
   const DECK_RATIO = 3 / 2;
-  const DECK_LARGE_ROWS = 2;
+  const DECK_LARGE_ROWS = 4;
   const DECK_GAP = 16;
   const DECK_WRAP_PAD = 0; // grid has no vertical padding
   const deckLargeCardH = cardArea.h > (DECK_LARGE_ROWS - 1) * DECK_GAP + DECK_WRAP_PAD
@@ -894,6 +894,53 @@ export default function App() {
       return cmp * dir;
     });
   }, [filteredDecks, deckCardSort, deckCardSortDir]);
+
+  // Deck card view pagination: show only rows × cols that fit the grid (no
+  // scrolling), and page like the Card Library (incl. mouse wheel).
+  const deckCols = cardArea.w > 0 && deckCardW > 0
+    ? Math.max(1, Math.floor((cardArea.w + DECK_GAP) / (deckCardW + DECK_GAP)))
+    : 1;
+  const deckPageSize = deckCols * DECK_LARGE_ROWS;
+  const [deckPage, setDeckPage] = useState(1);
+  const deckTotalPages = Math.max(1, Math.ceil(sortedCardDecks.length / deckPageSize));
+  const safeDeckPage = Math.min(deckPage, deckTotalPages);
+  const deckDisplayed = sortedCardDecks.slice((safeDeckPage - 1) * deckPageSize, safeDeckPage * deckPageSize);
+
+  // Reset to page 1 when filters/sort/page-size change.
+  const deckPageKey = [
+    deckSearch,
+    deckFormatFilter,
+    deckColorFilter.join(','),
+    commanderFilter,
+    commanderSearch,
+    deckCardSort,
+    deckCardSortDir,
+    deckView,
+    deckPageSize,
+  ].join('|');
+  useEffect(() => {
+    setDeckPage(1);
+  }, [deckPageKey]);
+
+  // Mouse wheel flips the deck card page (scroll down = next, up = prev).
+  const deckWheelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = deckWheelRef.current;
+    if (!el || deckView !== 'cards') return;
+    let lock = false;
+    const onWheel = (e: WheelEvent) => {
+      if (lock) return;
+      if (deckTotalPages <= 1) return;
+      if (Math.abs(e.deltaY) < 10) return;
+      e.preventDefault();
+      lock = true;
+      if (e.deltaY > 0) setDeckPage((p) => Math.min(deckTotalPages, p + 1));
+      else setDeckPage((p) => Math.max(1, p - 1));
+      setTimeout(() => { lock = false; }, 450);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [deckView, deckTotalPages]);
 
   // Deck table virtualization (separate from the match history virtualizer)
   const deckTableParentRef = useRef<HTMLDivElement>(null);
@@ -1857,13 +1904,16 @@ export default function App() {
             {/* Deck Library content: card view */}
             {deckView === 'cards' ? (
               <>
-                <div ref={cardAreaRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                <div ref={cardAreaRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
                   {sortedCardDecks.length === 0 ? (
                     <div className="p-10 text-center text-xs opacity-40 font-mono">No decks match the current filters</div>
                   ) : (
                     /* Centered flex-wrap grid so partial rows stay center-justified */
-                    <div className="flex flex-wrap justify-center content-start items-start gap-4">
-                      {sortedCardDecks.map((d) => {
+                    <div
+                      ref={deckWheelRef}
+                      className="h-full min-h-0 flex flex-wrap justify-center content-center items-start gap-4"
+                    >
+                      {deckDisplayed.map((d) => {
                         const artName = d.top_commander_name || d.top_card_name;
                         const fmt = (d.formats || [])[0]?.format;
                         const fmtChip = fmt ? formatChipColor(fmt) : null;
@@ -1943,6 +1993,31 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {/* Deck card pagination (bottom center) */}
+                {deckTotalPages > 1 && (
+                  <div className="shrink-0 flex items-center justify-center gap-4 pt-1">
+                    <button
+                      onClick={() => setDeckPage((p) => Math.max(1, p - 1))}
+                      disabled={safeDeckPage <= 1}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
+                      style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                    </button>
+                    <span className="text-[11px] font-mono opacity-60">
+                      Page {safeDeckPage} of {deckTotalPages} • {sortedCardDecks.length} decks
+                    </span>
+                    <button
+                      onClick={() => setDeckPage((p) => Math.min(deckTotalPages, p + 1))}
+                      disabled={safeDeckPage >= deckTotalPages}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
+                      style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                    >
+                      Next <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
 
                 {/* Deck card size toggle (floating pill, bottom-right): magnifier
                     icon shows what you'll switch TO — zoom-in when small, zoom-out
