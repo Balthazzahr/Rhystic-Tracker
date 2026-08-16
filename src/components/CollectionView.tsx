@@ -255,8 +255,18 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const wheelLock = useRef(false);
   const pageCountRef = useRef(1);
   const setPageRef = useRef(setPage);
+  const pageDirRef = useRef<'next' | 'prev'>('next');
   setPageRef.current = setPage;
   pageCountRef.current = totalPages;
+
+  const goPage = (dir: 'next' | 'prev') => {
+    pageDirRef.current = dir;
+    if (dir === 'next') {
+      setPageRef.current((p) => Math.min(pageCountRef.current, p + 1));
+    } else {
+      setPageRef.current((p) => Math.max(1, p - 1));
+    }
+  };
 
   useEffect(() => {
     const el = gridWrapRef.current;
@@ -268,9 +278,9 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       e.preventDefault();
       wheelLock.current = true;
       if (e.deltaY > 0) {
-        setPageRef.current((p) => Math.min(pageCountRef.current, p + 1));
+        goPage('next');
       } else {
-        setPageRef.current((p) => Math.max(1, p - 1));
+        goPage('prev');
       }
       setTimeout(() => { wheelLock.current = false; }, 450);
     };
@@ -374,12 +384,13 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const renderCardTile = (card: CollectionCard, pageKey: number) => {
     const isOwned = card.owned_count > 0;
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
+    const slideClass = pageDirRef.current === 'next' ? 'animate-page-right' : 'animate-page-left';
 
     return (
       <button
         key={`${pageKey}-${card.grp_id}`}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0 animate-page-in"
+        className={`group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0 ${slideClass}`}
         style={{ width: cardW, height: cardH }}
         title={cardName}
       >
@@ -777,7 +788,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       {totalPages > 1 && (
         <div className="shrink-0 flex items-center justify-center gap-4 pt-1">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => goPage('prev')}
             disabled={safePage <= 1}
             className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
             style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
@@ -788,7 +799,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             Page {safePage} of {totalPages} • {cards.length} cards
           </span>
           <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => goPage('next')}
             disabled={safePage >= totalPages}
             className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
             style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}

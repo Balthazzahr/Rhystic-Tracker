@@ -96,11 +96,19 @@ input[type='range']::-moz-range-track {
   animation: rt-fade-in 0.2s ease-out;
 }
 
-/* Collection page-change transition: cards slide up + fade in. */
-@keyframes rt-page-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Horizontal page slide: content enters from the right (next page). */
+@keyframes rt-page-right {
+  from { opacity: 0.4; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
 }
-.animate-page-in {
-  animation: rt-page-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+/* Horizontal page slide: content enters from the left (previous page). */
+@keyframes rt-page-left {
+  from { opacity: 0.4; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-page-right {
+  animation: rt-page-right 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.animate-page-left {
+  animation: rt-page-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }

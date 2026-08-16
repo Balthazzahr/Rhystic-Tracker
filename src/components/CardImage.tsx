@@ -75,8 +75,14 @@ interface CardImageProps {
  * Scryfall. Shows the card name + a loading spinner until the image is ready,
  * then swaps to the image (name/spinner disappear).
  */
+// In-memory cache of resolved local file URLs, keyed by name+version. Lets a
+// remounted tile (page change) render its image synchronously instead of
+// flashing the spinner again while the IPC/local-file check re-runs.
+const srcCache = new Map<string, string>();
+
 export function CardImage({ name, version = 'art_crop', className, style, alt, onClick }: CardImageProps) {
-  const [src, setSrc] = useState<string | null>(null);
+  const cacheKey = `${version}:${name}`;
+  const [src, setSrc] = useState<string | null>(() => srcCache.get(cacheKey) || null);
   const [failed, setFailed] = useState(false);
   const mountedRef = useRef(true);
   const attemptRef = useRef(0);
@@ -84,14 +90,21 @@ export function CardImage({ name, version = 'art_crop', className, style, alt, o
   useEffect(() => {
     mountedRef.current = true;
     attemptRef.current = 0;
-    setSrc(null);
-    setFailed(false);
+
+    if (srcCache.has(cacheKey)) {
+      // Already resolved in a previous mount — render immediately.
+      const cached = srcCache.get(cacheKey)!;
+      setSrc(cached);
+      setFailed(false);
+      return () => { mountedRef.current = false; };
+    }
 
     let cancelled = false;
     (async () => {
       const url = await ensureLocalImage(name, version);
       if (cancelled || !mountedRef.current) return;
       if (url) {
+        srcCache.set(cacheKey, url);
         setSrc(url);
       } else {
         setFailed(true);
@@ -99,7 +112,8 @@ export function CardImage({ name, version = 'art_crop', className, style, alt, o
     })();
 
     return () => { cancelled = true; mountedRef.current = false; };
-  }, [name, version]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, version, cacheKey]);
 
   // Retry the local-cache check if the file was somehow missing.
   const retry = () => {
@@ -108,8 +122,10 @@ export function CardImage({ name, version = 'art_crop', className, style, alt, o
     setFailed(false);
     (async () => {
       const url = await ensureLocalImage(name, version);
-      if (mountedRef.current && url) setSrc(url);
-      else if (mountedRef.current) setFailed(true);
+      if (mountedRef.current && url) {
+        srcCache.set(cacheKey, url);
+        setSrc(url);
+      } else if (mountedRef.current) setFailed(true);
     })();
   };
 
