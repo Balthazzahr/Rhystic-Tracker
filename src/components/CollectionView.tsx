@@ -481,7 +481,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         style={{ width: cardW, height: cardH }}
         title={cardName}
       >
-        <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-110" style={{ filter: isOwned ? 'none' : 'saturate(5%)' }}>
+        <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-[1.015]" style={{ filter: isOwned ? 'none' : 'saturate(5%)' }}>
           {card.name ? (
             <CardImage
               name={card.name}
@@ -506,7 +506,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
                 style={{
                   width: owned ? 9 : 6,
                   height: owned ? 9 : 6,
-                  backgroundColor: owned ? '#34D399' : 'rgba(255,255,255,0.45)',
+                  backgroundColor: owned ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.45)',
                   boxShadow: '0 0 3px rgba(0,0,0,0.8)',
                 }}
               />
@@ -626,7 +626,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
               style={{
                 width: i < copiesFilter ? 6 : 4,
                 height: i < copiesFilter ? 6 : 4,
-                backgroundColor: i < copiesFilter ? '#34D399' : `${palette?.text}44`,
+                backgroundColor: i < copiesFilter ? (palette?.accent || '#38BDF8') : `${palette?.text}44`,
               }}
             />
           ))}
