@@ -103,13 +103,15 @@ CREATE TABLE IF NOT EXISTS match_decks (
     submitted_at TEXT,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
--- Set display metadata (name + release date) fetched from Scryfall. Used by the
--- Collection view for set-name labels and release-date sorting. Refreshed on
--- demand via the Settings "Update Set Lists" button.
+-- Set display metadata (name + release date + icon) fetched from Scryfall. Used
+-- by the Collection view for set-name labels, release-date sorting, and the set
+-- filter list (icon + name). Refreshed on demand via the Settings "Update Set
+-- Lists" button.
 CREATE TABLE IF NOT EXISTS sets_metadata (
     set_code TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     released_at TEXT,
+    icon_svg_uri TEXT,
     updated_at TEXT NOT NULL
 );
 "#;

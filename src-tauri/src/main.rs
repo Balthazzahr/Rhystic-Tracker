@@ -1371,7 +1371,8 @@ async fn query_collection(
             r#"
             SELECT c.grp_id, c.name, c.mana_cost, c.cmc, c.colors, c.color_identity,
                    c.set_code, c.rarity, c.card_type,
-                   sm.name as set_name, sm.released_at as set_released_at
+                   sm.name as set_name, sm.released_at as set_released_at,
+                   sm.icon_svg_uri as set_icon
             FROM cards_cache c
             LEFT JOIN sets_metadata sm ON c.set_code = sm.set_code
             WHERE c.grp_id IN ({})
@@ -1402,6 +1403,7 @@ async fn query_collection(
                 "set_code": r.get::<Option<String>, _>("set_code"),
                 "set_name": r.get::<Option<String>, _>("set_name"),
                 "set_released_at": r.get::<Option<String>, _>("set_released_at"),
+                "set_icon": r.get::<Option<String>, _>("set_icon"),
                 "rarity": r.get::<i64, _>("rarity"),
                 "card_type": r.get::<Option<String>, _>("card_type"),
                 "owned_count": owned_count,
@@ -1410,10 +1412,17 @@ async fn query_collection(
     }
 
     // 3. Ownership filter + sort (before pagination so page boundaries are stable).
+    //    `owned` = collected (>=1), `unowned` = not collected. An exact `copies`
+    //    value (1..=4) narrows to cards with exactly that many owned copies.
+    let copies = filters.get("copies").and_then(|v| v.as_u64());
     if owned_filter == "owned" {
         cards.retain(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0);
     } else if owned_filter == "unowned" {
         cards.retain(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) == 0);
+    }
+    if let Some(n) = copies {
+        let n = n.min(4) as i64;
+        cards.retain(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) == n);
     }
 
     sort_collection_cards(&mut cards, &sort, &sort_dir);
@@ -1466,7 +1475,8 @@ async fn get_set_metadata() -> Result<serde_json::Value, String> {
 
     let rows = sqlx::query(
         r#"
-        SELECT DISTINCT c.set_code as set_code, sm.name as name, sm.released_at as released_at
+        SELECT DISTINCT c.set_code as set_code, sm.name as name, sm.released_at as released_at,
+               sm.icon_svg_uri as icon_svg_uri
         FROM cards_cache c
         JOIN (
             SELECT je.value->>'grp_id' as grp_id
@@ -1486,6 +1496,7 @@ async fn get_set_metadata() -> Result<serde_json::Value, String> {
             "set_code": r.get::<Option<String>,_>("set_code"),
             "name": r.get::<Option<String>,_>("name"),
             "released_at": r.get::<Option<String>,_>("released_at"),
+            "icon_svg_uri": r.get::<Option<String>,_>("icon_svg_uri"),
         })
     }).collect();
 
@@ -1528,22 +1539,25 @@ async fn refresh_set_metadata(sets: serde_json::Value) -> Result<serde_json::Val
             .and_then(|v| v.as_str())
             .unwrap_or("").to_string();
         let released_at = s.get("released_at").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let icon_svg_uri = s.get("icon_svg_uri").and_then(|v| v.as_str()).map(|s| s.to_string());
         if code.is_empty() || name.is_empty() {
             continue;
         }
         sqlx::query(
             r#"
-            INSERT INTO sets_metadata (set_code, name, released_at, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sets_metadata (set_code, name, released_at, icon_svg_uri, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(set_code) DO UPDATE SET
                 name = excluded.name,
                 released_at = COALESCE(excluded.released_at, sets_metadata.released_at),
+                icon_svg_uri = COALESCE(excluded.icon_svg_uri, sets_metadata.icon_svg_uri),
                 updated_at = excluded.updated_at
             "#
         )
         .bind(&code)
         .bind(&name)
         .bind(&released_at)
+        .bind(&icon_svg_uri)
         .bind(&now)
         .execute(db.pool())
         .await
@@ -3165,6 +3179,45 @@ mod tests {
 
         let page3 = query_collection(pool, &serde_json::json!({"page": 3, "page_size": 2})).await.unwrap();
         assert_eq!(page3.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_query_collection_copies_filter() {
+        let db = DatabaseManager::init().await.expect("db init");
+        let pool = db.pool();
+
+        seed_card(pool, 1001, "Knight of Dawn", "o2oW", "1", "LEA", 4, "Creature").await;
+        seed_card(pool, 1002, "Serra Angel", "o3oWoW", "1", "LEA", 3, "Creature").await;
+        seed_card(pool, 1003, "Counterspell", "oUoU", "2", "LEA", 2, "Instant").await;
+        seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":4},{"grp_id":1002,"count":3},{"grp_id":1003,"count":1}]"#).await;
+        set_owned(pool, 1001, 2).await;
+        set_owned(pool, 1002, 4).await;
+        set_owned(pool, 1003, 1).await;
+
+        let all = query_collection(pool, &serde_json::json!({})).await.unwrap();
+        assert_eq!(all.get("cards").and_then(|v| v.as_array()).unwrap().len(), 3);
+
+        // Exactly 2 copies -> only 1001.
+        let two = query_collection(pool, &serde_json::json!({"copies": 2})).await.unwrap();
+        let cards2 = two.get("cards").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(cards2.len(), 1);
+        assert_eq!(cards2[0].get("grp_id").and_then(|v| v.as_i64()).unwrap(), 1001);
+
+        // Exactly 4 copies -> only 1002.
+        let four = query_collection(pool, &serde_json::json!({"copies": 4})).await.unwrap();
+        let cards4 = four.get("cards").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(cards4.len(), 1);
+        assert_eq!(cards4[0].get("grp_id").and_then(|v| v.as_i64()).unwrap(), 1002);
+
+        // Exactly 1 copy -> only 1003.
+        let one = query_collection(pool, &serde_json::json!({"copies": 1})).await.unwrap();
+        let cards1 = one.get("cards").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(cards1.len(), 1);
+        assert_eq!(cards1[0].get("grp_id").and_then(|v| v.as_i64()).unwrap(), 1003);
+
+        // Combined: owned + exactly 2 copies -> 1001.
+        let owned_two = query_collection(pool, &serde_json::json!({"owned": "owned", "copies": 2})).await.unwrap();
+        assert_eq!(owned_two.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);
     }
 
     #[tokio::test]
