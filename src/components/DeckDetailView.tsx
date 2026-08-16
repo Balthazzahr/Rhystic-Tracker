@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
-import { CardNameTooltip } from './CardNameTooltip';
 import DeckCardList from './DeckCardList';
 import TrueDeckListView from './TrueDeckListView';
 
@@ -17,11 +16,11 @@ interface DeckDetailViewProps {
   onViewAll: () => void;
   onDeckListImported?: () => void;
   formatDateShort: (ts: string) => string;
+  onShowCard: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
+  onDeleteDeck: (deckName: string) => void;
 }
 
-// Scryfall card image (full card, for the hover preview) + art crop for the header.
-const scryfallCardUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
+// Scryfall art crop for the commander header image.
 const scryfallArtUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
@@ -145,8 +144,9 @@ export function DeckDetailView({
   onViewAll,
   onDeckListImported,
   formatDateShort,
+  onShowCard,
+  onDeleteDeck,
 }: DeckDetailViewProps) {
-  const [hoverCmdr, setHoverCmdr] = useState<{ x: number; y: number } | null>(null);
   const [tip, setTip] = useState<Tip | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
@@ -285,37 +285,51 @@ export function DeckDetailView({
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Title card (full width) */}
           <div className="px-5 pt-4 shrink-0">
-            <div className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+            <div className="p-5 rounded-2xl border space-y-4 group/title" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               {/* Row 1: deck name + commander + mana pips */}
               <div className="flex items-center gap-6">
-                <h2 className="text-5xl font-black font-outfit uppercase tracking-wide shrink-0" style={{ color: palette?.text }}>
-                  {detail.deck_name}
-                </h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  <h2 className="text-5xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                    {detail.deck_name}
+                  </h2>
+                  {/* Delete deck — shows on hover, red trash icon */}
+                  <button
+                    onClick={() => onDeleteDeck(detail.deck_name)}
+                    className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20"
+                    style={{ color: '#F87171' }}
+                    title="Delete deck"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
 
-                {/* Commander: name first, picture after, right-justified before pips */}
+                {/* Commander: clickable name opens the card viewer */}
                 {detail.commander_name && (
                   <div className="flex items-center gap-4 ml-auto shrink-0">
                     <div className="text-right">
                       <p className="text-[10px] font-mono uppercase opacity-50">Commander</p>
                       <button
-                        onMouseMove={(e) => setHoverCmdr({ x: e.clientX, y: e.clientY })}
-                        onMouseLeave={() => setHoverCmdr(null)}
-                        className="text-xl font-bold hover:underline cursor-help"
+                        onClick={() => onShowCard({ name: detail.commander_name }, true)}
+                        className="text-xl font-bold transition-colors hover:underline"
                         style={{ color: palette?.accent || '#38BDF8' }}
-                        title="Hover to preview card"
+                        title="View card"
                       >
                         {detail.commander_name}
                       </button>
                     </div>
-                    <CardNameTooltip name={detail.commander_name}>
+                    <button
+                      onClick={() => onShowCard({ name: detail.commander_name }, true)}
+                      className="shrink-0"
+                      title="View card"
+                    >
                       <img
                         src={scryfallArtUrl(detail.commander_name)}
                         alt={detail.commander_name}
-                        className="w-20 h-20 rounded-xl object-cover border"
+                        className="w-20 h-20 rounded-xl object-cover border transition-opacity hover:opacity-80"
                         style={{ borderColor: `${palette?.border}66` }}
                         onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
                       />
-                    </CardNameTooltip>
+                    </button>
                   </div>
                 )}
 
@@ -667,16 +681,6 @@ export function DeckDetailView({
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Floating commander card preview on hover */}
-        {hoverCmdr && detail.commander_name && (
-          <div
-            className="fixed pointer-events-none z-[60] w-[340px] rounded-xl overflow-hidden border shadow-2xl transition-opacity duration-150"
-            style={{ left: `${hoverCmdr.x + 18}px`, top: `${Math.min(hoverCmdr.y - 100, window.innerHeight - 560)}px`, borderColor: palette?.border }}
-          >
-            <img src={scryfallCardUrl(detail.commander_name)} alt={detail.commander_name} className="w-full" />
           </div>
         )}
 

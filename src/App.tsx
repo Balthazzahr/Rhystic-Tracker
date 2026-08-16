@@ -2549,6 +2549,8 @@ export default function App() {
           }
         }}
         formatDateShort={formatDateShort}
+        onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+        onDeleteDeck={(name) => setDeckToDelete(name)}
       />
 
       {/* Stage 5B: Full Match Info Overlay Modal */}

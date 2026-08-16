@@ -136,6 +136,6 @@ input[type='range']::-moz-range-track {
 }
 
 /* nf-md-cards — card stack (used for true-decklist source / Deck Library). */
-.nf-md-cards::before { content: '\f0124'; }
+.nf-md-cards::before { content: '\f0638'; }
 /* nf-oct-log — log file (used for logged-only source). */
 .nf-oct-log::before { content: '\f02d1'; }
