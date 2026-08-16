@@ -24,13 +24,6 @@ interface DeckDetailViewProps {
 const scryfallArtUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
-const ownedPctColor = (pct: number | null): string => {
-  if (pct == null) return '#94A3B8';
-  if (pct >= 100) return '#34D399';
-  if (pct >= 50) return '#FBBF24';
-  return '#F87171';
-};
-
 // Mana value histogram (bins 0, 1, 2, 3, 4, 5, 6, 7+). Bars fill the full
 // cell height; each bar shows its mana value label underneath, hover shows count.
 type Tip = { text: string; x: number; y: number };
@@ -153,6 +146,18 @@ export function DeckDetailView({
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Opening the import dialog resets the previous result/error so a fresh
+  // import never shows a stale confirmation from an earlier deck.
+  const openImport = () => {
+    setImportResult(null);
+    setImportError(null);
+    setImportOpen(true);
+  };
+  const closeImport = () => {
+    if (importBusy) return;
+    setImportOpen(false);
+  };
   const [deckListData, setDeckListData] = useState<any>(null);
   const [deckListStatus, setDeckListStatus] = useState<any>(null);
   const [listMode, setListMode] = useState<'logged' | 'true'>('logged');
@@ -160,7 +165,6 @@ export function DeckDetailView({
   const [exportMode, setExportMode] = useState<'true' | 'logged'>('true');
   const [exportText, setExportText] = useState('');
   const [copied, setCopied] = useState(false);
-  const [ownedStats, setOwnedStats] = useState<any>(null);
 
   // Load the export text whenever the dialog opens or the mode changes.
   useEffect(() => {
@@ -201,22 +205,6 @@ export function DeckDetailView({
         });
       } catch (e) {
         if (!cancelled) { setDeckListData(null); setDeckListStatus(null); }
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [isOpen, deckName, importResult]);
-
-  // "% owned" collection completion for this deck.
-  useEffect(() => {
-    if (!isOpen || !deckName) { setOwnedStats(null); return; }
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const stats = await invoke<any>('get_deck_owned_stats', { deckName });
-        if (!cancelled) setOwnedStats(stats);
-      } catch (e) {
-        if (!cancelled) setOwnedStats(null);
       }
     };
     load();
@@ -380,29 +368,6 @@ export function DeckDetailView({
                   <Layers className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
                 </div>
 
-                {/* Collection completion (% owned) */}
-                <div className="rounded-2xl border p-3 space-y-1.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Collection</p>
-                  {ownedStats && ownedStats.total_cards > 0 ? (
-                    <>
-                      <h3 className="text-3xl font-extrabold font-outfit mt-0.5" style={{ color: ownedPctColor(ownedStats.owned_pct) }}>
-                        {ownedStats.owned_pct}%
-                      </h3>
-                      <p className="text-[11px] font-mono opacity-60">
-                        {ownedStats.owned_cards} / {ownedStats.total_cards} cards owned
-                        {ownedStats.has_list ? '' : ' (logged)'}
-                      </p>
-                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${ownedStats.owned_pct}%`, backgroundColor: ownedPctColor(ownedStats.owned_pct) }} />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-[11px] font-mono opacity-40 leading-relaxed">
-                      No data — import a decklist or play matches to estimate completion
-                    </p>
-                  )}
-                </div>
-
                 {/* Win rate by position */}
                 <div className="rounded-2xl border p-3 space-y-3" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
                   <p className="text-[10px] uppercase font-semibold opacity-60">Win Rate by Position</p>
@@ -476,7 +441,7 @@ export function DeckDetailView({
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => setImportOpen(true)}
+                    onClick={openImport}
                     className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
                     style={{ color: '#34D399', borderColor: '#34D39955' }}
                     title="Import a decklist from MTGA"
@@ -507,7 +472,7 @@ export function DeckDetailView({
                 <div className="flex-1 flex flex-col items-center justify-center min-h-0">
                   <div
                     className="flex flex-col items-center gap-2 text-center cursor-pointer select-none"
-                    onClick={() => setImportOpen(true)}
+                    onClick={openImport}
                   >
                     <p className="text-sm font-mono text-center opacity-40" style={{ color: palette?.text }}>
                       Click Import Decklist
@@ -528,7 +493,7 @@ export function DeckDetailView({
         {importOpen && (
           <div
             className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-text"
-            onClick={() => { if (!importBusy) setImportOpen(false); }}
+            onClick={closeImport}
           >
             <div
               className="w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden"
@@ -540,7 +505,7 @@ export function DeckDetailView({
                   <p className="text-sm font-bold font-outfit" style={{ color: palette?.text }}>Import Decklist</p>
                   <p className="text-[10px] font-mono opacity-50">Paste the deck export from MTGA (Ctrl+V)</p>
                 </div>
-                <button onClick={() => { if (!importBusy) setImportOpen(false); }} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
+                <button onClick={closeImport} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -573,7 +538,7 @@ export function DeckDetailView({
 
               <div className="p-4 border-t flex items-center justify-end gap-2 shrink-0" style={{ borderColor: palette?.border }}>
                 <button
-                  onClick={() => setImportOpen(false)}
+                  onClick={closeImport}
                   disabled={importBusy}
                   className="px-4 py-1.5 rounded-lg border text-xs font-bold opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
                   style={{ borderColor: palette?.border, color: palette?.text }}
