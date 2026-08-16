@@ -28,7 +28,7 @@ import { listen } from '@tauri-apps/api/event';
 import { ManaPip } from './components/ManaPip';
 import { ManaFontPip } from './components/ManaFontPip';
 import { parseMtgaManaCost } from './utils/manaUtils';
-import { setCardStylePref } from './utils/cardStylePrefs';
+import { getCardStylePref, setCardStylePref } from './utils/cardStylePrefs';
 import { SettingsView } from './components/SettingsView';
 import { CustomDropdown } from './components/CustomDropdown';
 import { CardItem } from './components/CardBreakdown';
@@ -396,7 +396,15 @@ export default function App() {
         const printings = res?.printings || [];
         setOverlayPrintings(printings);
         setOverlayStats(res?.stats || null);
-        if (printings.length > 0) setOverlaySelected(printingKey(printings[0]));
+        if (printings.length > 0) {
+          // Prefer the saved card-style preference; else the newest printing.
+          const pref = getCardStylePref(name);
+          const saved = pref?.setCode && pref?.collectorNumber
+            ? printings.find((p) => String(p.set_code) === String(pref.setCode)
+                && String(p.collector_number) === String(pref.collectorNumber))
+            : null;
+          setOverlaySelected(saved ? printingKey(saved) : printingKey(printings[0]));
+        }
         // Fetch flavor text for each printing so it matches the selected art.
         const flavors: Record<string, string> = {};
         for (const p of printings) {
@@ -2684,8 +2692,8 @@ export default function App() {
                             setDeckCardOverlay(null);
                             setSelectedDeckName(d);
                           }}
-                          className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-all hover:bg-white/15 hover:border-sky-400/60 hover:text-sky-300 cursor-pointer"
-                          style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.text, backgroundColor: 'rgba(0,0,0,0.25)' }}
+                          className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-colors bg-slate-900/60 hover:bg-slate-600 hover:text-white hover:border-slate-400 cursor-pointer"
+                          style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.text }}
                           title={`Open ${d}`}
                         >
                           {d}

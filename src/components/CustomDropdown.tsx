@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {
@@ -13,27 +14,63 @@ interface CustomDropdownProps {
   palette?: any;
 }
 
+/**
+ * Dark-themed dropdown. The menu is rendered through a portal to document.body
+ * and positioned via the trigger's bounding rect, so it is never clipped by an
+ * ancestor's overflow (e.g. the card-viewer overlay) and always stays within the
+ * window. Opens downward, but flips upward if there isn't enough room below.
+ */
 export function CustomDropdown({ options, value, onChange, palette }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
 
-  const selectedOption = options.find(o => o.value === value) || options[0];
+  const updatePos = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const menuHeight = Math.min(256, options.length * 34 + 8);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < menuHeight && rect.top > menuHeight;
+    setPos({
+      top: openUp ? rect.top - menuHeight - 6 : rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+      openUp,
+    });
+  }, [options.length]);
+
+  const open = () => {
+    updatePos();
+    setIsOpen(true);
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+      if (triggerRef.current && triggerRef.current.contains(e.target as Node)) return;
+      // Close when clicking outside the menu (the menu is portaled to body).
+      if (pos && (e.target as HTMLElement).closest?.('[data-rt-dropdown-menu]')) return;
+      setIsOpen(false);
     };
+    const handleScroll = () => setIsOpen(false);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', () => setIsOpen(false));
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', () => setIsOpen(false));
+    };
+  }, [pos]);
+
+  const selectedOption = options.find(o => o.value === value) || options[0];
 
   return (
-    <div ref={dropdownRef} className="relative w-full">
+    <div className="relative w-full">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={open}
         className="w-full mt-1 px-3 py-1.5 text-xs font-semibold rounded-xl border flex items-center justify-between transition-all hover:bg-white/5"
         style={{
           backgroundColor: palette?.mantle || '#12141A',
@@ -41,16 +78,22 @@ export function CustomDropdown({ options, value, onChange, palette }: CustomDrop
           borderColor: palette?.border || '#2A2F3D',
         }}
       >
-        <span className="truncate">{selectedOption.label}</span>
+        <span className="truncate">{selectedOption?.label || ''}</span>
         <ChevronDown className={`w-3.5 h-3.5 opacity-60 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && (
+      {isOpen && pos && createPortal(
         <div
-          className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
+          data-rt-dropdown-menu
+          className="fixed z-[200] rounded-xl border shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
           style={{
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            maxWidth: Math.min(pos.width, window.innerWidth - 16),
             backgroundColor: palette?.surface || '#1A1D24',
             borderColor: palette?.border || '#2A2F3D',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
           }}
         >
           {options.map((opt) => {
@@ -74,7 +117,8 @@ export function CustomDropdown({ options, value, onChange, palette }: CustomDrop
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
