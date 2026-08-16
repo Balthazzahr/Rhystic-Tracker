@@ -3,13 +3,14 @@ import {
   Search,
   Minus,
   Plus,
-  Filter,
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
   Table2,
-  Maximize2,
-  Minimize2,
+  SlidersHorizontal,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
@@ -53,7 +54,19 @@ const RARITY_INFO: Record<number, { label: string; color: string }> = {
   5: { label: 'Mythic', color: '#F97316' },
 };
 
+// MTGA rarity codes, shown in Arena order: Basic Land, Common, Uncommon, Rare, Mythic.
+const RARITY_ORDER: { value: number; label: string }[] = [
+  { value: 1, label: 'Basic Land' },
+  { value: 2, label: 'Common' },
+  { value: 3, label: 'Uncommon' },
+  { value: 4, label: 'Rare' },
+  { value: 5, label: 'Mythic' },
+];
+
 const CARD_TYPES = ['Creature', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Land', 'Planeswalker', 'Battle', 'Other'];
+
+// Mana Value options: 0..7 exact, 8 means "8 or more" (like MTGA's 8+ pip).
+const CMC_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 
 const SORT_OPTIONS = [
   { value: 'name', label: 'Name' },
@@ -80,11 +93,13 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [cmcFilter, setCmcFilter] = useState<number | null>(null);
+  const [copiesFilter, setCopiesFilter] = useState<number | null>(null);
   const [sort, setSort] = useState<string>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showAdvModal, setShowAdvModal] = useState(false);
 
-  const [setOptions, setSetOptions] = useState<{ set_code: string; name: string | null; released_at: string | null }[]>([]);
+  const [setOptions, setSetOptions] = useState<{ set_code: string; name: string | null; released_at: string | null; icon_svg_uri: string | null }[]>([]);
   const [setNameQuery, setSetNameQuery] = useState('');
 
   // View mode + card size, persisted locally.
@@ -131,7 +146,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [view, showFilterPanel]);
+  }, [view]);
 
   const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
   const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
@@ -163,6 +178,16 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return () => { cancelled = true; };
   }, []);
 
+  // Close the advanced-filter modal on Escape.
+  useEffect(() => {
+    if (!showAdvModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowAdvModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showAdvModal]);
+
   const fetchCollection = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -176,6 +201,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           colors: selectedColors.length ? selectedColors : null,
           rarities: selectedRarities.length ? selectedRarities : null,
           types: selectedTypes.length ? selectedTypes : null,
+          cmc: cmcFilter,
+          copies: copiesFilter,
           search: search.trim() === '' ? null : search.trim(),
           sort,
           sort_dir: sortDir,
@@ -191,15 +218,23 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, search, sort, sortDir]);
+  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, cmcFilter, copiesFilter, search, sort, sortDir]);
+
+  // CMC has no backend support yet, so filter client-side on the full result
+  // set. `copies` IS backend-filtered, but the summary/pagination below run on
+  // the same filtered list so both stay consistent.
+  const filteredCards = useMemo(() => {
+    if (cmcFilter === null) return cards;
+    return cards.filter((c) => (cmcFilter === 8 ? c.cmc >= 8 : c.cmc === cmcFilter));
+  }, [cards, cmcFilter]);
 
   // Client-side pagination derived at render (never feeds the network fetch).
-  const totalPages = Math.max(1, Math.ceil(cards.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const displayedCards = useMemo(() => {
     const start = (safePage - 1) * pageSize;
-    return cards.slice(start, start + pageSize);
-  }, [cards, safePage, pageSize]);
+    return filteredCards.slice(start, start + pageSize);
+  }, [filteredCards, safePage, pageSize]);
 
   const ownedCount = useMemo(() => cards.filter((c) => c.owned_count > 0).length, [cards]);
   const ownedCopies = useMemo(() => cards.reduce((s, c) => s + c.owned_count, 0), [cards]);
@@ -209,7 +244,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   }, [fetchCollection]);
 
   // Reset to page 1 whenever filters/sort change (but not when only paging).
-  const filterKey = [ownedFilter, selectedSets.join(','), selectedColors.join(','), selectedRarities.join(','), selectedTypes.join(','), search, sort, sortDir].join('|');
+  const filterKey = [ownedFilter, selectedSets.join(','), selectedColors.join(','), selectedRarities.join(','), selectedTypes.join(','), cmcFilter, copiesFilter, search, sort, sortDir].join('|');
   const prevFilterKey = useRef(filterKey);
   useEffect(() => {
     if (prevFilterKey.current !== filterKey) {
@@ -218,9 +253,14 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     }
   }, [filterKey]);
 
-  const hasActiveFilters =
+  // Any advanced-filter state active -> the top-bar sliders icon turns gold.
+  const hasActiveAdvancedFilters =
     ownedFilter !== 'all' || selectedSets.length > 0 || selectedColors.length > 0 ||
-    selectedRarities.length > 0 || selectedTypes.length > 0 || search.trim() !== '';
+    selectedRarities.length > 0 || selectedTypes.length > 0 || cmcFilter !== null ||
+    copiesFilter !== null;
+
+  const hasActiveFilters =
+    hasActiveAdvancedFilters || search.trim() !== '';
 
   const clearAllFilters = () => {
     setOwnedFilter('all');
@@ -228,6 +268,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     setSelectedColors([]);
     setSelectedRarities([]);
     setSelectedTypes([]);
+    setCmcFilter(null);
+    setCopiesFilter(null);
     setSearch('');
     setSort('name');
     setSortDir('asc');
@@ -321,6 +363,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     }
   };
 
+  // Sets sorted by most-recent release date first, filtered by the search box.
   const sortedSets = useMemo(() => {
     const q = setNameQuery.trim().toLowerCase();
     const filtered = setOptions.filter((s) =>
@@ -331,11 +374,6 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       (a.name || a.set_code || '').localeCompare(b.name || b.set_code || '')
     );
   }, [setOptions, setNameQuery]);
-
-  const setLabel = (code: string) => {
-    const s = setOptions.find((x) => x.set_code === code);
-    return s?.name ? `${s.name} (${code})` : code;
-  };
 
   const renderOwnedControl = (card: CollectionCard) => {
     const isOwned = card.owned_count > 0;
@@ -474,59 +512,29 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             {ownedCount} / {cards.length} cards owned • {ownedCopies} total copies
           </p>
         </div>
-        <div className="relative w-64">
+        {error && <span className="text-[11px] font-mono text-rose-400">{error}</span>}
+      </div>
+
+      {/* Top bar */}
+      <div
+        className="shrink-0 rounded-2xl border p-2.5 flex items-center gap-2.5"
+        style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+      >
+        {/* Search */}
+        <div className="relative w-64 shrink-0">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
           <input
             type="text"
             placeholder="Search cards..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border bg-black/30 focus:outline-none"
+            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border bg-black/30 focus:outline-none"
             style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
           />
         </div>
-      </div>
 
-      {/* Filter bar */}
-      <div className="shrink-0 rounded-2xl border p-3 flex items-center flex-wrap gap-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-        {/* Filters button */}
-        <button
-          onClick={() => setShowFilterPanel(!showFilterPanel)}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 ${
-            showFilterPanel || hasActiveFilters ? 'opacity-100' : 'opacity-70'
-          }`}
-          style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-        >
-          <Filter className="w-3.5 h-3.5" style={{ color: palette?.accent }} />
-          Filters
-          {hasActiveFilters && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
-        </button>
-
-        {/* Ownership segmented control */}
-        <div className="flex rounded-xl border overflow-hidden" style={{ borderColor: palette?.border }}>
-          {(['all', 'owned', 'unowned'] as const).map((o) => {
-            const active = ownedFilter === o;
-            return (
-              <button
-                key={o}
-                onClick={() => setOwnedFilter(o)}
-                className={`px-3 py-1.5 text-[11px] font-mono font-bold uppercase tracking-wide transition-colors ${
-                  active ? '' : 'opacity-50 hover:opacity-80'
-                }`}
-                style={{
-                  color: active ? (palette?.accent || '#38BDF8') : palette?.text,
-                  backgroundColor: active ? `${palette?.accent || '#38BDF8'}1a` : 'transparent',
-                  borderRight: `1px solid ${palette?.border || '#2A2F3D'}`,
-                }}
-              >
-                {o === 'all' ? 'All' : o === 'owned' ? 'Owned' : 'Unowned'}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Color pips */}
-        <div className="flex items-center gap-1.5">
+        {/* Color pips: multi-select, toggles selectedColors. */}
+        <div className="flex items-center gap-1.5 pl-0.5">
           {['W', 'U', 'B', 'R', 'G', 'C'].map((c) => {
             const active = selectedColors.includes(c);
             return (
@@ -542,7 +550,23 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           })}
         </div>
 
-        {/* Sort dropdown */}
+        {/* Advanced Filter */}
+        <button
+          onClick={() => setShowAdvModal(true)}
+          className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border transition-all hover:bg-white/5 ${
+            hasActiveAdvancedFilters ? '' : 'opacity-60 hover:opacity-100'
+          }`}
+          style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+          title="Advanced filters"
+        >
+          <SlidersHorizontal
+            className="w-3.5 h-3.5"
+            style={{ color: hasActiveAdvancedFilters ? '#FBBF24' : palette?.text }}
+          />
+          {hasActiveAdvancedFilters && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+        </button>
+
+        {/* Sort dropdown + direction toggle */}
         <div className="w-40">
           <CustomDropdown
             options={SORT_OPTIONS}
@@ -582,151 +606,19 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           </button>
         </div>
 
-        {/* Card size toggle (cards view only) */}
+        {/* Card size toggle (cards view only): the icon shows what you'll
+            switch TO — zoom-in when currently small, zoom-out when large. */}
         {view === 'cards' && (
           <button
             onClick={() => setCardSize(cardSize === 'small' ? 'large' : 'small')}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5"
+            className="flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all hover:bg-white/5"
             style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
             title={cardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards'}
           >
-            {cardSize === 'small' ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-            {cardSize === 'small' ? 'Large' : 'Small'}
+            {cardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
           </button>
         )}
-
-        {error && <span className="text-[11px] font-mono text-rose-400">{error}</span>}
       </div>
-
-      {/* Filter panel */}
-      {showFilterPanel && (
-        <div className="shrink-0 rounded-2xl border shadow-xl p-4 space-y-4" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-          <div className="flex items-center justify-between">
-            <Filter className="w-4 h-4" style={{ color: palette?.accent }} />
-            <button
-              onClick={clearAllFilters}
-              className="text-[10px] font-mono opacity-60 hover:opacity-100 underline"
-            >
-              Clear all
-            </button>
-          </div>
-
-          <div className="grid grid-cols-4 gap-6">
-            {/* Set filter: searchable, multi-select chips */}
-            <div>
-              <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Set</p>
-              <input
-                type="text"
-                placeholder="Search sets..."
-                value={setNameQuery}
-                onChange={(e) => setSetNameQuery(e.target.value)}
-                className="w-full pl-2.5 pr-2.5 py-1.5 text-xs rounded-lg border bg-black/30 focus:outline-none mb-2"
-                style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
-              />
-              <div className="max-h-44 overflow-y-auto custom-scrollbar space-y-1 pr-1">
-                {sortedSets.map((s) => {
-                  const active = selectedSets.includes(s.set_code);
-                  return (
-                    <button
-                      key={s.set_code}
-                      onClick={() => toggleIn(selectedSets, s.set_code, setSelectedSets)}
-                      className={`w-full flex items-center justify-between gap-2 px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                        active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
-                      }`}
-                      style={{
-                        backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                        borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                        color: active ? (palette?.accent || '#38BDF8') : palette?.text,
-                      }}
-                      title={s.released_at ? `Released ${s.released_at}` : s.set_code}
-                    >
-                      <span className="truncate">{setLabel(s.set_code)}</span>
-                      {active && <span className="text-[10px] font-mono shrink-0">✓</span>}
-                    </button>
-                  );
-                })}
-                {sortedSets.length === 0 && (
-                  <p className="text-[10px] font-mono opacity-40">No sets match</p>
-                )}
-              </div>
-            </div>
-
-            {/* Color filter */}
-            <div>
-              <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Color Identity</p>
-              <div className="flex items-center gap-2">
-                {['W', 'U', 'B', 'R', 'G', 'C'].map((c) => {
-                  const active = selectedColors.includes(c);
-                  return (
-                    <button
-                      key={c}
-                      onClick={() => toggleIn(selectedColors, c, setSelectedColors)}
-                      className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
-                      title={c === 'C' ? 'Colorless' : `Toggle ${c}`}
-                    >
-                      <ManaPip symbol={c} size={24} />
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[9px] font-mono opacity-40 mt-2">Any selected color identity</p>
-            </div>
-
-            {/* Rarity filter */}
-            <div>
-              <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Rarity</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[2, 3, 4, 5, 1].map((r) => {
-                  const active = selectedRarities.includes(r);
-                  const info = RARITY_INFO[r];
-                  return (
-                    <button
-                      key={r}
-                      onClick={() => setSelectedRarities(active ? selectedRarities.filter((x) => x !== r) : [...selectedRarities, r])}
-                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                        active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
-                      }`}
-                      style={{
-                        backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                        borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                        color: active ? (palette?.accent || '#38BDF8') : info.color,
-                      }}
-                    >
-                      {info.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Card type filter */}
-            <div>
-              <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Card Type</p>
-              <div className="flex flex-wrap gap-1.5">
-                {CARD_TYPES.map((t) => {
-                  const active = selectedTypes.includes(t);
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => toggleIn(selectedTypes, t, setSelectedTypes)}
-                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                        active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
-                      }`}
-                      style={{
-                        backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                        borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                        color: active ? (palette?.accent || '#38BDF8') : palette?.text,
-                      }}
-                    >
-                      {t}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Content: cards grid or table */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative">
@@ -806,6 +698,288 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           >
             Next <ChevronRight className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Advanced Filter modal (sibling of the grid — the grid stays mounted) */}
+      {showAdvModal && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+          onClick={() => setShowAdvModal(false)}
+        >
+          <div
+            className="w-[900px] max-w-full max-h-[85vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden"
+            style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div
+              className="flex items-center justify-between gap-3 px-5 py-3 border-b shrink-0"
+              style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}
+            >
+              <p
+                className="text-sm font-bold uppercase tracking-wide flex items-center gap-2"
+                style={{ color: palette?.text }}
+              >
+                <SlidersHorizontal className="w-4 h-4" style={{ color: hasActiveAdvancedFilters ? '#FBBF24' : palette?.text }} />
+                Advanced Filters
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={clearAllFilters}
+                  className="text-[10px] font-mono opacity-60 hover:opacity-100 underline"
+                >
+                  Clear all
+                </button>
+                <button
+                  onClick={() => setShowAdvModal(false)}
+                  className="p-1.5 rounded-lg border transition-colors hover:bg-white/10"
+                  style={{ borderColor: `${palette?.border}66`, color: palette?.text }}
+                  title="Close (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal body: two columns */}
+            <div className="flex-1 min-h-0 flex">
+              {/* Left column: colors / cmc / collected / copies / rarity / types */}
+              <div
+                className="w-[56%] shrink-0 border-r overflow-y-auto custom-scrollbar p-5 space-y-5"
+                style={{ borderColor: palette?.border }}
+              >
+                {/* Mana cost / color pips + All */}
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Mana Cost / Color</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {['W', 'U', 'B', 'R', 'G', 'C'].map((c) => {
+                      const active = selectedColors.includes(c);
+                      return (
+                        <button
+                          key={c}
+                          onClick={() => toggleIn(selectedColors, c, setSelectedColors)}
+                          className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                          title={c === 'C' ? 'Colorless' : `Toggle ${c}`}
+                        >
+                          <ManaPip symbol={c} size={24} />
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setSelectedColors([])}
+                      className={`ml-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                        selectedColors.length === 0 ? '' : 'opacity-50 hover:opacity-100'
+                      }`}
+                      style={{
+                        backgroundColor: selectedColors.length === 0 ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
+                        borderColor: selectedColors.length === 0 ? (palette?.accent || '#38BDF8') : palette?.border,
+                        color: selectedColors.length === 0 ? (palette?.accent || '#38BDF8') : palette?.text,
+                      }}
+                      title="Clear color filter (show all colors)"
+                    >
+                      All
+                    </button>
+                  </div>
+                  <p className="text-[9px] font-mono opacity-40 mt-2">Any selected color identity</p>
+                </div>
+
+                {/* Mana Value (CMC) */}
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Mana Value</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {CMC_OPTIONS.map((v) => {
+                      const active = cmcFilter === v;
+                      return (
+                        <button
+                          key={v}
+                          onClick={() => setCmcFilter(active ? null : v)}
+                          className={`transition-all ${active ? 'scale-110' : 'opacity-35 hover:opacity-75'}`}
+                          title={v === 8 ? '8 or more mana' : `Mana value ${v}`}
+                        >
+                          {v === 8 ? (
+                            <span className="relative inline-block">
+                              <ManaPip symbol="8" size={24} />
+                              <span
+                                className="absolute -top-1 -right-1.5 text-[11px] font-black leading-none"
+                                style={{ color: '#94A3B8', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+                              >
+                                +
+                              </span>
+                            </span>
+                          ) : (
+                            <ManaPip symbol={String(v)} size={24} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Collected / Not Collected */}
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Collected</p>
+                  <div className="flex rounded-xl border overflow-hidden w-fit" style={{ borderColor: palette?.border }}>
+                    {(['all', 'owned', 'unowned'] as const).map((o) => {
+                      const active = ownedFilter === o;
+                      return (
+                        <button
+                          key={o}
+                          onClick={() => setOwnedFilter(o)}
+                          className={`px-3 py-1.5 text-[11px] font-mono font-bold uppercase tracking-wide transition-colors ${
+                            active ? '' : 'opacity-50 hover:opacity-80'
+                          }`}
+                          style={{
+                            color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}1a` : 'transparent',
+                            borderRight: `1px solid ${palette?.border || '#2A2F3D'}`,
+                          }}
+                        >
+                          {o === 'all' ? 'All' : o === 'owned' ? 'Collected' : 'Not Collected'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Copy count filter */}
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Copies Owned</p>
+                  <div className="flex items-center gap-1.5">
+                    {[1, 2, 3, 4].map((n) => {
+                      const active = copiesFilter === n;
+                      return (
+                        <button
+                          key={n}
+                          onClick={() => setCopiesFilter(active ? null : n)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all ${
+                            active ? '' : 'opacity-50 hover:opacity-100'
+                          }`}
+                          style={{
+                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
+                            borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
+                            color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                          }}
+                          title={`Exactly ${n} copies owned`}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Rarity */}
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Rarity</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RARITY_ORDER.map((r) => {
+                      const active = selectedRarities.includes(r.value);
+                      const info = RARITY_INFO[r.value] || { color: '#9CA3AF' };
+                      return (
+                        <button
+                          key={r.value}
+                          onClick={() => setSelectedRarities(active ? selectedRarities.filter((x) => x !== r.value) : [...selectedRarities, r.value])}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                            active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                          }`}
+                          style={{
+                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
+                            borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
+                            color: active ? (palette?.accent || '#38BDF8') : info.color,
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Card type */}
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Card Type</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CARD_TYPES.map((t) => {
+                      const active = selectedTypes.includes(t);
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => toggleIn(selectedTypes, t, setSelectedTypes)}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                            active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                          }`}
+                          style={{
+                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
+                            borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
+                            color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                          }}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right column: set filter */}
+              <div className="flex-1 min-w-0 flex flex-col p-5">
+                <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">
+                  Set <span className="normal-case opacity-50">({selectedSets.length} selected)</span>
+                </p>
+                <input
+                  type="text"
+                  placeholder="Search sets..."
+                  value={setNameQuery}
+                  onChange={(e) => setSetNameQuery(e.target.value)}
+                  className="w-full pl-2.5 pr-2.5 py-1.5 text-xs rounded-lg border bg-black/30 focus:outline-none mb-2"
+                  style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+                />
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                  {sortedSets.map((s) => {
+                    const active = selectedSets.includes(s.set_code);
+                    return (
+                      <button
+                        key={s.set_code}
+                        onClick={() => toggleIn(selectedSets, s.set_code, setSelectedSets)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                          active ? 'opacity-100' : 'opacity-55 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
+                          borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
+                          color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                        }}
+                        title={s.released_at ? `Released ${s.released_at}` : s.set_code}
+                      >
+                        {s.icon_svg_uri ? (
+                          <img
+                            src={s.icon_svg_uri}
+                            alt=""
+                            className="w-4 h-4 shrink-0 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span
+                            className="w-4 h-4 shrink-0 rounded-sm flex items-center justify-center text-[7px] font-mono font-bold"
+                            style={{ backgroundColor: `${palette?.accent || '#38BDF8'}33`, color: palette?.text }}
+                          >
+                            {(s.set_code || '').slice(0, 3).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="truncate flex-1 text-left">{s.name || s.set_code}</span>
+                        {active && <span className="text-[10px] font-mono shrink-0">✓</span>}
+                      </button>
+                    );
+                  })}
+                  {sortedSets.length === 0 && (
+                    <p className="text-[10px] font-mono opacity-40">No sets match</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
