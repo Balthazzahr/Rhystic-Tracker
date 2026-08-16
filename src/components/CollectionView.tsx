@@ -101,9 +101,11 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
   // Fixed card footprint (exact image ratio 63:88). Cards never scale with the
   // window — extra space becomes padding, and new rows/columns appear only when
-  // enough room accumulates for another full card.
-  const CARD_W_LARGE = 200;
-  const CARD_W_SMALL = 130;
+  // enough room accumulates for another full card. Sized so the current default
+  // window (1701x1392, 1433px content) fills with 6 across (large) / 7 across
+  // (small) leaving ~5px/3px of horizontal padding.
+  const CARD_W_LARGE = 228;
+  const CARD_W_SMALL = 194;
   const CARD_RATIO = 88 / 63;
   const cardW = cardSize === 'small' ? CARD_W_SMALL : CARD_W_LARGE;
   const cardH = Math.round(cardW * CARD_RATIO);
