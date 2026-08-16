@@ -720,12 +720,14 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       {/* Content: cards grid or table */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative">
         {view === 'cards' && (
-          <div
-            ref={gridWrapRef}
-            className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
-            style={{ paddingTop: 4, paddingBottom: 4 }}
-          >
-            {displayedCards.map(renderCardTile)}
+          <div key={safePage} className="h-full animate-page-in">
+            <div
+              ref={gridWrapRef}
+              className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
+              style={{ paddingTop: 4, paddingBottom: 4 }}
+            >
+              {displayedCards.map(renderCardTile)}
+            </div>
           </div>
         )}
         {view === 'table' && displayedCards.length > 0 && (
