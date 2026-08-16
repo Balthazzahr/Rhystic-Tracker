@@ -46,7 +46,9 @@ async function ensureLocalImage(name: string, version: 'art_crop' | 'normal'): P
       const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
       if (!resp.ok) return null;
       const data = await resp.json();
-      const uris = data.image_uris;
+      // Single-faced cards put image_uris at the top level; double-faced /
+      // modal cards put them on each card_face. Use the front face (first).
+      const uris = data.image_uris || data.card_faces?.[0]?.image_uris;
       const url = uris?.[version] || uris?.normal || null;
       if (!url) return null;
       const blob = await fetchImageBlob(url);

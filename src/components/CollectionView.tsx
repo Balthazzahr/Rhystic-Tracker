@@ -371,15 +371,15 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     );
   };
 
-  const renderCardTile = (card: CollectionCard) => {
+  const renderCardTile = (card: CollectionCard, pageKey: number) => {
     const isOwned = card.owned_count > 0;
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
 
     return (
       <button
-        key={card.grp_id}
+        key={`${pageKey}-${card.grp_id}`}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0"
+        className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0 animate-page-in"
         style={{ width: cardW, height: cardH }}
         title={cardName}
       >
@@ -720,14 +720,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       {/* Content: cards grid or table */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative">
         {view === 'cards' && (
-          <div key={safePage} className="h-full animate-page-in">
-            <div
-              ref={gridWrapRef}
-              className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
-              style={{ paddingTop: 4, paddingBottom: 4 }}
-            >
-              {displayedCards.map(renderCardTile)}
-            </div>
+          <div
+            ref={gridWrapRef}
+            className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
+            style={{ paddingTop: 4, paddingBottom: 4 }}
+          >
+            {displayedCards.map((c) => renderCardTile(c, safePage))}
           </div>
         )}
         {view === 'table' && displayedCards.length > 0 && (
