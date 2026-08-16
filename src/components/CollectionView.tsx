@@ -170,6 +170,26 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         const res = await invoke<any>('get_set_metadata');
         if (!cancelled) {
           setSetOptions((res?.sets || []).filter((s: any) => s.set_code));
+          // First run: populate set names/release dates from Scryfall so the
+          // set filter shows names (not 3-letter codes) without visiting Settings.
+          if (!res?.known_count) {
+            try {
+              const resp = await fetch('https://api.scryfall.com/sets');
+              if (resp.ok) {
+                const data = await resp.json();
+                const sets = (data.data || []).map((s: any) => ({
+                  code: s.code,
+                  name: s.name,
+                  released_at: s.released_at || null,
+                }));
+                await invoke('refresh_set_metadata', { sets });
+                const res2 = await invoke<any>('get_set_metadata');
+                if (!cancelled && res2) setSetOptions((res2.sets || []).filter((s: any) => s.set_code));
+              }
+            } catch (e) {
+              console.error('Failed to auto-populate set metadata:', e);
+            }
+          }
         }
       } catch (e) {
         console.error('Failed to load set metadata:', e);
@@ -333,6 +353,14 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const toggleIn = (list: string[], v: string, setter: (n: string[]) => void) => {
     setter(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   };
+
+  // A few MTGA set codes differ from Keyrune's icon codes; map them so the
+  // correct keyrune glyph renders.
+  const KEYRUNE_CODE_ALIAS: Record<string, string> = {
+    DAR: 'dom', // Dominaria
+    CONF: 'con', // Conflux
+  };
+  const keyruneClass = (code: string) => `ss ss-${(KEYRUNE_CODE_ALIAS[code] || code).toLowerCase()}`;
 
   // Clicking a table column header sets the sort key and toggles direction.
   const sortByColumn = (key: string) => {
@@ -500,6 +528,93 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     );
   };
 
+  // Active advanced-filter chips shown in a pop-down below the top bar. Search
+  // text and the top-bar color pips are excluded (already visible in the bar).
+  const typeIconClass: Record<string, string> = {
+    Creature: 'ms-creature',
+    Planeswalker: 'ms-planeswalker',
+    Battle: 'ms-battle',
+    Instant: 'ms-instant',
+    Sorcery: 'ms-sorcery',
+    Enchantment: 'ms-enchantment',
+    Artifact: 'ms-artifact',
+    Land: 'ms-land',
+    Other: 'ms-multicolor',
+  };
+
+  const activeChips: { key: string; icon: React.ReactNode; label: string; onRemove: () => void }[] = [];
+  for (const sc of selectedSets) {
+    const s = setOptions.find((x) => x.set_code === sc);
+    activeChips.push({
+      key: `set-${sc}`,
+      icon: <i className={`${keyruneClass(sc)} shrink-0`} style={{ fontSize: 15, color: palette?.text }} />,
+      label: s?.name || sc,
+      onRemove: () => toggleIn(selectedSets, sc, setSelectedSets),
+    });
+  }
+  for (const t of selectedTypes) {
+    activeChips.push({
+      key: `type-${t}`,
+      icon: <i className={`ms ${typeIconClass[t] || 'ms-multicolor'} shrink-0`} style={{ fontSize: 13, color: palette?.text }} />,
+      label: t,
+      onRemove: () => toggleIn(selectedTypes, t, setSelectedTypes),
+    });
+  }
+  if (cmcFilter !== null) {
+    activeChips.push({
+      key: 'cmc',
+      icon: <ManaPip symbol={cmcFilter === 8 ? '8' : String(cmcFilter)} size={15} />,
+      label: `Mana value ${cmcFilter === 8 ? '8+' : cmcFilter}`,
+      onRemove: () => setCmcFilter(null),
+    });
+  }
+  for (const r of selectedRarities) {
+    const info = RARITY_INFO[r] || { label: 'Rarity', color: '#9CA3AF' };
+    activeChips.push({
+      key: `rar-${r}`,
+      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: info.color }} />,
+      label: info.label,
+      onRemove: () => setSelectedRarities(selectedRarities.filter((x) => x !== r)),
+    });
+  }
+  if (ownedFilter === 'owned') {
+    activeChips.push({
+      key: 'owned',
+      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#34D399' }} />,
+      label: 'Collected',
+      onRemove: () => setOwnedFilter('all'),
+    });
+  } else if (ownedFilter === 'unowned') {
+    activeChips.push({
+      key: 'unowned',
+      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.text, backgroundColor: 'transparent' }} />,
+      label: 'Not Collected',
+      onRemove: () => setOwnedFilter('all'),
+    });
+  }
+  if (copiesFilter !== null) {
+    activeChips.push({
+      key: 'copies',
+      icon: (
+        <span className="flex items-end gap-0.5 shrink-0">
+          {[0, 1, 2, 3].map((i) => (
+            <span
+              key={i}
+              className="rounded-full"
+              style={{
+                width: i < copiesFilter ? 6 : 4,
+                height: i < copiesFilter ? 6 : 4,
+                backgroundColor: i < copiesFilter ? '#34D399' : `${palette?.text}44`,
+              }}
+            />
+          ))}
+        </span>
+      ),
+      label: `${copiesFilter} copy${copiesFilter === 1 ? '' : 's'}`,
+      onRemove: () => setCopiesFilter(null),
+    });
+  }
+
   return (
     <div className="flex-1 relative flex flex-col space-y-4 overflow-hidden">
       {/* Header */}
@@ -620,6 +735,32 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         )}
       </div>
 
+      {/* Active-filters pop-down: shown when advanced filters are applied
+          (excludes search + top-bar color pips, which are visible in the bar) */}
+      {activeChips.length > 0 && (
+        <div
+          className="shrink-0 rounded-2xl border px-3 py-2 flex items-center flex-wrap gap-x-3 gap-y-1.5 animate-page-right"
+          style={{ backgroundColor: palette?.surface, borderColor: `${palette?.accent || '#38BDF8'}55` }}
+        >
+          <span className="text-[10px] font-mono uppercase tracking-wide font-bold shrink-0" style={{ color: palette?.accent || '#38BDF8' }}>
+            Filtered by
+          </span>
+          {activeChips.map((chip) => (
+            <button
+              key={chip.key}
+              onClick={chip.onRemove}
+              className="group flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-semibold transition-colors hover:bg-white/10"
+              style={{ borderColor: palette?.border, color: palette?.text, backgroundColor: `${palette?.accent || '#38BDF8'}10` }}
+              title="Remove this filter"
+            >
+              {chip.icon}
+              <span>{chip.label}</span>
+              <X className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Content: cards grid or table */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative">
         {view === 'cards' && (
@@ -708,7 +849,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           onClick={() => setShowAdvModal(false)}
         >
           <div
-            className="w-[900px] max-w-full max-h-[85vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden"
+            className="w-[900px] max-w-full max-h-[50vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden"
             style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -953,21 +1094,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
                         }}
                         title={s.released_at ? `Released ${s.released_at}` : s.set_code}
                       >
-                        {s.icon_svg_uri ? (
-                          <img
-                            src={s.icon_svg_uri}
-                            alt=""
-                            className="w-4 h-4 shrink-0 object-contain"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span
-                            className="w-4 h-4 shrink-0 rounded-sm flex items-center justify-center text-[7px] font-mono font-bold"
-                            style={{ backgroundColor: `${palette?.accent || '#38BDF8'}33`, color: palette?.text }}
-                          >
-                            {(s.set_code || '').slice(0, 3).toUpperCase()}
-                          </span>
-                        )}
+                        {/* Keyrune set icon (ss ss-<code>), rendered from the bundled font */}
+                        <i
+                          className={`${keyruneClass(s.set_code || '')} shrink-0`}
+                          style={{ fontSize: 16, color: active ? (palette?.accent || '#38BDF8') : palette?.text }}
+                          title={s.set_code}
+                        />
                         <span className="truncate flex-1 text-left">{s.name || s.set_code}</span>
                         {active && <span className="text-[10px] font-mono shrink-0">✓</span>}
                       </button>
