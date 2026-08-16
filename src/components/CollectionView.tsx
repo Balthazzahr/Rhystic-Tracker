@@ -248,10 +248,10 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     }
   };
 
-  // Wheel-to-change-page: scroll down -> previous page (left), scroll up ->
-  // next page (right). Debounced so a single wheel tick flips exactly one page.
-  // Uses a native listener (React's synthetic onWheel can be swallowed by the
-  // parent overflow-y-auto container) with preventDefault to stop scrolling.
+  // Wheel-to-change-page: scroll down -> next page (right), scroll up ->
+  // previous page (left). Debounced so a single wheel tick flips exactly one
+  // page. Uses a native listener (React's synthetic onWheel can be swallowed
+  // by the parent overflow-y-auto container) with preventDefault.
   const wheelLock = useRef(false);
   const pageCountRef = useRef(1);
   const setPageRef = useRef(setPage);
@@ -268,9 +268,9 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       e.preventDefault();
       wheelLock.current = true;
       if (e.deltaY > 0) {
-        setPageRef.current((p) => Math.max(1, p - 1));
-      } else {
         setPageRef.current((p) => Math.min(pageCountRef.current, p + 1));
+      } else {
+        setPageRef.current((p) => Math.max(1, p - 1));
       }
       setTimeout(() => { wheelLock.current = false; }, 450);
     };
@@ -373,7 +373,6 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
   const renderCardTile = (card: CollectionCard) => {
     const isOwned = card.owned_count > 0;
-    const rarity = RARITY_INFO[card.rarity] || { label: '-', color: '#9CA3AF' };
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
 
     return (
@@ -384,25 +383,37 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         style={{ width: cardW, height: cardH }}
         title={cardName}
       >
-        {card.name ? (
-          <CardImage
-            name={card.name}
-            version="normal"
-            alt={cardName}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 w-full h-full bg-black" />
-        )}
-        {/* Owned count pill */}
-        {isOwned && (
-          <span
-            className="absolute top-1 right-1 z-10 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold tabular-nums"
-            style={{ backgroundColor: 'rgba(0,0,0,0.7)', color: rarity.color }}
-          >
-            {card.owned_count}/4
-          </span>
-        )}
+        <div className="absolute inset-0" style={{ filter: isOwned ? 'none' : 'saturate(5%)' }}>
+          {card.name ? (
+            <CardImage
+              name={card.name}
+              version="normal"
+              alt={cardName}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 w-full h-full bg-black" />
+          )}
+        </div>
+        {/* Ownership dots: big dots = owned copies, small dots = remaining,
+            shown bottom-center left-to-right. */}
+        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-10 flex items-end gap-1">
+          {[0, 1, 2, 3].map((i) => {
+            const owned = i < card.owned_count;
+            return (
+              <span
+                key={i}
+                className="rounded-full"
+                style={{
+                  width: owned ? 9 : 6,
+                  height: owned ? 9 : 6,
+                  backgroundColor: owned ? '#34D399' : 'rgba(255,255,255,0.45)',
+                  boxShadow: '0 0 3px rgba(0,0,0,0.8)',
+                }}
+              />
+            );
+          })}
+        </div>
       </button>
     );
   };
