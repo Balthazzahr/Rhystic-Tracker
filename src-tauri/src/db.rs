@@ -205,6 +205,22 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added result_reason column to matches table");
         }
 
+        // Migration: add icon_svg_uri column to sets_metadata for databases created
+        // before the set-icon feature. CREATE TABLE IF NOT EXISTS won't add columns
+        // to an existing table, so the Collection set filter would fail otherwise.
+        let set_icon_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('sets_metadata') WHERE name = 'icon_svg_uri'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if set_icon_check.is_none() {
+            sqlx::query("ALTER TABLE sets_metadata ADD COLUMN icon_svg_uri TEXT")
+                .execute(&pool)
+                .await?;
+            println!("[DB MIGRATION] Added icon_svg_uri column to sets_metadata table");
+        }
+
         // Migration: backfill cards_cache.cmc from mana_cost. Early imports stored cmc=0
         // for every card. Recompute using the same parse_mtga_cmc() logic the rest of the
         // app relies on. Truly idempotent: only updates rows where the recomputed cmc
