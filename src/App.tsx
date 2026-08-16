@@ -2570,29 +2570,19 @@ export default function App() {
                   />
                 </div>
                 <p className="mt-2.5 text-[9px] font-mono uppercase tracking-wide opacity-50">Card Style / Set</p>
-                <select
-                  value={overlaySelected ?? ''}
-                  onChange={(e) => setOverlaySelected(e.target.value || null)}
-                  disabled={overlayPrintings.length === 0}
-                  className="mt-1 w-full rounded-lg border px-2.5 py-2 text-xs font-mono outline-none disabled:opacity-50"
-                  style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border, color: '#E2E8F0' }}
-                >
-                  {overlayPrintings.length === 0 ? (
-                    <option value="" style={{ backgroundColor: '#12141A', color: '#E2E8F0' }}>
-                      {overlayPrintingsLoading ? 'Loading printings…' : 'No printings found'}
-                    </option>
-                  ) : (
-                    overlayPrintings.map((p) => (
-                      <option
-                        key={printingKey(p)}
-                        value={printingKey(p)}
-                        style={{ backgroundColor: '#12141A', color: '#E2E8F0' }}
-                      >
-                        {p.set_name ? `${p.set_name} (${p.set_code})` : p.set_code}
-                      </option>
-                    ))
-                  )}
-                </select>
+                <div className="mt-1">
+                  <CustomDropdown
+                    options={overlayPrintings.length === 0
+                      ? [{ value: '', label: overlayPrintingsLoading ? 'Loading printings…' : 'No printings found' }]
+                      : overlayPrintings.map((p) => ({
+                          value: printingKey(p),
+                          label: p.set_name ? `${p.set_name} (${p.set_code})` : p.set_code,
+                        }))}
+                    value={overlaySelected ?? ''}
+                    onChange={(val) => setOverlaySelected(val || null)}
+                    palette={palette}
+                  />
+                </div>
               </div>
 
               {/* Info panel */}
@@ -2681,7 +2671,7 @@ export default function App() {
                             setDeckCardOverlay(null);
                             setSelectedDeckName(d);
                           }}
-                          className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-colors hover:bg-white/10 cursor-pointer"
+                          className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-all hover:bg-white/15 hover:border-sky-400/60 hover:text-sky-300 cursor-pointer"
                           style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.text, backgroundColor: 'rgba(0,0,0,0.25)' }}
                           title={`Open ${d}`}
                         >
