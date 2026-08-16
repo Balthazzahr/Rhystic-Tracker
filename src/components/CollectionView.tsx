@@ -634,11 +634,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       <div className="flex items-center justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-            Collection
+            Card Library
           </h1>
-          <p className="text-[11px] font-mono opacity-50 mt-0.5">
-            {serverTotalOwned} / {serverTotalCards} cards owned • {serverTotalOwnedCopies} total copies
-          </p>
         </div>
         {error && <span className="text-[11px] font-mono text-rose-400">{error}</span>}
       </div>
@@ -704,25 +701,30 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           {hasActiveAdvancedFilters && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
         </button>
 
-        {/* Sort dropdown + direction toggle */}
-        <div className="w-40">
+        <div className="flex-1" />
+
+        {/* Sort dropdown with embedded direction toggle: clicking an item once
+            selects it ascending; clicking the same item again toggles direction. */}
+        <div className="w-44">
           <CustomDropdown
-            options={SORT_OPTIONS}
+            options={SORT_OPTIONS.map((o) => ({
+              value: o.value,
+              label: sort === o.value
+                ? `${o.label} (${sortDir === 'asc' ? 'A→Z' : 'Z→A'})`
+                : o.label,
+            }))}
             value={sort}
-            onChange={setSort}
+            onChange={(val) => {
+              if (val === sort) {
+                setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+              } else {
+                setSort(val);
+                setSortDir('asc');
+              }
+            }}
             palette={palette}
           />
         </div>
-        <button
-          onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
-          className="flex items-center gap-1 px-2.5 py-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5"
-          style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-          title="Toggle sort direction"
-        >
-          {sortDir === 'asc' ? '▲' : '▼'}
-        </button>
-
-        <div className="flex-1" />
 
         {/* View toggle */}
         <div className="flex items-center rounded-xl border overflow-hidden" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
@@ -853,7 +855,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="shrink-0 flex items-center justify-center gap-4 pt-1">
+        <div className="shrink-0 flex items-center gap-4 pt-1">
+          <div className="flex-1" />
           <button
             onClick={() => goPage('prev')}
             disabled={safePage <= 1}
@@ -863,7 +866,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             <ChevronLeft className="w-3.5 h-3.5" /> Prev
           </button>
           <span className="text-[11px] font-mono opacity-60">
-            Page {safePage} of {totalPages} • {serverTotalCards} cards
+            Page {safePage} of {totalPages}
           </span>
           <button
             onClick={() => goPage('next')}
@@ -873,6 +876,10 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           >
             Next <ChevronRight className="w-3.5 h-3.5" />
           </button>
+          <div className="flex-1" />
+          <span className="text-[11px] font-mono opacity-70">
+            {serverTotalOwned} / {serverTotalCards} cards owned
+          </span>
         </div>
       )}
 

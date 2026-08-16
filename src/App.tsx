@@ -888,7 +888,7 @@ export default function App() {
     { id: 'decks', label: 'Deck Library', icon: Layers },
     { id: 'matches', label: 'Match History', icon: Swords },
     { id: 'live', label: 'Live Match HUD', icon: Activity },
-    { id: 'collection', label: 'Collection', icon: BookOpen },
+    { id: 'collection', label: 'Card Library', icon: BookOpen },
   ];
 
   const formatOptions = [
