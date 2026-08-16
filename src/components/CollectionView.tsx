@@ -250,19 +250,33 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
   // Wheel-to-change-page: scroll down -> previous page (left), scroll up ->
   // next page (right). Debounced so a single wheel tick flips exactly one page.
+  // Uses a native listener (React's synthetic onWheel can be swallowed by the
+  // parent overflow-y-auto container) with preventDefault to stop scrolling.
   const wheelLock = useRef(false);
-  const onGridWheel = (e: React.WheelEvent) => {
-    if (wheelLock.current) return;
-    if (view !== 'cards' || totalPages <= 1) return;
-    if (Math.abs(e.deltaY) < 20) return;
-    wheelLock.current = true;
-    if (e.deltaY > 0) {
-      setPage((p) => Math.max(1, p - 1));
-    } else {
-      setPage((p) => Math.min(totalPages, p + 1));
-    }
-    setTimeout(() => { wheelLock.current = false; }, 400);
-  };
+  const pageCountRef = useRef(1);
+  const setPageRef = useRef(setPage);
+  setPageRef.current = setPage;
+  pageCountRef.current = totalPages;
+
+  useEffect(() => {
+    const el = gridWrapRef.current;
+    if (!el || view !== 'cards') return;
+    const onWheel = (e: WheelEvent) => {
+      if (wheelLock.current) return;
+      if (pageCountRef.current <= 1) return;
+      if (Math.abs(e.deltaY) < 10) return;
+      e.preventDefault();
+      wheelLock.current = true;
+      if (e.deltaY > 0) {
+        setPageRef.current((p) => Math.max(1, p - 1));
+      } else {
+        setPageRef.current((p) => Math.min(pageCountRef.current, p + 1));
+      }
+      setTimeout(() => { wheelLock.current = false; }, 450);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [view, gridSize]);
 
   const toggleIn = (list: string[], v: string, setter: (n: string[]) => void) => {
     setter(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -697,7 +711,6 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         {view === 'cards' && (
           <div
             ref={gridWrapRef}
-            onWheel={onGridWheel}
             className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
             style={{ paddingTop: 4, paddingBottom: 4 }}
           >

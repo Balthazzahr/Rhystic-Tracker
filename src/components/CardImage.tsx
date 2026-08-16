@@ -1,48 +1,62 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
-// Scryfall image URL cache, persisted to localStorage so each card name is only
-// resolved through the rate-limited `named?exact` endpoint once ever. After a
-// successful resolve the direct cards.scryfall.io URL is reused, which loads
-// from CDN without hitting the API rate limit.
-const CACHE_KEY = 'rhysticCardImageCache_v1';
+// --- Local image cache ------------------------------------------------------
+// Card images are downloaded once and stored under
+// ~/.config/rhystic-tracker/cardimg/. On later renders the local file is used
+// directly (via convertFileSrc), so Scryfall's API is never hit again.
 
-function loadCache(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
-  } catch {
-    return {};
-  }
+// Global queue: Scryfall's named?exact endpoint is rate limited (~10 req/s),
+// so image resolutions are serialized with a small delay between requests to
+// stay well under the limit.
+let queue: Promise<void> = Promise.resolve();
+let inflight = 0;
+const MIN_INTERVAL_MS = 150; // >= 6 req/s max, comfortably under the limit
+
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task);
+  // Chain a delay so the next task doesn't start until MIN_INTERVAL_MS later.
+  queue = run.then(() => new Promise((r) => setTimeout(r, MIN_INTERVAL_MS)), () => new Promise((r) => setTimeout(r, MIN_INTERVAL_MS)));
+  return run;
 }
 
-function saveCache(cache: Record<string, string>) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // ignore quota errors
-  }
+async function fetchImageBlob(url: string): Promise<Blob> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.blob();
 }
 
-// Resolve the direct CDN image URL for a card name via Scryfall's named search
-// (JSON, not the image redirect). Cache the result keyed by name + version.
-export async function resolveCardImageUrl(name: string, version: 'art_crop' | 'normal' = 'art_crop'): Promise<string | null> {
-  const key = `${version}:${name}`;
-  const cache = loadCache();
-  if (cache[key]) return cache[key];
+function blobToBytes(blob: Blob): Promise<Uint8Array> {
+  return blob.arrayBuffer().then((buf) => new Uint8Array(buf));
+}
 
+// Resolve the direct CDN URL, download the bytes, cache to disk, and return
+// the local file path (for convertFileSrc). All rate-limited through the queue.
+async function ensureLocalImage(name: string, version: 'art_crop' | 'normal'): Promise<string | null> {
+  // 1. Already cached locally? (returns the file path if so)
   try {
-    const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const uris = data.image_uris;
-    const url = uris?.[version] || uris?.normal || null;
-    if (url) {
-      cache[key] = url;
-      saveCache(cache);
+    const cached = await invoke<string | null>('has_card_image', { name, version });
+    if (cached) return convertFileSrc(cached);
+  } catch { /* fall through */ }
+
+  // 2. Resolve + download via the shared rate-limited queue.
+  return enqueue(async () => {
+    try {
+      const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const uris = data.image_uris;
+      const url = uris?.[version] || uris?.normal || null;
+      if (!url) return null;
+      const blob = await fetchImageBlob(url);
+      const bytes = await blobToBytes(blob);
+      const path = await invoke<string>('save_card_image', { name, version, data: Array.from(bytes) });
+      return convertFileSrc(path);
+    } catch {
+      return null;
     }
-    return url;
-  } catch {
-    return null;
-  }
+  });
 }
 
 interface CardImageProps {
@@ -55,15 +69,15 @@ interface CardImageProps {
 }
 
 /**
- * <img> that resolves and caches the direct Scryfall CDN image URL for a card
- * name, avoiding repeated rate-limited `named?exact` image requests. Retries
- * with backoff when the CDN fetch fails transiently.
+ * Card image that downloads once, caches locally, and never re-fetches from
+ * Scryfall. Shows the card name + a loading spinner until the image is ready,
+ * then swaps to the image (name/spinner disappear).
  */
 export function CardImage({ name, version = 'art_crop', className, style, alt, onClick }: CardImageProps) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const attemptRef = useRef(0);
   const mountedRef = useRef(true);
+  const attemptRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -71,61 +85,62 @@ export function CardImage({ name, version = 'art_crop', className, style, alt, o
     setSrc(null);
     setFailed(false);
 
-    const key = `${version}:${name}`;
-    const cache = loadCache();
-    if (cache[key]) {
-      setSrc(cache[key]);
-      return;
-    }
-
     let cancelled = false;
-    const tryResolve = async (delayMs = 0) => {
-      await new Promise((r) => setTimeout(r, delayMs));
-      if (cancelled || !mountedRef.current) return;
-      const url = await resolveCardImageUrl(name, version);
+    (async () => {
+      const url = await ensureLocalImage(name, version);
       if (cancelled || !mountedRef.current) return;
       if (url) {
         setSrc(url);
-      } else if (attemptRef.current < 3) {
-        attemptRef.current += 1;
-        tryResolve(1200 * attemptRef.current);
       } else {
         setFailed(true);
       }
-    };
-    tryResolve();
+    })();
+
     return () => { cancelled = true; mountedRef.current = false; };
   }, [name, version]);
 
-  if (failed) {
-    return <div className={className} style={{ ...style, backgroundColor: '#0B0C10' }} />;
-  }
-  if (!src) {
-    return <div className={className} style={{ ...style, backgroundColor: '#0B0C10' }} />;
-  }
+  // Retry the local-cache check if the file was somehow missing.
+  const retry = () => {
+    if (attemptRef.current >= 2) return;
+    attemptRef.current += 1;
+    setFailed(false);
+    (async () => {
+      const url = await ensureLocalImage(name, version);
+      if (mountedRef.current && url) setSrc(url);
+      else if (mountedRef.current) setFailed(true);
+    })();
+  };
+
   return (
-    <img
-      src={src}
-      alt={alt || name}
+    <div
       className={className}
-      style={style}
+      style={{ ...style, position: 'relative', overflow: 'hidden' }}
       onClick={onClick}
-      loading="lazy"
-      onError={() => {
-        // Direct CDN URL failed; clear it so a re-render retries resolution.
-        if (mountedRef.current && attemptRef.current < 3) {
-          attemptRef.current += 1;
-          const key = `${version}:${name}`;
-          const cache = loadCache();
-          delete cache[key];
-          saveCache(cache);
-          setSrc(null);
-          setTimeout(() => resolveCardImageUrl(name, version).then((u) => {
-            if (mountedRef.current && u) setSrc(u);
-          }), 1200 * attemptRef.current);
-        }
-      }}
-    />
+    >
+      {src ? (
+        <img
+          src={src}
+          alt={alt || name}
+          className="w-full h-full object-cover"
+          onError={retry}
+        />
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/70">
+          {/* Loading spinner */}
+          <div
+            className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white/90 animate-spin"
+            style={{ borderTopColor: '#38BDF8' }}
+          />
+          {/* Card name while loading */}
+          <span
+            className="text-[9px] font-mono font-semibold px-1.5 text-center leading-tight"
+            style={{ color: failed ? '#F87171' : '#E2E8F0', maxWidth: '100%' }}
+          >
+            {name}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 

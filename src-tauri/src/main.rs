@@ -1554,6 +1554,47 @@ async fn refresh_set_metadata(sets: serde_json::Value) -> Result<serde_json::Val
     Ok(serde_json::json!({ "updated": count, "at": now }))
 }
 
+/// Directory where downloaded Scryfall card images are cached locally so they
+/// never need re-fetching (avoids the API rate limit on repeat renders).
+/// Lives under Tauri's appConfigDir (~/.config/com.rhystic.tracker) so the
+/// asset protocol scope ($APPCONFIG/cardimg/*) covers it.
+fn card_img_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let img_dir = dir.join("cardimg");
+    std::fs::create_dir_all(&img_dir).map_err(|e| e.to_string())?;
+    Ok(img_dir)
+}
+
+fn card_img_filename(name: &str, version: &str) -> String {
+    // Sanitized name + version; stable across calls for the same card.
+    let mut s: String = name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    s.truncate(80);
+    format!("{}_{}.img", s, version)
+}
+
+/// Save a downloaded card image (bytes) to the local cache. Returns the file
+/// path the frontend can pass to convertFileSrc.
+#[tauri::command]
+fn save_card_image(app: tauri::AppHandle, name: String, version: String, data: Vec<u8>) -> Result<String, String> {
+    let path = card_img_cache_dir(&app)?.join(card_img_filename(&name, &version));
+    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// If a card image is already cached locally, return its file path (for
+/// convertFileSrc); otherwise null.
+#[tauri::command]
+fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Result<Option<String>, String> {
+    let path = card_img_cache_dir(&app)?.join(card_img_filename(&name, &version));
+    if path.exists() {
+        Ok(Some(path.to_string_lossy().to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Per-deck "% owned" stats. Uses the True Decklist when one is imported,
 /// else falls back to the deck's logged player-side cards. pct is card-level
 /// (owned distinct grp_ids / total distinct grp_ids).
@@ -2880,6 +2921,8 @@ fn main() {
             get_collection,
             get_set_metadata,
             refresh_set_metadata,
+            save_card_image,
+            has_card_image,
             get_deck_owned_stats,
             get_commander_info,
             get_opponent_h2h_stats,
