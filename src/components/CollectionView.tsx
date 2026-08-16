@@ -122,18 +122,25 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [gridSize, setGridSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Measure the card-grid area so we can auto-fit columns/rows of fixed cards.
+  // Attached via a callback ref so it observes the real element once it mounts,
+  // and guarded so identical sizes don't retrigger renders/fetches.
   useEffect(() => {
     const el = gridWrapRef.current;
     if (!el) return;
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      setGridSize({ w: rect.width, h: rect.height });
+      setGridSize((prev) => {
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        if (prev.w === w && prev.h === h) return prev;
+        return { w, h };
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [view, showFilterPanel]);
+  }, [view, showFilterPanel, loading]);
 
   const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
   const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
@@ -666,14 +673,17 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       )}
 
       {/* Content: cards grid or table */}
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-        {loading ? (
-          <div className="p-10 text-center text-xs font-mono opacity-40">Loading collection…</div>
-        ) : cards.length === 0 ? (
-          <div className="p-10 text-center text-xs font-mono opacity-40">
-            No cards match the current filters
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative">
+        {view === 'cards' && (
+          <div
+            ref={gridWrapRef}
+            className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
+            style={{ paddingTop: 4, paddingBottom: 4 }}
+          >
+            {cards.map(renderCardTile)}
           </div>
-        ) : view === 'table' ? (
+        )}
+        {view === 'table' && cards.length > 0 && (
           <div className="rounded-2xl border overflow-hidden" style={{ borderColor: palette?.border }}>
             <table className="w-full text-left border-collapse" style={{ color: palette?.text }}>
               <thead>
@@ -705,15 +715,17 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div
-            ref={gridWrapRef}
-            className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
-            style={{ paddingTop: 4, paddingBottom: 4 }}
-          >
-            {cards.map(renderCardTile)}
-          </div>
         )}
+        {/* Loading / empty overlays on top of the mounted grid */}
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+            <span className="text-xs font-mono opacity-70">Loading collection…</span>
+          </div>
+        ) : cards.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-mono opacity-40">No cards match the current filters</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Pagination */}
