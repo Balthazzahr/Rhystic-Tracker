@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
+import { getCardStylePref } from '../utils/cardStylePrefs';
 import { ManaPip } from './ManaPip';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
@@ -475,6 +476,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             <CardImage
               name={card.name}
               version="normal"
+              printing={getCardStylePref(card.name) || undefined}
               alt={cardName}
               className="absolute inset-0 w-full h-full object-cover"
             />

@@ -33,27 +33,31 @@ function blobToBytes(blob: Blob): Promise<Uint8Array> {
 
 // Resolve the direct CDN URL, download the bytes, cache to disk, and return
 // the local file path (for convertFileSrc). All rate-limited through the queue.
-async function ensureLocalImage(name: string, version: 'art_crop' | 'normal'): Promise<string | null> {
+// When a specific printing (set_code + collector_number) is given, use that
+// printing's image instead of the default named?exact resolution.
+async function ensureLocalImage(
+  name: string,
+  version: 'art_crop' | 'normal',
+  printing?: { setCode?: string | null; collectorNumber?: string | null },
+): Promise<string | null> {
+  const cacheName = printing?.setCode && printing.collectorNumber
+    ? `${name}|${printing.setCode}|${printing.collectorNumber}`
+    : name;
   // 1. Already cached locally? (returns the file path if so)
   try {
-    const cached = await invoke<string | null>('has_card_image', { name, version });
+    const cached = await invoke<string | null>('has_card_image', { name: cacheName, version });
     if (cached) return convertFileSrc(cached);
   } catch { /* fall through */ }
 
   // 2. Resolve + download via the shared rate-limited queue.
   return enqueue(async () => {
     try {
-      const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
-      if (!resp.ok) return null;
-      const data = await resp.json();
-      // Single-faced cards put image_uris at the top level; double-faced /
-      // modal cards put them on each card_face. Use the front face (first).
-      const uris = data.image_uris || data.card_faces?.[0]?.image_uris;
-      const url = uris?.[version] || uris?.normal || null;
-      if (!url) return null;
+      const url = printing?.setCode && printing.collectorNumber
+        ? `https://api.scryfall.com/cards/${String(printing.setCode).toLowerCase()}/${encodeURIComponent(String(printing.collectorNumber))}?format=image&version=${version}`
+        : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=${version}`;
       const blob = await fetchImageBlob(url);
       const bytes = await blobToBytes(blob);
-      const path = await invoke<string>('save_card_image', { name, version, data: Array.from(bytes) });
+      const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
       return convertFileSrc(path);
     } catch {
       return null;
@@ -64,6 +68,7 @@ async function ensureLocalImage(name: string, version: 'art_crop' | 'normal'): P
 interface CardImageProps {
   name: string;
   version?: 'art_crop' | 'normal';
+  printing?: { setCode?: string | null; collectorNumber?: string | null };
   className?: string;
   style?: React.CSSProperties;
   alt?: string;
@@ -80,8 +85,11 @@ interface CardImageProps {
 // flashing the spinner again while the IPC/local-file check re-runs.
 const srcCache = new Map<string, string>();
 
-export function CardImage({ name, version = 'art_crop', className, style, alt, onClick }: CardImageProps) {
-  const cacheKey = `${version}:${name}`;
+export function CardImage({ name, version = 'art_crop', printing, className, style, alt, onClick }: CardImageProps) {
+  const printKey = printing?.setCode && printing.collectorNumber
+    ? `${printing.setCode}|${printing.collectorNumber}`
+    : '';
+  const cacheKey = `${version}:${printKey || name}`;
   const [src, setSrc] = useState<string | null>(() => srcCache.get(cacheKey) || null);
   const [failed, setFailed] = useState(false);
   const mountedRef = useRef(true);
@@ -101,7 +109,7 @@ export function CardImage({ name, version = 'art_crop', className, style, alt, o
 
     let cancelled = false;
     (async () => {
-      const url = await ensureLocalImage(name, version);
+      const url = await ensureLocalImage(name, version, printing);
       if (cancelled || !mountedRef.current) return;
       if (url) {
         srcCache.set(cacheKey, url);
@@ -121,7 +129,7 @@ export function CardImage({ name, version = 'art_crop', className, style, alt, o
     attemptRef.current += 1;
     setFailed(false);
     (async () => {
-      const url = await ensureLocalImage(name, version);
+      const url = await ensureLocalImage(name, version, printing);
       if (mountedRef.current && url) {
         srcCache.set(cacheKey, url);
         setSrc(url);

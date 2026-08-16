@@ -28,6 +28,7 @@ import { listen } from '@tauri-apps/api/event';
 import { ManaPip } from './components/ManaPip';
 import { ManaFontPip } from './components/ManaFontPip';
 import { parseMtgaManaCost } from './utils/manaUtils';
+import { setCardStylePref } from './utils/cardStylePrefs';
 import { SettingsView } from './components/SettingsView';
 import { CustomDropdown } from './components/CustomDropdown';
 import { CardItem } from './components/CardBreakdown';
@@ -2556,7 +2557,7 @@ export default function App() {
               <X className="w-4 h-4" /> Close
             </button>
 
-            <div className="flex flex-row flex-wrap items-start justify-center gap-5 max-w-full">
+            <div className="flex flex-row flex-nowrap items-start justify-center gap-5 max-w-full">
               {/* Card image + set/art selector */}
               <div className="w-[340px] shrink-0">
                 <div className="rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
@@ -2579,7 +2580,19 @@ export default function App() {
                           label: p.set_name ? `${p.set_name} (${p.set_code})` : p.set_code,
                         }))}
                     value={overlaySelected ?? ''}
-                    onChange={(val) => setOverlaySelected(val || null)}
+                    onChange={(val) => {
+                      setOverlaySelected(val || null);
+                      // Persist the chosen style so the Collection grid shows it.
+                      if (val) {
+                        const p = overlayPrintings.find((pp) => printingKey(pp) === val);
+                        if (p?.set_code && p.collector_number) {
+                          setCardStylePref(deckCardOverlay.card.name, {
+                            setCode: p.set_code,
+                            collectorNumber: p.collector_number,
+                          });
+                        }
+                      }
+                    }}
                     palette={palette}
                   />
                 </div>
