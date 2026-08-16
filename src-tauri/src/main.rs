@@ -2193,14 +2193,13 @@ async fn save_deck_list(deck_name: String, export_text: String) -> Result<serde_
     }))
 }
 
-/// Delete a deck entirely: removes its True Decklist (if any) and ALL of its
-/// match history from the database. The match tables cascade via FK
-/// (match_cards / match_turn_events / match_impactful_cards / match_decks all
-/// reference matches with ON DELETE CASCADE). Deleting a deck does NOT touch
-/// collection_cards — cards remain owned in the library even though the deck is
-/// gone.
+/// Delete a deck. Always removes its True Decklist (if any). When
+/// `delete_matches` is true, also removes ALL of its match history (cascades
+/// via FK to match_cards / match_turn_events / match_impactful_cards /
+/// match_decks). When false, the deck's match history is kept. Deleting a deck
+/// never touches collection_cards — cards remain owned in the library.
 #[tauri::command]
-async fn delete_deck(deck_name: String) -> Result<serde_json::Value, String> {
+async fn delete_deck(deck_name: String, delete_matches: bool) -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
 
     // Remove the True Decklist row (no-op if there was none).
@@ -2210,18 +2209,19 @@ async fn delete_deck(deck_name: String) -> Result<serde_json::Value, String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    // Remove the deck's matches (cascades to match_cards, turn_events,
-    // impactful_cards, and the match_decks audit rows).
-    let match_result = sqlx::query("DELETE FROM matches WHERE hero_deck_name = ?")
-        .bind(&deck_name)
-        .execute(db.pool())
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let deleted_matches = match_result.rows_affected();
+    let mut deleted_matches: u64 = 0;
+    if delete_matches {
+        let match_result = sqlx::query("DELETE FROM matches WHERE hero_deck_name = ?")
+            .bind(&deck_name)
+            .execute(db.pool())
+            .await
+            .map_err(|e| e.to_string())?;
+        deleted_matches = match_result.rows_affected();
+    }
 
     Ok(serde_json::json!({
         "deck_name": deck_name,
+        "delete_matches": delete_matches,
         "deleted_matches": deleted_matches,
     }))
 }
@@ -3569,5 +3569,23 @@ mod tests {
         // Collection ownership is untouched.
         let after_owned: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM collection_cards WHERE grp_id=1001 AND owned_count>0").fetch_one(pool).await.unwrap();
         assert_eq!(after_owned, 1);
+    }
+
+    #[tokio::test]
+    async fn test_delete_deck_keep_matches_path() {
+        let db = DatabaseManager::init().await.expect("db init");
+        let pool = db.pool();
+
+        seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":4}]"#).await;
+        seed_match(pool, "m1", "My Deck").await;
+        seed_match(pool, "m2", "My Deck").await;
+
+        // "Keep Match History": remove only the decklist, leave the matches.
+        sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?").bind("My Deck").execute(pool).await.unwrap();
+
+        let after_list: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deck_lists WHERE deck_name='My Deck'").fetch_one(pool).await.unwrap();
+        assert_eq!(after_list, 0);
+        let after_matches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM matches WHERE hero_deck_name='My Deck'").fetch_one(pool).await.unwrap();
+        assert_eq!(after_matches, 2, "matches are kept when only the decklist is deleted");
     }
 }

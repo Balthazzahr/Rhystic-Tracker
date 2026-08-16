@@ -135,7 +135,9 @@ input[type='range']::-moz-range-track {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* nf-md-cards — card stack (used for true-decklist source / Deck Library). */
+/* nf-md-cards — card stack (used for Card Library nav + true-decklist source). */
 .nf-md-cards::before { content: '\f0638'; }
-/* nf-oct-log — log file (used for logged-only source). */
-.nf-oct-log::before { content: '\f02d1'; }
+/* nf-oct-log — log file (used for logged-only deck source). */
+.nf-oct-log::before { content: '\uf4ed'; }
+/* nf-fa-box_archive — archive box (Deck Library nav). */
+.nf-fa-box_archive::before { content: '\uf187'; }

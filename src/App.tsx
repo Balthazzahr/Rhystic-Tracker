@@ -22,6 +22,8 @@ import {
   LayoutGrid,
   ArrowUpDown,
   Trash2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
@@ -236,30 +238,50 @@ export default function App() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [showCardSortMenu]);
 
-  // Card view size checkpoint: number of cards across (3..6), persisted locally.
-  // Rightmost = 3 across (largest), leftmost = 6 across (smallest).
-  const [cardCols, setCardCols] = useState<number>(() => {
-    const saved = parseInt(localStorage.getItem('deckCardCols') || '', 10);
-    return saved >= 3 && saved <= 6 ? saved : 5;
+  // Deck card size: two levels (small / large) matching the Card Library.
+  // Small = fixed landscape footprint; large = fills the grid height with a
+  // fixed number of landscape rows, width derived from the ratio.
+  const [deckCardSize, setDeckCardSize] = useState<'small' | 'large'>(() => {
+    const saved = localStorage.getItem('deckCardSize');
+    return saved === 'small' ? 'small' : 'large';
   });
   useEffect(() => {
-    localStorage.setItem('deckCardCols', String(cardCols));
-  }, [cardCols]);
-  // Measure the available width of the card area to derive the base card width.
+    localStorage.setItem('deckCardSize', deckCardSize);
+  }, [deckCardSize]);
+  // Measure the available area of the card grid to derive the card size.
   const cardAreaRef = useRef<HTMLDivElement>(null);
-  const [cardAreaWidth, setCardAreaWidth] = useState(0);
+  const [cardArea, setCardArea] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   useEffect(() => {
     const el = cardAreaRef.current;
     if (!el) return;
-    const measure = () => setCardAreaWidth(el.clientWidth);
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setCardArea((prev) => {
+        const w = Math.round(r.width);
+        const h = Math.round(r.height);
+        if (prev.w === w && prev.h === h) return prev;
+        return { w, h };
+      });
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, [deckView]);
-  // Cards snap to fill `cardCols` across (with 16px gaps), 4:3 ratio.
-  const containerW = cardAreaWidth > 0 ? cardAreaWidth : 1200;
-  const cardWidth = (containerW - (cardCols - 1) * 16) / cardCols;
+  // Landscape deck card ratio (wider than tall). Small uses a fixed footprint;
+  // large fills the height with DECK_LARGE_ROWS rows, width derived from ratio.
+  const DECK_RATIO = 3 / 2;
+  const DECK_LARGE_ROWS = 2;
+  const DECK_GAP = 16;
+  const DECK_WRAP_PAD = 0; // grid has no vertical padding
+  const deckLargeCardH = cardArea.h > (DECK_LARGE_ROWS - 1) * DECK_GAP + DECK_WRAP_PAD
+    ? (cardArea.h - (DECK_LARGE_ROWS - 1) * DECK_GAP - DECK_WRAP_PAD) / DECK_LARGE_ROWS
+    : 0;
+  const deckLargeCardW = deckLargeCardH > 0 ? deckLargeCardH * DECK_RATIO : 0;
+  const deckCardW = deckCardSize === 'small' ? 260 : deckLargeCardW;
+  const deckCardH = deckCardSize === 'small'
+    ? Math.round(260 / DECK_RATIO)
+    : deckLargeCardH;
 
   useEffect(() => {
     localStorage.setItem('deckLibraryView', deckView);
@@ -318,13 +340,12 @@ export default function App() {
 
   // Delete a deck: removes its true decklist (if any) and all its match history.
   // Cards stay in the library's collection — only the deck + its matches go.
-  const confirmDeleteDeck = async () => {
+  const confirmDeleteDeck = async (deleteMatches: boolean) => {
     if (!deckToDelete) return;
     try {
-      await invoke('delete_deck', { deckName: deckToDelete });
+      await invoke('delete_deck', { deckName: deckToDelete, deleteMatches });
       // Close the (possibly open) deck detail, refresh the deck overview, and
-      // refresh match history (matches for the deleted deck were removed from
-      // the DB, so the Match History tab must update too).
+      // refresh match history (matches may have been removed for this deck).
       if (selectedDeckName === deckToDelete) setSelectedDeckName(null);
       setDeckToDelete(null);
       await loadDeckOverview();
@@ -912,10 +933,10 @@ export default function App() {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'decks', label: 'Deck Library', icon: Layers, nerdIcon: 'nf-md-cards' },
+    { id: 'decks', label: 'Deck Library', icon: Layers, nerdIcon: 'nf-fa-box_archive' },
     { id: 'matches', label: 'Match History', icon: Swords },
     { id: 'live', label: 'Live Match HUD', icon: Activity },
-    { id: 'collection', label: 'Card Library', icon: BookOpen },
+    { id: 'collection', label: 'Card Library', icon: BookOpen, nerdIcon: 'nf-md-cards' },
   ];
 
   const formatOptions = [
@@ -1851,7 +1872,7 @@ export default function App() {
                             key={d.deck_name}
                             onClick={() => setSelectedDeckName(d.deck_name)}
                             className="group relative rounded-xl border overflow-hidden shadow-lg text-left transition-all duration-200 hover:scale-[1.03] hover:ring-2 hover:ring-sky-400/60 cursor-pointer shrink-0"
-                            style={{ width: cardWidth, height: Math.round(cardWidth * 3 / 4), borderColor: `${palette?.border || '#2A2F3D'}88` }}
+                            style={{ width: deckCardW, height: deckCardH, borderColor: `${palette?.border || '#2A2F3D'}88` }}
                           >
                             {/* Artwork fills the whole card */}
                             {artName ? (
@@ -1923,28 +1944,19 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Card size checkpoint slider (floating pill, bottom-right) */}
+                {/* Deck card size toggle (floating pill, bottom-right): magnifier
+                    icon shows what you'll switch TO — zoom-in when small, zoom-out
+                    when large. */}
                 <div className="absolute bottom-4 right-4 z-50 rounded-full border shadow-2xl bg-black/85 backdrop-blur-md px-3 py-2 flex items-center gap-2"
-                  style={{ borderColor: palette?.border, width: '25%', minWidth: '180px' }}>
-                  <LayoutGrid className="w-4 h-4 shrink-0" style={{ color: palette?.accent }} />
-                  <div className="flex-1 relative">
-                    <input
-                      type="range"
-                      min={0}
-                      max={3}
-                      step={1}
-                      value={6 - cardCols}
-                      onChange={(e) => setCardCols(6 - parseInt(e.target.value, 10))}
-                      className="w-full"
-                      style={{ accentColor: palette?.accent || '#38BDF8' }}
-                      title={`${cardCols} cards across`}
-                    />
-                    <div className="flex justify-between px-[3px] -mt-0.5">
-                      {[0, 1, 2, 3].map((i) => (
-                        <span key={i} className="w-0.5 h-1.5 rounded-full" style={{ backgroundColor: palette?.border || '#2A2F3D' }} />
-                      ))}
-                    </div>
-                  </div>
+                  style={{ borderColor: palette?.border }}>
+                  <button
+                    onClick={() => setDeckCardSize(deckCardSize === 'small' ? 'large' : 'small')}
+                    className="flex items-center justify-center p-1.5 rounded-full transition-colors hover:bg-white/10"
+                    style={{ color: palette?.text }}
+                    title={deckCardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards'}
+                  >
+                    {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
+                  </button>
                 </div>
               </>
             ) : (
@@ -2818,7 +2830,7 @@ export default function App() {
           onClick={() => setDeckToDelete(null)}
         >
           <div
-            className="w-[420px] max-w-full rounded-2xl border shadow-2xl p-6 space-y-4"
+            className="w-[440px] max-w-full rounded-2xl border shadow-2xl p-6 space-y-4"
             style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2826,12 +2838,12 @@ export default function App() {
               Delete Deck
             </h3>
             <p className="text-sm leading-relaxed" style={{ color: palette?.text }}>
-              Deleting <strong>{deckToDelete}</strong> will also delete all of its match history.
+              Deleting <strong>{deckToDelete}</strong> will remove its deck list from the library.
             </p>
             <p className="text-sm" style={{ color: palette?.text }}>
-              Are you sure?
+              Do you want to keep the match history, or delete the deck and its matches too?
             </p>
-            <div className="flex items-center justify-end gap-3 pt-1">
+            <div className="flex items-center justify-end gap-2.5 pt-1">
               <button
                 onClick={() => setDeckToDelete(null)}
                 className="px-4 py-2 rounded-xl text-xs font-bold border transition-colors hover:bg-white/5"
@@ -2840,11 +2852,18 @@ export default function App() {
                 Cancel
               </button>
               <button
-                onClick={confirmDeleteDeck}
+                onClick={() => confirmDeleteDeck(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold border transition-colors"
+                style={{ borderColor: palette?.border, color: palette?.text, backgroundColor: palette?.mantle }}
+              >
+                Keep Match History
+              </button>
+              <button
+                onClick={() => confirmDeleteDeck(true)}
                 className="px-4 py-2 rounded-xl text-xs font-bold transition-colors"
                 style={{ backgroundColor: '#DC2626', color: '#FFF' }}
               >
-                Confirm
+                Delete Both
               </button>
             </div>
           </div>
