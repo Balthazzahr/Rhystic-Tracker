@@ -704,13 +704,14 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         <div className="flex-1" />
 
         {/* Sort dropdown with embedded direction toggle: clicking an item once
-            selects it ascending; clicking the same item again toggles direction. */}
+            selects it ascending; clicking the same item again toggles direction.
+            The selected item is prefixed with an up/down arrow glyph. */}
         <div className="w-44">
           <CustomDropdown
             options={SORT_OPTIONS.map((o) => ({
               value: o.value,
               label: sort === o.value
-                ? `${o.label} (${sortDir === 'asc' ? 'A→Z' : 'Z→A'})`
+                ? `${sortDir === 'asc' ? '▲' : '▼'} ${o.label}`
                 : o.label,
             }))}
             value={sort}
