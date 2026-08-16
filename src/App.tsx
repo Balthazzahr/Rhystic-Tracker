@@ -37,6 +37,7 @@ import { OpponentH2HModal } from './components/OpponentH2HModal';
 import { DeckDetailView } from './components/DeckDetailView';
 import { DashboardView } from './components/DashboardView';
 import { CardNameTooltip } from './components/CardNameTooltip';
+import { CardImage } from './components/CardImage';
 import CollectionView from './components/CollectionView';
 import logoImg from './assets/logo.png';
 import symbolIcon from './assets/symbolIcon.png';
@@ -888,10 +889,6 @@ export default function App() {
     return `${day} ${mon} ${yr} ${hh}:${mm}`;
   };
 
-  // Scryfall art crop URL for a card name (same named-card endpoint HoverArtPreview uses).
-  const scryfallArtUrl = (name: string) =>
-    `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
-
   // Win-rate gradient: interpolate between the ManaPip theme colors — red
   // (#F87171) at 0%, yellow mid, green (#34D399) at 100%. Matches the app's
   // mana pip palette rather than a fluorescent HSL ramp.
@@ -942,14 +939,13 @@ export default function App() {
     }
     return (
       <CardNameTooltip name={artName}>
-        <img
-          src={scryfallArtUrl(artName)}
+        <CardImage
+          name={artName}
+          version="art_crop"
           alt={artName}
           onClick={openOverlay}
           className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70`}
           style={{ borderColor: `${palette?.border}66` }}
-          loading="lazy"
-          onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
         />
       </CardNameTooltip>
     );
@@ -1728,12 +1724,11 @@ export default function App() {
                           >
                             {/* Artwork fills the whole card */}
                             {artName ? (
-                              <img
-                                src={scryfallArtUrl(artName)}
+                              <CardImage
+                                name={artName}
+                                version="art_crop"
                                 alt={artName}
                                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
                             ) : (
                               <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: `${palette?.mantle || '#12141A'}99` }}>
@@ -1854,14 +1849,13 @@ export default function App() {
                           <div className="hidden xl:flex w-[170px] shrink-0 items-center justify-center gap-1.5">
                             {(d.key_cards || []).slice(0, 3).map((k: any) => (
                               <CardNameTooltip key={k.grp_id} name={k.name}>
-                                <img
-                                  src={scryfallArtUrl(k.name)}
+                                <CardImage
+                                  name={k.name}
+                                  version="art_crop"
                                   alt={k.name}
                                   onClick={(e) => { e.stopPropagation(); openCardOverlay(k, false); }}
                                   className="w-11 h-11 rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70 z-10"
                                   style={{ borderColor: `${palette?.border}66` }}
-                                  loading="lazy"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
                                 />
                               </CardNameTooltip>
                             ))}

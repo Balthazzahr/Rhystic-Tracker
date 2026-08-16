@@ -12,6 +12,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { CardImage } from './CardImage';
 import { ManaPip } from './ManaPip';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
@@ -62,9 +63,6 @@ const SORT_OPTIONS = [
   { value: 'released', label: 'Release Date' },
   { value: 'count', label: 'Owned Count' },
 ];
-
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 
 function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [cards, setCards] = useState<CollectionCard[]>([]);
@@ -250,6 +248,22 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     }
   };
 
+  // Wheel-to-change-page: scroll down -> previous page (left), scroll up ->
+  // next page (right). Debounced so a single wheel tick flips exactly one page.
+  const wheelLock = useRef(false);
+  const onGridWheel = (e: React.WheelEvent) => {
+    if (wheelLock.current) return;
+    if (view !== 'cards' || totalPages <= 1) return;
+    if (Math.abs(e.deltaY) < 20) return;
+    wheelLock.current = true;
+    if (e.deltaY > 0) {
+      setPage((p) => Math.max(1, p - 1));
+    } else {
+      setPage((p) => Math.min(totalPages, p + 1));
+    }
+    setTimeout(() => { wheelLock.current = false; }, 400);
+  };
+
   const toggleIn = (list: string[], v: string, setter: (n: string[]) => void) => {
     setter(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   };
@@ -353,16 +367,19 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         key={card.grp_id}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
         className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0"
-        style={{
-          width: cardW,
-          height: cardH,
-          backgroundImage: card.name ? `url(${scryfallArtUrl(card.name)})` : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundColor: '#000',
-        }}
+        style={{ width: cardW, height: cardH }}
         title={cardName}
       >
+        {card.name ? (
+          <CardImage
+            name={card.name}
+            version="normal"
+            alt={cardName}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 w-full h-full bg-black" />
+        )}
         {/* Owned count pill */}
         {isOwned && (
           <span
@@ -680,6 +697,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         {view === 'cards' && (
           <div
             ref={gridWrapRef}
+            onWheel={onGridWheel}
             className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
             style={{ paddingTop: 4, paddingBottom: 4 }}
           >
