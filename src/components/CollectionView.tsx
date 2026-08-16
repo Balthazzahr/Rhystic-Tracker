@@ -108,7 +108,36 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return saved === 'small' ? 'small' : 'large';
   });
 
-  const pageSize = view === 'table' ? 100 : cardSize === 'small' ? 28 : 15;
+  // Fixed card footprint (exact image ratio 63:88). Cards never scale with the
+  // window — extra space becomes padding, and new rows/columns appear only when
+  // enough room accumulates for another full card.
+  const CARD_W_LARGE = 200;
+  const CARD_W_SMALL = 130;
+  const CARD_RATIO = 88 / 63;
+  const cardW = cardSize === 'small' ? CARD_W_SMALL : CARD_W_LARGE;
+  const cardH = Math.round(cardW * CARD_RATIO);
+  const GRID_GAP = 12;
+
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const [gridSize, setGridSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // Measure the card-grid area so we can auto-fit columns/rows of fixed cards.
+  useEffect(() => {
+    const el = gridWrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setGridSize({ w: rect.width, h: rect.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view, showFilterPanel]);
+
+  const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
+  const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
+  const pageSize = view === 'table' ? 100 : cols * rows;
 
   useEffect(() => {
     localStorage.setItem('collectionView', view);
@@ -156,7 +185,9 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       const parsed: CollectionResponse = res;
       setCards(parsed?.cards || []);
       setSummary(parsed?.summary || null);
-      setTotalPages(Math.max(1, parsed?.total_pages || 1));
+      const tp = Math.max(1, parsed?.total_pages || 1);
+      setTotalPages(tp);
+      if (parsed?.page && parsed.page > tp) setPage(tp);
     } catch (e) {
       console.error('Failed to load collection:', e);
       setError(String(e));
@@ -311,13 +342,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       <button
         key={card.grp_id}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative w-full h-full rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl"
+        className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0"
         style={{
-          borderColor: isOwned ? rarity.color : `${palette?.border}88`,
-          borderWidth: 1,
-          borderStyle: 'solid',
+          width: cardW,
+          height: cardH,
           backgroundImage: card.name ? `url(${scryfallArtUrl(card.name)})` : undefined,
-          backgroundSize: 'contain',
+          backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundColor: '#000',
         }}
@@ -677,12 +707,9 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           </div>
         ) : (
           <div
-            className="grid h-full gap-2"
-            style={{
-              gridTemplateColumns: cardSize === 'small' ? 'repeat(7, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))',
-              gridTemplateRows: cardSize === 'small' ? 'repeat(4, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
-              gridAutoRows: 'minmax(0, 1fr)',
-            }}
+            ref={gridWrapRef}
+            className="flex-1 min-h-0 flex flex-wrap content-center items-start justify-center gap-3 overflow-y-auto custom-scrollbar"
+            style={{ paddingTop: 4, paddingBottom: 4 }}
           >
             {cards.map(renderCardTile)}
           </div>
