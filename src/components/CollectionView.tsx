@@ -87,7 +87,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [search, setSearch] = useState('');
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'unowned'>(() => {
     const saved = localStorage.getItem('collectionOwnedFilter');
-    return saved === 'all' || saved === 'unowned' ? saved : 'owned';
+    return saved === 'all' || saved === 'owned' || saved === 'unowned' ? saved : 'all';
   });
   const [selectedSets, setSelectedSets] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
@@ -758,6 +758,17 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
               <X className="w-3 h-3 opacity-50 group-hover:opacity-100" />
             </button>
           ))}
+          <div className="flex-1" />
+          {/* Clear all filters, right-justified */}
+          <button
+            onClick={clearAllFilters}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-colors hover:bg-white/10"
+            style={{ borderColor: `${palette?.border}88`, color: palette?.text }}
+            title="Clear all filters"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear All Filters
+          </button>
         </div>
       )}
 
