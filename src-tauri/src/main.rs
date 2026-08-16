@@ -1423,9 +1423,104 @@ fn sort_collection_cards(cards: &mut Vec<serde_json::Value>, sort: &str, sort_di
 /// "unowned" = cached cards with owned_count = 0.
 ///
 /// Multi-select filters: `sets` (Vec<String> set codes), `colors`
+/// A single printing's card metadata (no ownership — that's joined per-query).
+#[derive(Clone)]
+struct UniverseCard {
+    grp_id: i64,
+    name: String,
+    mana_cost: Option<String>,
+    cmc: i64,
+    colors: Option<String>,
+    color_identity: Option<String>,
+    set_code: Option<String>,
+    set_name: Option<String>,
+    set_released_at: Option<String>,
+    rarity: i64,
+    card_type: Option<String>,
+}
+
+/// Process-wide cache of the full card universe (every printing in cards_cache,
+/// ~26k rows), keyed by database filename so parallel tests (each with their own
+/// temp DB) never collide. cards_cache is static during a run, so the cache only
+/// needs invalidating when set metadata changes.
+static UNIVERSE_CACHE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<Vec<UniverseCard>>>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+/// Identity of a pool's database file (cache key).
+fn universe_db_key(pool: &sqlx::Pool<sqlx::Sqlite>) -> String {
+    pool.connect_options().as_ref().clone().get_filename().to_string_lossy().to_string()
+}
+
+/// Load every printing's metadata from cards_cache (joined to sets_metadata for
+/// set display names / release dates). This is the slow query — cached after the
+/// first build so subsequent collection queries run entirely in memory.
+async fn build_universe(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<UniverseCard>, String> {
+    let rows = sqlx::query(
+        r#"
+        SELECT c.grp_id, c.name, c.mana_cost, c.cmc, c.colors, c.color_identity,
+               c.set_code, c.rarity, c.card_type,
+               sm.name as set_name, sm.released_at as set_released_at
+        FROM cards_cache c
+        LEFT JOIN sets_metadata sm ON c.set_code = sm.set_code
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        let raw_cmc: i64 = r.get("cmc");
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let cmc = if raw_cmc == 0 { card_db::parse_mtga_cmc(mana_cost.as_deref().unwrap_or("")) } else { raw_cmc };
+        out.push(UniverseCard {
+            grp_id: r.get("grp_id"),
+            name: r.get::<String, _>("name"),
+            mana_cost,
+            cmc,
+            colors: r.get("colors"),
+            color_identity: r.get("color_identity"),
+            set_code: r.get("set_code"),
+            set_name: r.get("set_name"),
+            set_released_at: r.get("set_released_at"),
+            rarity: r.get("rarity"),
+            card_type: r.get("card_type"),
+        });
+    }
+    Ok(out)
+}
+
+/// Return the cached card universe, building it lazily on first call. The build
+/// (a 26k-row query) happens at most once per process; pre-warmed at startup so
+/// the first Card Library visit is instant.
+async fn get_universe(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<std::sync::Arc<Vec<UniverseCard>>, String> {
+    let key = universe_db_key(pool);
+    {
+        let guard = UNIVERSE_CACHE.lock().unwrap();
+        if let Some(u) = guard.get(&key) {
+            return Ok(u.clone());
+        }
+    }
+    let built = std::sync::Arc::new(build_universe(pool).await?);
+    let mut guard = UNIVERSE_CACHE.lock().unwrap();
+    guard.entry(key).or_insert_with(|| built.clone());
+    Ok(built)
+}
+
+/// Drop the cached universe for every database. Used when set metadata is
+/// refreshed and by tests that seed their own cards_cache.
+fn clear_universe_cache() {
+    UNIVERSE_CACHE.lock().unwrap().clear();
+}
+
 /// (Vec<String> W/U/B/R/G/C), `rarities` (Vec<i64>), `types` (Vec<String>
-/// card-type substrings), plus `search` (name substring). `sort` + `sort_dir`,
-/// and `page` (1-based) + `page_size` for pagination.
+/// card-type substrings), plus `search` (name substring). `sort` + `sort_dir`.
+///
+/// Returns the FULL filtered/sorted/merged list (no server-side pagination) so
+/// the frontend can re-slice instantly on window resize. The card universe is
+/// served from a process-wide cache built once (see `get_universe`), making
+/// every query run in memory (milliseconds) instead of re-loading all ~26k
+/// cards from SQLite.
 async fn query_collection(
     pool: &sqlx::Pool<sqlx::Sqlite>,
     filters: &serde_json::Value,
@@ -1453,79 +1548,83 @@ async fn query_collection(
     let cmc_filter = filters.get("cmc").and_then(|v| v.as_i64());
     let sort = filters.get("sort").and_then(|v| v.as_str()).unwrap_or("name").to_string();
     let sort_dir = filters.get("sort_dir").and_then(|v| v.as_str()).unwrap_or("asc").to_string();
-    let page = filters.get("page").and_then(|v| v.as_u64()).unwrap_or(1).max(1);
-    let page_size = filters.get("page_size").and_then(|v| v.as_u64()).unwrap_or(120).max(1);
 
-    // 1. Universe = every card in the local MTGA card database (cards_cache),
-    //    so "Not Collected" filters can show every card in a set.
-    let mut universe: Vec<i64> = Vec::new();
-    let mut seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
-    let cc_rows = sqlx::query("SELECT grp_id FROM cards_cache")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    for r in cc_rows {
-        let gid: i64 = r.get("grp_id");
-        if gid > 0 && seen.insert(gid) {
-            universe.push(gid);
-        }
+    // Cached full card universe (all printings) + fresh owned counts.
+    let universe = get_universe(pool).await?;
+    let owned = owned_counts(pool).await?;
+
+    // 1. Build a full metadata list with owned_count joined in.
+    let mut cards: Vec<serde_json::Value> = Vec::with_capacity(universe.len());
+    for uc in universe.iter() {
+        let owned_count = owned.get(&uc.grp_id).copied().unwrap_or(0);
+        cards.push(serde_json::json!({
+            "grp_id": uc.grp_id,
+            "name": uc.name,
+            "mana_cost": uc.mana_cost,
+            "cmc": uc.cmc,
+            "colors": uc.colors,
+            "color_identity": uc.color_identity,
+            "set_code": uc.set_code,
+            "set_name": uc.set_name,
+            "set_released_at": uc.set_released_at,
+            "rarity": uc.rarity,
+            "card_type": uc.card_type,
+            "owned_count": owned_count,
+        }));
     }
 
-    let (clauses, binds) = collection_filter_clauses(&sets, &colors, &rarities, &types, &search_filter, &cmc_filter);
-    let where_sql = if clauses.is_empty() { String::new() } else { format!(" AND {}", clauses.join(" AND ")) };
-
-    // 2. Query every decklist card's metadata, filtered.
-    let mut cards: Vec<serde_json::Value> = Vec::new();
-    if !universe.is_empty() {
-        let placeholders = universe.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let sql = format!(
-            r#"
-            SELECT c.grp_id, c.name, c.mana_cost, c.cmc, c.colors, c.color_identity,
-                   c.set_code, c.rarity, c.card_type,
-                   sm.name as set_name, sm.released_at as set_released_at,
-                   sm.icon_svg_uri as set_icon
-            FROM cards_cache c
-            LEFT JOIN sets_metadata sm ON c.set_code = sm.set_code
-            WHERE c.grp_id IN ({})
-            {}
-            "#,
-            placeholders, where_sql
-        );
-        let mut binds2: Vec<QBind> = universe.iter().map(|id| QBind::Int(*id)).collect();
-        binds2.extend(binds.iter().cloned());
-        let q = apply_binds(sqlx::query(&sql), &binds2);
-        let rows = q.fetch_all(pool).await.map_err(|e| e.to_string())?;
-
-        let owned_map = owned_counts(pool).await?;
-
-        for r in rows {
-            let grp_id: i64 = r.get("grp_id");
-            let raw_cmc: i64 = r.get("cmc");
-            let mana_cost: Option<String> = r.get("mana_cost");
-            let cmc = if raw_cmc == 0 { card_db::parse_mtga_cmc(mana_cost.as_deref().unwrap_or("")) } else { raw_cmc };
-            let owned_count = owned_map.get(&grp_id).copied().unwrap_or(0);
-            cards.push(serde_json::json!({
-                "grp_id": grp_id,
-                "name": r.get::<Option<String>, _>("name"),
-                "mana_cost": mana_cost,
-                "cmc": cmc,
-                "colors": r.get::<Option<String>, _>("colors"),
-                "color_identity": r.get::<Option<String>, _>("color_identity"),
-                "set_code": r.get::<Option<String>, _>("set_code"),
-                "set_name": r.get::<Option<String>, _>("set_name"),
-                "set_released_at": r.get::<Option<String>, _>("set_released_at"),
-                "set_icon": r.get::<Option<String>, _>("set_icon"),
-                "rarity": r.get::<i64, _>("rarity"),
-                "card_type": r.get::<Option<String>, _>("card_type"),
-                "owned_count": owned_count,
-            }));
-        }
+    // 2. Metadata filters in memory (mirrors the previous SQL WHERE clauses,
+    //    applied per-printing BEFORE the by-name merge so results match).
+    if !sets.is_empty() {
+        cards.retain(|c| {
+            c.get("set_code").and_then(|v| v.as_str())
+                .map(|s| sets.iter().any(|x| x == s)).unwrap_or(false)
+        });
+    }
+    if !colors.is_empty() {
+        cards.retain(|c| {
+            let ci = c.get("color_identity").and_then(|v| v.as_str()).unwrap_or("");
+            colors.iter().any(|col| match col.as_str() {
+                "C" => ci.trim().is_empty(),
+                "W" => ci.split(',').any(|p| p == "1"),
+                "U" => ci.split(',').any(|p| p == "2"),
+                "B" => ci.split(',').any(|p| p == "3"),
+                "R" => ci.split(',').any(|p| p == "4"),
+                "G" => ci.split(',').any(|p| p == "5"),
+                _ => false,
+            })
+        });
+    }
+    if !rarities.is_empty() {
+        cards.retain(|c| {
+            c.get("rarity").and_then(|v| v.as_i64())
+                .map(|r| rarities.contains(&r)).unwrap_or(false)
+        });
+    }
+    if !types.is_empty() {
+        cards.retain(|c| {
+            let ct = c.get("card_type").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            types.iter().any(|t| ct.contains(&t.to_lowercase()))
+        });
+    }
+    if let Some(search) = &search_filter {
+        let q = search.to_lowercase();
+        cards.retain(|c| {
+            c.get("name").and_then(|v| v.as_str())
+                .map(|n| n.to_lowercase().contains(&q)).unwrap_or(false)
+        });
+    }
+    if let Some(mv) = cmc_filter {
+        cards.retain(|c| {
+            let cmc = c.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
+            if mv >= 8 { cmc >= mv } else { cmc == mv }
+        });
     }
 
-    // 2b. Merge duplicate printings of the same card name into a single entry
-    //     (like Arena's collection: one row per card, not per printing). Copies
-    //     sum across printings, capped at 4. The representative keeps the newest
-    //     printing's set/art.
+    // 3. Merge duplicate printings of the same card name into a single entry
+    //    (like Arena's collection: one row per card, not per printing). Copies
+    //    sum across printings, capped at 4. The representative keeps the newest
+    //    printing's set/art.
     if !cards.is_empty() {
         let mut merged: Vec<serde_json::Value> = Vec::new();
         let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -1551,9 +1650,8 @@ async fn query_collection(
         cards = merged;
     }
 
-    // 3. Ownership filter + sort (before pagination so page boundaries are stable).
-    //    `owned` = collected (>=1), `unowned` = not collected. An exact `copies`
-    //    value (1..=4) narrows to cards with exactly that many owned copies.
+    // 4. Ownership filter. `owned` = collected (>=1), `unowned` = not collected.
+    //    An exact `copies` value (1..=4) narrows to exactly that many copies.
     let copies = filters.get("copies").and_then(|v| v.as_u64());
     if owned_filter == "owned" {
         cards.retain(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0);
@@ -1569,39 +1667,29 @@ async fn query_collection(
 
     let total_cards = cards.len() as i64;
 
-    // Total-owned stats over the FULL filtered set (for the header), before
-    // pagination slices the page.
+    // Ownership stats over the full filtered set (header counts).
     let total_owned_cards = cards.iter()
         .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
         .count() as i64;
     let total_owned_copies_all: i64 = cards.iter()
         .filter_map(|c| c.get("owned_count").and_then(|v| v.as_i64()))
         .sum();
-
-    // 4. Pagination.
-    let offset = ((page - 1) * page_size) as usize;
-    let page_cards: Vec<serde_json::Value> = cards.into_iter().skip(offset).take(page_size as usize).collect();
-    let total_pages = if page_size > 0 { (total_cards + page_size as i64 - 1) / page_size as i64 } else { 0 };
-
-    let owned_cards = page_cards.iter()
-        .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
-        .count() as i64;
-    let owned_grp_ids: Vec<i64> = page_cards.iter()
+    let owned_grp_ids: Vec<i64> = cards.iter()
         .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
         .filter_map(|c| c.get("grp_id").and_then(|v| v.as_i64()))
         .collect();
-    let total_owned_copies: i64 = page_cards.iter()
+    let total_owned_copies: i64 = cards.iter()
         .filter_map(|c| c.get("owned_count").and_then(|v| v.as_i64()))
         .sum();
 
     Ok(serde_json::json!({
-        "cards": page_cards,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": total_pages,
+        "cards": cards,
+        "page": 1,
+        "page_size": total_cards,
+        "total_pages": 1,
         "summary": {
             "total_cards": total_cards,
-            "owned_cards": owned_cards,
+            "owned_cards": total_owned_cards,
             "owned_grp_ids": owned_grp_ids,
             "total_owned_copies": total_owned_copies,
             "total_owned_cards": total_owned_cards,
@@ -1673,6 +1761,9 @@ async fn get_set_metadata() -> Result<serde_json::Value, String> {
 /// The frontend fetches https://api.scryfall.com/sets and passes the list here.
 #[tauri::command]
 async fn refresh_set_metadata(sets: serde_json::Value) -> Result<serde_json::Value, String> {
+    // Set names/release dates feed the cached card universe, so drop it so the
+    // next collection query rebuilds with the fresh metadata.
+    clear_universe_cache();
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -3099,6 +3190,19 @@ fn main() {
 
                 run_tailer_supervisor(path_rx, db_manager, assembler_ref).await;
             });
+
+            // Pre-warm the collection card universe in the background so the
+            // first Card Library visit renders immediately.
+            tauri::async_runtime::spawn(async move {
+                let db_manager = match DatabaseManager::init().await {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("[ERROR] DB init failed: {}", e);
+                        return;
+                    }
+                };
+                let _ = get_universe(db_manager.pool()).await;
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -3261,6 +3365,7 @@ mod tests {
     async fn test_query_collection_all_owned_unowned() {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
+        clear_universe_cache();
 
         seed_card(pool, 1001, "Knight of Dawn", "o2oW", "1", "LEA", 4, "Creature").await;
         seed_card(pool, 1002, "Serra Angel", "o3oWoW", "1", "LEA", 3, "Creature").await;
@@ -3305,6 +3410,7 @@ mod tests {
     async fn test_query_collection_filters() {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
+        clear_universe_cache();
 
         seed_card(pool, 1001, "Knight of Dawn", "o2oW", "1", "LEA", 4, "Creature").await;
         seed_card(pool, 1002, "Serra Angel", "o3oWoW", "1", "LEA", 3, "Creature").await;
@@ -3365,25 +3471,28 @@ mod tests {
     async fn test_query_collection_pagination() {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
+        clear_universe_cache();
 
         for i in 1..=5 {
             seed_card(pool, 1000 + i, &format!("Card {}", i), "o1", "1", "LEA", 2, "Creature").await;
         }
         seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":1},{"grp_id":1002,"count":1},{"grp_id":1003,"count":1},{"grp_id":1004,"count":1},{"grp_id":1005,"count":1}]"#).await;
 
-        let page1 = query_collection(pool, &serde_json::json!({"page": 1, "page_size": 2})).await.unwrap();
-        assert_eq!(page1.get("cards").and_then(|v| v.as_array()).unwrap().len(), 2);
-        assert_eq!(page1.get("total_pages").and_then(|v| v.as_i64()).unwrap(), 3);
-        assert_eq!(page1.get("summary").unwrap().get("total_cards").and_then(|v| v.as_i64()).unwrap(), 5);
+        // Pagination is client-side now: the backend always returns the FULL
+        // filtered list plus the summary, ignoring any page/page_size args.
+        let all = query_collection(pool, &serde_json::json!({})).await.unwrap();
+        assert_eq!(all.get("cards").and_then(|v| v.as_array()).unwrap().len(), 5);
+        assert_eq!(all.get("summary").unwrap().get("total_cards").and_then(|v| v.as_i64()).unwrap(), 5);
 
-        let page3 = query_collection(pool, &serde_json::json!({"page": 3, "page_size": 2})).await.unwrap();
-        assert_eq!(page3.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);
+        let with_page = query_collection(pool, &serde_json::json!({"page": 1, "page_size": 2})).await.unwrap();
+        assert_eq!(with_page.get("cards").and_then(|v| v.as_array()).unwrap().len(), 5, "page args ignored; full list returned");
     }
 
     #[tokio::test]
     async fn test_query_collection_copies_filter() {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
+        clear_universe_cache();
 
         seed_card(pool, 1001, "Knight of Dawn", "o2oW", "1", "LEA", 4, "Creature").await;
         seed_card(pool, 1002, "Serra Angel", "o3oWoW", "1", "LEA", 3, "Creature").await;
@@ -3423,6 +3532,7 @@ mod tests {
     async fn test_query_collection_merges_duplicate_printings() {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
+        clear_universe_cache();
 
         // Two printings of the same card name (e.g. Fabled Passage in ELD + BLB).
         seed_card(pool, 7001, "Fabled Passage", "o1", "", "ELD", 4, "Land").await;
@@ -3459,6 +3569,7 @@ mod tests {
     async fn test_query_collection_owned_not_in_decklist_excluded() {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
+        clear_universe_cache();
         set_owned(pool, 9999, 2).await;
         // The universe is cards_cache; no cards are seeded there, so nothing is
         // returned even though 9999 is owned.

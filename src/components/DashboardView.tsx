@@ -806,7 +806,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {spotlightKeyCards.map((k, idx) => (
                         <CardNameTooltip key={k.grp_id ?? k.name} name={k.name}>
                           <div
-                            className="rounded-md overflow-hidden border-2 cursor-zoom-in transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 hover:ring-sky-400/70 relative"
+                            className="rounded-md overflow-hidden border-2 cursor-zoom-in transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 theme-ring-strong relative"
                             style={{ width: SPOT_KEY_SIDE, height: SPOT_KEY_SIDE, borderColor: '#00000088' }}
                             onClick={(e) => {
                               e.stopPropagation();

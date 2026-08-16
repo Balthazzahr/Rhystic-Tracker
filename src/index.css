@@ -40,6 +40,16 @@ body {
   background: var(--rt-accent-hover, #45A29E);
 }
 
+/* Themed hover ring — Tailwind ring color follows the active mana theme via
+   color-mix (WebKitGTK >= 2.40). Applied as `theme-ring`/`theme-ring-strong`
+   together with Tailwind's `hover:ring-2` (box-shadow, so no layout shift). */
+.theme-ring {
+  --tw-ring-color: color-mix(in srgb, var(--rt-accent, #38BDF8) 60%, transparent);
+}
+.theme-ring-strong {
+  --tw-ring-color: color-mix(in srgb, var(--rt-accent, #38BDF8) 70%, transparent);
+}
+
 /* Themed range sliders (accent color follows the active mana theme) */
 input[type='range'] {
   -webkit-appearance: none;

@@ -85,10 +85,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [busyGrp, setBusyGrp] = useState<number | null>(null);
   const [serverTotalCards, setServerTotalCards] = useState(0);
-  const [serverTotalPages, setServerTotalPages] = useState(1);
   const [serverTotalOwned, setServerTotalOwned] = useState(0);
   const [serverTotalOwnedCopies, setServerTotalOwnedCopies] = useState(0);
-  const safePageRef = useRef(1);
 
   const [search, setSearch] = useState('');
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'unowned'>(() => {
@@ -118,12 +116,13 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return saved === 'small' ? 'small' : 'large';
   });
 
-  // Small cards use a fixed footprint (exact image ratio 63:88). Large cards are
-  // sized dynamically: always exactly 3 rows, tall enough to fill the grid height
-  // (top-to-bottom, minimal padding), keeping the exact 63:88 ratio so the number
-  // of columns adjusts to the available width.
+  // Cards keep a FIXED footprint per size mode (small / large). The grid fits
+  // as many rows and columns as the available space allows — window width
+  // drives columns, window height drives rows, both instantly.
   const CARD_W_SMALL = 194;
-  const CARD_RATIO = 88 / 63;
+  const CARD_H_SMALL = 271;
+  const CARD_W_LARGE = 250;
+  const CARD_H_LARGE = 380;
   const GRID_GAP = 12;
 
   const gridWrapRef = useRef<HTMLDivElement>(null);
@@ -150,22 +149,15 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     return () => ro.disconnect();
   }, [view]);
 
-  // Large: exactly 3 rows filling the vertical space. cardH = (h - 2*gap)/3,
-  // then cardW derives from the exact 63:88 ratio. Small: fixed footprint.
-  // The grid wrap carries 4px top + 4px bottom padding, so subtract it.
-  const LARGE_ROWS = 3;
-  const GRID_WRAP_PAD = 8;
-  const largeCardH = gridSize.h > (LARGE_ROWS - 1) * GRID_GAP + GRID_WRAP_PAD
-    ? (gridSize.h - (LARGE_ROWS - 1) * GRID_GAP - GRID_WRAP_PAD) / LARGE_ROWS
-    : 0;
-  const largeCardW = largeCardH > 0 ? (largeCardH * 63) / 88 : 0;
-  const cardW = cardSize === 'small' ? CARD_W_SMALL : largeCardW;
-  const cardH = cardSize === 'small' ? Math.round(CARD_W_SMALL * CARD_RATIO) : largeCardH;
+  // Cards have a FIXED footprint per size mode. The grid fits as many rows and
+  // columns as the available space allows — both are driven purely by window
+  // dimensions (never by card scaling), so a taller window adds a row and a
+  // wider window adds a column, instantly.
+  const cardW = cardSize === 'small' ? CARD_W_SMALL : CARD_W_LARGE;
+  const cardH = cardSize === 'small' ? CARD_H_SMALL : CARD_H_LARGE;
 
   const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
-  const rows = cardSize === 'small'
-    ? (gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1)
-    : LARGE_ROWS;
+  const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
   // Page size is client-side only; the backend fetch is decoupled from it.
   const pageSize = view === 'table' ? 100 : cols * rows;
 
@@ -228,8 +220,9 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     setLoading(true);
     setError(null);
     try {
-      // Server-side pagination: the universe is the full MTGA card DB, so we
-      // fetch only the current page (grid-sized) rather than all 26k cards.
+      // The backend returns the FULL filtered/sorted/merged list (served from a
+      // cached card universe, filtered in memory). Pagination is client-side,
+      // so window resizes never refetch — only filters/sort do.
       const res = await invoke<any>('get_collection', {
         filters: {
           owned: ownedFilter,
@@ -242,14 +235,11 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           search: search.trim() === '' ? null : search.trim(),
           sort,
           sort_dir: sortDir,
-          page: safePageRef.current,
-          page_size: pageSize,
         },
       });
       const parsed: CollectionResponse = res;
       setCards(parsed?.cards || []);
       setServerTotalCards(parsed?.summary?.total_cards ?? parsed?.cards?.length ?? 0);
-      setServerTotalPages(parsed?.total_pages ?? 1);
       setServerTotalOwned(parsed?.summary?.total_owned_cards ?? 0);
       setServerTotalOwnedCopies(parsed?.summary?.total_owned_copies_all ?? 0);
     } catch (e) {
@@ -258,22 +248,22 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, cmcFilter, copiesFilter, search, sort, sortDir, pageSize, page]);
+  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, cmcFilter, copiesFilter, search, sort, sortDir]);
 
-  // Page total / total-cards come from the server. safePage keeps the local
-  // `page` within bounds.
-  const totalPages = serverTotalPages;
+  // Client-side pagination: total pages and the visible slice are derived from
+  // the fetched list + current grid geometry every render, so resizing is
+  // instant with no server round-trip and no overflow/scroll.
+  const totalPages = Math.max(1, Math.ceil(cards.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const displayedCards = cards;
-
-  // Keep the fetch page ref in sync with the current page.
-  useEffect(() => {
-    safePageRef.current = Math.min(page, serverTotalPages);
-  }, [page, serverTotalPages]);
+  const displayedCards = cards.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   useEffect(() => {
-    fetchCollection();
-  }, [fetchCollection]);
+    // Don't fetch until the grid has been measured — on first render gridSize
+    // is {0,0} which gives a wrong pageSize (e.g. 3 in large-card mode).
+    if (gridSize.w > 0 && gridSize.h > 0) {
+      fetchCollection();
+    }
+  }, [fetchCollection, gridSize]);
 
   // Reset to page 1 whenever filters/sort change (but not when only paging).
   const filterKey = [ownedFilter, selectedSets.join(','), selectedColors.join(','), selectedRarities.join(','), selectedTypes.join(','), cmcFilter, copiesFilter, search, sort, sortDir].join('|');
@@ -332,6 +322,26 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const pageDirRef = useRef<'next' | 'prev'>('next');
   setPageRef.current = setPage;
   pageCountRef.current = totalPages;
+
+  // Page-turn animation. The grid stays mounted — we replay a Web Animation on
+  // the wrapper when new data arrives instead of remounting it. Replaying (with
+  // an explicit cancel) means the animation can never double-fire or overlap,
+  // and the image tiles keep their state (no spinner flash mid-transition).
+  const gridAnimRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = gridAnimRef.current;
+    if (!el) return;
+    // Cancel any still-running animation so rapid paging can't stack them.
+    el.getAnimations().forEach((a) => a.cancel());
+    const next = pageDirRef.current === 'next';
+    el.animate(
+      [
+        { opacity: 0.25, transform: next ? 'translateX(14px)' : 'translateX(-14px)' },
+        { opacity: 1, transform: 'translateX(0)' },
+      ],
+      { duration: 250, easing: 'ease-out' },
+    );
+  }, [safePage]);
 
   const goPage = (dir: 'next' | 'prev') => {
     pageDirRef.current = dir;
@@ -459,20 +469,19 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     );
   };
 
-  const renderCardTile = (card: CollectionCard, pageKey: number) => {
+  const renderCardTile = (card: CollectionCard) => {
     const isOwned = card.owned_count > 0;
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
-    const slideClass = pageDirRef.current === 'next' ? 'animate-page-right' : 'animate-page-left';
 
     return (
       <button
-        key={`${pageKey}-${card.grp_id}`}
+        key={card.grp_id}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className={`group relative rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl shrink-0 ${slideClass}`}
+        className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:shadow-xl hover:ring-2 theme-ring shrink-0"
         style={{ width: cardW, height: cardH }}
         title={cardName}
       >
-        <div className="absolute inset-0" style={{ filter: isOwned ? 'none' : 'saturate(5%)' }}>
+        <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-110" style={{ filter: isOwned ? 'none' : 'saturate(5%)' }}>
           {card.name ? (
             <CardImage
               name={card.name}
@@ -806,7 +815,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
             style={{ paddingTop: 4, paddingBottom: 4 }}
           >
-            {displayedCards.map((c) => renderCardTile(c, safePage))}
+            <div
+              ref={gridAnimRef}
+              className="h-full min-h-0 w-full flex flex-wrap content-center items-start justify-center gap-3"
+            >
+              {displayedCards.map((c) => renderCardTile(c))}
+            </div>
           </div>
         )}
         {view === 'table' && displayedCards.length > 0 && (
@@ -842,8 +856,11 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             </table>
           </div>
         )}
-        {/* Loading / empty overlays on top of the mounted grid */}
-        {loading ? (
+        {/* Loading / empty overlays on top of the mounted grid. The loading
+            overlay only covers when there is nothing to show yet (initial load /
+            filter change with empty cache) — during page flips the previous
+            page stays visible so the page-turn reads cleanly, no dark flash. */}
+        {loading && displayedCards.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
             <span className="text-xs font-mono opacity-70">Loading collection…</span>
           </div>
