@@ -32,7 +32,8 @@ import {
 } from 'lucide-react';
 import { ManaPip } from './ManaPip';
 import { CardNameTooltip } from './CardNameTooltip';
-import logoImg from '../assets/logo.png';
+import logoSvg from '../assets/RhysticTrackerLogo.svg';
+import iconSvg from '../assets/RhysticTrackerICON.svg';
 
 interface ManaTheme {
   id: string;
@@ -529,9 +530,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
-      {/* Top-center logo */}
-      <div className="flex justify-center shrink-0">
-        <img src={logoImg} alt="Rhystic Tracker" className="h-[83px] object-contain drop-shadow-md" />
+      {/* Top-center brand: icon (left) + text logo (right), side by side */}
+      <div className="flex items-center justify-center gap-3 shrink-0">
+        <img src={iconSvg} alt="" className="h-[72px] w-auto object-contain drop-shadow-md" />
+        <img src={logoSvg} alt="Rhystic Tracker" className="h-[83px] w-auto object-contain drop-shadow-md" />
       </div>
 
       {/* Top row: 4 stat cells */}

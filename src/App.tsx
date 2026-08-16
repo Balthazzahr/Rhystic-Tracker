@@ -42,8 +42,8 @@ import { DashboardView } from './components/DashboardView';
 import { CardNameTooltip } from './components/CardNameTooltip';
 import { CardImage } from './components/CardImage';
 import CollectionView from './components/CollectionView';
-import logoImg from './assets/logo.png';
-import symbolIcon from './assets/symbolIcon.png';
+import logoImg from './assets/RhysticTrackerLogo.svg';
+import symbolIcon from './assets/RhysticTrackerICON.svg';
 
 // Renders a Nerd Font glyph (from the bundled NerdFontSymbols font) as an
 // inline icon. `glyph` is one of the `.nf-*` classes defined in index.css.
@@ -1116,18 +1116,16 @@ export default function App() {
             <img 
               src={symbolIcon} 
               alt="Rhystic Tracker" 
-              className={`object-contain drop-shadow-md transition-all ${
+              className={`object-contain w-auto drop-shadow-md transition-all ${
                 isSidebarCollapsed ? 'h-8' : 'h-[75px]'
               }`}
             />
           </div>
 
-          {/* Navigation Links — fills remaining height; when collapsed the group
-              centers vertically, sliding to the middle of the sidebar. */}
+          {/* Navigation Links — stays in place below the icon whether the sidebar
+              is open or collapsed (no vertical centering on collapse). */}
           <nav className={`transition-all duration-300 ease-in-out ${
-            isSidebarCollapsed
-              ? 'flex-1 flex flex-col justify-center space-y-0.5'
-              : 'space-y-1.5'
+            isSidebarCollapsed ? 'space-y-0.5' : 'space-y-1.5'
           }`}>
             {navItems.map((item) => {
               const Icon = item.icon;
