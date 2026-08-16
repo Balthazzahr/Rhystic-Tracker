@@ -51,6 +51,11 @@ fn parse_line(line: &str) -> Option<(i64, String, Option<String>, Option<String>
 
 /// Resolves a card name to the lowest grp_id in cards_cache (printings merged,
 /// deterministic). Returns None if the name has no cache entry.
+///
+/// MTGA exports Alchemy-rebalanced printings with an "A-" prefix on the name
+/// (e.g. "A-The One Ring"). Those cards aren't in the cache under that name —
+/// they're the same cards, just the rebalanced Arena-only variant — so when an
+/// exact lookup fails we retry with the leading "A-" stripped.
 async fn resolve_by_name(pool: &Pool<Sqlite>, name: &str) -> Result<Option<i64>, sqlx::Error> {
     let row = sqlx::query(
         "SELECT MIN(grp_id) as grp_id FROM cards_cache WHERE name = ?"
@@ -58,7 +63,19 @@ async fn resolve_by_name(pool: &Pool<Sqlite>, name: &str) -> Result<Option<i64>,
     .bind(name)
     .fetch_optional(pool)
     .await?;
-    Ok(row.and_then(|r| r.get::<Option<i64>,_>("grp_id")))
+    if let Some(id) = row.and_then(|r| r.get::<Option<i64>,_>("grp_id")) {
+        return Ok(Some(id));
+    }
+    if let Some(stripped) = name.strip_prefix("A-") {
+        let row2 = sqlx::query(
+            "SELECT MIN(grp_id) as grp_id FROM cards_cache WHERE name = ?"
+        )
+        .bind(stripped)
+        .fetch_optional(pool)
+        .await?;
+        return Ok(row2.and_then(|r| r.get::<Option<i64>,_>("grp_id")));
+    }
+    Ok(None)
 }
 
 /// Resolves a (set_code, collector_number) pair to the lowest grp_id.
@@ -256,6 +273,33 @@ mod tests {
         sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?").bind(deck)
             .execute(db.pool()).await.expect("cleanup");
         println!("roundtrip ok: {:?}", stored);
+    }
+
+    #[tokio::test]
+    async fn test_alchemy_a_prefix_resolves() {
+        // MTGA exports Alchemy-rebalanced cards with an "A-" prefix on the name
+        // (e.g. "A-The One Ring"). Those names don't exist in the cache — the
+        // card is stored under its base name — so resolution must strip the prefix.
+        let db = crate::db::DatabaseManager::init().await.expect("db init");
+        seed_test_cards(&db).await;
+        sqlx::query(
+            "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number, card_type, last_updated) \
+             VALUES (?, ?, '', 0, '', '', ?, 0, ?, ?, DATETIME('now'))"
+        )
+        .bind(70001).bind("The One Ring").bind("LTR").bind("246").bind("Legendary Artifact")
+        .execute(db.pool()).await.expect("seed alchemy base card");
+        sqlx::query(
+            "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number, card_type, last_updated) \
+             VALUES (?, ?, '', 0, '', '', ?, 0, ?, ?, DATETIME('now'))"
+        )
+        .bind(70002).bind("Guide of Souls").bind("MH3").bind("29").bind("Creature")
+        .execute(db.pool()).await.expect("seed alchemy base card 2");
+
+        let sample = "Deck\n1 A-The One Ring (LTR) 246\n1 A-Guide of Souls (MH3) 29\n";
+        let parsed = parse_deck_export(db.pool(), sample).await.expect("parse");
+        assert!(parsed.unresolved.is_empty(), "unresolved: {:?}", parsed.unresolved);
+        assert_eq!(parsed.cards.len(), 2);
+        assert!(parsed.cards.iter().all(|(id, _)| *id > 0));
     }
 
     #[tokio::test]
