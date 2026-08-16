@@ -1297,13 +1297,15 @@ fn ownership_stats(
 
 /// Dynamic WHERE clauses + bind values for the collection query over cards_cache
 /// (`c.` alias). Supports multi-select sets, multi-select colors (incl. colorless
-/// "C"), multi-select rarities, card type substring, and name search.
+/// "C"), multi-select rarities, card type substring, name search, and an exact
+/// mana value (CMC) filter.
 fn collection_filter_clauses(
     sets: &[String],
     colors: &[String],
     rarities: &[i64],
     types: &[String],
     search: &Option<String>,
+    cmc: &Option<i64>,
 ) -> (Vec<String>, Vec<QBind>) {
     let mut clauses: Vec<String> = Vec::new();
     let mut binds: Vec<QBind> = Vec::new();
@@ -1355,6 +1357,18 @@ fn collection_filter_clauses(
         binds.push(QBind::Str(format!("%{}%", search.to_lowercase())));
     }
 
+    // Exact mana value (CMC). The cache's cmc column is reliable (backfilled).
+    // "8+" (cmc value 8) means 8 or more.
+    if let Some(mv) = cmc {
+        if *mv >= 8 {
+            clauses.push("c.cmc >= ?".to_string());
+            binds.push(QBind::Int(*mv));
+        } else {
+            clauses.push("c.cmc = ?".to_string());
+            binds.push(QBind::Int(*mv));
+        }
+    }
+
     (clauses, binds)
 }
 
@@ -1398,13 +1412,14 @@ fn sort_collection_cards(cards: &mut Vec<serde_json::Value>, sort: &str, sort_di
 
 /// Full collection browse/filter query, shared by the IPC command and tests.
 ///
-/// Universe: the union of all grp_ids from uploaded True Decklists ONLY. Cards
-/// never seen in a true decklist are never shown, which keeps the collection
-/// privacy-safe (no leaked/stolen/seen-but-unowned cards). `owned_count` comes
-/// from collection_cards (0 when the card is in a decklist but not owned).
+/// Universe: every card in the local MTGA card database (cards_cache). This is
+/// the full set of Arena cards (incl. all printings across sets), so filtering
+/// by "Not Collected" + a set shows every card that set contains, not just the
+/// ones that appear in uploaded True Decklists. `owned_count` comes from
+/// collection_cards (0 when a card has no ownership signal).
 ///
-/// `owned` filter: "all" = every decklist card, "owned" = owned_count > 0,
-/// "unowned" = decklist cards with owned_count = 0.
+/// `owned` filter: "all" = every cached card, "owned" = owned_count > 0,
+/// "unowned" = cached cards with owned_count = 0.
 ///
 /// Multi-select filters: `sets` (Vec<String> set codes), `colors`
 /// (Vec<String> W/U/B/R/G/C), `rarities` (Vec<i64>), `types` (Vec<String>
@@ -1414,8 +1429,6 @@ async fn query_collection(
     pool: &sqlx::Pool<sqlx::Sqlite>,
     filters: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    use std::collections::HashSet;
-
     let owned_filter = filters.get("owned").and_then(|v| v.as_str()).unwrap_or("all").to_string();
 
     let sets: Vec<String> = filters.get("sets")
@@ -1436,31 +1449,28 @@ async fn query_collection(
         .unwrap_or_default();
     let search_filter = filters.get("search").and_then(|v| v.as_str())
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let cmc_filter = filters.get("cmc").and_then(|v| v.as_i64());
     let sort = filters.get("sort").and_then(|v| v.as_str()).unwrap_or("name").to_string();
     let sort_dir = filters.get("sort_dir").and_then(|v| v.as_str()).unwrap_or("asc").to_string();
     let page = filters.get("page").and_then(|v| v.as_u64()).unwrap_or(1).max(1);
     let page_size = filters.get("page_size").and_then(|v| v.as_u64()).unwrap_or(120).max(1);
 
-    // 1. Build the decklist-only universe of grp_ids.
+    // 1. Universe = every card in the local MTGA card database (cards_cache),
+    //    so "Not Collected" filters can show every card in a set.
     let mut universe: Vec<i64> = Vec::new();
-    let mut seen: HashSet<i64> = HashSet::new();
-    let dl_rows = sqlx::query("SELECT cards_json FROM deck_lists")
+    let mut seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
+    let cc_rows = sqlx::query("SELECT grp_id FROM cards_cache")
         .fetch_all(pool)
         .await
         .map_err(|e| e.to_string())?;
-    for r in dl_rows {
-        let cards_json: String = r.get("cards_json");
-        let entries: Vec<serde_json::Value> = serde_json::from_str(&cards_json).unwrap_or_default();
-        for e in entries {
-            if let Some(gid) = e.get("grp_id").and_then(|v| v.as_i64()) {
-                if gid > 0 && seen.insert(gid) {
-                    universe.push(gid);
-                }
-            }
+    for r in cc_rows {
+        let gid: i64 = r.get("grp_id");
+        if gid > 0 && seen.insert(gid) {
+            universe.push(gid);
         }
     }
 
-    let (clauses, binds) = collection_filter_clauses(&sets, &colors, &rarities, &types, &search_filter);
+    let (clauses, binds) = collection_filter_clauses(&sets, &colors, &rarities, &types, &search_filter, &cmc_filter);
     let where_sql = if clauses.is_empty() { String::new() } else { format!(" AND {}", clauses.join(" AND ")) };
 
     // 2. Query every decklist card's metadata, filtered.
@@ -1558,6 +1568,15 @@ async fn query_collection(
 
     let total_cards = cards.len() as i64;
 
+    // Total-owned stats over the FULL filtered set (for the header), before
+    // pagination slices the page.
+    let total_owned_cards = cards.iter()
+        .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
+        .count() as i64;
+    let total_owned_copies_all: i64 = cards.iter()
+        .filter_map(|c| c.get("owned_count").and_then(|v| v.as_i64()))
+        .sum();
+
     // 4. Pagination.
     let offset = ((page - 1) * page_size) as usize;
     let page_cards: Vec<serde_json::Value> = cards.into_iter().skip(offset).take(page_size as usize).collect();
@@ -1584,6 +1603,8 @@ async fn query_collection(
             "owned_cards": owned_cards,
             "owned_grp_ids": owned_grp_ids,
             "total_owned_copies": total_owned_copies,
+            "total_owned_cards": total_owned_cards,
+            "total_owned_copies_all": total_owned_copies_all,
         },
     }))
 }
@@ -3151,6 +3172,7 @@ mod tests {
             &[2],
             &["angel".to_string()],
             &Some("dawn".to_string()),
+            &None,
         );
         assert_eq!(clauses.len(), 5, "set + color + rarity + type + search");
         assert_eq!(binds.len(), 4, "set(1) + rarity(1) + type(1) + search(1); color is inline");
@@ -3158,34 +3180,46 @@ mod tests {
         assert!(clauses[1].contains(",1,"), "W color clause");
 
         // Colorless maps to empty/null identity.
-        let (clauses, binds) = collection_filter_clauses(&[], &["C".to_string()], &[], &[], &None);
+        let (clauses, binds) = collection_filter_clauses(&[], &["C".to_string()], &[], &[], &None, &None);
         assert_eq!(clauses.len(), 1);
         assert!(clauses[0].contains("color_identity IS NULL"));
         assert!(binds.is_empty());
 
         // Multi-color OR across selected colors.
-        let (clauses, binds) = collection_filter_clauses(&[], &["W".to_string(), "U".to_string()], &[], &[], &None);
+        let (clauses, binds) = collection_filter_clauses(&[], &["W".to_string(), "U".to_string()], &[], &[], &None, &None);
         assert_eq!(clauses.len(), 1);
         assert!(clauses[0].contains(" OR "));
         assert!(binds.is_empty());
 
         // Multi-set IN clause.
-        let (clauses, binds) = collection_filter_clauses(&["LEA".to_string(), "LEG".to_string()], &[], &[], &[], &None);
+        let (clauses, binds) = collection_filter_clauses(&["LEA".to_string(), "LEG".to_string()], &[], &[], &[], &None, &None);
         assert_eq!(clauses.len(), 1);
         assert!(clauses[0].contains("c.set_code IN ("), "clause: {}", clauses[0]);
         assert_eq!(binds.len(), 2);
 
         // Multi-rarity IN clause.
-        let (clauses, binds) = collection_filter_clauses(&[], &[], &[2, 4], &[], &None);
+        let (clauses, binds) = collection_filter_clauses(&[], &[], &[2, 4], &[], &None, &None);
         assert_eq!(clauses.len(), 1);
         assert!(clauses[0].contains("c.rarity IN ("), "clause: {}", clauses[0]);
         assert_eq!(binds.len(), 2);
 
         // Card type as OR'd LIKE clauses.
-        let (clauses, binds) = collection_filter_clauses(&[], &[], &[], &["land".to_string(), "artifact".to_string()], &None);
+        let (clauses, binds) = collection_filter_clauses(&[], &[], &[], &["land".to_string(), "artifact".to_string()], &None, &None);
         assert_eq!(clauses.len(), 1);
         assert!(clauses[0].contains(" OR "));
         assert_eq!(binds.len(), 2);
+
+        // Exact CMC.
+        let (clauses, binds) = collection_filter_clauses(&[], &[], &[], &[], &None, &Some(3));
+        assert_eq!(clauses.len(), 1);
+        assert!(clauses[0].contains("c.cmc = ?"), "clause: {}", clauses[0]);
+        assert_eq!(binds, vec![QBind::Int(3)]);
+
+        // CMC 8+.
+        let (clauses, binds) = collection_filter_clauses(&[], &[], &[], &[], &None, &Some(8));
+        assert_eq!(clauses.len(), 1);
+        assert!(clauses[0].contains("c.cmc >= ?"), "clause: {}", clauses[0]);
+        assert_eq!(binds, vec![QBind::Int(8)]);
     }
 
     #[tokio::test]
@@ -3213,19 +3247,20 @@ mod tests {
 
         let all = query_collection(pool, &serde_json::json!({})).await.expect("all");
         let cards = all.get("cards").and_then(|v| v.as_array()).unwrap();
-        assert_eq!(cards.len(), 4, "all = decklist cards only (1004 logged must be excluded)");
+        // Universe = the full cards_cache, so all 5 seeded cards appear.
+        assert_eq!(cards.len(), 5, "all = every card in cards_cache");
         let summary = all.get("summary").unwrap();
-        assert_eq!(summary.get("total_cards").and_then(|v| v.as_i64()).unwrap(), 4);
-        assert_eq!(summary.get("owned_cards").and_then(|v| v.as_i64()).unwrap(), 3);
-        assert_eq!(summary.get("total_owned_copies").and_then(|v| v.as_i64()).unwrap(), 7);
-        assert_eq!(summary.get("owned_grp_ids").and_then(|v| v.as_array()).unwrap().len(), 3);
+        assert_eq!(summary.get("total_cards").and_then(|v| v.as_i64()).unwrap(), 5);
+        assert_eq!(summary.get("total_owned_cards").and_then(|v| v.as_i64()).unwrap(), 3);
+        assert_eq!(summary.get("total_owned_copies_all").and_then(|v| v.as_i64()).unwrap(), 7);
 
         let owned = query_collection(pool, &serde_json::json!({"owned": "owned"})).await.expect("owned");
         assert_eq!(owned.get("cards").and_then(|v| v.as_array()).unwrap().len(), 3);
 
         let unowned = query_collection(pool, &serde_json::json!({"owned": "unowned"})).await.expect("unowned");
         let unowned_cards = unowned.get("cards").and_then(|v| v.as_array()).unwrap();
-        assert_eq!(unowned_cards.len(), 1, "only 1005 is in a decklist but unowned");
+        // 1004 (logged only) and 1005 (in a decklist) are both unowned cards.
+        assert_eq!(unowned_cards.len(), 2, "1004 (logged) + 1005 (decklist) both unowned");
         for c in unowned_cards {
             assert_eq!(c.get("owned_count").and_then(|v| v.as_i64()).unwrap(), 0);
         }
@@ -3249,9 +3284,8 @@ mod tests {
         set_owned(pool, 1004, 1).await;
         set_owned(pool, 1006, 1).await;
 
-        // Universe = decklist cards only.
+        // Universe = the full cards_cache (all seeded cards are visible).
         seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":4},{"grp_id":1002,"count":2},{"grp_id":1003,"count":3},{"grp_id":1004,"count":1},{"grp_id":1006,"count":1}]"#).await;
-        // 1005 is seen-but-not-in-a-decklist; must never appear.
         seed_match(pool, "m1", "My Deck").await;
         seed_match_card(pool, "m1", 1005, false, 1).await;
 
@@ -3391,8 +3425,8 @@ mod tests {
         let db = DatabaseManager::init().await.expect("db init");
         let pool = db.pool();
         set_owned(pool, 9999, 2).await;
-        // 9999 is owned but appears in NO true decklist -> the collection (which
-        // only shows decklist-derived cards) must not list it.
+        // The universe is cards_cache; no cards are seeded there, so nothing is
+        // returned even though 9999 is owned.
         let res = query_collection(pool, &serde_json::json!({})).await.unwrap();
         let cards = res.get("cards").and_then(|v| v.as_array()).unwrap();
         assert_eq!(cards.len(), 0);

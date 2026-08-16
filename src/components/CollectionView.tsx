@@ -84,6 +84,11 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyGrp, setBusyGrp] = useState<number | null>(null);
+  const [serverTotalCards, setServerTotalCards] = useState(0);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [serverTotalOwned, setServerTotalOwned] = useState(0);
+  const [serverTotalOwnedCopies, setServerTotalOwnedCopies] = useState(0);
+  const safePageRef = useRef(1);
 
   const [search, setSearch] = useState('');
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'unowned'>(() => {
@@ -223,8 +228,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     setLoading(true);
     setError(null);
     try {
-      // Fetch all matching cards in one shot; pagination is client-side so the
-      // grid can auto-fit rows/cols on resize without refetching.
+      // Server-side pagination: the universe is the full MTGA card DB, so we
+      // fetch only the current page (grid-sized) rather than all 26k cards.
       const res = await invoke<any>('get_collection', {
         filters: {
           owned: ownedFilter,
@@ -237,38 +242,34 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           search: search.trim() === '' ? null : search.trim(),
           sort,
           sort_dir: sortDir,
-          page: 1,
-          page_size: 100000,
+          page: safePageRef.current,
+          page_size: pageSize,
         },
       });
       const parsed: CollectionResponse = res;
       setCards(parsed?.cards || []);
+      setServerTotalCards(parsed?.summary?.total_cards ?? parsed?.cards?.length ?? 0);
+      setServerTotalPages(parsed?.total_pages ?? 1);
+      setServerTotalOwned(parsed?.summary?.total_owned_cards ?? 0);
+      setServerTotalOwnedCopies(parsed?.summary?.total_owned_copies_all ?? 0);
     } catch (e) {
       console.error('Failed to load collection:', e);
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, cmcFilter, copiesFilter, search, sort, sortDir]);
+  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, cmcFilter, copiesFilter, search, sort, sortDir, pageSize, page]);
 
-  // CMC has no backend support yet, so filter client-side on the full result
-  // set. `copies` IS backend-filtered, but the summary/pagination below run on
-  // the same filtered list so both stay consistent.
-  const filteredCards = useMemo(() => {
-    if (cmcFilter === null) return cards;
-    return cards.filter((c) => (cmcFilter === 8 ? c.cmc >= 8 : c.cmc === cmcFilter));
-  }, [cards, cmcFilter]);
-
-  // Client-side pagination derived at render (never feeds the network fetch).
-  const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
+  // Page total / total-cards come from the server. safePage keeps the local
+  // `page` within bounds.
+  const totalPages = serverTotalPages;
   const safePage = Math.min(page, totalPages);
-  const displayedCards = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return filteredCards.slice(start, start + pageSize);
-  }, [filteredCards, safePage, pageSize]);
+  const displayedCards = cards;
 
-  const ownedCount = useMemo(() => cards.filter((c) => c.owned_count > 0).length, [cards]);
-  const ownedCopies = useMemo(() => cards.reduce((s, c) => s + c.owned_count, 0), [cards]);
+  // Keep the fetch page ref in sync with the current page.
+  useEffect(() => {
+    safePageRef.current = Math.min(page, serverTotalPages);
+  }, [page, serverTotalPages]);
 
   useEffect(() => {
     fetchCollection();
@@ -636,7 +637,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             Collection
           </h1>
           <p className="text-[11px] font-mono opacity-50 mt-0.5">
-            {ownedCount} / {cards.length} cards owned • {ownedCopies} total copies
+            {serverTotalOwned} / {serverTotalCards} cards owned • {serverTotalOwnedCopies} total copies
           </p>
         </div>
         {error && <span className="text-[11px] font-mono text-rose-400">{error}</span>}
@@ -862,7 +863,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             <ChevronLeft className="w-3.5 h-3.5" /> Prev
           </button>
           <span className="text-[11px] font-mono opacity-60">
-            Page {safePage} of {totalPages} • {cards.length} cards
+            Page {safePage} of {totalPages} • {serverTotalCards} cards
           </span>
           <button
             onClick={() => goPage('next')}
