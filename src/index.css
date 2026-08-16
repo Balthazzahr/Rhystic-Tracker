@@ -112,3 +112,30 @@ input[type='range']::-moz-range-track {
 .animate-page-left {
   animation: rt-page-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* --- Nerd Font icon glyphs ------------------------------------------------ */
+@font-face {
+  font-family: 'NerdFontSymbols';
+  src: url('./assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Base class for Nerd Font glyph rendering. */
+.nf {
+  font-family: 'NerdFontSymbols';
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  display: inline-block;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* nf-md-cards — card stack (used for true-decklist source / Deck Library). */
+.nf-md-cards::before { content: '\f0124'; }
+/* nf-oct-log — log file (used for logged-only source). */
+.nf-oct-log::before { content: '\f02d1'; }

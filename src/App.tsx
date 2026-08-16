@@ -22,7 +22,6 @@ import {
   LayoutGrid,
   ArrowUpDown,
   Trash2,
-  ScrollText,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
@@ -44,6 +43,12 @@ import { CardImage } from './components/CardImage';
 import CollectionView from './components/CollectionView';
 import logoImg from './assets/logo.png';
 import symbolIcon from './assets/symbolIcon.png';
+
+// Renders a Nerd Font glyph (from the bundled NerdFontSymbols font) as an
+// inline icon. `glyph` is one of the `.nf-*` classes defined in index.css.
+const NerdIcon = ({ glyph, className = '', style }: { glyph: string; className?: string; style?: React.CSSProperties }) => (
+  <i className={`nf ${glyph} ${className}`} style={style} aria-hidden="true" />
+);
 
 // In-memory cache of Scryfall card JSON (keyed by card name) so repeated overlay
 // opens don't re-hit the rate-limited API while the app is running.
@@ -904,7 +909,7 @@ export default function App() {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'decks', label: 'Deck Library', icon: Layers },
+    { id: 'decks', label: 'Deck Library', icon: Layers, nerdIcon: 'nf-md-cards' },
     { id: 'matches', label: 'Match History', icon: Swords },
     { id: 'live', label: 'Live Match HUD', icon: Activity },
     { id: 'collection', label: 'Card Library', icon: BookOpen },
@@ -1200,10 +1205,18 @@ export default function App() {
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon 
-                      className={`w-4 h-4 shrink-0 ${item.id === 'live' && isActive ? 'animate-pulse' : ''}`}
-                      style={{ color: isActive ? palette?.accent : undefined }}
-                    />
+                    {item.nerdIcon ? (
+                      <NerdIcon
+                        glyph={item.nerdIcon}
+                        className={`w-4 h-4 shrink-0 ${item.id === 'live' && isActive ? 'animate-pulse' : ''}`}
+                        style={{ color: isActive ? palette?.accent : undefined }}
+                      />
+                    ) : (
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${item.id === 'live' && isActive ? 'animate-pulse' : ''}`}
+                        style={{ color: isActive ? palette?.accent : undefined }}
+                      />
+                    )}
                     {!isSidebarCollapsed && (
                       <span className="truncate">{item.label}</span>
                     )}
@@ -1882,10 +1895,10 @@ export default function App() {
                                       true decklist is uploaded. */}
                                   <span
                                     className="shrink-0 flex items-center justify-center"
-                                    style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF' }}
+                                    style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF', fontSize: 14 }}
                                     title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
                                   >
-                                    {d.has_list ? <Layers className="w-3.5 h-3.5" /> : <ScrollText className="w-3.5 h-3.5" />}
+                                    <NerdIcon glyph={d.has_list ? 'nf-md-cards' : 'nf-oct-log'} />
                                   </span>
                                   {fmtChip ? (
                                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border" style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}>
@@ -2031,10 +2044,10 @@ export default function App() {
                           <div className="w-[130px] shrink-0 flex items-center justify-center">
                             <span
                               className="flex items-center justify-center"
-                              style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF' }}
+                              style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF', fontSize: 16 }}
                               title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
                             >
-                              {d.has_list ? <Layers className="w-4 h-4" /> : <ScrollText className="w-4 h-4" />}
+                              <NerdIcon glyph={d.has_list ? 'nf-md-cards' : 'nf-oct-log'} />
                             </span>
                           </div>
                         </div>
