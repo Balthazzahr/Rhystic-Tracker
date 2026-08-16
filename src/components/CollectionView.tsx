@@ -653,9 +653,19 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             placeholder="Search cards..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border bg-black/30 focus:outline-none"
+            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border bg-black/30 focus:outline-none"
             style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
           />
+          {search.length > 0 && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors hover:bg-white/10"
+              style={{ color: palette?.text }}
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Color pips: multi-select, toggles selectedColors. */}

@@ -156,6 +156,9 @@ export default function App() {
   const [overlayScryfall, setOverlayScryfall] = useState<any>(null);
   const [overlayScryfallLoading, setOverlayScryfallLoading] = useState(false);
   const [overlaySelected, setOverlaySelected] = useState<string | null>(null);
+  // Flavor text per printing, keyed by printingKey. Fetched lazily so the flavor
+  // shown matches the selected art/set.
+  const [overlayFlavors, setOverlayFlavors] = useState<Record<string, string>>({});
 
   // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
   // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
@@ -393,6 +396,26 @@ export default function App() {
         setOverlayPrintings(printings);
         setOverlayStats(res?.stats || null);
         if (printings.length > 0) setOverlaySelected(printingKey(printings[0]));
+        // Fetch flavor text for each printing so it matches the selected art.
+        const flavors: Record<string, string> = {};
+        for (const p of printings) {
+          const key = printingKey(p);
+          try {
+            const url = p.set_code && p.collector_number
+              ? `https://api.scryfall.com/cards/${String(p.set_code).toLowerCase()}/${encodeURIComponent(String(p.collector_number))}?format=json`
+              : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`;
+            const resp = await fetch(url);
+            if (resp.ok) {
+              const data = await resp.json();
+              const face = data.card_faces?.[0] || null;
+              const ft = data.flavor_text || face?.flavor_text || '';
+              if (ft) flavors[key] = ft;
+            }
+          } catch (e) {
+            // ignore individual printing failures
+          }
+        }
+        if (!cancelled) setOverlayFlavors(flavors);
       } catch (e) {
         console.error('Failed to fetch card printings:', e);
       } finally {
@@ -2546,20 +2569,25 @@ export default function App() {
                     className="w-full"
                   />
                 </div>
+                <p className="mt-2.5 text-[9px] font-mono uppercase tracking-wide opacity-50">Card Style / Set</p>
                 <select
                   value={overlaySelected ?? ''}
                   onChange={(e) => setOverlaySelected(e.target.value || null)}
                   disabled={overlayPrintings.length === 0}
-                  className="mt-2 w-full rounded-lg border px-2.5 py-2 text-xs font-mono outline-none disabled:opacity-50"
-                  style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
+                  className="mt-1 w-full rounded-lg border px-2.5 py-2 text-xs font-mono outline-none disabled:opacity-50"
+                  style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border, color: '#E2E8F0' }}
                 >
                   {overlayPrintings.length === 0 ? (
-                    <option value="">
+                    <option value="" style={{ backgroundColor: '#12141A', color: '#E2E8F0' }}>
                       {overlayPrintingsLoading ? 'Loading printings…' : 'No printings found'}
                     </option>
                   ) : (
                     overlayPrintings.map((p) => (
-                      <option key={printingKey(p)} value={printingKey(p)}>
+                      <option
+                        key={printingKey(p)}
+                        value={printingKey(p)}
+                        style={{ backgroundColor: '#12141A', color: '#E2E8F0' }}
+                      >
                         {p.set_name ? `${p.set_name} (${p.set_code})` : p.set_code}
                       </option>
                     ))
@@ -2611,41 +2639,61 @@ export default function App() {
                             {overlayStats ? overlayStats.deck_count : '—'}
                           </p>
                         </div>
-                        <div>
-                          <p className="text-[9px] font-mono uppercase opacity-50">Impactful</p>
-                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                            {overlayStats ? overlayStats.times_impactful : '—'}
-                          </p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-[9px] font-mono uppercase opacity-50">Damage</p>
-                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                            {overlayStats
-                              ? `${overlayStats.total_damage}${overlayStats.max_hit > 0 ? ` (max ${overlayStats.max_hit})` : ''}`
-                              : '—'}
-                          </p>
-                        </div>
                       </>
                     );
                   })()}
                 </div>
 
-                {overlayStats?.decks?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-0.5">
-                    {overlayStats.decks.slice(0, 12).map((d: string, i: number) => (
-                      <span
-                        key={i}
-                        className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
-                        style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.subtext, backgroundColor: 'rgba(0,0,0,0.25)' }}
-                      >
-                        {d}
-                      </span>
-                    ))}
-                    {overlayStats.decks.length > 12 && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 opacity-60" style={{ color: palette?.subtext }}>
-                        +{overlayStats.decks.length - 12} more
-                      </span>
+                {overlayStats && (overlayStats.times_impactful > 0 || overlayStats.total_damage > 0) && (
+                  <div className="rounded-xl border p-2.5 space-y-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66`, backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                    <p className="text-[10px] font-mono uppercase tracking-wide font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
+                      Card Play Stats
+                    </p>
+                    {overlayStats.times_impactful > 0 && (
+                      <div>
+                        <p className="text-[9px] font-mono uppercase opacity-50">Impactful Games</p>
+                        <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
+                          {overlayStats.times_impactful}
+                        </p>
+                      </div>
                     )}
+                    {overlayStats.total_damage > 0 && (
+                      <div>
+                        <p className="text-[9px] font-mono uppercase opacity-50">Damage Done In Matches</p>
+                        <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
+                          {overlayStats.total_damage}{overlayStats.max_hit > 0 ? ` (max ${overlayStats.max_hit})` : ''}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {overlayStats?.decks?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-mono uppercase tracking-wide font-semibold" style={{ color: palette?.accent || '#38BDF8' }}>
+                      Decks Present In:
+                    </p>
+                    <div className="flex flex-wrap gap-1 pt-1.5">
+                      {overlayStats.decks.slice(0, 12).map((d: string, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setDeckCardOverlay(null);
+                            setSelectedDeckName(d);
+                          }}
+                          className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-colors hover:bg-white/10 cursor-pointer"
+                          style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.text, backgroundColor: 'rgba(0,0,0,0.25)' }}
+                          title={`Open ${d}`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                      {overlayStats.decks.length > 12 && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 opacity-60" style={{ color: palette?.subtext }}>
+                          +{overlayStats.decks.length - 12} more
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -2665,7 +2713,7 @@ export default function App() {
                   const scry = overlayScryfall;
                   const face = scry.card_faces?.[0] || null;
                   const oracleText = scry.oracle_text || face?.oracle_text || '';
-                  const flavorText = scry.flavor_text || face?.flavor_text || '';
+                  const flavorText = (overlaySelected && overlayFlavors[overlaySelected]) || '';
                   const power = scry.power ?? face?.power;
                   const toughness = scry.toughness ?? face?.toughness;
                   const loyalty = scry.loyalty ?? face?.loyalty;
