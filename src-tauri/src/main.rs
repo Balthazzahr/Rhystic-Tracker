@@ -1411,6 +1411,35 @@ async fn query_collection(
         }
     }
 
+    // 2b. Merge duplicate printings of the same card name into a single entry
+    //     (like Arena's collection: one row per card, not per printing). Copies
+    //     sum across printings, capped at 4. The representative keeps the newest
+    //     printing's set/art.
+    if !cards.is_empty() {
+        let mut merged: Vec<serde_json::Value> = Vec::new();
+        let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for card in cards {
+            let name = card.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if let Some(&i) = index.get(&name) {
+                let existing = &mut merged[i];
+                let have = existing.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0);
+                let add = card.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0);
+                existing["owned_count"] = serde_json::json!((have + add).min(4));
+                // Keep the newer printing (higher release date) for set/art.
+                let cur_rel = existing.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("");
+                let new_rel = card.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("");
+                if new_rel > cur_rel {
+                    *existing = card;
+                    existing["owned_count"] = serde_json::json!((have + add).min(4));
+                }
+            } else {
+                index.insert(name.clone(), merged.len());
+                merged.push(card);
+            }
+        }
+        cards = merged;
+    }
+
     // 3. Ownership filter + sort (before pagination so page boundaries are stable).
     //    `owned` = collected (>=1), `unowned` = not collected. An exact `copies`
     //    value (1..=4) narrows to cards with exactly that many owned copies.
@@ -3218,6 +3247,42 @@ mod tests {
         // Combined: owned + exactly 2 copies -> 1001.
         let owned_two = query_collection(pool, &serde_json::json!({"owned": "owned", "copies": 2})).await.unwrap();
         assert_eq!(owned_two.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_query_collection_merges_duplicate_printings() {
+        let db = DatabaseManager::init().await.expect("db init");
+        let pool = db.pool();
+
+        // Two printings of the same card name (e.g. Fabled Passage in ELD + BLB).
+        seed_card(pool, 7001, "Fabled Passage", "o1", "", "ELD", 4, "Land").await;
+        seed_card(pool, 7002, "Fabled Passage", "o1", "", "BLB", 4, "Land").await;
+        seed_card(pool, 7003, "Counterspell", "oUoU", "2", "LEA", 2, "Instant").await;
+        // Release dates so the merge keeps the newest printing (BLB).
+        sqlx::query("INSERT INTO sets_metadata (set_code, name, released_at, updated_at) VALUES ('ELD','Throne of Eldraine','2019-10-04','t')")
+            .execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO sets_metadata (set_code, name, released_at, updated_at) VALUES ('BLB','Bloomburrow','2024-08-02','t')")
+            .execute(pool).await.unwrap();
+        seed_decklist(pool, "My Deck", r#"[{"grp_id":7001,"count":1},{"grp_id":7002,"count":1},{"grp_id":7003,"count":3}]"#).await;
+        set_owned(pool, 7001, 1).await;
+        set_owned(pool, 7002, 1).await;
+        set_owned(pool, 7003, 2).await;
+
+        let all = query_collection(pool, &serde_json::json!({})).await.unwrap();
+        let cards = all.get("cards").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(cards.len(), 2, "two printings of Fabled Passage must merge into one entry");
+
+        // Fabled Passage: copies summed (1+1=2), keeps the newest printing (BLB).
+        let fabled = cards.iter().find(|c| c.get("name").and_then(|v| v.as_str()).unwrap_or("") == "Fabled Passage").unwrap();
+        assert_eq!(fabled.get("owned_count").and_then(|v| v.as_i64()).unwrap(), 2);
+        assert_eq!(fabled.get("set_code").and_then(|v| v.as_str()).unwrap(), "BLB");
+
+        // Copies filter still works across the merged entry: both Fabled Passage
+        // (merged to 2) and Counterspell (2) match copies=2.
+        let two = query_collection(pool, &serde_json::json!({"copies": 2})).await.unwrap();
+        let two_cards = two.get("cards").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(two_cards.len(), 2);
+        assert!(two_cards.iter().any(|c| c.get("name").and_then(|v| v.as_str()).unwrap_or("") == "Fabled Passage"));
     }
 
     #[tokio::test]

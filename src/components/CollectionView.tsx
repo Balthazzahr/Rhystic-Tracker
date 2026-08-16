@@ -87,7 +87,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [search, setSearch] = useState('');
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'unowned'>(() => {
     const saved = localStorage.getItem('collectionOwnedFilter');
-    return saved === 'all' || saved === 'owned' || saved === 'unowned' ? saved : 'all';
+    return saved === 'all' || saved === 'owned' || saved === 'unowned' ? saved : 'owned';
   });
   const [selectedSets, setSelectedSets] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
@@ -275,15 +275,15 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
   // Any advanced-filter state active -> the top-bar sliders icon turns gold.
   const hasActiveAdvancedFilters =
-    ownedFilter !== 'all' || selectedSets.length > 0 || selectedColors.length > 0 ||
-    selectedRarities.length > 0 || selectedTypes.length > 0 || cmcFilter !== null ||
-    copiesFilter !== null;
+    ownedFilter === 'all' || ownedFilter === 'unowned' || selectedSets.length > 0 ||
+    selectedColors.length > 0 || selectedRarities.length > 0 || selectedTypes.length > 0 ||
+    cmcFilter !== null || copiesFilter !== null;
 
   const hasActiveFilters =
     hasActiveAdvancedFilters || search.trim() !== '';
 
   const clearAllFilters = () => {
-    setOwnedFilter('all');
+    setOwnedFilter('owned');
     setSelectedSets([]);
     setSelectedColors([]);
     setSelectedRarities([]);
@@ -577,19 +577,19 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       onRemove: () => setSelectedRarities(selectedRarities.filter((x) => x !== r)),
     });
   }
-  if (ownedFilter === 'owned') {
+  if (ownedFilter === 'all') {
     activeChips.push({
-      key: 'owned',
-      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#34D399' }} />,
-      label: 'Collected',
-      onRemove: () => setOwnedFilter('all'),
+      key: 'all',
+      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.accent || '#38BDF8', backgroundColor: 'transparent' }} />,
+      label: 'All cards',
+      onRemove: () => setOwnedFilter('owned'),
     });
   } else if (ownedFilter === 'unowned') {
     activeChips.push({
       key: 'unowned',
       icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.text, backgroundColor: 'transparent' }} />,
       label: 'Not Collected',
-      onRemove: () => setOwnedFilter('all'),
+      onRemove: () => setOwnedFilter('owned'),
     });
   }
   if (copiesFilter !== null) {
