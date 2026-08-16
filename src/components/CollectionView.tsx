@@ -71,7 +71,7 @@ const SORT_OPTIONS = [
 ];
 
 const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 
 function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [cards, setCards] = useState<CollectionCard[]>([]);
@@ -306,53 +306,32 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     const isOwned = card.owned_count > 0;
     const rarity = RARITY_INFO[card.rarity] || { label: '-', color: '#9CA3AF' };
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
-    const small = cardSize === 'small';
 
     return (
       <button
         key={card.grp_id}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative w-full h-full rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl flex flex-col"
+        className="group relative w-full h-full rounded-[6px] overflow-hidden text-left transition-all hover:scale-[1.02] hover:z-10 hover:shadow-xl"
         style={{
           borderColor: isOwned ? rarity.color : `${palette?.border}88`,
           borderWidth: 1,
           borderStyle: 'solid',
           backgroundImage: card.name ? `url(${scryfallArtUrl(card.name)})` : undefined,
-          backgroundSize: 'cover',
+          backgroundSize: 'contain',
           backgroundPosition: 'center',
+          backgroundColor: '#000',
         }}
+        title={cardName}
       >
-        {/* Full-card art; scrim only at the bottom so text stays readable */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
-
-        {/* Card text overlaid on the art (name + type line), like a real card */}
-        <div className="relative mt-auto p-1.5 flex flex-col gap-1">
-          <div className="flex items-start justify-between gap-1">
-            <p
-              className="font-bold leading-tight"
-              style={{ color: '#FFF', fontSize: small ? 9 : 11, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
-            >
-              {cardName}
-            </p>
-            {card.card_type ? (
-              <span
-                className="shrink-0 text-[8px] font-mono uppercase opacity-80 text-right"
-                style={{ color: '#FFF', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
-              >
-                {card.card_type.split('—')[0].trim()}
-              </span>
-            ) : null}
-          </div>
-          <div
-            className="flex items-center justify-between gap-1 pt-0.5 border-t"
-            style={{ borderColor: 'rgba(255,255,255,0.2)' }}
+        {/* Owned count pill */}
+        {isOwned && (
+          <span
+            className="absolute top-1 right-1 z-10 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold tabular-nums"
+            style={{ backgroundColor: 'rgba(0,0,0,0.7)', color: rarity.color }}
           >
-            <span className="text-[8px] font-mono uppercase font-semibold" style={{ color: rarity.color }}>
-              {rarity.label}
-            </span>
-            {renderOwnedControl(card)}
-          </div>
-        </div>
+            {card.owned_count}/4
+          </span>
+        )}
       </button>
     );
   };
