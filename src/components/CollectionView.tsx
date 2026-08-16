@@ -37,18 +37,11 @@ interface CollectionCard {
   owned_count: number;
 }
 
-interface CollectionSummary {
-  total_cards: number;
-  owned_cards: number;
-  total_owned_copies: number;
-}
-
 interface CollectionResponse {
   cards: CollectionCard[];
   page: number;
   page_size: number;
   total_pages: number;
-  summary: CollectionSummary;
 }
 
 const RARITY_INFO: Record<number, { label: string; color: string }> = {
@@ -75,9 +68,7 @@ const scryfallArtUrl = (name: string) =>
 
 function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [cards, setCards] = useState<CollectionCard[]>([]);
-  const [summary, setSummary] = useState<CollectionSummary | null>(null);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyGrp, setBusyGrp] = useState<number | null>(null);
@@ -122,8 +113,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const [gridSize, setGridSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Measure the card-grid area so we can auto-fit columns/rows of fixed cards.
-  // Attached via a callback ref so it observes the real element once it mounts,
-  // and guarded so identical sizes don't retrigger renders/fetches.
+  // Only drives CLIENT-SIDE pagination (never the network fetch), so resizing
+  // the window can't cause refetch loops.
   useEffect(() => {
     const el = gridWrapRef.current;
     if (!el) return;
@@ -140,10 +131,11 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [view, showFilterPanel, loading]);
+  }, [view, showFilterPanel]);
 
   const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
   const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
+  // Page size is client-side only; the backend fetch is decoupled from it.
   const pageSize = view === 'table' ? 100 : cols * rows;
 
   useEffect(() => {
@@ -175,6 +167,8 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     setLoading(true);
     setError(null);
     try {
+      // Fetch all matching cards in one shot; pagination is client-side so the
+      // grid can auto-fit rows/cols on resize without refetching.
       const res = await invoke<any>('get_collection', {
         filters: {
           owned: ownedFilter,
@@ -185,23 +179,30 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           search: search.trim() === '' ? null : search.trim(),
           sort,
           sort_dir: sortDir,
-          page,
-          page_size: pageSize,
+          page: 1,
+          page_size: 100000,
         },
       });
       const parsed: CollectionResponse = res;
       setCards(parsed?.cards || []);
-      setSummary(parsed?.summary || null);
-      const tp = Math.max(1, parsed?.total_pages || 1);
-      setTotalPages(tp);
-      if (parsed?.page && parsed.page > tp) setPage(tp);
     } catch (e) {
       console.error('Failed to load collection:', e);
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, search, sort, sortDir, page, pageSize]);
+  }, [ownedFilter, selectedSets, selectedColors, selectedRarities, selectedTypes, search, sort, sortDir]);
+
+  // Client-side pagination derived at render (never feeds the network fetch).
+  const totalPages = Math.max(1, Math.ceil(cards.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const displayedCards = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return cards.slice(start, start + pageSize);
+  }, [cards, safePage, pageSize]);
+
+  const ownedCount = useMemo(() => cards.filter((c) => c.owned_count > 0).length, [cards]);
+  const ownedCopies = useMemo(() => cards.reduce((s, c) => s + c.owned_count, 0), [cards]);
 
   useEffect(() => {
     fetchCollection();
@@ -415,7 +416,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             Collection
           </h1>
           <p className="text-[11px] font-mono opacity-50 mt-0.5">
-            {summary?.owned_cards ?? 0} / {summary?.total_cards ?? 0} cards owned • {summary?.total_owned_copies ?? 0} total copies
+            {ownedCount} / {cards.length} cards owned • {ownedCopies} total copies
           </p>
         </div>
         <div className="relative w-64">
@@ -680,10 +681,10 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
             style={{ paddingTop: 4, paddingBottom: 4 }}
           >
-            {cards.map(renderCardTile)}
+            {displayedCards.map(renderCardTile)}
           </div>
         )}
-        {view === 'table' && cards.length > 0 && (
+        {view === 'table' && displayedCards.length > 0 && (
           <div className="rounded-2xl border overflow-hidden" style={{ borderColor: palette?.border }}>
             <table className="w-full text-left border-collapse" style={{ color: palette?.text }}>
               <thead>
@@ -711,7 +712,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
                 </tr>
               </thead>
               <tbody>
-                {cards.map(renderTableRow)}
+                {displayedCards.map(renderTableRow)}
               </tbody>
             </table>
           </div>
@@ -733,18 +734,18 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         <div className="shrink-0 flex items-center justify-center gap-4 pt-1">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
+            disabled={safePage <= 1}
             className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
             style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
           >
             <ChevronLeft className="w-3.5 h-3.5" /> Prev
           </button>
           <span className="text-[11px] font-mono opacity-60">
-            Page {page} of {totalPages} • {summary?.total_cards ?? 0} cards
+            Page {safePage} of {totalPages} • {cards.length} cards
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
+            disabled={safePage >= totalPages}
             className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
             style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
           >
