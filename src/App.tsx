@@ -131,12 +131,8 @@ export default function App() {
     }
   }, [isSidebarCollapsedManual]);
 
-  // Navigation & Filter State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>(() => {
-    const saved = localStorage.getItem('activeTab');
-    const valid = ['dashboard', 'matches', 'live', 'decks', 'collection', 'settings'];
-    return valid.includes(saved || '') ? (saved as any) : 'dashboard';
-  });
+  // Navigation & Filter State: Always default to 'dashboard' on launch
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>('dashboard');
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
@@ -1205,7 +1201,7 @@ export default function App() {
           <div 
             className={`flex items-center justify-center shrink-0 transition-all pt-3 pb-5 ${
               isSidebarCollapsed ? 'px-0' : 'px-2'
-            }`}
+            } ${splashState !== 'done' ? 'opacity-0' : 'opacity-100'}`}
           >
             <img 
               src={symbolIcon} 
@@ -1347,6 +1343,7 @@ export default function App() {
             }}
             onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            hideBrandHeader={splashState !== 'done'}
           />
         )}
 
@@ -2547,22 +2544,23 @@ export default function App() {
         >
           {/* Animated Container: holds the centered icon + text logo on splash, then translates/scales into resting positions */}
           <div className="relative w-full h-full pointer-events-none overflow-hidden">
-            {/* 1. SYMBOL ICON: Animates from center (50% scale) -> Top-Left Sidebar Icon */}
+            {/* 1. SYMBOL ICON: Animates from center (large) -> Top-Left Sidebar Icon */}
             <div
               className="absolute transition-all duration-[3000ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? '36px' : '110px'),
-                top: splashState === 'showing' ? '42%' : '48px',
+                top: splashState === 'showing' ? '40%' : '52px',
                 transform: splashState === 'showing' 
-                  ? 'translate(-50%, -50%) scale(2.2)' 
-                  : 'translate(-50%, -50%) scale(1)',
-                opacity: splashState === 'showing' ? 1 : 0,
+                  ? 'translate(-50%, -50%) scale(1)' 
+                  : `translate(-50%, -50%) scale(${isSidebarCollapsed ? 0.22 : 0.44})`,
+                opacity: 1,
               }}
             >
               <img
                 src={symbolIcon}
                 alt="Rhystic Tracker"
-                className="w-auto h-[75px] object-contain drop-shadow-[0_10px_35px_rgba(56,189,248,0.4)]"
+                className="w-[170px] h-[170px] object-contain drop-shadow-[0_15px_40px_rgba(56,189,248,0.5)]"
+                style={{ imageRendering: 'auto' }}
               />
             </div>
 
@@ -2570,18 +2568,19 @@ export default function App() {
             <div
               className="absolute transition-all duration-[3000ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
-                left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? 'calc(50% + 36px)' : 'calc(50% + 110px)'),
-                top: splashState === 'showing' ? '58%' : '58px',
+                left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? 'calc(50% + 36px + 36px)' : 'calc(50% + 110px + 36px)'),
+                top: splashState === 'showing' ? '60%' : '58px',
                 transform: splashState === 'showing' 
-                  ? 'translate(-50%, -50%) scale(1.6)' 
-                  : 'translate(-50%, -50%) scale(0.9)',
-                opacity: splashState === 'showing' ? 1 : 0,
+                  ? 'translate(-50%, -50%) scale(1)' 
+                  : 'translate(-50%, -50%) scale(0.46)',
+                opacity: 1,
               }}
             >
               <img
                 src={logoImg}
                 alt="Rhystic Tracker"
-                className="w-auto h-[83px] max-w-[85vw] object-contain drop-shadow-[0_10px_40px_rgba(0,0,0,0.8)]"
+                className="w-[380px] h-auto max-w-[80vw] object-contain drop-shadow-[0_15px_45px_rgba(0,0,0,0.9)]"
+                style={{ imageRendering: 'auto' }}
               />
             </div>
           </div>

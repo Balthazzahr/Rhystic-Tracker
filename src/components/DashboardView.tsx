@@ -87,6 +87,7 @@ interface DashboardViewProps {
   onSelectMatch: (matchId: string) => void;
   onSelectDeck: (deckName: string) => void;
   onShowCard: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
+  hideBrandHeader?: boolean;
 }
 
 // ---- small helpers (duplicated locally to keep the component self-contained) ----
@@ -155,6 +156,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectMatch,
   onSelectDeck,
   onShowCard,
+  hideBrandHeader = false,
 }) => {
   const [chartFormat, setChartFormat] = useState('ALL');
   const [chartTime, setChartTime] = useState('MONTH');
@@ -512,7 +514,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
       {/* Top-center brand: icon (left) + text logo (right), side by side */}
-      <div className="flex items-center justify-center gap-3 shrink-0">
+      <div 
+        className={`flex items-center justify-center gap-3 shrink-0 transition-opacity duration-500 ${
+          hideBrandHeader ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
         <img src={iconSvg} alt="" className="h-[72px] w-auto object-contain drop-shadow-md" />
         <img src={logoSvg} alt="Rhystic Tracker" className="h-[83px] w-auto object-contain drop-shadow-md" />
       </div>
