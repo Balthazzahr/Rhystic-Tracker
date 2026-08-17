@@ -100,25 +100,7 @@ const flatWinRateColor = (rate: number): string => (rate >= 50 ? '#34D399' : '#F
 const scryfallCardUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 
-const winRateColor = (rate: string): string => {
-  const pct = Math.max(0, Math.min(100, parseFloat(rate) || 0)) / 100;
-  const red: [number, number, number] = [0xF8, 0x71, 0x71];
-  const yellow: [number, number, number] = [0xF8, 0xCB, 0x6B];
-  const green: [number, number, number] = [0x34, 0xD3, 0x99];
-  let r: number, g: number, b: number;
-  if (pct <= 0.5) {
-    const t = pct * 2;
-    r = red[0] + (yellow[0] - red[0]) * t;
-    g = red[1] + (yellow[1] - red[1]) * t;
-    b = red[2] + (yellow[2] - red[2]) * t;
-  } else {
-    const t = (pct - 0.5) * 2;
-    r = yellow[0] + (green[0] - yellow[0]) * t;
-    g = yellow[1] + (green[1] - yellow[1]) * t;
-    b = yellow[2] + (green[2] - yellow[2]) * t;
-  }
-  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-};
+const winRateColor = (rate: string): string => (parseFloat(rate) || 0) >= 50 ? '#34D399' : '#F87171';
 
 const localDateKey = (d: Date): string => {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -502,7 +484,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const subtext = palette?.subtext || '#94A3B8';
   const green = palette?.green || '#34D399';
   const red = palette?.red || '#F87171';
-  const yellow = palette?.yellow || '#F8CB6B';
 
   const renderColorPips = (colors: string[], size = 14) => {
     if (!colors || colors.length === 0) return <ManaPip symbol="C" size={size} />;
@@ -917,11 +898,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
                 <div className="text-[9px] font-mono uppercase tracking-wider opacity-50" style={{ color: subtext }}>Game Priority</div>
               </div>
-              {/* Continuum: on-play (left, accent blue) vs on-draw (right, yellow) */}
+              {/* Continuum: on-play (left, always blue) vs on-draw (right, always orange) */}
               <div className="mt-2.5">
                 <div className="flex h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: `${border}44` }}>
-                  <div className="h-full" style={{ width: `${funFacts.onPlayPct}%`, backgroundColor: accent }} />
-                  <div className="h-full flex-1" style={{ backgroundColor: yellow }} />
+                  <div className="h-full" style={{ width: `${funFacts.onPlayPct}%`, backgroundColor: '#38BDF8' }} />
+                  <div className="h-full flex-1" style={{ backgroundColor: '#F97316' }} />
                 </div>
                 <div className="flex items-center justify-between mt-1 text-[10px] font-mono" style={{ color: subtext }}>
                   <span>On Play {funFacts.onPlayPct.toFixed(0)}%</span>

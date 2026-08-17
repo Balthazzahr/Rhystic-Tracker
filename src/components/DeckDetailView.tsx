@@ -274,16 +274,18 @@ export function DeckDetailView({
           {/* Title card (full width) */}
           <div className="px-5 pt-4 shrink-0">
             <div className="p-5 rounded-2xl border space-y-4 group/title" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-              {/* Row 1: deck name + commander + mana pips */}
+              {/* Row 1: deck name + commander + mana pips. The deck name wraps
+                  (capped at 60% width) and the commander name wraps too, so the
+                  mana pips are never pushed off-screen. */}
               <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2 shrink-0">
-                  <h2 className="text-5xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                <div className="flex items-center gap-2 min-w-0 max-w-[60%]">
+                  <h2 className="text-5xl font-black font-outfit uppercase tracking-wide break-words leading-tight min-w-0" style={{ color: palette?.text }}>
                     {detail.deck_name}
                   </h2>
                   {/* Delete deck — shows on hover, red trash icon */}
                   <button
                     onClick={() => onDeleteDeck(detail.deck_name)}
-                    className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20"
+                    className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20 shrink-0"
                     style={{ color: '#F87171' }}
                     title="Delete deck"
                   >
@@ -293,12 +295,12 @@ export function DeckDetailView({
 
                 {/* Commander: clickable name opens the card viewer */}
                 {detail.commander_name && (
-                  <div className="flex items-center gap-4 ml-auto shrink-0">
-                    <div className="text-right">
+                  <div className="flex items-center gap-4 ml-auto min-w-0">
+                    <div className="text-right min-w-0">
                       <p className="text-[10px] font-mono uppercase opacity-50">Commander</p>
                       <button
                         onClick={() => onShowCard({ name: detail.commander_name }, true)}
-                        className="text-xl font-bold transition-colors hover:underline"
+                        className="text-xl font-bold break-words whitespace-normal leading-tight transition-colors hover:underline"
                         style={{ color: palette?.accent || '#38BDF8' }}
                         title="View card"
                       >
@@ -466,6 +468,7 @@ export function DeckDetailView({
                   totalMatches={detail?.total || 0}
                   status={deckListStatus}
                   palette={palette}
+                  onShowCard={onShowCard}
                 />
               ) : listMode === 'true' ? (
                 /* True Decklist selected but none imported yet — show an empty prompt. */
@@ -483,7 +486,7 @@ export function DeckDetailView({
                   </div>
                 </div>
               ) : (
-                <DeckCardList deckName={deckName} palette={palette} />
+                <DeckCardList deckName={deckName} palette={palette} onShowCard={onShowCard} />
               )}
             </div>
           </div>

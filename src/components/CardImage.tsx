@@ -7,6 +7,13 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 // ~/.config/rhystic-tracker/cardimg/. On later renders the local file is used
 // directly (via convertFileSrc), so Scryfall's API is never hit again.
 
+// A printing is only usable for a direct /cards/{set}/{collector} URL when it
+// has a real collector number. Many MTGA cache rows store 0 (SPG, promo, etc.),
+// which Scryfall 404s — in that case we fall back to the named-image endpoint.
+function hasValidCollector(cn?: string | number | null): boolean {
+  return !!cn && String(cn).trim() !== '' && String(cn) !== '0';
+}
+
 // Global queue: Scryfall's named?exact endpoint is rate limited (~10 req/s),
 // so image resolutions are serialized with a small delay between requests to
 // stay well under the limit.
@@ -40,7 +47,7 @@ async function ensureLocalImage(
   version: 'art_crop' | 'normal',
   printing?: { setCode?: string | null; collectorNumber?: string | null },
 ): Promise<string | null> {
-  const cacheName = printing?.setCode && printing.collectorNumber
+  const cacheName = printing?.setCode && hasValidCollector(printing.collectorNumber)
     ? `${name}|${printing.setCode}|${printing.collectorNumber}`
     : name;
   // 1. Already cached locally? (returns the file path if so)
@@ -52,7 +59,7 @@ async function ensureLocalImage(
   // 2. Resolve + download via the shared rate-limited queue.
   return enqueue(async () => {
     try {
-      const url = printing?.setCode && printing.collectorNumber
+      const url = printing?.setCode && hasValidCollector(printing.collectorNumber)
         ? `https://api.scryfall.com/cards/${String(printing.setCode).toLowerCase()}/${encodeURIComponent(String(printing.collectorNumber))}?format=image&version=${version}`
         : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=${version}`;
       const blob = await fetchImageBlob(url);

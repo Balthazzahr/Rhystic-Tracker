@@ -17,6 +17,7 @@ interface FullMatchInfoModalProps {
   impactfulCards?: any[];
   onSelectDeck?: (deckName: string) => void;
   onSelectOpponent?: (opponentName: string) => void;
+  onShowCard?: (card: any, isCommander?: boolean) => void;
 }
 
 export function FullMatchInfoModal({
@@ -30,17 +31,9 @@ export function FullMatchInfoModal({
   impactfulCards,
   onSelectDeck,
   onSelectOpponent,
+  onShowCard,
 }: FullMatchInfoModalProps) {
   const [subTab, setSubTab] = useState<'cards' | 'timeline'>('cards');
-  const [selectedCard, setSelectedCard] = useState<{ card: CardItem; turn?: number; damage?: number } | null>(null);
-
-  // Close the card overlay with Escape.
-  useEffect(() => {
-    if (!selectedCard) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedCard(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selectedCard]);
 
   if (!isOpen || !selectedMatch) return null;
 
@@ -272,8 +265,7 @@ export function FullMatchInfoModal({
                   palette={palette} 
                   impactfulGrpIds={impactfulGrpIds}
                   onCardClick={(card) => {
-                    const impactful = (impactfulCards || []).find((c) => c.grp_id === card.grp_id);
-                    setSelectedCard({ card, damage: impactful?.total_damage || impactful?.max_hit || 0 });
+                    onShowCard?.(card);
                   }}
                 />
               </div>
@@ -289,79 +281,14 @@ export function FullMatchInfoModal({
                   result={selectedMatch.result} 
                   palette={palette} 
                   cards={cards}
-                  onCardClick={(card, turn) => {
-                    const impactful = (impactfulCards || []).find((c) => c.grp_id === card.grp_id);
-                    setSelectedCard({ card, turn, damage: impactful?.total_damage || impactful?.max_hit || 0 });
+                  onCardClick={(card) => {
+                    onShowCard?.(card);
                   }}
                 />
               </div>
             )}
           </div>
         </div>
-
-        {/* Card overlay modal on click (same pattern as Deck Library) */}
-        {selectedCard && (
-          <div
-            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
-            onClick={() => setSelectedCard(null)}
-          >
-            <div className="flex flex-col items-center max-h-full overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => setSelectedCard(null)}
-                className="self-end mb-2 flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold opacity-70 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5 transition-opacity"
-                style={{ color: palette?.text, borderColor: palette?.border }}
-                title="Close (Esc)"
-              >
-                <X className="w-4 h-4" /> Close
-              </button>
-
-              <div className="w-[340px] rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
-                <img
-                  src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(selectedCard.card.name)}&format=image&version=normal`}
-                  alt={selectedCard.card.name}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="mt-3 w-[340px] rounded-xl border p-4 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{selectedCard.card.name}</p>
-                  <span className="shrink-0 flex items-center gap-0.5">
-                    {parseMtgaManaCost(selectedCard.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
-                  </span>
-                </div>
-                <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
-                  {selectedCard.card.card_type || 'Card'}
-                </p>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                  {selectedCard.turn != null && (
-                    <div>
-                      <p className="text-[9px] font-mono uppercase opacity-50">Played</p>
-                      <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>Turn {selectedCard.turn}</p>
-                    </div>
-                  )}
-                  {selectedCard.damage ? (
-                    <div>
-                      <p className="text-[9px] font-mono uppercase opacity-50">Damage</p>
-                      <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.damage}</p>
-                    </div>
-                  ) : null}
-                  {selectedCard.card.set_code && (
-                    <div>
-                      <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
-                      <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.card.set_code}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-[9px] font-mono uppercase opacity-50">In Match</p>
-                    <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.card.count}x</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

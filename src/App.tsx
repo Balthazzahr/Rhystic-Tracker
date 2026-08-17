@@ -18,11 +18,13 @@ import {
   Clock,
   X,
   LayoutDashboard,
-  Table,
+  Table2,
   LayoutGrid,
   Trash2,
   ZoomIn,
   ZoomOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
@@ -60,9 +62,10 @@ const printingKey = (p: any) => `${p.set_code}|${p.collector_number}`;
 
 // Build the Scryfall image URL for a specific printing. The /cards/{set}/{cn}
 // image endpoint resolves to that exact printing; fall back to the named URL
-// (newest printing) when set/collector are missing.
+// (newest printing) when set/collector are missing OR the collector number is 0
+// (many MTGA cache rows store 0, which Scryfall 404s on).
 const scryfallPrintingImageUrl = (name: string, p?: any): string => {
-  if (p && p.set_code && p.collector_number) {
+  if (p && p.set_code && p.collector_number && String(p.collector_number) !== '0') {
     return `https://api.scryfall.com/cards/${String(p.set_code).toLowerCase()}/${encodeURIComponent(String(p.collector_number))}?format=image&version=normal`;
   }
   return `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
@@ -127,7 +130,6 @@ export default function App() {
       localStorage.setItem('sidebarCollapsed', String(isSidebarCollapsedManual));
     }
   }, [isSidebarCollapsedManual]);
-  const [isDrawerOpenManual, setIsDrawerOpenManual] = useState<boolean>(false);
 
   // Navigation & Filter State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>(() => {
@@ -148,7 +150,6 @@ export default function App() {
   const [matchCount, setMatchCount] = useState<number>(0);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [selectedMatchCards, setSelectedMatchCards] = useState<CardItem[]>([]);
-  const [drawerSubTab, setDrawerSubTab] = useState<'cards' | 'timeline'>('cards');
   const [hoveredCard, setHoveredCard] = useState<CardItem | null>(null);
   const [isFullInfoOpen, setIsFullInfoOpen] = useState<boolean>(false);
   const [targetOpponentName, setTargetOpponentName] = useState<string | null>(null);
@@ -591,19 +592,6 @@ export default function App() {
     ? isSidebarCollapsedManual 
     : windowWidth < SIDEBAR_BREAKPOINT;
 
-  const isDrawerOpen = isDrawerOpenManual;
-
-  // Close the right drawer with Escape when it is open.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isDrawerOpen) {
-        setIsDrawerOpenManual(false);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isDrawerOpen]);
-
   // Selected Match Object
   const selectedMatch = useMemo(() => {
     return matches.find(m => m.match_id === selectedMatchId) || null;
@@ -855,6 +843,7 @@ export default function App() {
     { id: 'collection', label: 'Card Library', icon: BookOpen, nerdIcon: 'nf-md-cards' },
     { id: 'decks', label: 'Deck Library', icon: Layers, nerdIcon: 'nf-fa-box_archive' },
     { id: 'live', label: 'Live Match HUD', icon: Activity },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const formatOptions = [
@@ -894,12 +883,12 @@ export default function App() {
     );
   };
 
-  const renderDeckColorIdentity = (colors?: string[], size: number = 14) => {
+  const renderDeckColorIdentity = (colors?: string[], size: number = 14, justify: string = 'justify-center') => {
     if (!colors || colors.length === 0) {
       return <ManaPip symbol="C" size={size} className="shrink-0" />;
     }
     return (
-      <div className="flex flex-wrap items-center justify-center gap-0.5 shrink-0">
+      <div className={`flex flex-wrap items-center ${justify} gap-1 shrink-0`}>
         {colors.map((c) => (
           <ManaPip key={c} symbol={c} size={size} className="shrink-0" />
         ))}
@@ -1047,17 +1036,57 @@ export default function App() {
   };
 
   // Live HUD deck colors: show "-" until colors are known (rather than a colorless
-  // pip, which implies a genuinely colorless deck).
+  // pip, which implies a genuinely colorless deck). Left-aligned and larger size (18px).
   const renderLiveDeckColors = (colors?: string[]) => {
     if (!colors || colors.length === 0) {
-      return <span className="text-xs font-mono opacity-50">-</span>;
+      return <span className="text-xs font-mono opacity-50 block text-left">-</span>;
     }
-    return renderDeckColorIdentity(colors);
+    return renderDeckColorIdentity(colors, 18, 'justify-start');
   };
 
-  // Render a single live action-feed row, handling life-change entries with
-  // green/red +/- deltas and card play/draw entries with their badge.
-  const renderFeedItem = (e: { type: string; name?: string; delta?: number }, idx: number) => {
+  // Helper: Card type classification with Keyrune/mana-font icons and specific palette colors
+  const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; border: string }> = {
+    Creature: { icon: 'ms-creature', color: '#34D399', bg: 'rgba(52, 211, 153, 0.1)', border: 'rgba(52, 211, 153, 0.3)' }, // Green
+    Instant: { icon: 'ms-instant', color: '#F87171', bg: 'rgba(248, 113, 113, 0.1)', border: 'rgba(248, 113, 113, 0.3)' }, // Red
+    Sorcery: { icon: 'ms-sorcery', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.3)' }, // Yellow
+    Artifact: { icon: 'ms-artifact', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.3)' }, // Cool blue-grey
+    Enchantment: { icon: 'ms-enchantment', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.1)', border: 'rgba(192, 132, 252, 0.3)' }, // Purple
+    Planeswalker: { icon: 'ms-planeswalker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.3)' }, // Orange/Rose
+    Battle: { icon: 'ms-battle', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.1)', border: 'rgba(244, 63, 94, 0.3)' }, // Rose
+    Land: { icon: 'ms-land', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.3)' }, // Light brown/amber
+    Token: { icon: 'ms-token', color: '#A1A1AA', bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.3)' },
+    Other: { icon: 'ms-multicolor', color: '#E2E8F0', bg: 'rgba(226, 232, 240, 0.1)', border: 'rgba(226, 232, 240, 0.3)' },
+  };
+
+  const getCardTypeBadge = (rawType?: string) => {
+    if (!rawType) return null;
+    const lower = rawType.toLowerCase();
+    let category = 'Other';
+    if (lower.includes('token')) category = 'Token';
+    else {
+      for (const kw of ['planeswalker', 'battle', 'creature', 'land', 'enchantment', 'artifact', 'instant', 'sorcery']) {
+        if (lower.includes(kw)) {
+          category = kw[0].toUpperCase() + kw.slice(1);
+          break;
+        }
+      }
+    }
+    const conf = CARD_TYPE_CONFIG[category] || CARD_TYPE_CONFIG.Other;
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0"
+        style={{ color: conf.color, backgroundColor: conf.bg, borderColor: conf.border }}
+        title={rawType}
+      >
+        <span className={`ms ${conf.icon} text-[12px] leading-none`} style={{ color: conf.color }} />
+        <span>{category}</span>
+      </span>
+    );
+  };
+
+  // Render a single live action-feed row, handling life-change entries, damage entries,
+  // and card play/draw entries with their badges.
+  const renderFeedItem = (e: { type: string; name?: string; card_type?: string; delta?: number; amount?: number; target_name?: string; damage_type?: string }, idx: number) => {
     if (e.type === 'life') {
       const positive = (e.delta ?? 0) >= 0;
       return (
@@ -1069,12 +1098,46 @@ export default function App() {
         </div>
       );
     }
+    if (e.type === 'damage') {
+      return (
+        <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
+          <span className="px-1 rounded text-[10px] font-bold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+            {e.amount} DMG
+          </span>
+          <span className="truncate font-semibold opacity-95" style={{ color: palette?.text }}>
+            {e.name}
+          </span>
+          {getCardTypeBadge(e.card_type)}
+          <span className="opacity-40 text-[10px] shrink-0">→</span>
+          <span className="truncate text-amber-300/90 text-[11px]">
+            {e.target_name}
+          </span>
+        </div>
+      );
+    }
+    let badgeText = 'PLAY';
+    let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    if (e.type === 'draw') {
+      badgeText = 'DRAW';
+      badgeStyle = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+    } else if (e.type === 'token') {
+      badgeText = 'TOKEN';
+      badgeStyle = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+    } else if (e.type === 'dies') {
+      badgeText = 'DIES';
+      badgeStyle = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+    } else if (e.type === 'exile') {
+      badgeText = 'EXILE';
+      badgeStyle = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
+    }
+
     return (
       <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
-        <span className={`px-1 rounded text-[10px] font-bold uppercase ${e.type === 'play' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-purple-500/10 text-purple-400'}`}>
-          {e.type === 'draw' ? 'DRAW' : 'PLAY'}
+        <span className={`px-1 rounded text-[10px] font-bold uppercase border shrink-0 ${badgeStyle}`}>
+          {badgeText}
         </span>
         <span className="truncate opacity-90">{e.name}</span>
+        {getCardTypeBadge(e.card_type)}
       </div>
     );
   };
@@ -1130,6 +1193,20 @@ export default function App() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
+              const isLiveMatchActive = item.id === 'live' && liveMatchState && liveMatchState.status === 'IN_MATCH';
+
+              let itemColor = isActive ? (palette?.accent || '#38BDF8') : (palette?.text || '#F8FAFC');
+              let itemBg = isActive ? `${palette?.accent || '#38BDF8'}1F` : 'transparent';
+              let itemBorder = !isSidebarCollapsed && isActive ? `4px solid ${palette?.accent || '#38BDF8'}` : 'none';
+
+              if (isLiveMatchActive) {
+                itemColor = '#F97316'; // Bright orange
+                if (isActive) {
+                  itemBg = 'rgba(249, 115, 22, 0.2)';
+                  itemBorder = '4px solid #F97316';
+                }
+              }
+
               return (
                 <button
                   key={item.id}
@@ -1137,31 +1214,31 @@ export default function App() {
                   title={isSidebarCollapsed ? item.label : undefined}
                   className={`w-full flex items-center py-3 rounded-xl font-medium text-sm transition-all ${
                     isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3.5'
-                  }`}
+                  } ${isLiveMatchActive ? 'animate-pulse font-bold' : ''}`}
                   style={{
-                    backgroundColor: isActive ? `${palette?.accent || '#38BDF8'}1F` : 'transparent',
-                    color: isActive ? (palette?.accent || '#38BDF8') : (palette?.text || '#F8FAFC'),
-                    borderLeft: !isSidebarCollapsed && isActive ? `4px solid ${palette?.accent || '#38BDF8'}` : 'none',
+                    backgroundColor: itemBg,
+                    color: itemColor,
+                    borderLeft: itemBorder,
                   }}
                 >
                   <div className="flex items-center gap-3">
                     {item.nerdIcon ? (
                       <NerdIcon
                         glyph={item.nerdIcon}
-                        className={`w-4 h-4 shrink-0 ${item.id === 'live' && isActive ? 'animate-pulse' : ''}`}
-                        style={{ color: isActive ? palette?.accent : undefined }}
+                        className="w-4 h-4 shrink-0"
+                        style={{ color: itemColor }}
                       />
                     ) : (
                       <Icon
-                        className={`w-4 h-4 shrink-0 ${item.id === 'live' && isActive ? 'animate-pulse' : ''}`}
-                        style={{ color: isActive ? palette?.accent : undefined }}
+                        className="w-4 h-4 shrink-0"
+                        style={{ color: itemColor }}
                       />
                     )}
                     {!isSidebarCollapsed && (
                       <span className="truncate">{item.label}</span>
                     )}
                   </div>
-                  {!isSidebarCollapsed && item.badge && (
+                  {!isSidebarCollapsed && !isLiveMatchActive && item.badge && (
                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/40 text-amber-300 border border-amber-500/30">
                       {item.badge}
                     </span>
@@ -1172,13 +1249,27 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Sidebar Footer: Color-Lit Mana Theme Selector */}
-        <div className="space-y-3">
-          <div 
-            className={`flex items-center transition-all ${
-              isSidebarCollapsed ? 'flex-col space-y-1' : 'justify-center gap-0.5'
-            }`}
+        {/* Sidebar Footer: mana theme selector + collapse chevron. When the
+            sidebar is open the chevron sits on the left of the pips in one row;
+            when collapsed the pips stack vertically with the chevron below. */}
+        <div className={`flex items-center transition-all ${
+          isSidebarCollapsed ? 'flex-col' : 'justify-center gap-3'
+        }`}>
+          {/* Collapse chevron — bare icon, no pill/button around it */}
+          <button
+            onClick={() => setIsSidebarCollapsedManual(!isSidebarCollapsed)}
+            className={`shrink-0 p-1 transition-opacity hover:opacity-70 ${isSidebarCollapsed ? 'order-2 mt-8' : 'order-1'}`}
+            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
+            {isSidebarCollapsed
+              ? <PanelLeftOpen className="w-[18px] h-[18px]" style={{ color: palette?.subtext || '#94A3B8' }} />
+              : <PanelLeftClose className="w-[18px] h-[18px]" style={{ color: palette?.subtext || '#94A3B8' }} />}
+          </button>
+
+          {/* Mana theme pips */}
+          <div className={`flex items-center transition-all ${
+            isSidebarCollapsed ? 'flex-col space-y-1 order-1' : 'gap-0.5 order-2'
+          }`}>
             {manaThemeOptions.map((t) => {
               const isSelected = activeThemeId === t.id;
               const isHovered = hoveredThemeId === t.id;
@@ -1205,74 +1296,11 @@ export default function App() {
               );
             })}
           </div>
-
-          <div className={`flex items-stretch gap-2 ${
-            isSidebarCollapsed ? 'flex-col-reverse' : 'flex-row'
-          }`}>
-            {/* Collapse menu icon button */}
-            <button 
-              onClick={() => setIsSidebarCollapsedManual(!isSidebarCollapsed)}
-              className="flex-1 py-2 border rounded-xl flex items-center justify-center transition-all hover:bg-white/5"
-              style={{ 
-                backgroundColor: `${palette?.surface || '#1A1D24'}99`,
-                borderColor: palette?.border || '#2A2F3D',
-                color: palette?.subtext || '#94A3B8'
-              }}
-              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-            >
-              {isSidebarCollapsed ? (
-                <ChevronRight className="w-4 h-4" />
-              ) : (
-                <ChevronLeft className="w-4 h-4" />
-              )}
-            </button>
-
-            {/* Settings icon pill button */}
-            <button 
-              onClick={() => setActiveTab('settings')}
-              className={`flex-1 py-2 border rounded-xl flex items-center justify-center transition-all hover:bg-white/5 ${
-                activeTab === 'settings' ? '' : 'opacity-70'
-              }`}
-              style={{ 
-                backgroundColor: activeTab === 'settings' ? `${palette?.accent || '#38BDF8'}1F` : `${palette?.surface || '#1A1D24'}99`,
-                borderColor: activeTab === 'settings' ? (palette?.accent || '#38BDF8') : (palette?.border || '#2A2F3D'),
-                color: activeTab === 'settings' ? (palette?.accent || '#38BDF8') : (palette?.subtext || '#94A3B8')
-              }}
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </aside>
 
       {/* COLUMN 2: Main Workspace Container */}
       <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 transition-all duration-300 relative">
-        
-        {/* Persistent Live Match Banner */}
-        {liveMatchState && activeTab !== 'live' && (
-          <div 
-            onClick={() => setActiveTab('live')}
-            className="w-full p-3.5 rounded-2xl border flex items-center justify-between shadow-lg cursor-pointer hover:opacity-90 transition-all animate-pulse"
-            style={{ backgroundColor: `${palette?.accent}1F`, borderColor: palette?.accent }}
-          >
-            <div className="flex items-center gap-3">
-              <Activity className="w-5 h-5" style={{ color: palette?.accent }} />
-              <div>
-                <span className="text-xs font-bold font-outfit uppercase tracking-wide" style={{ color: palette?.accent }}>
-                  MATCH IN PROGRESS — LIVE TRACKING ACTIVE
-                </span>
-                <p className="text-[11px] opacity-80 font-mono">
-                  Round {liveMatchState.round ?? Math.ceil((liveMatchState.turn || 1) / 2)} • Your HP: {liveMatchState.player_life ?? 20} • Opp HP: {liveMatchState.opponent_life ?? 20}
-                  {liveMatchState.last_event ? ` • ${liveMatchState.last_event.is_player ? 'You' : (liveMatchState.opponent_name || 'Opp')} ${liveMatchState.last_event.type === 'draw' ? 'drew' : 'played'}` : ''}
-                </p>
-              </div>
-            </div>
-            <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border bg-black/40 text-emerald-400 border-emerald-500/30">
-              CLICK TO VIEW HUD →
-            </span>
-          </div>
-        )}
         
         {/* VIEW 1: Dashboard (default landing view) */}
         {activeTab === 'dashboard' && (
@@ -1284,7 +1312,7 @@ export default function App() {
             timeOptions={timeOptions}
             onSelectMatch={(matchId) => {
               setSelectedMatchId(matchId);
-              setIsDrawerOpenManual(true);
+              setIsFullInfoOpen(true);
             }}
             onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
@@ -1592,22 +1620,23 @@ export default function App() {
                   className={`flex items-center justify-center px-2.5 py-2 transition-all ${deckView === 'table' ? '' : 'opacity-50 hover:opacity-100'}`}
                   style={{ color: palette?.text }}
                 >
-                  <Table className="w-3.5 h-3.5" />
+                  <Table2 className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Card size toggle (cards view only): the icon shows what you'll
-                  switch TO — zoom-in when currently small, zoom-out when large. */}
-              {deckView === 'cards' && (
-                <button
-                  onClick={() => setDeckCardSize(deckCardSize === 'small' ? 'large' : 'small')}
-                  className="flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all hover:bg-white/5"
-                  style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-                  title={deckCardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards'}
-                >
-                  {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
-                </button>
-              )}
+              {/* Card size toggle: kept visible in table view but disabled/greyed
+                  so the top bar stays consistent. */}
+              <button
+                onClick={() => deckView === 'cards' && setDeckCardSize(deckCardSize === 'small' ? 'large' : 'small')}
+                disabled={deckView !== 'cards'}
+                className={`flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all ${
+                  deckView === 'cards' ? 'hover:bg-white/5' : 'opacity-40 cursor-not-allowed'
+                }`}
+                style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+                title={deckView === 'cards' ? (deckCardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards') : 'Card size only applies to card view'}
+              >
+                {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
+              </button>
             </div>
 
             {/* Deck Library content: card view */}
@@ -1961,7 +1990,7 @@ export default function App() {
                         key={m.match_id}
                         onClick={() => {
                           setSelectedMatchId(m.match_id);
-                          setIsDrawerOpenManual(true);
+                          setIsFullInfoOpen(true);
                         }}
                         className={`absolute top-0 left-0 w-full flex items-center text-base py-2 px-4 gap-2 border-b transition-colors cursor-pointer hover:bg-white/5 ${
                           selectedMatchId === m.match_id ? 'bg-white/10' : ''
@@ -2028,288 +2057,7 @@ export default function App() {
             </div>
           </>
         )}
-
-        {/* Edge-of-Screen Chevron Toggle for Drawer */}
-        {!isDrawerOpen && (
-          <button
-            onClick={() => setIsDrawerOpenManual(true)}
-            className="fixed right-0 top-1/2 -translate-y-1/2 z-30 p-2 rounded-l-xl border-l border-t border-b shadow-2xl transition-all hover:pr-3 group"
-            style={{
-              backgroundColor: palette?.surface || '#1A1D24',
-              borderColor: palette?.border || '#2A2F3D',
-              color: palette?.accent || '#38BDF8',
-            }}
-            title="Open Inspector Drawer"
-          >
-            <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          </button>
-        )}
       </main>
-
-      {/* COLUMN 3: Lightweight Key Match Stats Summary Drawer (fixed overlay above content) */}
-      <aside 
-        className={`fixed right-0 top-0 bottom-0 border-l p-5 flex flex-col justify-between transition-all duration-300 ease-in-out z-40 shadow-2xl backdrop-blur-xl ${
-          isDrawerOpen ? 'w-[432px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 p-0 border-none pointer-events-none'
-        }`}
-        style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
-      >
-        <div className="flex flex-col flex-1 space-y-4 overflow-y-auto pr-0.5 custom-scrollbar">
-          {/* Drawer Header */}
-          <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: palette?.border }}>
-            <p className="flex-1 text-2xl font-black font-outfit uppercase tracking-wide text-center" style={{ color: palette?.text }}>Key Match Stats</p>
-            <button 
-              onClick={() => setIsDrawerOpenManual(false)}
-              className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5"
-              style={{ borderColor: palette?.border }}
-              title="Close Drawer"
-            >
-              ✕
-            </button>
-          </div>
-
-          {selectedMatch && (
-            <div className="space-y-4">
-              {/* 2. Fighting-Game-Style VS Header */}
-              <div className="p-4 rounded-2xl border text-center space-y-2.5 shadow-lg" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                {/* Player deck name with colors inline */}
-                <div className="flex items-center justify-center gap-2">
-                  <button 
-                    onClick={() => setSelectedDeckName(selectedMatch.player_deck_name)}
-                    className="text-lg font-extrabold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer text-center max-w-[60%]" 
-                    style={{ color: palette?.accent || '#38BDF8' }}
-                    title="Open Deck Details"
-                  >
-                    {selectedMatch.player_deck_name}
-                  </button>
-                  <span className="shrink-0">{renderDeckColorIdentity(selectedMatch.deck_colors)}</span>
-                </div>
-
-                <p className="text-sm font-mono font-bold opacity-40">VS</p>
-
-                {/* Opponent name with colors inline */}
-                <div className="flex items-center justify-center gap-2">
-                  <button 
-                    onClick={() => {
-                      setTargetOpponentName(selectedMatch.opponent_name || 'Opponent');
-                      setIsH2HOpen(true);
-                    }}
-                    className="text-base font-bold font-outfit uppercase tracking-wide truncate hover:underline cursor-pointer text-center max-w-[60%]" 
-                    style={{ color: palette?.text }}
-                    title="View Opponent Head-to-Head Stats"
-                  >
-                    {selectedMatch.opponent_name || 'Opponent'}
-                  </button>
-                  <span className="shrink-0">{renderDeckColorIdentity(selectedMatch.opponent_colors)}</span>
-                </div>
-
-                {/* Victory / Defeat Status Banner with reason underneath */}
-                <div className="pt-1 flex flex-col items-center justify-center space-y-1">
-                  {selectedMatch.result === 'win' ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-black tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                      <CheckCircle2 className="w-4 h-4" /> VICTORY
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-black tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/30">
-                      <XCircle className="w-4 h-4" /> DEFEAT
-                    </span>
-                  )}
-                  <span className={`text-xs font-mono font-semibold ${selectedMatch.result === 'win' ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>
-                    {matchReason(selectedMatch)}
-                  </span>
-                  {/* Deck Win Streak (moved up under the result) */}
-                  <span className="text-[10px] font-mono opacity-60">
-                    {deckStreak ? (
-                      `${deckStreak.count}${deckStreak.count === 1 ? 'st' : deckStreak.count === 2 ? 'nd' : deckStreak.count === 3 ? 'rd' : 'th'} ${deckStreak.type.toUpperCase()} STREAK`
-                    ) : (
-                      '1st Game'
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              {/* 3+4. Combined Player vs Opponent: label, commander (Brawl), then stats */}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {/* Player Column */}
-                <div className="p-3.5 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-xs uppercase font-bold text-emerald-400 font-mono">Player</p>
-
-                  {/* Player Commander (Brawl Only) */}
-                  {selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
-                    <div className="text-center space-y-1">
-                      {commanderInfo?.player_commander ? (
-                        <>
-                          <img 
-                            src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(commanderInfo.player_commander.name)}&format=image&version=art_crop`}
-                            alt={commanderInfo.player_commander.name}
-                            className="w-full h-20 object-cover rounded-lg border border-white/10"
-                          />
-                          <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.player_commander.name}</p>
-                        </>
-                      ) : (
-                        <div className="h-20 rounded-lg border border-dashed flex items-center justify-center text-[11px] opacity-40 font-mono" style={{ borderColor: palette?.border }}>
-                          No Cmdr
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Player Stats */}
-                  <div className="space-y-1.5">
-                    <div>
-                      <span className="opacity-50 text-[11px]">Order: </span>
-                      <span className="font-bold text-amber-400">{selectedMatch.going_first ? 'Play (1st)' : 'Draw (2nd)'}</span>
-                    </div>
-                    <div>
-                      <span className="opacity-50 text-[11px]">Mulligans: </span>
-                      <span className="font-bold font-mono">{selectedMatch.player_mulligans ?? 0}</span>
-                    </div>
-                    <div>
-                      <span className="opacity-50 text-[11px]">End HP: </span>
-                      <span className="font-bold text-emerald-400 font-mono">{selectedMatch.player_life_end ?? 20} HP</span>
-                    </div>
-                  </div>
-
-                  {/* Player Cards Played */}
-                  <div className="pt-1">
-                    <p className="text-[10px] uppercase opacity-50 mb-1">Cards Played</p>
-                    <span className="font-mono text-sm font-bold">{selectedMatchCards.filter(c => !c.is_opponent).reduce((acc, c) => acc + c.count, 0)} Cards</span>
-                  </div>
-                </div>
-
-                {/* Opponent Column */}
-                <div className="p-3.5 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-xs uppercase font-bold text-rose-400 font-mono">Opponent</p>
-
-                  {/* Opponent Commander (Brawl Only) */}
-                  {selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
-                    <div className="text-center space-y-1">
-                      {commanderInfo?.opponent_commander ? (
-                        <>
-                          <img 
-                            src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(commanderInfo.opponent_commander.name)}&format=image&version=art_crop`}
-                            alt={commanderInfo.opponent_commander.name}
-                            className="w-full h-20 object-cover rounded-lg border border-white/10"
-                          />
-                          <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.opponent_commander.name}</p>
-                        </>
-                      ) : (
-                        <div className="h-20 rounded-lg border border-dashed flex flex-col items-center justify-center text-[10px] opacity-40 font-mono px-1 text-center" style={{ borderColor: palette?.border }}>
-                          <span>Uncast /</span>
-                          <span>Unknown</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Opponent Stats */}
-                  <div className="space-y-1.5">
-                    <div>
-                      <span className="opacity-50 text-[11px]">Order: </span>
-                      <span className="font-bold text-amber-400">{selectedMatch.going_first ? 'Draw (2nd)' : 'Play (1st)'}</span>
-                    </div>
-                    <div>
-                      <span className="opacity-50 text-[11px]">Mulligans: </span>
-                      <span className="font-bold font-mono">{selectedMatch.opponent_mulligans ?? 0}</span>
-                    </div>
-                    <div>
-                      <span className="opacity-50 text-[11px]">End HP: </span>
-                      <span className="font-bold text-rose-400 font-mono">{selectedMatch.opponent_life_end ?? 0} HP</span>
-                    </div>
-                  </div>
-
-                  <div className="pt-1">
-                    <p className="text-[10px] uppercase opacity-50 mb-1">Cards Seen</p>
-                    <span className="font-mono text-sm font-bold">{selectedMatchCards.filter(c => c.is_opponent).reduce((acc, c) => acc + c.count, 0)} Cards</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Impactful Cards Played: full-size card carousel with player attribution */}
-              <div className="p-3.5 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                <p className="text-xs font-mono uppercase tracking-wider font-bold opacity-60 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" style={{ color: palette?.accent }} /> Impactful Cards Played
-                </p>
-                {impactfulCards.length === 0 ? (
-                  <div className="p-4 border border-dashed rounded-xl text-center text-[10px] font-mono opacity-40" style={{ borderColor: palette?.border }}>
-                    No impactful plays detected
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(() => {
-                      const card = impactfulCards[Math.min(impactfulIndex, impactfulCards.length - 1)];
-                      const byOpponent = card.is_opponent;
-                      return (
-                        <div className="space-y-1.5">
-                          {/* Card image with green (player) / red (opponent) border (90% width) */}
-                          <div className="mx-auto w-[90%]">
-                            <div className={`rounded-xl overflow-hidden border-2 ${byOpponent ? 'border-rose-500/70' : 'border-emerald-500/70'}`}>
-                              <img
-                                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(card.name)}&format=image&version=normal`}
-                                alt={card.name}
-                                className="w-full h-auto object-contain"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                            </div>
-                          </div>
-                          {/* Below the card: just "Player" or "Opponent" */}
-                          <div className={`text-sm font-mono font-bold uppercase tracking-widest text-center ${byOpponent ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {byOpponent ? 'Opponent' : 'Player'}
-                          </div>
-                          <div className="flex items-center justify-between px-1">
-                            <span className="text-xs font-bold truncate" style={{ color: palette?.text }}>{card.name}</span>
-                            <span className="text-[10px] font-mono opacity-60 shrink-0 ml-2">
-                              {card.total_damage > 0 ? `${card.total_damage} dmg` : (card.max_hit > 0 ? `${card.max_hit} swing` : '')}
-                            </span>
-                          </div>
-                          {/* Carousel dots */}
-                          {impactfulCards.length > 1 && (
-                            <div className="flex items-center justify-center gap-1 pt-0.5">
-                              {impactfulCards.map((_, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => setImpactfulIndex(i)}
-                                  className={`w-1.5 h-1.5 rounded-full transition-all ${i === impactfulIndex ? 'bg-white/80 w-3' : 'bg-white/25 hover:bg-white/50'}`}
-                                  aria-label={`Card ${i + 1}`}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom-anchored: Open Full Match Info button (always visible at bottom, scrolls under) */}
-        {selectedMatch && (
-          <div className="pt-4 border-t mt-4 shrink-0" style={{ borderColor: `${palette?.border}66` }}>
-            <button
-              onClick={() => setIsFullInfoOpen(true)}
-              className="w-full box-border py-4 px-3 rounded-xl font-extrabold text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl border transition-all hover:bg-white/10 truncate"
-              style={{
-                backgroundColor: palette?.accent || '#38BDF8',
-                color: '#000000',
-                borderColor: palette?.accent || '#38BDF8',
-              }}
-            >
-              <Sparkles className="w-5 h-5 shrink-0" />
-              <span className="truncate">Open Full Match Info</span>
-            </button>
-          </div>
-        )}
-      </aside>
-
-      {/* Dark Overlay Backdrop for the right drawer */}
-      {isDrawerOpen && (
-        <div 
-          onClick={() => setIsDrawerOpenManual(false)}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 transition-opacity"
-        />
-      )}
 
       {/* Deck Detail Modal (overlay, browser-style back) */}
       <DeckDetailView
@@ -2363,6 +2111,7 @@ export default function App() {
           setTargetOpponentName(oppName);
           setIsH2HOpen(true);
         }}
+        onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
       />
 
       {/* Stage 5D: Opponent Head-to-Head Statistics Modal */}
@@ -2373,7 +2122,7 @@ export default function App() {
         palette={palette}
         onSelectMatch={(matchId) => {
           setSelectedMatchId(matchId);
-          setIsDrawerOpenManual(true);
+          setIsFullInfoOpen(true);
         }}
       />
 
@@ -2393,21 +2142,21 @@ export default function App() {
               <X className="w-4 h-4" /> Close
             </button>
 
-            <div className="flex flex-row flex-nowrap items-start justify-center gap-5 max-w-full">
-              {/* Card image + set/art selector */}
-              <div className="w-[340px] shrink-0">
-                <div className="rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
+            <div className="flex flex-row flex-nowrap items-center justify-center gap-5 max-w-full">
+              {/* PANEL 1: Card image + set/art selector (enlarged by another ~15% to 450px - never hidden) */}
+              <div className="w-[450px] max-w-[90vw] shrink-0 flex flex-col">
+                <div className="rounded-xl overflow-hidden border shadow-2xl shrink-0" style={{ borderColor: palette?.border }}>
                   <img
                     src={scryfallPrintingImageUrl(
                       deckCardOverlay.card.name,
                       overlayPrintings.find((p) => printingKey(p) === overlaySelected)
                     )}
                     alt={deckCardOverlay.card.name}
-                    className="w-full"
+                    className="w-full h-auto block"
                   />
                 </div>
-                <p className="mt-2.5 text-[9px] font-mono uppercase tracking-wide opacity-50">Card Style / Set</p>
-                <div className="mt-1">
+                <p className="mt-2.5 text-[9px] font-mono uppercase tracking-wide opacity-50 shrink-0">Card Style / Set</p>
+                <div className="mt-1 shrink-0">
                   <CustomDropdown
                     options={overlayPrintings.length === 0
                       ? [{ value: '', label: overlayPrintingsLoading ? 'Loading printings…' : 'No printings found' }]
@@ -2434,165 +2183,276 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Info panel */}
+              {/* PANEL 2: Card info & Oracle text (hidden on small viewports < 920px) */}
               <div
-                className="w-[400px] max-w-full max-h-[80vh] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3"
+                className="hidden min-[920px]:flex w-[380px] max-w-full h-[580px] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3 shrink-0 flex-col justify-between"
                 style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{deckCardOverlay.card.name}</p>
-                  <span className="shrink-0 flex items-center gap-0.5">
-                    {parseMtgaManaCost(deckCardOverlay.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
-                  </span>
-                </div>
-                {deckCardOverlay.isCommander && (
-                  <p className="text-[11px] font-mono uppercase tracking-wide" style={{ color: palette?.accent || '#38BDF8' }}>Commander</p>
-                )}
-                {deckCardOverlay.card.card_type && (
-                  <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
-                    {deckCardOverlay.card.card_type}
-                  </p>
-                )}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{deckCardOverlay.card.name}</p>
+                    <span className="shrink-0 flex items-center gap-0.5">
+                      {parseMtgaManaCost(deckCardOverlay.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
+                    </span>
+                  </div>
+                  {deckCardOverlay.isCommander && (
+                    <p className="text-[11px] font-mono uppercase tracking-wide font-bold" style={{ color: palette?.accent || '#38BDF8' }}>Commander</p>
+                  )}
+                  {deckCardOverlay.card.card_type && (
+                    <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
+                      {deckCardOverlay.card.card_type}
+                    </p>
+                  )}
 
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                  {(() => {
-                    const sel = overlayPrintings.find((p) => printingKey(p) === overlaySelected);
-                    const rarity = sel?.rarity ?? deckCardOverlay.card.rarity;
+                  <div className="grid grid-cols-3 gap-x-2 gap-y-2 pt-1 border-t border-b py-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                    {(() => {
+                      const sel = overlayPrintings.find((p) => printingKey(p) === overlaySelected);
+                      const rarity = sel?.rarity ?? deckCardOverlay.card.rarity;
+                      return (
+                        <>
+                          <div>
+                            <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
+                            <p className="text-[12px] font-mono font-bold truncate" style={{ color: cardRarityColor(rarity) }}>
+                              {cardRarityLabel(rarity)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
+                            <p className="text-[12px] font-mono font-bold truncate" style={{ color: palette?.text }}>
+                              {sel?.set_name ? `${sel.set_code}` : (sel?.set_code || deckCardOverlay.card.set_code || '—')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-mono uppercase opacity-50">Decks</p>
+                            <p className="text-[12px] font-mono font-bold" style={{ color: palette?.text }}>
+                              {overlayStats ? overlayStats.deck_count : '—'}
+                            </p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {overlayStats?.decks?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-mono uppercase tracking-wide font-semibold" style={{ color: palette?.accent || '#38BDF8' }}>
+                        Decks Present In:
+                      </p>
+                      <div className="flex flex-wrap gap-1 pt-1.5">
+                        {overlayStats.decks.slice(0, 12).map((d: string, i: number) => (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              setDeckCardOverlay(null);
+                              setSelectedDeckName(d);
+                            }}
+                            className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-colors bg-slate-900/60 hover:bg-slate-600 hover:text-white hover:border-slate-400 cursor-pointer"
+                            style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.text }}
+                            title={`Open ${d}`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                        {overlayStats.decks.length > 12 && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 opacity-60" style={{ color: palette?.subtext }}>
+                            +{overlayStats.decks.length - 12} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="shrink-0 h-px" style={{ backgroundColor: `${palette?.border || '#2A2F3D'}66` }} />
+
+                  {overlayScryfallLoading && (
+                    <div className="flex items-center gap-2 py-1">
+                      <div
+                        className="w-4 h-4 rounded-full border-2 border-white/20 animate-spin"
+                        style={{ borderTopColor: palette?.accent || '#38BDF8' }}
+                      />
+                      <span className="text-[11px] font-mono opacity-60" style={{ color: palette?.text }}>Loading card details…</span>
+                    </div>
+                  )}
+
+                  {overlayScryfall && (() => {
+                    const scry = overlayScryfall;
+                    const face = scry.card_faces?.[0] || null;
+                    const oracleText = scry.oracle_text || face?.oracle_text || '';
+                    const flavorText = (overlaySelected && overlayFlavors[overlaySelected]) || '';
+                    const power = scry.power ?? face?.power;
+                    const toughness = scry.toughness ?? face?.toughness;
+                    const loyalty = scry.loyalty ?? face?.loyalty;
+                    const keywords: string[] = scry.keywords || [];
                     return (
                       <>
-                        <div>
-                          <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
-                          <p className="text-[13px] font-mono font-bold" style={{ color: cardRarityColor(rarity) }}>
-                            {cardRarityLabel(rarity)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
-                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                            {sel?.set_name ? `${sel.set_name} (${sel.set_code})` : (sel?.set_code || deckCardOverlay.card.set_code)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-mono uppercase opacity-50">Decks</p>
-                          <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                            {overlayStats ? overlayStats.deck_count : '—'}
-                          </p>
-                        </div>
+                        {oracleText && (
+                          <div>
+                            <p className="text-[9px] font-mono uppercase opacity-50">Oracle Text</p>
+                            <p className="text-xs leading-relaxed whitespace-pre-wrap pt-0.5" style={{ color: palette?.text }}>{oracleText}</p>
+                          </div>
+                        )}
+                        {flavorText && (
+                          <div>
+                            <p className="text-[9px] font-mono uppercase opacity-50">Flavor Text</p>
+                            <p className="text-xs italic leading-relaxed pt-0.5 opacity-80" style={{ color: palette?.subtext }}>{flavorText}</p>
+                          </div>
+                        )}
+                        {(power !== undefined || toughness !== undefined || loyalty !== undefined) && (
+                          <div className="flex items-center gap-3 pt-1 text-xs font-mono font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
+                            {power !== undefined && toughness !== undefined && (
+                              <span>P/T: {power}/{toughness}</span>
+                            )}
+                            {loyalty !== undefined && (
+                              <span>Loyalty: {loyalty}</span>
+                            )}
+                          </div>
+                        )}
+                        {keywords.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {keywords.map((kw: string, i: number) => (
+                              <span
+                                key={i}
+                                className="text-[9px] font-mono px-1.5 py-0.2 rounded border bg-black/40"
+                                style={{ borderColor: `${palette?.border || '#2A2F3D'}66`, color: palette?.subtext }}
+                              >
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </>
                     );
                   })()}
                 </div>
+              </div>
 
-                {overlayStats && (overlayStats.times_impactful > 0 || overlayStats.total_damage > 0) && (
-                  <div className="rounded-xl border p-2.5 space-y-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66`, backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                    <p className="text-[10px] font-mono uppercase tracking-wide font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
-                      Card Play Stats
+              {/* PANEL 3: Persistent Card Combat Analytics (hidden on viewports < 1320px) */}
+              <div
+                className="hidden min-[1320px]:block w-[380px] max-w-full h-[580px] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3.5 shrink-0"
+                style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+              >
+                <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                  <p className="text-lg font-bold leading-tight" style={{ color: palette?.accent || '#38BDF8' }}>
+                    Card Combat Analytics
+                  </p>
+                  {overlayStats?.best_deck && (
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      MVP: {overlayStats.best_deck.name}
+                    </span>
+                  )}
+                </div>
+
+                {/* 4 KPI Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 rounded-lg border bg-black/30 space-y-0.5" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                    <p className="text-[9px] font-mono uppercase opacity-50">Matches Played</p>
+                    <p className="text-base font-mono font-black" style={{ color: palette?.text }}>
+                      {overlayStats?.matches_played ?? 0}
                     </p>
-                    {overlayStats.times_impactful > 0 && (
-                      <div>
-                        <p className="text-[9px] font-mono uppercase opacity-50">Impactful Games</p>
-                        <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                          {overlayStats.times_impactful}
-                        </p>
-                      </div>
-                    )}
-                    {overlayStats.total_damage > 0 && (
-                      <div>
-                        <p className="text-[9px] font-mono uppercase opacity-50">Damage Done In Matches</p>
-                        <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                          {overlayStats.total_damage}{overlayStats.max_hit > 0 ? ` (max ${overlayStats.max_hit})` : ''}
-                        </p>
-                      </div>
-                    )}
                   </div>
-                )}
-
-                {overlayStats?.decks?.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-mono uppercase tracking-wide font-semibold" style={{ color: palette?.accent || '#38BDF8' }}>
-                      Decks Present In:
+                  <div className="p-2.5 rounded-lg border bg-black/30 space-y-0.5" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                    <p className="text-[9px] font-mono uppercase opacity-50">Win Rate When Cast</p>
+                    <p className={`text-base font-mono font-black ${(overlayStats?.win_rate ?? 0) >= 50 ? 'text-emerald-400' : (overlayStats?.matches_played ? 'text-rose-400' : 'text-slate-400')}`}>
+                      {overlayStats?.matches_played ? `${overlayStats.win_rate}% (${overlayStats.wins_when_played}W - ${overlayStats.losses_when_played}L)` : '—'}
                     </p>
-                    <div className="flex flex-wrap gap-1 pt-1.5">
-                      {overlayStats.decks.slice(0, 12).map((d: string, i: number) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            setDeckCardOverlay(null);
-                            setSelectedDeckName(d);
-                          }}
-                          className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap transition-colors bg-slate-900/60 hover:bg-slate-600 hover:text-white hover:border-slate-400 cursor-pointer"
-                          style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.text }}
-                          title={`Open ${d}`}
-                        >
-                          {d}
-                        </button>
-                      ))}
-                      {overlayStats.decks.length > 12 && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 opacity-60" style={{ color: palette?.subtext }}>
-                          +{overlayStats.decks.length - 12} more
-                        </span>
-                      )}
+                  </div>
+                  <div className="p-2.5 rounded-lg border bg-black/30 space-y-0.5" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                    <p className="text-[9px] font-mono uppercase opacity-50">Total Damage Dealt</p>
+                    <p className="text-base font-mono font-black text-amber-400">
+                      {overlayStats?.total_damage ?? 0} DMG
+                      {(overlayStats?.max_hit ?? 0) > 0 && <span className="text-xs font-normal opacity-70 ml-1">(max {overlayStats.max_hit})</span>}
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-lg border bg-black/30 space-y-0.5" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                    <p className="text-[9px] font-mono uppercase opacity-50">Impactful Games</p>
+                    <p className="text-base font-mono font-black" style={{ color: palette?.text }}>
+                      {overlayStats?.times_impactful ?? 0}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Damage Target Distribution */}
+                <div className="p-3 rounded-lg border bg-black/30 space-y-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                  <div className="flex items-center justify-between text-[10px] font-mono uppercase font-bold opacity-75">
+                    <span>Damage Target Split</span>
+                    <span>{overlayStats?.total_damage ?? 0} Total DMG</span>
+                  </div>
+                  {overlayStats && overlayStats.total_damage > 0 ? (
+                    (() => {
+                      const face = overlayStats.damage_to_player || 0;
+                      const perm = overlayStats.damage_to_permanents || 0;
+                      const total = face + perm > 0 ? face + perm : 1;
+                      const facePct = Math.round((face / total) * 100);
+                      const permPct = 100 - facePct;
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="w-full h-3 rounded-full overflow-hidden bg-white/10 flex">
+                            <div style={{ width: `${facePct}%` }} className="bg-rose-500 transition-all duration-300" title={`Face: ${face} DMG (${facePct}%)`} />
+                            <div style={{ width: `${permPct}%` }} className="bg-amber-400 transition-all duration-300" title={`Permanents: ${perm} DMG (${permPct}%)`} />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] font-mono">
+                            <span className="text-rose-400 font-semibold">Face (Player): {face} DMG ({facePct}%)</span>
+                            <span className="text-amber-400 font-semibold">Permanents: {perm} DMG ({permPct}%)</span>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <p className="text-[11px] font-mono opacity-40 italic">No damage recorded yet</p>
+                  )}
+                </div>
+
+                {/* Damage Classification */}
+                <div className="p-3 rounded-lg border bg-black/30 space-y-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                  <p className="text-[10px] font-mono uppercase font-bold opacity-75">Source Classification</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div className="flex flex-col">
+                      <span className="opacity-50 text-[9px] uppercase">Combat Damage</span>
+                      <span className="font-bold text-amber-300">{overlayStats?.damage_combat ?? 0} DMG</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="opacity-50 text-[9px] uppercase">Spell / Ability Damage</span>
+                      <span className="font-bold text-indigo-300">{overlayStats?.damage_spell ?? 0} DMG</span>
                     </div>
                   </div>
-                )}
+                </div>
 
-                <div className="shrink-0 h-px" style={{ backgroundColor: `${palette?.border || '#2A2F3D'}66` }} />
-
-                {overlayScryfallLoading && (
-                  <div className="flex items-center gap-2 py-1">
-                    <div
-                      className="w-4 h-4 rounded-full border-2 border-white/20 animate-spin"
-                      style={{ borderTopColor: palette?.accent || '#38BDF8' }}
-                    />
-                    <span className="text-[11px] font-mono opacity-60" style={{ color: palette?.text }}>Loading card details…</span>
+                {/* Turn Cast Frequency */}
+                <div className="p-3 rounded-lg border bg-black/30 space-y-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                  <div className="flex items-center justify-between text-[10px] font-mono uppercase font-bold opacity-75">
+                    <span>Turn Cast Frequency</span>
+                    {overlayStats?.avg_cast_turn > 0 && <span>Avg Turn: T{overlayStats.avg_cast_turn}</span>}
                   </div>
-                )}
-
-                {overlayScryfall && (() => {
-                  const scry = overlayScryfall;
-                  const face = scry.card_faces?.[0] || null;
-                  const oracleText = scry.oracle_text || face?.oracle_text || '';
-                  const flavorText = (overlaySelected && overlayFlavors[overlaySelected]) || '';
-                  const power = scry.power ?? face?.power;
-                  const toughness = scry.toughness ?? face?.toughness;
-                  const loyalty = scry.loyalty ?? face?.loyalty;
-                  const keywords: string[] = scry.keywords || [];
-                  return (
-                    <>
-                      {oracleText && (
-                        <div>
-                          <p className="text-[9px] font-mono uppercase opacity-50">Oracle Text</p>
-                          <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: palette?.text }}>{oracleText}</p>
+                  {overlayStats?.turn_distribution && overlayStats.turn_distribution.length > 0 ? (
+                    (() => {
+                      const maxTurnCount = Math.max(...overlayStats.turn_distribution.map((t: any) => t.count), 1);
+                      const turnBins: { turn: number; count: number }[] = [];
+                      for (let i = 1; i <= 6; i++) {
+                        const match = overlayStats.turn_distribution.find((t: any) => t.turn === i);
+                        turnBins.push({ turn: i, count: match ? match.count : 0 });
+                      }
+                      return (
+                        <div className="flex items-end gap-1.5 h-14 pt-1">
+                          {turnBins.map((bin) => {
+                            const pct = Math.max(Math.round((bin.count / maxTurnCount) * 100), 6);
+                            return (
+                              <div key={bin.turn} className="flex-1 h-full flex flex-col justify-end items-center gap-1 group">
+                                <div
+                                  className={`w-full rounded-t-sm transition-all ${bin.count > 0 ? 'bg-sky-400' : 'bg-white/10'}`}
+                                  style={{ height: `${pct}%` }}
+                                  title={`Turn ${bin.turn}: ${bin.count} casts`}
+                                />
+                                <span className="text-[9px] font-mono opacity-50">T{bin.turn}</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      )}
-                      {flavorText && (
-                        <div>
-                          <p className="text-[9px] font-mono uppercase opacity-50">Flavor</p>
-                          <p className="text-xs italic leading-relaxed opacity-70" style={{ color: palette?.text }}>{flavorText}</p>
-                        </div>
-                      )}
-                      {(power !== undefined && toughness !== undefined) && (
-                        <p className="text-xs font-mono font-bold" style={{ color: palette?.text }}>P/T: {power} / {toughness}</p>
-                      )}
-                      {loyalty !== undefined && (
-                        <p className="text-xs font-mono font-bold" style={{ color: palette?.text }}>Loyalty: {loyalty}</p>
-                      )}
-                      {keywords.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {keywords.map((k) => (
-                            <span
-                              key={k}
-                              className="text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
-                              style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, color: palette?.accent || '#38BDF8' }}
-                            >
-                              {k}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
+                      );
+                    })()
+                  ) : (
+                    <p className="text-[11px] font-mono opacity-40 italic">Never cast in tracked matches</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

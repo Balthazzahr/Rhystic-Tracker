@@ -7,6 +7,7 @@ import { parseMtgaManaCost } from '../utils/manaUtils';
 interface DeckCardListProps {
   deckName: string;
   palette: any;
+  onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
 }
 
 interface LoggedCard {
@@ -75,26 +76,19 @@ const RARITY_INFO: Record<number, { label: string; color: string }> = {
 };
 
 // Rarity labels for the card overlay. Unknown/token rarity shows a dash.
-const rarityLabel = (r: number) => RARITY_INFO[r]?.label || '-';
-const rarityColor = (r: number) => RARITY_INFO[r]?.color || '#9CA3AF';
+const rarityLabel = (r: number) => RARITY_INFO[r]?.label || 'Common';
+const rarityColor = (r: number) => RARITY_INFO[r]?.color || '#E5E7EB';
 
-function DeckCardList({ deckName, palette }: DeckCardListProps) {
+export function DeckCardList({ deckName, palette, onShowCard }: DeckCardListProps) {
   const [data, setData] = useState<DeckCardsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCard, setSelectedCard] = useState<LoggedCard | null>(null);
-
-  // Close the card overlay with Escape.
-  useEffect(() => {
-    if (!selectedCard) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedCard(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selectedCard]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!deckName) { setData(null); return; }
+    if (!deckName) { setData(null); setLoading(false); return; }
     const fetchCards = async () => {
+      setLoading(true);
       try {
         const res = await invoke<DeckCardsResponse>('get_deck_cards', { deckName });
         if (!cancelled) { setData(res); setError(null); }
@@ -161,7 +155,7 @@ function DeckCardList({ deckName, palette }: DeckCardListProps) {
             <div
               key={card.grp_id}
               className="flex items-center gap-2 py-0.5 rounded px-1 cursor-pointer hover:bg-white/5 transition-colors"
-              onClick={() => setSelectedCard(card)}
+              onClick={() => onShowCard?.(card, false)}
             >
               <span className="w-10 shrink-0 text-[15px] font-mono font-bold tabular-nums" style={{ color: palette?.text }}>
                 {card.max_count}x
@@ -202,17 +196,10 @@ function DeckCardList({ deckName, palette }: DeckCardListProps) {
             className="flex items-center gap-2 py-0.5 rounded px-1 cursor-pointer hover:bg-white/5 transition-colors"
             onClick={() => {
               if (!data.commander_name) return;
-              setSelectedCard({
+              onShowCard?.({
                 grp_id: data.commander_grp_id || 0,
                 name: data.commander_name!,
-                max_count: 1,
-                total_count: data.total_matches,
-                match_freq: data.total_matches,
-                mana_cost: data.commander_mana_cost,
-                card_type: 'Legendary Creature — Commander',
-                cmc: 0,
-                rarity: data.commander_rarity || 4,
-              });
+              }, true);
             }}
           >
             <span className="w-10 shrink-0 text-[15px] font-mono font-bold tabular-nums" style={{ color: palette?.text }}>
@@ -259,74 +246,6 @@ function DeckCardList({ deckName, palette }: DeckCardListProps) {
           </div>
         </div>
       </div>
-
-      {/* Card overlay modal on click */}
-      {selectedCard && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
-          onClick={() => setSelectedCard(null)}
-        >
-          <div className="flex flex-col items-center max-h-full overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
-            {/* Close button above the card */}
-            <button
-              onClick={() => setSelectedCard(null)}
-              className="self-end mb-2 flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold opacity-70 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5 transition-opacity"
-              style={{ color: palette?.text, borderColor: palette?.border }}
-              title="Close (Esc)"
-            >
-              <X className="w-4 h-4" /> Close
-            </button>
-
-            {/* Card image */}
-            <div className="w-[340px] rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
-              <img
-                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(selectedCard.name)}&format=image&version=normal`}
-                alt={selectedCard.name}
-                className="w-full"
-              />
-            </div>
-
-            {/* Card info below */}
-            <div className="mt-3 w-[340px] rounded-xl border p-4 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{selectedCard.name}</p>
-                <span className="shrink-0 flex items-center gap-0.5">
-                  {parseMtgaManaCost(selectedCard.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
-                </span>
-              </div>
-
-              <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
-                {selectedCard.card_type || 'Card'}
-              </p>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                <div>
-                  <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
-                  <p className="text-[13px] font-mono font-bold" style={{ color: rarityColor(selectedCard.rarity) }}>
-                    {rarityLabel(selectedCard.rarity)}
-                  </p>
-                </div>
-                {selectedCard.set_code && (
-                  <div>
-                    <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
-                    <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.set_code}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-[9px] font-mono uppercase opacity-50">In Deck</p>
-                  <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.max_count}x</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-mono uppercase opacity-50">Matches Seen</p>
-                  <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>
-                    {selectedCard.match_freq} / {data.total_matches}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ interface TrueDeckListViewProps {
   totalMatches: number;
   status?: any; // from get_deck_list_status: { missing_count, logged_count }
   palette: any;
+  onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
 }
 
 interface CardEntry {
@@ -58,16 +59,7 @@ const RARITY_INFO: Record<number, { label: string; color: string }> = {
 const rarityLabel = (r: number) => RARITY_INFO[r]?.label || '-';
 const rarityColor = (r: number) => RARITY_INFO[r]?.color || '#9CA3AF';
 
-function TrueDeckListView({ data, totalMatches, status, palette }: TrueDeckListViewProps) {
-  const [selectedCard, setSelectedCard] = useState<CardEntry | null>(null);
-
-  useEffect(() => {
-    if (!selectedCard) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedCard(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selectedCard]);
-
+function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: TrueDeckListViewProps) {
   const cards: CardEntry[] = data?.cards || [];
   const sideboard: CardEntry[] = data?.sideboard || [];
 
@@ -105,7 +97,7 @@ function TrueDeckListView({ data, totalMatches, status, palette }: TrueDeckListV
       <div
         key={card.grp_id}
         className="flex items-center gap-2 py-0.5 rounded px-1 cursor-pointer hover:bg-white/5 transition-colors"
-        onClick={() => setSelectedCard(card)}
+        onClick={() => onShowCard?.(card, false)}
       >
         <span className="w-10 shrink-0 text-[15px] font-mono font-bold tabular-nums" style={{ color: palette?.text }}>
           {card.count}x
@@ -198,61 +190,6 @@ function TrueDeckListView({ data, totalMatches, status, palette }: TrueDeckListV
           </div>
         )}
       </div>
-
-      {/* Card overlay modal on click */}
-      {selectedCard && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
-          onClick={() => setSelectedCard(null)}
-        >
-          <div className="flex flex-col items-center max-h-full overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setSelectedCard(null)}
-              className="self-end mb-2 flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider font-bold opacity-70 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5 transition-opacity"
-              style={{ color: palette?.text, borderColor: palette?.border }}
-              title="Close (Esc)"
-            >
-              <X className="w-4 h-4" /> Close
-            </button>
-            <div className="w-[340px] rounded-xl overflow-hidden border shadow-2xl" style={{ borderColor: palette?.border }}>
-              <img
-                src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(selectedCard.name)}&format=image&version=normal`}
-                alt={selectedCard.name}
-                className="w-full"
-              />
-            </div>
-            <div className="mt-3 w-[340px] rounded-xl border p-4 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-lg font-bold leading-tight" style={{ color: palette?.text }}>{selectedCard.name}</p>
-                <span className="shrink-0 flex items-center gap-0.5">
-                  {parseMtgaManaCost(selectedCard.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
-                </span>
-              </div>
-              <p className="text-[11px] font-mono uppercase tracking-wide opacity-70" style={{ color: palette?.text }}>
-                {selectedCard.card_type || 'Card'}
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                <div>
-                  <p className="text-[9px] font-mono uppercase opacity-50">Rarity</p>
-                  <p className="text-[13px] font-mono font-bold" style={{ color: rarityColor(selectedCard.rarity) }}>
-                    {rarityLabel(selectedCard.rarity)}
-                  </p>
-                </div>
-                {selectedCard.set_code && (
-                  <div>
-                    <p className="text-[9px] font-mono uppercase opacity-50">Set</p>
-                    <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.set_code}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-[9px] font-mono uppercase opacity-50">In Deck</p>
-                  <p className="text-[13px] font-mono font-bold" style={{ color: palette?.text }}>{selectedCard.count}x</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

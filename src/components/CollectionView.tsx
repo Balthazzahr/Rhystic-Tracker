@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import {
   Search,
   Minus,
@@ -564,78 +564,180 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     Other: 'ms-multicolor',
   };
 
-  const activeChips: { key: string; icon: React.ReactNode; label: string; onRemove: () => void }[] = [];
-  for (const sc of selectedSets) {
-    const s = setOptions.find((x) => x.set_code === sc);
-    activeChips.push({
-      key: `set-${sc}`,
-      icon: <i className={`${keyruneClass(sc)} shrink-0`} style={{ fontSize: 15, color: palette?.text }} />,
-      label: s?.name || sc,
-      onRemove: () => toggleIn(selectedSets, sc, setSelectedSets),
-    });
-  }
-  for (const t of selectedTypes) {
-    activeChips.push({
-      key: `type-${t}`,
-      icon: <i className={`ms ${typeIconClass[t] || 'ms-multicolor'} shrink-0`} style={{ fontSize: 13, color: palette?.text }} />,
-      label: t,
-      onRemove: () => toggleIn(selectedTypes, t, setSelectedTypes),
-    });
-  }
-  if (cmcFilter !== null) {
-    activeChips.push({
-      key: 'cmc',
-      icon: <ManaPip symbol={cmcFilter === 8 ? '8' : String(cmcFilter)} size={15} />,
-      label: `Mana value ${cmcFilter === 8 ? '8+' : cmcFilter}`,
-      onRemove: () => setCmcFilter(null),
-    });
-  }
-  for (const r of selectedRarities) {
-    const info = RARITY_INFO[r] || { label: 'Rarity', color: '#9CA3AF' };
-    activeChips.push({
-      key: `rar-${r}`,
-      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: info.color }} />,
-      label: info.label,
-      onRemove: () => setSelectedRarities(selectedRarities.filter((x) => x !== r)),
-    });
-  }
-  if (ownedFilter === 'all') {
-    activeChips.push({
-      key: 'all',
-      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.accent || '#38BDF8', backgroundColor: 'transparent' }} />,
-      label: 'All cards',
-      onRemove: () => setOwnedFilter('owned'),
-    });
-  } else if (ownedFilter === 'unowned') {
-    activeChips.push({
-      key: 'unowned',
-      icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.text, backgroundColor: 'transparent' }} />,
-      label: 'Not Collected',
-      onRemove: () => setOwnedFilter('owned'),
-    });
-  }
-  if (copiesFilter !== null) {
-    activeChips.push({
-      key: 'copies',
-      icon: (
-        <span className="flex items-end gap-0.5 shrink-0">
-          {[0, 1, 2, 3].map((i) => (
-            <span
-              key={i}
-              className="rounded-full"
-              style={{
-                width: i < copiesFilter ? 6 : 4,
-                height: i < copiesFilter ? 6 : 4,
-                backgroundColor: i < copiesFilter ? (palette?.accent || '#38BDF8') : `${palette?.text}44`,
-              }}
-            />
-          ))}
-        </span>
-      ),
-      label: `${copiesFilter} copy${copiesFilter === 1 ? '' : 's'}`,
-      onRemove: () => setCopiesFilter(null),
-    });
-  }
+  // Active advanced-filter chips. Memoized so its reference is stable across
+  // renders — the chip-measurement effects depend on it, and a fresh array
+  // every render caused an infinite re-render loop (black screen).
+  const activeChips = useMemo<{ key: string; icon: React.ReactNode; label: string; onRemove: () => void }[]>(() => {
+    const chips: { key: string; icon: React.ReactNode; label: string; onRemove: () => void }[] = [];
+    for (const sc of selectedSets) {
+      const s = setOptions.find((x) => x.set_code === sc);
+      chips.push({
+        key: `set-${sc}`,
+        icon: <i className={`${keyruneClass(sc)} shrink-0`} style={{ fontSize: 15, color: palette?.text }} />,
+        label: s?.name || sc,
+        onRemove: () => toggleIn(selectedSets, sc, setSelectedSets),
+      });
+    }
+    for (const t of selectedTypes) {
+      chips.push({
+        key: `type-${t}`,
+        icon: <i className={`ms ${typeIconClass[t] || 'ms-multicolor'} shrink-0`} style={{ fontSize: 13, color: palette?.text }} />,
+        label: t,
+        onRemove: () => toggleIn(selectedTypes, t, setSelectedTypes),
+      });
+    }
+    if (cmcFilter !== null) {
+      chips.push({
+        key: 'cmc',
+        icon: <ManaPip symbol={cmcFilter === 8 ? '8' : String(cmcFilter)} size={15} />,
+        label: `Mana value ${cmcFilter === 8 ? '8+' : cmcFilter}`,
+        onRemove: () => setCmcFilter(null),
+      });
+    }
+    for (const r of selectedRarities) {
+      const info = RARITY_INFO[r] || { label: 'Rarity', color: '#9CA3AF' };
+      chips.push({
+        key: `rar-${r}`,
+        icon: <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: info.color }} />,
+        label: info.label,
+        onRemove: () => setSelectedRarities(selectedRarities.filter((x) => x !== r)),
+      });
+    }
+    if (ownedFilter === 'all') {
+      chips.push({
+        key: 'all',
+        icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.accent || '#38BDF8', backgroundColor: 'transparent' }} />,
+        label: 'All cards',
+        onRemove: () => setOwnedFilter('owned'),
+      });
+    } else if (ownedFilter === 'unowned') {
+      chips.push({
+        key: 'unowned',
+        icon: <span className="w-2.5 h-2.5 rounded-full shrink-0 border" style={{ borderColor: palette?.text, backgroundColor: 'transparent' }} />,
+        label: 'Not Collected',
+        onRemove: () => setOwnedFilter('owned'),
+      });
+    }
+    if (copiesFilter !== null) {
+      chips.push({
+        key: 'copies',
+        icon: (
+          <span className="flex items-end gap-0.5 shrink-0">
+            {[0, 1, 2, 3].map((i) => (
+              <span
+                key={i}
+                className="rounded-full"
+                style={{
+                  width: i < copiesFilter ? 6 : 4,
+                  height: i < copiesFilter ? 6 : 4,
+                  backgroundColor: i < copiesFilter ? (palette?.accent || '#38BDF8') : `${palette?.text}44`,
+                }}
+              />
+            ))}
+          </span>
+        ),
+        label: `${copiesFilter} copy${copiesFilter === 1 ? '' : 's'}`,
+        onRemove: () => setCopiesFilter(null),
+      });
+    }
+    return chips;
+  }, [selectedSets, selectedTypes, cmcFilter, selectedRarities, ownedFilter, copiesFilter, setOptions, palette]);
+
+  // Measured chip visibility: the applied-filter chips live in a single flex
+  // row that shows as many WHOLE chips as fit before the sort selector, then a
+  // "…" indicator. A hidden off-screen measurer reads each chip's natural width;
+  // the available chip space is (spacer + row) which is constant regardless of
+  // how many chips are rendered, so it can be read on any layout.
+  const chipRowRef = useRef<HTMLSpanElement>(null);
+  const measurerRef = useRef<HTMLSpanElement>(null);
+  const topBarRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
+  const [chipWidths, setChipWidths] = useState<number[]>([]);
+  const [ellipsisWidth, setEllipsisWidth] = useState(0);
+  const [visibleChips, setVisibleChips] = useState(activeChips.length);
+  const CHIP_GAP = 4; // matches the row's gap-1
+
+  const countFitChips = (widths: number[], ellipsisW: number, available: number): number => {
+    const safety = 16;
+    let used = 0;
+    let count = 0;
+    for (let i = 0; i < widths.length; i++) {
+      const add = widths[i] + (i > 0 ? CHIP_GAP : 0);
+      if (used + add > available - safety) break;
+      used += add;
+      count++;
+    }
+    // If not everything fits, make room for the "…" indicator and retry.
+    if (count < widths.length && ellipsisW > 0) {
+      used = ellipsisW + CHIP_GAP;
+      count = 0;
+      for (let i = 0; i < widths.length; i++) {
+        const add = widths[i] + (i > 0 ? CHIP_GAP : 0);
+        if (used + add > available - safety) break;
+        used += add;
+        count++;
+      }
+    }
+    return count;
+  };
+
+  // Shared chip renderers (used by both the visible row and the hidden measurer
+  // so their widths match exactly).
+  const renderChip = (chip: { key: string; icon: React.ReactNode; label: string; onRemove: () => void }) => (
+    <span
+      key={chip.key}
+      onClick={(e) => { e.stopPropagation(); chip.onRemove(); }}
+      className="group flex shrink-0 items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold cursor-pointer transition-colors hover:bg-white/10"
+      style={{ borderColor: palette?.border, color: palette?.text, backgroundColor: `${palette?.accent || '#38BDF8'}10` }}
+      title="Remove this filter"
+    >
+      {chip.icon}
+      <span>{chip.label}</span>
+      <X className="w-2.5 h-2.5 opacity-50 group-hover:opacity-100" />
+    </span>
+  );
+
+  const renderEllipsisChip = () => (
+    <span
+      onClick={(e) => { e.stopPropagation(); setShowAdvModal(true); }}
+      className="flex shrink-0 items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] font-bold leading-none cursor-pointer transition-colors hover:bg-white/10"
+      style={{ borderColor: palette?.border, color: palette?.accent || '#38BDF8', backgroundColor: `${palette?.accent || '#38BDF8'}10` }}
+      title="More filters — open advanced filters"
+    >
+      …
+    </span>
+  );
+
+  // Measure chip widths + recompute how many fit whenever the filter chips change.
+  useLayoutEffect(() => {
+    const measurer = measurerRef.current;
+    const row = chipRowRef.current;
+    const spacer = spacerRef.current;
+    if (!measurer || !row || !spacer || measurer.children.length === 0) return;
+    const widths = Array.from(measurer.children).map((el) => (el as HTMLElement).offsetWidth);
+    const chipW = widths.slice(0, -1);
+    const ellW = widths[widths.length - 1] || 0;
+    const available = spacer.offsetWidth + row.offsetWidth;
+    setChipWidths(chipW);
+    setEllipsisWidth(ellW);
+    setVisibleChips(countFitChips(chipW, ellW, available));
+  }, [activeChips]);
+
+  // Recompute on window / top-bar resize.
+  useLayoutEffect(() => {
+    const bar = topBarRef.current;
+    const row = chipRowRef.current;
+    const spacer = spacerRef.current;
+    if (!bar || !row || !spacer || chipWidths.length === 0) return;
+    const recompute = () => {
+      const available = spacer.offsetWidth + row.offsetWidth;
+      setVisibleChips(countFitChips(chipWidths, ellipsisWidth, available));
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, [chipWidths, ellipsisWidth]);
 
   return (
     <div className="flex-1 relative flex flex-col space-y-4 overflow-hidden">
@@ -651,6 +753,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
       {/* Top bar */}
       <div
+        ref={topBarRef}
         className="shrink-0 rounded-2xl border p-2.5 flex items-center gap-2.5"
         style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
       >
@@ -694,23 +797,52 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           })}
         </div>
 
-        {/* Advanced Filter */}
+        {/* Advanced Filter — expands to show applied filters inline when active.
+            Chips stay on a single line and clip with an ellipsis if they don't
+            fit, and the pill's height is capped so the top bar never grows. */}
         <button
           onClick={() => setShowAdvModal(true)}
-          className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border transition-all hover:bg-white/5 ${
+          className={`flex items-center gap-1.5 px-2.5 h-[32px] rounded-xl border transition-all hover:bg-white/5 min-w-0 ${
             hasActiveAdvancedFilters ? '' : 'opacity-60 hover:opacity-100'
           }`}
-          style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+          style={{
+            backgroundColor: palette?.surface,
+            borderColor: hasActiveAdvancedFilters ? `${palette?.accent || '#38BDF8'}55` : palette?.border,
+            color: palette?.text,
+          }}
           title="Advanced filters"
         >
           <SlidersHorizontal
-            className="w-3.5 h-3.5"
+            className="w-3.5 h-3.5 shrink-0"
             style={{ color: hasActiveAdvancedFilters ? '#FBBF24' : palette?.text }}
           />
-          {hasActiveAdvancedFilters && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+          {hasActiveAdvancedFilters && activeChips.length === 0 && (
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+          )}
+          {activeChips.length > 0 && (
+            <>
+              <span className="text-[10px] font-mono uppercase tracking-wide font-bold shrink-0" style={{ color: palette?.accent || '#38BDF8' }}>
+                Filtered by
+              </span>
+              {/* Chip row: single line, whole chips only, "…" indicator for the rest */}
+              <span ref={chipRowRef} className="flex items-center gap-1 min-w-0 overflow-hidden">
+                {activeChips.slice(0, visibleChips).map(renderChip)}
+                {visibleChips < activeChips.length && renderEllipsisChip()}
+              </span>
+              {/* Clear all filters — bold red X */}
+              <span
+                onClick={(e) => { e.stopPropagation(); clearAllFilters(); }}
+                className="shrink-0 p-0.5 rounded-md cursor-pointer transition-colors hover:bg-red-500/20"
+                style={{ color: '#F87171' }}
+                title="Clear all filters"
+              >
+                <X className="w-4 h-4" strokeWidth={3} />
+              </span>
+            </>
+          )}
         </button>
 
-        <div className="flex-1" />
+        <div ref={spacerRef} className="flex-1" />
 
         {/* Sort dropdown with embedded direction toggle: clicking an item once
             selects it ascending; clicking the same item again toggles direction.
@@ -756,55 +888,33 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           </button>
         </div>
 
-        {/* Card size toggle (cards view only): the icon shows what you'll
-            switch TO — zoom-in when currently small, zoom-out when large. */}
-        {view === 'cards' && (
-          <button
-            onClick={() => setCardSize(cardSize === 'small' ? 'large' : 'small')}
-            className="flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all hover:bg-white/5"
-            style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-            title={cardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards'}
-          >
-            {cardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
-          </button>
-        )}
+        {/* Card size toggle: the icon shows what you'll switch TO (zoom-in when
+            currently small, zoom-out when large). Kept visible in table view but
+            disabled/greyed so the top bar stays consistent. */}
+        <button
+          onClick={() => view === 'cards' && setCardSize(cardSize === 'small' ? 'large' : 'small')}
+          disabled={view !== 'cards'}
+          className={`flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all ${
+            view === 'cards' ? 'hover:bg-white/5' : 'opacity-40 cursor-not-allowed'
+          }`}
+          style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+          title={view === 'cards' ? (cardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards') : 'Card size only applies to card view'}
+        >
+          {cardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
+        </button>
       </div>
 
-      {/* Active-filters pop-down: shown when advanced filters are applied
-          (excludes search + top-bar color pips, which are visible in the bar) */}
+      {/* Hidden measurer: all chips + ellipsis at natural width, used to compute
+          how many whole chips fit in the row above. */}
       {activeChips.length > 0 && (
-        <div
-          className="shrink-0 rounded-2xl border px-3 py-2 flex items-center flex-wrap gap-x-3 gap-y-1.5 animate-page-right"
-          style={{ backgroundColor: palette?.surface, borderColor: `${palette?.accent || '#38BDF8'}55` }}
+        <span
+          ref={measurerRef}
+          aria-hidden="true"
+          className="absolute left-[-9999px] top-0 flex items-center gap-1 whitespace-nowrap invisible"
         >
-          <span className="text-[10px] font-mono uppercase tracking-wide font-bold shrink-0" style={{ color: palette?.accent || '#38BDF8' }}>
-            Filtered by
-          </span>
-          {activeChips.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={chip.onRemove}
-              className="group flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-semibold transition-colors hover:bg-white/10"
-              style={{ borderColor: palette?.border, color: palette?.text, backgroundColor: `${palette?.accent || '#38BDF8'}10` }}
-              title="Remove this filter"
-            >
-              {chip.icon}
-              <span>{chip.label}</span>
-              <X className="w-3 h-3 opacity-50 group-hover:opacity-100" />
-            </button>
-          ))}
-          <div className="flex-1" />
-          {/* Clear all filters, right-justified */}
-          <button
-            onClick={clearAllFilters}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-colors hover:bg-white/10"
-            style={{ borderColor: `${palette?.border}88`, color: palette?.text }}
-            title="Clear all filters"
-          >
-            <X className="w-3.5 h-3.5" />
-            Clear All Filters
-          </button>
-        </div>
+          {activeChips.map(renderChip)}
+          {renderEllipsisChip()}
+        </span>
       )}
 
       {/* Content: cards grid or table */}
@@ -871,35 +981,38 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
         ) : null}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="shrink-0 flex items-center gap-4 pt-1">
-          <div className="flex-1" />
-          <button
-            onClick={() => goPage('prev')}
-            disabled={safePage <= 1}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
-            style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" /> Prev
-          </button>
-          <span className="text-[11px] font-mono opacity-60">
-            Page {safePage} of {totalPages}
-          </span>
-          <button
-            onClick={() => goPage('next')}
-            disabled={safePage >= totalPages}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
-            style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
-          >
-            Next <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-          <div className="flex-1" />
-          <span className="text-[11px] font-mono opacity-70">
-            {serverTotalOwned} / {serverTotalCards} cards owned
-          </span>
-        </div>
-      )}
+      {/* Footer: pagination controls (when multiple pages) + global owned/total
+          count (always visible, filter-independent) */}
+      <div className="shrink-0 flex items-center gap-4 pt-1">
+        {totalPages > 1 && (
+          <>
+            <div className="flex-1" />
+            <button
+              onClick={() => goPage('prev')}
+              disabled={safePage <= 1}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
+              style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            </button>
+            <span className="text-[11px] font-mono opacity-60">
+              Page {safePage} of {totalPages}
+            </span>
+            <button
+              onClick={() => goPage('next')}
+              disabled={safePage >= totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
+              style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex-1" />
+          </>
+        )}
+        <span className="text-[11px] font-mono opacity-70 ml-auto">
+          {serverTotalOwned} / {serverTotalCards} cards owned
+        </span>
+      </div>
 
       {/* Advanced Filter modal (sibling of the grid — the grid stays mounted) */}
       {showAdvModal && (

@@ -78,23 +78,97 @@ export function MatchTimeline({
     return map;
   }, [turnEvents, heroSeatId]);
 
-  const renderEventRow = (ev: TurnEventItem, isPlayer: boolean) => (
-    <div
-      key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.timestamp}`}
-      onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
-      className="text-xs flex items-center justify-between p-1.5 rounded hover:bg-white/10 cursor-pointer group"
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${
-          ev.event_type === 'play' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
-        }`}>
-          {ev.event_type === 'draw' ? 'draw' : 'play'}
-        </span>
-        <span className="font-semibold text-xs truncate" style={{ color: palette?.text }}>{ev.name}</span>
+  const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; border: string }> = {
+    Creature: { icon: 'ms-creature', color: '#34D399', bg: 'rgba(52, 211, 153, 0.1)', border: 'rgba(52, 211, 153, 0.3)' }, // Green
+    Instant: { icon: 'ms-instant', color: '#F87171', bg: 'rgba(248, 113, 113, 0.1)', border: 'rgba(248, 113, 113, 0.3)' }, // Red
+    Sorcery: { icon: 'ms-sorcery', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.3)' }, // Yellow
+    Artifact: { icon: 'ms-artifact', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.3)' }, // Cool blue-grey
+    Enchantment: { icon: 'ms-enchantment', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.1)', border: 'rgba(192, 132, 252, 0.3)' }, // Purple
+    Planeswalker: { icon: 'ms-planeswalker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.3)' }, // Orange/Rose
+    Battle: { icon: 'ms-battle', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.1)', border: 'rgba(244, 63, 94, 0.3)' }, // Rose
+    Land: { icon: 'ms-land', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.3)' }, // Light brown/amber
+    Token: { icon: 'ms-token', color: '#A1A1AA', bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.3)' },
+    Other: { icon: 'ms-multicolor', color: '#E2E8F0', bg: 'rgba(226, 232, 240, 0.1)', border: 'rgba(226, 232, 240, 0.3)' },
+  };
+
+  const getCardTypeBadge = (rawType?: string) => {
+    if (!rawType) return null;
+    const lower = rawType.toLowerCase();
+    let category = 'Other';
+    if (lower.includes('token')) category = 'Token';
+    else {
+      for (const kw of ['planeswalker', 'battle', 'creature', 'land', 'enchantment', 'artifact', 'instant', 'sorcery']) {
+        if (lower.includes(kw)) {
+          category = kw[0].toUpperCase() + kw.slice(1);
+          break;
+        }
+      }
+    }
+    const conf = CARD_TYPE_CONFIG[category] || CARD_TYPE_CONFIG.Other;
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1 py-0.2 rounded border shrink-0"
+        style={{ color: conf.color, backgroundColor: conf.bg, borderColor: conf.border }}
+        title={rawType}
+      >
+        <span className={`ms ${conf.icon} text-[11px] leading-none`} style={{ color: conf.color }} />
+        <span>{category}</span>
+      </span>
+    );
+  };
+
+  const renderEventRow = (ev: TurnEventItem, isPlayer: boolean) => {
+    const isDamage = ev.event_type.startsWith('damage:');
+    let dmgAmount = '';
+    let isCombat = true;
+    if (isDamage) {
+      const parts = ev.event_type.split(':');
+      isCombat = parts[1] === 'combat';
+      dmgAmount = parts[2] || '';
+    }
+
+    return (
+      <div
+        key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}`}
+        onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
+        className="text-xs flex items-center justify-between p-1.5 rounded hover:bg-white/10 cursor-pointer group"
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          {isDamage ? (
+            <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 bg-amber-500/15 text-amber-400 border-amber-500/30">
+              {dmgAmount} DMG
+            </span>
+          ) : (
+            (() => {
+              let badgeText = 'PLAY';
+              let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+              if (ev.event_type === 'draw') {
+                badgeText = 'DRAW';
+                badgeStyle = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+              } else if (ev.event_type === 'token') {
+                badgeText = 'TOKEN';
+                badgeStyle = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+              } else if (ev.event_type === 'dies') {
+                badgeText = 'DIES';
+                badgeStyle = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+              } else if (ev.event_type === 'exile') {
+                badgeText = 'EXILE';
+                badgeStyle = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
+              }
+              return (
+                <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${badgeStyle}`}>
+                  {badgeText}
+                </span>
+              );
+            })()
+          )}
+          <span className="font-semibold text-xs truncate" style={{ color: palette?.text }}>{ev.name}</span>
+          {getCardTypeBadge(ev.card_type)}
+        </div>
+        <RenderManaCost costStr={ev.mana_cost} size={12} />
       </div>
-      <RenderManaCost costStr={ev.mana_cost} size={12} />
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="h-full flex flex-col space-y-4 p-4 rounded-2xl border" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
