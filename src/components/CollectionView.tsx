@@ -37,6 +37,7 @@ interface CollectionCard {
   set_released_at?: string | null;
   rarity: number;
   card_type?: string | null;
+  collector_number?: string | null;
   owned_count: number;
 }
 
@@ -486,7 +487,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             <CardImage
               name={card.name}
               version="normal"
-              printing={getCardStylePref(card.name) || undefined}
+              printing={getCardStylePref(card.name) || { setCode: card.set_code, collectorNumber: card.collector_number }}
               alt={cardName}
               className="absolute inset-0 w-full h-full object-cover"
             />

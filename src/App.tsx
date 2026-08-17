@@ -57,16 +57,35 @@ const NerdIcon = ({ glyph, className = '', style }: { glyph: string; className?:
 // opens don't re-hit the rate-limited API while the app is running.
 const scryfallCardCache = new Map<string, any>();
 
+// Normalize MTGA set codes to Scryfall set codes (e.g. DAR -> DOM)
+export const normalizeScryfallSetCode = (code?: string | null): string => {
+  if (!code) return '';
+  const c = code.trim().toLowerCase();
+  if (c === 'dar') return 'dom';
+  if (c === 'arenasup') return 'spg';
+  if (c === 'conf') return 'con';
+  return c;
+};
+
+// Clean MTGA raw collector number strings (e.g. "'16'" -> "16", "0" -> "")
+export const cleanCollectorNumber = (cn?: string | number | null): string => {
+  if (cn === undefined || cn === null) return '';
+  const s = String(cn).replace(/['"]/g, '').trim();
+  return (s === '' || s === '0') ? '' : s;
+};
+
 // Key a printing uniquely by set + collector number (the dropdown value).
-const printingKey = (p: any) => `${p.set_code}|${p.collector_number}`;
+const printingKey = (p: any) => `${normalizeScryfallSetCode(p.set_code)}|${cleanCollectorNumber(p.collector_number)}`;
 
 // Build the Scryfall image URL for a specific printing. The /cards/{set}/{cn}
 // image endpoint resolves to that exact printing; fall back to the named URL
 // (newest printing) when set/collector are missing OR the collector number is 0
 // (many MTGA cache rows store 0, which Scryfall 404s on).
 const scryfallPrintingImageUrl = (name: string, p?: any): string => {
-  if (p && p.set_code && p.collector_number && String(p.collector_number) !== '0') {
-    return `https://api.scryfall.com/cards/${String(p.set_code).toLowerCase()}/${encodeURIComponent(String(p.collector_number))}?format=image&version=normal`;
+  const setCode = normalizeScryfallSetCode(p?.set_code);
+  const cn = cleanCollectorNumber(p?.collector_number);
+  if (setCode && cn) {
+    return `https://api.scryfall.com/cards/${encodeURIComponent(setCode)}/${encodeURIComponent(cn)}?format=image&version=normal`;
   }
   return `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 };

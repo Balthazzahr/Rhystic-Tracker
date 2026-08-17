@@ -7,11 +7,27 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 // ~/.config/rhystic-tracker/cardimg/. On later renders the local file is used
 // directly (via convertFileSrc), so Scryfall's API is never hit again.
 
+// Normalize MTGA set codes to Scryfall set codes (e.g. DAR -> DOM)
+function normalizeScryfallSetCode(code?: string | null): string {
+  if (!code) return '';
+  const c = code.trim().toLowerCase();
+  if (c === 'dar') return 'dom';
+  if (c === 'arenasup') return 'spg';
+  if (c === 'conf') return 'con';
+  return c;
+}
+
+// Clean MTGA raw collector number strings (e.g. "'16'" -> "16", "0" -> "")
+function cleanCollectorNumber(cn?: string | number | null): string {
+  if (cn === undefined || cn === null) return '';
+  const s = String(cn).replace(/['"]/g, '').trim();
+  return (s === '' || s === '0') ? '' : s;
+}
+
 // A printing is only usable for a direct /cards/{set}/{collector} URL when it
-// has a real collector number. Many MTGA cache rows store 0 (SPG, promo, etc.),
-// which Scryfall 404s — in that case we fall back to the named-image endpoint.
+// has a real collector number.
 function hasValidCollector(cn?: string | number | null): boolean {
-  return !!cn && String(cn).trim() !== '' && String(cn) !== '0';
+  return cleanCollectorNumber(cn) !== '';
 }
 
 // Global queue: Scryfall's named?exact endpoint is rate limited (~10 req/s),
@@ -41,15 +57,18 @@ function blobToBytes(blob: Blob): Promise<Uint8Array> {
 // Resolve the direct CDN URL, download the bytes, cache to disk, and return
 // the local file path (for convertFileSrc). All rate-limited through the queue.
 // When a specific printing (set_code + collector_number) is given, use that
-// printing's image instead of the default named?exact resolution.
+// printing's image; if that fails/404s, fall back to the default named?exact resolution.
 async function ensureLocalImage(
   name: string,
   version: 'art_crop' | 'normal',
   printing?: { setCode?: string | null; collectorNumber?: string | null },
 ): Promise<string | null> {
-  const cacheName = printing?.setCode && hasValidCollector(printing.collectorNumber)
-    ? `${name}|${printing.setCode}|${printing.collectorNumber}`
+  const normSet = normalizeScryfallSetCode(printing?.setCode);
+  const cleanCn = cleanCollectorNumber(printing?.collectorNumber);
+  const cacheName = normSet && cleanCn
+    ? `${name}|${normSet}|${cleanCn}`
     : name;
+
   // 1. Already cached locally? (returns the file path if so)
   try {
     const cached = await invoke<string | null>('has_card_image', { name: cacheName, version });
@@ -58,14 +77,31 @@ async function ensureLocalImage(
 
   // 2. Resolve + download via the shared rate-limited queue.
   return enqueue(async () => {
+    // Try printing-specific URL first if available
+    if (normSet && cleanCn) {
+      try {
+        const printingUrl = `https://api.scryfall.com/cards/${encodeURIComponent(normSet)}/${encodeURIComponent(cleanCn)}?format=image&version=${version}`;
+        const blob = await fetchImageBlob(printingUrl);
+        const bytes = await blobToBytes(blob);
+        if (bytes.length > 500) {
+          const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
+          return convertFileSrc(path);
+        }
+      } catch {
+        // Fall through to named lookup
+      }
+    }
+
+    // Fallback: named?exact resolution
     try {
-      const url = printing?.setCode && hasValidCollector(printing.collectorNumber)
-        ? `https://api.scryfall.com/cards/${String(printing.setCode).toLowerCase()}/${encodeURIComponent(String(printing.collectorNumber))}?format=image&version=${version}`
-        : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=${version}`;
-      const blob = await fetchImageBlob(url);
+      const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=${version}`;
+      const blob = await fetchImageBlob(namedUrl);
       const bytes = await blobToBytes(blob);
-      const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
-      return convertFileSrc(path);
+      if (bytes.length > 500) {
+        const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
+        return convertFileSrc(path);
+      }
+      return null;
     } catch {
       return null;
     }

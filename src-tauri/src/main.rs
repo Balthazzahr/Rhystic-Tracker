@@ -1559,6 +1559,7 @@ struct UniverseCard {
     set_released_at: Option<String>,
     rarity: i64,
     card_type: Option<String>,
+    collector_number: Option<String>,
 }
 
 /// Process-wide cache of the full card universe (every printing in cards_cache,
@@ -1580,7 +1581,7 @@ async fn build_universe(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<UniverseC
     let rows = sqlx::query(
         r#"
         SELECT c.grp_id, c.name, c.mana_cost, c.cmc, c.colors, c.color_identity,
-               c.set_code, c.rarity, c.card_type,
+               c.set_code, c.rarity, c.card_type, c.collector_number,
                sm.name as set_name, sm.released_at as set_released_at
         FROM cards_cache c
         LEFT JOIN sets_metadata sm ON c.set_code = sm.set_code
@@ -1607,6 +1608,7 @@ async fn build_universe(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<UniverseC
             set_released_at: r.get("set_released_at"),
             rarity: r.get("rarity"),
             card_type: r.get("card_type"),
+            collector_number: r.get("collector_number"),
         });
     }
     Ok(out)
@@ -1719,6 +1721,7 @@ async fn query_collection(
             "set_released_at": uc.set_released_at,
             "rarity": uc.rarity,
             "card_type": uc.card_type,
+            "collector_number": uc.collector_number,
             "owned_count": owned_count,
         }));
     }
