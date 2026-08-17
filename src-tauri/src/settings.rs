@@ -1,10 +1,25 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(default)]
     pub mtga_log_path: Option<String>,
+    #[serde(default = "default_minimize_to_tray")]
+    pub minimize_to_tray: bool,
+}
+
+fn default_minimize_to_tray() -> bool {
+    true
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            mtga_log_path: None,
+            minimize_to_tray: true,
+        }
+    }
 }
 
 fn settings_path() -> Option<PathBuf> {

@@ -35,6 +35,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [setMetaResult, setSetMetaResult] = useState<string | null>(null);
   const [setMetaError, setSetMetaError] = useState<string | null>(null);
 
+  const [minimizeToTray, setMinimizeToTray] = useState(true);
+
+  // Load Minimize to Tray setting on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const val = await invoke<boolean>('get_minimize_to_tray');
+        if (!cancelled) setMinimizeToTray(val);
+      } catch (e) {
+        console.error('Failed to load minimize to tray setting:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleToggleMinimizeToTray = async (val: boolean) => {
+    setMinimizeToTray(val);
+    try {
+      await invoke('set_minimize_to_tray', { enabled: val });
+    } catch (e) {
+      console.error('Failed to save minimize to tray setting:', e);
+    }
+  };
+
   // Load set metadata status on mount.
   useEffect(() => {
     let cancelled = false;
@@ -216,6 +241,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {savedSuccess ? 'Saved' : 'Save Config'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Section: Desktop & Background Behavior */}
+      <div 
+        className="p-6 rounded-2xl border space-y-4 shadow-xl"
+        style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5" style={{ color: palette?.accent }} />
+            <h3 className="text-base font-bold">Desktop & Background Behavior</h3>
+          </div>
+        </div>
+        <p className="text-xs opacity-70 leading-relaxed">
+          Configure how Rhystic Tracker behaves when closing the application window.
+        </p>
+
+        <div className="flex items-center justify-between p-4 rounded-xl border bg-black/20" style={{ borderColor: `${palette?.border || '#2A2F3D'}88` }}>
+          <div className="space-y-1">
+            <p className="text-sm font-bold font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+              Minimize to System Tray on Close
+            </p>
+            <p className="text-xs opacity-60 font-mono">
+              When enabled, clicking [X] hides the window to the Linux system tray so match and collection tracking continues in the background. Right-click the tray icon to Open or Quit.
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+            <input 
+              type="checkbox" 
+              checked={minimizeToTray}
+              onChange={(e) => handleToggleMinimizeToTray(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div 
+              className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"
+              style={{
+                backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : undefined,
+              }}
+            />
+          </label>
         </div>
       </div>
 

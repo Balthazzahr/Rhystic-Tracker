@@ -17,6 +17,9 @@ use db::DatabaseManager;
 use theme::{get_mana_theme, ManaTheme};
 use tauri::Emitter;
 use tauri::Manager;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState, MouseButton};
+use tauri::image::Image;
 use sqlx::Row;
 
 fn redact_str(s: &str) -> String {
@@ -73,6 +76,18 @@ fn set_log_path(state: tauri::State<LogPathState>, path: String) -> Result<Strin
     Ok(effective)
 }
 
+#[tauri::command]
+fn get_minimize_to_tray() -> bool {
+    settings::load_settings().minimize_to_tray
+}
+
+#[tauri::command]
+fn set_minimize_to_tray(enabled: bool) -> Result<bool, String> {
+    let mut settings = settings::load_settings();
+    settings.minimize_to_tray = enabled;
+    settings::save_settings(&settings)?;
+    Ok(enabled)
+}
 
 #[tauri::command]
 async fn get_matches_count() -> Result<i64, String> {
@@ -3339,7 +3354,58 @@ fn main() {
                 };
                 let _ = get_universe(db_manager.pool()).await;
             });
+
+            // 1. Construct System Tray Context Menu
+            let open_item = MenuItem::with_id(app, "open", "Open Rhystic Tracker", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit Rhystic Tracker", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+
+            // 2. Build and register System Tray Icon
+            let icon_bytes = include_bytes!("../icons/icon.png");
+            let tray_icon = Image::from_bytes(icon_bytes)?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(tray_icon)
+                .tooltip("Rhystic Tracker")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "open" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let settings = settings::load_settings();
+                if settings.minimize_to_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_active_theme,
@@ -3372,7 +3438,9 @@ fn main() {
             get_impactful_cards,
             get_live_match_state,
             get_log_path,
-            set_log_path
+            set_log_path,
+            get_minimize_to_tray,
+            set_minimize_to_tray
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
