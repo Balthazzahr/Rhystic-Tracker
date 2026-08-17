@@ -6,3 +6,6 @@ dist/
 .env
 .DS_Store
 src-tauri/gen/
+AGENTS.md
+launch.sh
+run.sh
