@@ -22,18 +22,27 @@ mkdir -p "$DESKTOP_DIR"
 mkdir -p "$ICON_DIR"
 
 # 2. Locate binary or AppImage
+#    Search order: cargo release build > project root > tarball naming > AppImage
 BIN_SOURCE=""
 if [ -f "$SCRIPT_DIR/src-tauri/target/release/$EXEC_NAME" ]; then
     BIN_SOURCE="$SCRIPT_DIR/src-tauri/target/release/$EXEC_NAME"
 elif [ -f "$SCRIPT_DIR/$EXEC_NAME" ]; then
     BIN_SOURCE="$SCRIPT_DIR/$EXEC_NAME"
+elif [ -f "$SCRIPT_DIR/${EXEC_NAME}-x86_64-linux" ]; then
+    BIN_SOURCE="$SCRIPT_DIR/${EXEC_NAME}-x86_64-linux"
+elif [ -f "$SCRIPT_DIR/${EXEC_NAME}-aarch64-linux" ]; then
+    BIN_SOURCE="$SCRIPT_DIR/${EXEC_NAME}-aarch64-linux"
 elif ls "$SCRIPT_DIR"/src-tauri/target/release/bundle/appimage/*.AppImage 1> /dev/null 2>&1; then
     BIN_SOURCE="$(ls "$SCRIPT_DIR"/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)"
 fi
 
 if [ -z "$BIN_SOURCE" ]; then
     echo "❌ Error: Could not find compiled binary or AppImage."
-    echo "   Please run 'npm run build && (cd src-tauri && cargo build --release)' first."
+    echo ""
+    echo "   If building from source, run:"
+    echo "     npm run build && (cd src-tauri && cargo build --release)"
+    echo ""
+    echo "   If using the release tarball, ensure the binary is in the same directory as this script."
     exit 1
 fi
 
@@ -42,14 +51,25 @@ cp -f "$BIN_SOURCE" "$INSTALL_DIR/$EXEC_NAME"
 chmod +x "$INSTALL_DIR/$EXEC_NAME"
 
 # 3. Install App Icon
-ICON_SOURCE="$SCRIPT_DIR/src-tauri/icons/icon.png"
-if [ ! -f "$ICON_SOURCE" ]; then
-    ICON_SOURCE="$SCRIPT_DIR/src/assets/symbolIcon.png"
-fi
+#    Search multiple locations: cargo project icons, source assets, or project root
+ICON_SOURCE=""
+for candidate in \
+    "$SCRIPT_DIR/src-tauri/icons/icon.png" \
+    "$SCRIPT_DIR/src/assets/symbolIcon.png" \
+    "$SCRIPT_DIR/icons/icon.png" \
+    "$SCRIPT_DIR/icon.png"; do
+    if [ -f "$candidate" ]; then
+        ICON_SOURCE="$candidate"
+        break
+    fi
+done
 
-if [ -f "$ICON_SOURCE" ]; then
-    echo "  -> Installing application icon to: $ICON_DIR/$ICON_NAME.png"
+if [ -n "$ICON_SOURCE" ]; then
+    echo "  -> Installing application icon from: $ICON_SOURCE"
     cp -f "$ICON_SOURCE" "$ICON_DIR/$ICON_NAME.png"
+else
+    echo "  ⚠  No icon found — skipping icon installation."
+    echo "     You can manually place a 512x512 PNG at: $ICON_DIR/$ICON_NAME.png"
 fi
 
 # 4. Generate & Install .desktop Launcher
@@ -61,7 +81,7 @@ cat <<EOF > "$DESKTOP_FILE"
 Name=$APP_NAME
 GenericName=MTG Arena Tracker
 Comment=Real-time MTGA match tracking and deck analysis companion
-Exec=$INSTALL_DIR/$EXEC_NAME
+Exec=env GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 $INSTALL_DIR/$EXEC_NAME
 Icon=$ICON_NAME
 Terminal=false
 Type=Application
@@ -85,3 +105,6 @@ echo "   Binary:  $INSTALL_DIR/$EXEC_NAME"
 echo "   Desktop: $DESKTOP_FILE"
 echo ""
 echo "You can now launch '$APP_NAME' from your application menu (Rofi, Wofi, GNOME, KDE, etc.) or run 'rhystic-tracker'."
+echo ""
+echo "To uninstall, run:"
+echo "   rm $INSTALL_DIR/$EXEC_NAME $DESKTOP_DIR/$EXEC_NAME.desktop $ICON_DIR/$ICON_NAME.png"
