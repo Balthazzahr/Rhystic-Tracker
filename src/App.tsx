@@ -140,6 +140,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
+
+  // Listen for navigation events from the system tray menu
+  useEffect(() => {
+    const unlisten = listen<string>('navigate-to-tab', (event) => {
+      if (event.payload === 'live' || event.payload === 'dashboard' || event.payload === 'matches' || event.payload === 'decks' || event.payload === 'collection' || event.payload === 'settings') {
+        setActiveTab(event.payload as any);
+      }
+    });
+    return () => {
+      unlisten.then(f => f());
+    };
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');

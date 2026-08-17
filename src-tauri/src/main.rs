@@ -3355,17 +3355,18 @@ fn main() {
                 let _ = get_universe(db_manager.pool()).await;
             });
 
-            // 1. Construct System Tray Context Menu
+            // 1. Build and register System Tray Icon
+            let icon_bytes = include_bytes!("../icons/icon.png");
+            let icon_live_bytes = include_bytes!("../icons/icon_live.png");
+            let default_tray_icon = Image::from_bytes(icon_bytes)?;
+            let live_tray_icon = Image::from_bytes(icon_live_bytes)?;
+
             let open_item = MenuItem::with_id(app, "open", "Open Rhystic Tracker", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit Rhystic Tracker", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &quit_item])?;
 
-            // 2. Build and register System Tray Icon
-            let icon_bytes = include_bytes!("../icons/icon.png");
-            let tray_icon = Image::from_bytes(icon_bytes)?;
-
-            let _tray = TrayIconBuilder::new()
-                .icon(tray_icon)
+            let tray = TrayIconBuilder::with_id("main-tray")
+                .icon(default_tray_icon.clone())
                 .tooltip("Rhystic Tracker")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
@@ -3376,6 +3377,14 @@ fn main() {
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
+                            }
+                        }
+                        "live_match" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                                let _ = window.emit("navigate-to-tab", "live");
                             }
                         }
                         "quit" => {
@@ -3395,6 +3404,56 @@ fn main() {
                     }
                 })
                 .build(app)?;
+
+            // Background task: monitor live match state and update Tray Icon & Context Menu
+            let app_handle = app.handle().clone();
+            let monitor_assembler = shared_assembler.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut was_in_match = false;
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    let (is_active, format, opp_name, turn) = {
+                        let asm = monitor_assembler.lock().await;
+                        if let Some(ref m) = asm.active_match {
+                            (true, m.format_name.clone(), m.opponent_name.clone().unwrap_or_default(), asm.current_turn)
+                        } else {
+                            (false, String::new(), String::new(), 0)
+                        }
+                    };
+
+                    if is_active != was_in_match {
+                        was_in_match = is_active;
+                        if let Some(tray_icon_handle) = app_handle.tray_by_id("main-tray") {
+                            if is_active {
+                                let _ = tray_icon_handle.set_icon(Some(live_tray_icon.clone()));
+                                let round = (turn + 1) / 2;
+                                let match_label = format!("⚔️ Live Match: {} (Round {})\n   vs {}", format, round, if opp_name.is_empty() { "Opponent" } else { &opp_name });
+                                let _ = tray_icon_handle.set_tooltip(Some(format!("Rhystic Tracker — In Match (vs {})", if opp_name.is_empty() { "Opponent" } else { &opp_name })));
+                                
+                                if let Ok(live_item) = MenuItem::with_id(&app_handle, "live_match", &match_label, true, None::<&str>) {
+                                    if let Ok(open_item) = MenuItem::with_id(&app_handle, "open", "Open Rhystic Tracker", true, None::<&str>) {
+                                        if let Ok(quit_item) = MenuItem::with_id(&app_handle, "quit", "Quit Rhystic Tracker", true, None::<&str>) {
+                                            if let Ok(updated_menu) = Menu::with_items(&app_handle, &[&live_item, &open_item, &quit_item]) {
+                                                let _ = tray_icon_handle.set_menu(Some(updated_menu));
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                let _ = tray_icon_handle.set_icon(Some(default_tray_icon.clone()));
+                                let _ = tray_icon_handle.set_tooltip(Some("Rhystic Tracker"));
+                                if let Ok(open_item) = MenuItem::with_id(&app_handle, "open", "Open Rhystic Tracker", true, None::<&str>) {
+                                    if let Ok(quit_item) = MenuItem::with_id(&app_handle, "quit", "Quit Rhystic Tracker", true, None::<&str>) {
+                                        if let Ok(default_menu) = Menu::with_items(&app_handle, &[&open_item, &quit_item]) {
+                                            let _ = tray_icon_handle.set_menu(Some(default_menu));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
 
             Ok(())
         })

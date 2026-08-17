@@ -246,43 +246,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* Section: Desktop & Background Behavior */}
       <div 
-        className="p-6 rounded-2xl border space-y-4 shadow-xl"
+        className="p-6 rounded-2xl border shadow-xl flex items-center justify-between"
         style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5" style={{ color: palette?.accent }} />
-            <h3 className="text-base font-bold">Desktop & Background Behavior</h3>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <ShieldCheck className="w-5 h-5" style={{ color: palette?.accent }} />
+          <h3 className="text-base font-bold">Minimize to System Tray on Close</h3>
         </div>
-        <p className="text-xs opacity-70 leading-relaxed">
-          Configure how Rhystic Tracker behaves when closing the application window.
-        </p>
-
-        <div className="flex items-center justify-between p-4 rounded-xl border bg-black/20" style={{ borderColor: `${palette?.border || '#2A2F3D'}88` }}>
-          <div className="space-y-1">
-            <p className="text-sm font-bold font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-              Minimize to System Tray on Close
-            </p>
-            <p className="text-xs opacity-60 font-mono">
-              When enabled, clicking [X] hides the window to the Linux system tray so match and collection tracking continues in the background. Right-click the tray icon to Open or Quit.
-            </p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-            <input 
-              type="checkbox" 
-              checked={minimizeToTray}
-              onChange={(e) => handleToggleMinimizeToTray(e.target.checked)}
-              className="sr-only peer"
-            />
+        <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+          <input 
+            type="checkbox" 
+            checked={minimizeToTray}
+            onChange={(e) => handleToggleMinimizeToTray(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div 
+            className="w-12 h-6.5 rounded-full transition-colors border p-0.5 flex items-center"
+            style={{
+              backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#0F1117',
+              borderColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#2A2F3D',
+            }}
+          >
             <div 
-              className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"
-              style={{
-                backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : undefined,
-              }}
+              className={`w-5 h-5 rounded-full shadow-md transition-transform duration-200 ${
+                minimizeToTray ? 'translate-x-5.5 bg-black' : 'translate-x-0.5 bg-white/70'
+              }`}
             />
-          </label>
-        </div>
+          </div>
+        </label>
       </div>
 
       {/* Section 2: 5-Mana Color Theme Picker with Scryfall Mana Pips */}
@@ -317,31 +308,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span className="text-xs font-bold">{t.label.split(' ')[0]}</span>
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* Section 3: SQLite Cache Stats */}
-      <div 
-        className="p-6 rounded-2xl border space-y-3 shadow-xl"
-        style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-      >
-        <div className="flex items-center gap-2">
-          <Database className="w-5 h-5" style={{ color: palette?.accent }} />
-          <h3 className="text-base font-bold">Local SQLite Card Database Cache Status</h3>
-        </div>
-        <div className="grid grid-cols-3 gap-4 pt-2">
-          <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-            <p className="text-[10px] uppercase font-semibold opacity-60">Cached Cards</p>
-            <p className="text-xl font-bold font-mono text-emerald-400 mt-0.5">26,572 Rows</p>
-          </div>
-          <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-            <p className="text-[10px] uppercase font-semibold opacity-60">Sync Duration</p>
-            <p className="text-xl font-bold font-mono mt-0.5" style={{ color: palette?.accent }}>481 ms</p>
-          </div>
-          <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-            <p className="text-[10px] uppercase font-semibold opacity-60">Storage Path</p>
-            <p className="text-xs font-mono truncate opacity-80 mt-1">~/.config/rhystic-tracker/rhystic.db</p>
-          </div>
         </div>
       </div>
 
