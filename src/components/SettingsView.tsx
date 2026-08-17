@@ -265,14 +265,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           onClick={() => handleToggleMinimizeToTray(!minimizeToTray)}
           className="relative inline-flex items-center h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none"
           style={{
-            backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#1E232E',
-            borderColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#333B4D',
+            backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#181B22',
+            borderColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#2E3545',
           }}
         >
           <span
-            className={`pointer-events-none inline-block h-5 w-5 rounded-full shadow-lg ring-0 transition duration-200 ease-in-out ${
-              minimizeToTray ? 'translate-x-5.5 bg-black' : 'translate-x-0.5 bg-slate-400'
-            }`}
+            className="pointer-events-none inline-block h-5 w-5 rounded-full shadow-md transition-all duration-200 ease-in-out"
+            style={{
+              transform: minimizeToTray ? 'translateX(22px)' : 'translateX(2px)',
+              backgroundColor: minimizeToTray ? '#000000' : '#94A3B8',
+            }}
           />
         </button>
       </div>
