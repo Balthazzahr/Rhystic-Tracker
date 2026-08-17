@@ -141,6 +141,25 @@ export default function App() {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
+  // First-launch Cinematic Splash Screen Animation State
+  const [splashState, setSplashState] = useState<'showing' | 'animating' | 'done'>('showing');
+  useEffect(() => {
+    // Stage 1: Display large centered splash for 1.0s
+    const t1 = setTimeout(() => {
+      setSplashState('animating');
+    }, 1000);
+
+    // Stage 2: Animate for 850ms, then unmount overlay completely
+    const t2 = setTimeout(() => {
+      setSplashState('done');
+    }, 1850);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   // Listen for navigation events from the system tray menu
   useEffect(() => {
     const unlisten = listen<string>('navigate-to-tab', (event) => {
@@ -2513,6 +2532,57 @@ export default function App() {
               >
                 Delete Both
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FIRST-LAUNCH CINEMATIC SPLASH SCREEN & MORPH ANIMATION */}
+      {splashState !== 'done' && (
+        <div
+          onClick={() => setSplashState('done')}
+          className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-700 ease-in-out ${
+            splashState === 'animating' ? 'bg-black/0 backdrop-blur-none pointer-events-none' : 'bg-black/90 backdrop-blur-md'
+          }`}
+        >
+          {/* Animated Container: holds the centered icon + text logo on splash, then translates/scales into resting positions */}
+          <div className="relative w-full h-full pointer-events-none overflow-hidden">
+            {/* 1. SYMBOL ICON: Animates from center (50% scale) -> Top-Left Sidebar Icon */}
+            <div
+              className="absolute transition-all duration-800 ease-[cubic-bezier(0.25,1,0.5,1)]"
+              style={{
+                left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? '36px' : '110px'),
+                top: splashState === 'showing' ? '42%' : '48px',
+                transform: splashState === 'showing' 
+                  ? 'translate(-50%, -50%) scale(2.2)' 
+                  : 'translate(-50%, -50%) scale(1)',
+                opacity: splashState === 'showing' ? 1 : 0,
+              }}
+            >
+              <img
+                src={symbolIcon}
+                alt="Rhystic Tracker"
+                className="w-auto h-[75px] object-contain drop-shadow-[0_10px_35px_rgba(56,189,248,0.4)]"
+              />
+            </div>
+
+            {/* 2. TEXT LOGO: Animates from center below icon -> Top-Center Dashboard Header */}
+            <div
+              className="absolute transition-all duration-800 ease-[cubic-bezier(0.25,1,0.5,1)]"
+              style={{
+                left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? 'calc(50% + 36px)' : 'calc(50% + 110px)'),
+                top: splashState === 'showing' ? '58%' : '58px',
+                transform: splashState === 'showing' 
+                  ? 'translate(-50%, -50%) scale(1.6)' 
+                  : 'translate(-50%, -50%) scale(0.9)',
+                opacity: splashState === 'showing' ? 1 : 0,
+              }}
+            >
+              <img
+                src={logoImg}
+                alt="Rhystic Tracker"
+                className="w-auto h-[83px] max-w-[85vw] object-contain drop-shadow-[0_10px_40px_rgba(0,0,0,0.8)]"
+              />
             </div>
           </div>
         </div>
