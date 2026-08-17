@@ -167,11 +167,19 @@ The **Deck Library** tracks every deck you've played in MTGA, with true decklist
 ---
 
 ### Card Library & Persistent Combat Analytics
-The **Card Library** gives you an interactive collection viewer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics for every card you play.
+The **Card Library** gives you an interactive visual explorer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics for every card you play.
 
 <p align="center">
   <img src="docs/screenshots/card_library.png" alt="Card Library" width="900" />
 </p>
+
+#### How Collection Ownership & Card Tracking Works
+In earlier versions of Magic: The Gathering Arena, third-party companion tools could poll the client log for a player's complete inventory dump. However, recent client updates have restricted and removed general raw collection export from `Player.log`.
+
+To maintain **100% data integrity**, Rhystic Tracker implements the following architecture:
+1. **True Decklist Import**: The primary, guaranteed method to register cards into your permanent Collection is via the **Import True Decklist** feature in the Deck Library. When you import your decklists (using the standard MTGA `.txt` or clipboard export), Rhystic Tracker registers exact copies, card titles, and set printings into your local database.
+2. **Game Play vs Owned Integrity (Theft & Copy Protection)**: Every card cast in a match is logged by the engine. However, cards created in-game via **token generators, clone/copy mechanics (e.g., *Spark Double*), conjure, heist, or card-theft effects (e.g., *Gonti*, *Thief of Sanity*, *Ragavan*)** are not real collection cards. By strictly deriving owned inventory from verified True Decklists, Rhystic Tracker guarantees that borrowed or generated spells never artificially pollute your genuine collection stats.
+3. **Card Analytics Hub**: The Card Library is designed as an accessible combat analytics hub for the cards you own and play. Every card displays how often you've cast it across your decks, its win rate impact, and its direct combat potency. If Wizards of the Coast re-enables full client inventory dumps in future log updates, Rhystic Tracker is architected to automatically ingest full collection dumps seamlessly.
 
 #### 3-Panel Card Inspector & Analytics
 - **Panel 1 (Left)**: High-definition 450px card artwork with card style / printing selector.

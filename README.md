@@ -33,6 +33,7 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 - 🔍 **Full Match Inspector & Turn Timeline**: Granular play-by-play combat replay per turn, highlighting damage magnitude (`[4 DMG]`), card types, life swings, and victory/defeat causes.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
 - 🃏 **Deck & Card Library**: Visual collection explorer, full true-decklist import/export (`.txt` / MTGA format), deck legitimacy verification (protects stats from preset/starter decks), and 450px high-resolution card artwork viewers with Scryfall oracle texts.
+  - *Note on Collection Tracking*: Because MTGA has removed raw collection dumps from client logs, Rhystic Tracker derives owned inventory strictly through verified True Decklists. This ensures temporary or in-game cards (from *heist, theft, copy, clone, or conjure* mechanics) never pollute your genuine collection database.
 - 🎨 **Five Color-Identity Mana Themes**: Dynamic White, Blue, Black, Red, and Green themes that meticulously tint the entire application.
 
 ---
