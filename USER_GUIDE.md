@@ -86,7 +86,7 @@ RHYSTIC_MTGA_RAW_DIR="/path/to/Raw/Card/Database" rhystic-tracker
 2. Extract the archive and run the installer:
    ```bash
    tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
-   cd rhystic-tracker-v1.0.0-rc1-linux-x86_64
+   cd rhystic-tracker-v1.0.0-rc1
    ./install.sh
    ```
 
@@ -122,9 +122,36 @@ npm install && npm run build
 1. Installs the release binary into `~/.local/bin/rhystic-tracker`.
 2. Installs the high-resolution application icon into `~/.local/share/icons/hicolor/512x512/apps/rhystic-tracker.png`.
 3. Creates a valid XDG `.desktop` file in `~/.local/share/applications/rhystic-tracker.desktop`.
-4. Refreshes desktop and icon cache databases.
+4. Sets `GDK_BACKEND=x11` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` in the desktop launcher so the app works correctly on both X11 and Wayland sessions (via XWayland).
+5. Refreshes desktop and icon cache databases.
 
 You will now find **Rhystic Tracker** in your application launcher (e.g., **Pop Launcher**, **COSMIC**, **GNOME**, **KDE Plasma**, **Rofi**, **Wofi**, **KRunner**).
+
+### Wayland / Steam Deck Note
+
+Rhystic Tracker requires **X11** or **XWayland** to render its WebKitGTK window. The desktop launcher installed by `install.sh` automatically sets `GDK_BACKEND=x11`, so it works on both X11 and Wayland sessions out of the box.
+
+If you launch the binary directly from a terminal on a Wayland-only session (e.g., Steam Deck in Gaming Mode, or a pure Wayland GNOME/KDE session), prepend the environment variable:
+
+```bash
+GDK_BACKEND=x11 rhystic-tracker
+```
+
+### Uninstalling
+
+To remove Rhystic Tracker from your system:
+
+```bash
+rm ~/.local/bin/rhystic-tracker \
+   ~/.local/share/applications/rhystic-tracker.desktop \
+   ~/.local/share/icons/hicolor/512x512/apps/rhystic-tracker.png
+```
+
+Your match data in `~/.config/rhystic-tracker/rhystic.db` is preserved. To fully remove all data:
+
+```bash
+rm -rf ~/.config/rhystic-tracker
+```
 
 ---
 
@@ -257,4 +284,10 @@ All Rhystic Tracker data is stored **100% locally on your machine**:
 Simply copy the `~/.config/rhystic-tracker/rhystic.db` file to a safe backup location.
 
 #### Q: Can I run Rhystic Tracker on Steam Deck?
-Yes! Rhystic Tracker works natively on Steam Deck in Desktop Mode or added as a non-Steam game.
+Yes! Rhystic Tracker works natively on Steam Deck in Desktop Mode or added as a non-Steam game. The installer sets `GDK_BACKEND=x11` automatically, so it runs correctly via XWayland. If launching from a terminal instead, use `GDK_BACKEND=x11 rhystic-tracker`.
+
+#### Q: The app shows a blank or black screen on Wayland.
+Rhystic Tracker requires X11 or XWayland. If the desktop launcher doesn't set `GDK_BACKEND=x11` (e.g., you copied the binary manually), launch with:
+```bash
+GDK_BACKEND=x11 rhystic-tracker
+```

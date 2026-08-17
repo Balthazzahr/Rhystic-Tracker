@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0--rc1-38BDF8?style=flat-square&logo=git" alt="Version 1.0.0-rc1" />
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.0.0--rc1-38BDF8?style=flat-square&logo=git" alt="Version 1.0.0-rc1" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
@@ -63,13 +63,15 @@ Download the latest release tarball from [GitHub Releases](https://github.com/Ba
 ```bash
 # 1. Download and extract the latest release package
 tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
-cd rhystic-tracker-v1.0.0-rc1-linux-x86_64
+cd rhystic-tracker-v1.0.0-rc1
 
 # 2. Run the desktop installer (registers icon and launcher automatically)
 ./install.sh
 ```
 
-`install.sh` automatically installs the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
+The tarball contains the pre-compiled binary (`rhystic-tracker-x86_64-linux`) and `install.sh`. The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
+
+> **Note:** `install.sh` automatically sets `GDK_BACKEND=x11` in the desktop launcher so the app works correctly on both X11 and Wayland sessions (via XWayland).
 
 ---
 
@@ -84,17 +86,17 @@ Rhystic Tracker uses Tauri v2, which requires WebKitGTK and standard GTK3 build 
 **Debian / Ubuntu / Pop!_OS / Linux Mint:**
 ```bash
 sudo apt update
-sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential curl wget file libssl-dev libjavascriptcoregtk-4.1-dev
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential curl wget file libssl-dev libjavascriptcoregtk-4.1-dev nodejs npm
 ```
 
 **Arch Linux / Omarchy / Manjaro:**
 ```bash
-sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget openssl appmenu-gtk-module libappindicator-gtk3 librsvg
+sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget openssl appmenu-gtk-module libappindicator-gtk3 librsvg nodejs npm
 ```
 
 **Fedora / RHEL:**
 ```bash
-sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel @development-tools
+sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel @development-tools nodejs npm
 ```
 
 #### 2. Install Node.js & Rust (if not already installed)
@@ -129,6 +131,28 @@ If running the pre-built release binary on a minimal or newly installed Linux sy
 - **Pop!_OS / Ubuntu / Debian:** `sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1`
 - **Arch Linux:** `sudo pacman -S webkit2gtk-4.1 libappindicator-gtk3`
 - **Fedora:** `sudo dnf install webkit2gtk4.1 libappindicator-gtk3`
+
+---
+
+### 🖥️ Wayland / Steam Deck Note
+
+Rhystic Tracker requires **X11** or **XWayland**. The desktop launcher installed by `install.sh` automatically sets `GDK_BACKEND=x11`, so it works on both X11 and Wayland sessions out of the box. If you launch the binary directly from a terminal on a Wayland-only session, prepend the env var:
+
+```bash
+GDK_BACKEND=x11 rhystic-tracker
+```
+
+---
+
+### 🗑️ Uninstall
+
+```bash
+rm ~/.local/bin/rhystic-tracker \
+   ~/.local/share/applications/rhystic-tracker.desktop \
+   ~/.local/share/icons/hicolor/512x512/apps/rhystic-tracker.png
+```
+
+Your match data in `~/.config/rhystic-tracker/rhystic.db` is preserved and can be backed up or deleted separately.
 
 ---
 
