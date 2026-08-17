@@ -14,7 +14,7 @@ Welcome to the comprehensive guide for **Rhystic Tracker v1.0.0-rc1**. This docu
    - [Manual Path Overrides](#manual-path-overrides)
 4. [Desktop Integration & Launcher Setup](#4-desktop-integration--launcher-setup)
 5. [Feature Guide](#5-feature-guide)
-   - [Executive Dashboard](#executive-dashboard)
+   - [Dashboard](#dashboard)
    - [Live Match HUD & Real-Time Combat Feed](#live-match-hud--real-time-combat-feed)
    - [Full Match Inspector & Turn Playback](#full-match-inspector--turn-playback)
    - [Lifetime Card Combat Analytics](#lifetime-card-combat-analytics)
@@ -99,11 +99,11 @@ You will now find **Rhystic Tracker** in your application launcher (e.g., **Rofi
 
 ## 5. Feature Guide
 
-### Executive Dashboard
+### Dashboard
 The **Dashboard** serves as your mission control, synthesizing daily performance, active win streaks, 5-day trending win rates, and daily match history.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Executive Dashboard" width="900" />
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="900" />
 </p>
 
 - **Win Rate & Streak**: Displays today's match record, current win/loss streak, and all-time record.

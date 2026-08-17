@@ -28,7 +28,7 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## ✨ Features at a Glance
 
-- 📊 **Executive Dashboard**: Today's and all-time record, win rate trends, current streak counter, daily match grouping, and rotating deck spotlights.
+- 📊 **Dashboard**: Today's and all-time record, win rate trends, current streak counter, daily match grouping, and rotating deck spotlights.
 - ⚔️ **Live Match HUD**: Real-time game state tracker showing hero and opponent life changes, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with MTG font icons.
 - 🔍 **Full Match Inspector & Turn Timeline**: Granular play-by-play combat replay per turn, highlighting damage magnitude (`[4 DMG]`), card types, life swings, and victory/defeat causes.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
@@ -40,7 +40,7 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## 📸 Screenshots Showcase
 
-| Executive Dashboard | Live Match HUD |
+| Dashboard | Live Match HUD |
 | :---: | :---: |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Live Match HUD](docs/screenshots/live_hud.png) |
 
