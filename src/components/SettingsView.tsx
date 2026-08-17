@@ -250,30 +250,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
       >
         <div className="flex items-center gap-2.5">
-          <ShieldCheck className="w-5 h-5" style={{ color: palette?.accent }} />
-          <h3 className="text-base font-bold">Minimize to System Tray on Close</h3>
-        </div>
-        <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-          <input 
-            type="checkbox" 
-            checked={minimizeToTray}
-            onChange={(e) => handleToggleMinimizeToTray(e.target.checked)}
-            className="sr-only peer"
+          <ShieldCheck 
+            className={`w-5 h-5 transition-opacity ${minimizeToTray ? 'opacity-100' : 'opacity-40'}`} 
+            style={{ color: minimizeToTray ? palette?.accent : '#94A3B8' }} 
           />
-          <div 
-            className="w-12 h-6.5 rounded-full transition-colors border p-0.5 flex items-center"
-            style={{
-              backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#0F1117',
-              borderColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#2A2F3D',
-            }}
-          >
-            <div 
-              className={`w-5 h-5 rounded-full shadow-md transition-transform duration-200 ${
-                minimizeToTray ? 'translate-x-5.5 bg-black' : 'translate-x-0.5 bg-white/70'
-              }`}
-            />
-          </div>
-        </label>
+          <h3 className={`text-base font-bold transition-opacity ${minimizeToTray ? 'opacity-100' : 'opacity-70'}`}>
+            Minimize to System Tray on Close
+          </h3>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={minimizeToTray}
+          onClick={() => handleToggleMinimizeToTray(!minimizeToTray)}
+          className="relative inline-flex items-center h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none"
+          style={{
+            backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#1E232E',
+            borderColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#333B4D',
+          }}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 rounded-full shadow-lg ring-0 transition duration-200 ease-in-out ${
+              minimizeToTray ? 'translate-x-5.5 bg-black' : 'translate-x-0.5 bg-slate-400'
+            }`}
+          />
+        </button>
       </div>
 
       {/* Section 2: 5-Mana Color Theme Picker with Scryfall Mana Pips */}
