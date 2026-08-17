@@ -145,10 +145,10 @@ export default function App() {
       setSplashState('animating');
     }, 2000);
 
-    // Stage 2: Animate for 3.0s (total 5.0s), then unmount overlay completely
+    // Stage 2: Animate for 1.5s (2x faster, total 3.5s), then unmount overlay completely
     const t2 = setTimeout(() => {
       setSplashState('done');
-    }, 5000);
+    }, 3500);
 
     return () => {
       clearTimeout(t1);
@@ -2538,48 +2538,48 @@ export default function App() {
       {splashState !== 'done' && (
         <div
           onClick={() => setSplashState('done')}
-          className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-[3000ms] ease-in-out ${
+          className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-[1500ms] ease-in-out ${
             splashState === 'animating' ? 'bg-black/0 backdrop-blur-none pointer-events-none' : 'bg-black/50 backdrop-blur-sm'
           }`}
         >
           {/* Animated Container: holds the centered icon + text logo on splash, then translates/scales into resting positions */}
           <div className="relative w-full h-full pointer-events-none overflow-hidden">
-            {/* 1. SYMBOL ICON: Animates from center (large) -> Top-Left Sidebar Icon */}
+            {/* 1. SYMBOL ICON: Animates from center (2.2x scale) -> Top-Left Sidebar Icon (1.0x resting size) */}
             <div
-              className="absolute transition-all duration-[3000ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className="absolute transition-all duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? '36px' : '110px'),
                 top: splashState === 'showing' ? '40%' : '52px',
                 transform: splashState === 'showing' 
-                  ? 'translate(-50%, -50%) scale(1)' 
-                  : `translate(-50%, -50%) scale(${isSidebarCollapsed ? 0.22 : 0.44})`,
+                  ? 'translate(-50%, -50%) scale(2.2)' 
+                  : `translate(-50%, -50%) scale(${isSidebarCollapsed ? '0.43' : '1.0'})`,
                 opacity: 1,
               }}
             >
               <img
                 src={symbolIcon}
                 alt="Rhystic Tracker"
-                className="w-[170px] h-[170px] object-contain drop-shadow-[0_15px_40px_rgba(56,189,248,0.5)]"
+                className="w-auto h-[75px] object-contain drop-shadow-[0_15px_40px_rgba(56,189,248,0.5)]"
                 style={{ imageRendering: 'auto' }}
               />
             </div>
 
-            {/* 2. TEXT LOGO: Animates from center below icon -> Top-Center Dashboard Header */}
+            {/* 2. TEXT LOGO: Animates from center below icon (2.0x scale) -> Top-Center Dashboard Header (1.0x resting size) */}
             <div
-              className="absolute transition-all duration-[3000ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className="absolute transition-all duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? 'calc(50% + 36px + 36px)' : 'calc(50% + 110px + 36px)'),
                 top: splashState === 'showing' ? '60%' : '58px',
                 transform: splashState === 'showing' 
-                  ? 'translate(-50%, -50%) scale(1)' 
-                  : 'translate(-50%, -50%) scale(0.46)',
+                  ? 'translate(-50%, -50%) scale(2.0)' 
+                  : 'translate(-50%, -50%) scale(1.0)',
                 opacity: 1,
               }}
             >
               <img
                 src={logoImg}
                 alt="Rhystic Tracker"
-                className="w-[380px] h-auto max-w-[80vw] object-contain drop-shadow-[0_15px_45px_rgba(0,0,0,0.9)]"
+                className="w-auto h-[83px] max-w-[80vw] object-contain drop-shadow-[0_15px_45px_rgba(0,0,0,0.9)]"
                 style={{ imageRendering: 'auto' }}
               />
             </div>
