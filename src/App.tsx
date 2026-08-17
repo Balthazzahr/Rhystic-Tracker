@@ -144,15 +144,15 @@ export default function App() {
   // First-launch Cinematic Splash Screen Animation State
   const [splashState, setSplashState] = useState<'showing' | 'animating' | 'done'>('showing');
   useEffect(() => {
-    // Stage 1: Display large centered splash for 1.0s
+    // Stage 1: Display large centered splash for 2.0s
     const t1 = setTimeout(() => {
       setSplashState('animating');
-    }, 1000);
+    }, 2000);
 
-    // Stage 2: Animate for 850ms, then unmount overlay completely
+    // Stage 2: Animate for 3.0s (total 5.0s), then unmount overlay completely
     const t2 = setTimeout(() => {
       setSplashState('done');
-    }, 1850);
+    }, 5000);
 
     return () => {
       clearTimeout(t1);
@@ -2541,15 +2541,15 @@ export default function App() {
       {splashState !== 'done' && (
         <div
           onClick={() => setSplashState('done')}
-          className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-700 ease-in-out ${
-            splashState === 'animating' ? 'bg-black/0 backdrop-blur-none pointer-events-none' : 'bg-black/90 backdrop-blur-md'
+          className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-[3000ms] ease-in-out ${
+            splashState === 'animating' ? 'bg-black/0 backdrop-blur-none pointer-events-none' : 'bg-black/50 backdrop-blur-sm'
           }`}
         >
           {/* Animated Container: holds the centered icon + text logo on splash, then translates/scales into resting positions */}
           <div className="relative w-full h-full pointer-events-none overflow-hidden">
             {/* 1. SYMBOL ICON: Animates from center (50% scale) -> Top-Left Sidebar Icon */}
             <div
-              className="absolute transition-all duration-800 ease-[cubic-bezier(0.25,1,0.5,1)]"
+              className="absolute transition-all duration-[3000ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? '36px' : '110px'),
                 top: splashState === 'showing' ? '42%' : '48px',
@@ -2568,7 +2568,7 @@ export default function App() {
 
             {/* 2. TEXT LOGO: Animates from center below icon -> Top-Center Dashboard Header */}
             <div
-              className="absolute transition-all duration-800 ease-[cubic-bezier(0.25,1,0.5,1)]"
+              className="absolute transition-all duration-[3000ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? 'calc(50% + 36px)' : 'calc(50% + 110px)'),
                 top: splashState === 'showing' ? '58%' : '58px',
