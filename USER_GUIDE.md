@@ -80,20 +80,51 @@ RHYSTIC_MTGA_RAW_DIR="/path/to/Raw/Card/Database" rhystic-tracker
 
 ## 4. Desktop Integration & Launcher Setup
 
-### Arch Linux / Omarchy / Linux Installer
-To install Rhystic Tracker to your user application menu:
+### Option A: Pre-built Release (Fastest)
 
+1. Download `rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz` from the [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases).
+2. Extract the archive and run the installer:
+   ```bash
+   tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
+   cd rhystic-tracker-v1.0.0-rc1-linux-x86_64
+   ./install.sh
+   ```
+
+### Option B: Building from Source
+
+If compiling from source on your distribution:
+
+**Install Build Prerequisites:**
+- **Debian / Ubuntu / Pop!_OS / Linux Mint:**
+  ```bash
+  sudo apt update
+  sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential curl wget file libssl-dev libjavascriptcoregtk-4.1-dev nodejs npm
+  ```
+- **Arch Linux / Omarchy / Manjaro:**
+  ```bash
+  sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget openssl appmenu-gtk-module libappindicator-gtk3 librsvg nodejs npm
+  ```
+- **Fedora / RHEL:**
+  ```bash
+  sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel @development-tools nodejs npm
+  ```
+
+**Build & Install:**
 ```bash
+git clone https://github.com/Balthazzahr/Rhystic-Tracker.git
+cd Rhystic-Tracker
+npm install && npm run build
+(cd src-tauri && cargo build --release)
 ./install.sh
 ```
 
-This performs the following actions:
-1. Installs the compiled binary into `~/.local/bin/rhystic-tracker`.
-2. Installs the high-resolution logo into `~/.local/share/icons/hicolor/512x512/apps/rhystic-tracker.png`.
+### What `install.sh` Does:
+1. Installs the release binary into `~/.local/bin/rhystic-tracker`.
+2. Installs the high-resolution application icon into `~/.local/share/icons/hicolor/512x512/apps/rhystic-tracker.png`.
 3. Creates a valid XDG `.desktop` file in `~/.local/share/applications/rhystic-tracker.desktop`.
-4. Refreshes application menu databases.
+4. Refreshes desktop and icon cache databases.
 
-You will now find **Rhystic Tracker** in your application launcher (e.g., **Rofi**, **Wofi**, **KRunner**, **GNOME**, **KDE Plasma**).
+You will now find **Rhystic Tracker** in your application launcher (e.g., **Pop Launcher**, **COSMIC**, **GNOME**, **KDE Plasma**, **Rofi**, **Wofi**, **KRunner**).
 
 ---
 

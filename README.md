@@ -56,68 +56,79 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## 🚀 Quick Start & Installation
 
-### Option 1: 1-Command Installer (Arch Linux, Omarchy, Ubuntu, Fedora, Debian)
+### Option 1: Pre-built Release (Recommended)
 
-Clone the repository and run the automated installer:
+Download the latest release tarball from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases):
 
 ```bash
-git clone https://github.com/Balthazzahr/Rhystic-Tracker.git
-cd Rhystic-Tracker
+# 1. Download and extract the latest release package
+tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
+cd rhystic-tracker-v1.0.0-rc1-linux-x86_64
+
+# 2. Run the desktop installer (registers icon and launcher automatically)
 ./install.sh
 ```
 
-`install.sh` automatically compiles/installs the release binary to `~/.local/bin/rhystic-tracker`, places high-resolution application icons into `~/.local/share/icons/`, and registers the desktop entry so Rhystic Tracker appears immediately in your application launcher (**Rofi**, **Wofi**, **Krunner**, **GNOME**, **KDE Plasma**).
+`install.sh` automatically installs the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
 
 ---
 
-### Option 2: Standalone AppImage
+### Option 2: Build from Source
 
-Download the latest `Rhystic-Tracker-1.0.0.AppImage` from the [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases) page:
+If you prefer to compile from source or clone the repository:
 
+#### 1. Install System Dependencies
+
+Rhystic Tracker uses Tauri v2, which requires WebKitGTK and standard GTK3 build libraries.
+
+**Debian / Ubuntu / Pop!_OS / Linux Mint:**
 ```bash
-chmod +x Rhystic-Tracker-1.0.0.AppImage
-./Rhystic-Tracker-1.0.0.AppImage
+sudo apt update
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential curl wget file libssl-dev libjavascriptcoregtk-4.1-dev
 ```
 
----
+**Arch Linux / Omarchy / Manjaro:**
+```bash
+sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget openssl appmenu-gtk-module libappindicator-gtk3 librsvg
+```
 
-## ⚙️ MTG Arena Setup Requirement
+**Fedora / RHEL:**
+```bash
+sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel @development-tools
+```
 
-For MTG Arena to output detailed match and combat records, you must enable plugin logging once inside the game:
-
-1. Open **MTG Arena**.
-2. Click the **Gear Icon (Settings)** in the top right $\rightarrow$ Select **Account**.
-3. Check the box for **"Detailed Logs (Plugin Support)"**.
-4. Restart MTG Arena.
-
----
-
-## 📖 Documentation
-
-For full setup guides across Steam Proton, Lutris, Bottles, Heroic, environment variable overrides (`RHYSTIC_MTGA_LOG`), card library features, and troubleshooting, please read our:
-
-👉 **[Complete User Manual & Troubleshooting Guide (USER_GUIDE.md)](USER_GUIDE.md)**
-
----
-
-## 🛠️ Building from Source
-
-### Prerequisites
+#### 2. Install Node.js & Rust (if not already installed)
 - [Node.js](https://nodejs.org/) (v18+)
-- [Rust](https://www.rust-lang.org/tools/install) toolchain
-- System WebKitGTK dependencies (`webkit2gtk-4.1` on Arch / Debian / Fedora)
+- [Rust](https://www.rust-lang.org/tools/install): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+
+#### 3. Clone, Build, and Install
 
 ```bash
-# 1. Install frontend dependencies
-npm install
+# Clone the repository
+git clone https://github.com/Balthazzahr/Rhystic-Tracker.git
+cd Rhystic-Tracker
 
-# 2. Build the production frontend
+# Install frontend dependencies and build assets
+npm install
 npm run build
 
-# 3. Build release binary
+# Build the optimized release binary
 cd src-tauri
 cargo build --release
+cd ..
+
+# Run installer to place binary and desktop shortcuts
+./install.sh
 ```
+
+---
+
+### 📦 Runtime Dependencies (For Pre-built Binaries)
+
+If running the pre-built release binary on a minimal or newly installed Linux system, ensure the WebKitGTK 4.1 runtime is present:
+- **Pop!_OS / Ubuntu / Debian:** `sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1`
+- **Arch Linux:** `sudo pacman -S webkit2gtk-4.1 libappindicator-gtk3`
+- **Fedora:** `sudo dnf install webkit2gtk4.1 libappindicator-gtk3`
 
 ---
 
