@@ -37,15 +37,19 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ---
 
-## 📸 Screenshots
+## 📸 Screenshots Showcase
 
 | Executive Dashboard | Live Match HUD |
 | :---: | :---: |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Live Match HUD](docs/screenshots/live_hud.png) |
 
-| Deck Library & True Lists | Card Library & Combat Analytics |
+| Match History & Match Inspector | Turn Playback & Combat Timeline |
 | :---: | :---: |
-| ![Deck Library](docs/screenshots/deck_library.png) | ![Deck Library Overview](docs/screenshots/deck_library.png) |
+| ![Match History](docs/screenshots/match_history.png) | ![Match Inspector Timeline](docs/screenshots/match_inspector_timeline.png) |
+
+| Deck Library & True Decklist Inspector | Card Library & Combat Analytics |
+| :---: | :---: |
+| ![Deck Library](docs/screenshots/deck_library.png) | ![Card Inspector](docs/screenshots/card_inspector.png) |
 
 ---
 

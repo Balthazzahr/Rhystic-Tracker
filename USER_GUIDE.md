@@ -100,6 +100,12 @@ You will now find **Rhystic Tracker** in your application launcher (e.g., **Rofi
 ## 5. Feature Guide
 
 ### Executive Dashboard
+The **Dashboard** serves as your mission control, synthesizing daily performance, active win streaks, 5-day trending win rates, and daily match history.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Executive Dashboard" width="900" />
+</p>
+
 - **Win Rate & Streak**: Displays today's match record, current win/loss streak, and all-time record.
 - **5-Day Trend Chart**: Visualizes recent win percentage momentum across your matches.
 - **Recent Matches**: Chronological grouping of recent matches with quick result badges (`VICTORY` / `DEFEAT`).
@@ -108,7 +114,12 @@ You will now find **Rhystic Tracker** in your application launcher (e.g., **Rofi
 ---
 
 ### Live Match HUD & Real-Time Combat Feed
-While in an active match, click **Live Match HUD** in the left sidebar (the menu icon pulses orange when a game is in progress):
+While in an active match, click **Live Match HUD** in the left sidebar (the menu icon pulses bright orange when a game is in progress).
+
+<p align="center">
+  <img src="docs/screenshots/live_hud.png" alt="Live Match HUD" width="900" />
+</p>
+
 - **Commander & Identity**: Shows both players' commanders and deck colors.
 - **Live Action Feed**: Displays real-time entries:
   - 📥 `[DRAW]`: Cards drawn into hand.
@@ -121,34 +132,60 @@ While in an active match, click **Live Match HUD** in the left sidebar (the menu
 
 ---
 
-### Full Match Inspector & Turn Playback
-Clicking any match in the Dashboard or Match History opens the **Full Match Inspector**:
-- **Match Breakdown**: Starting order (Play vs Draw), mulligans taken, ending life totals, and deck win streaks.
-- **Play-by-Play Timeline**: Grouped by game round, displaying every card cast, spell damage dealt, creature death, and life fluctuation on the exact turn it occurred.
+### Match History & Full Match Inspector
+Clicking any match in the Dashboard, Match History, Deck detail, or Head-to-Head modal opens the comprehensive **Full Match Inspector**.
 
----
+<p align="center">
+  <img src="docs/screenshots/match_history.png" alt="Match History Table" width="900" />
+</p>
 
-### Lifetime Card Combat Analytics
-Open any card's details to view persistent lifetime metrics (isolated strictly to your games):
-- **Matches & Win Rate**: Total games played with the card and win percentage when cast.
-- **Damage Distribution**: Total damage dealt, maximum single swing, and a split bar showing **Damage to Face (Player)** vs **Damage to Permanents**.
-- **Source Classification**: Direct split between **Combat Damage** vs **Spell / Ability Damage**.
-- **Turn Cast Frequency**: Histogram showing which turn you most frequently cast the card.
-- **MVP Deck**: Attribution of which of your decks this card performs best in.
+The inspector provides two views:
+1. **Cards Logged View**: Breakdown of all cards played or seen during the match, with player/opponent attribution and damage metrics.
+2. **Match Play Timeline**: Turn-by-turn playback of every card drawn, played, damaged, or removed.
+
+| Cards Logged View | Match Play Timeline |
+| :---: | :---: |
+| ![Cards Logged](docs/screenshots/match_inspector_cards.png) | ![Match Timeline](docs/screenshots/match_inspector_timeline.png) |
 
 ---
 
 ### Deck Library & True Decklist Management
+The **Deck Library** tracks every deck you've played in MTGA, with true decklist import, format legitimacy verification, and customizable card size views.
+
+<p align="center">
+  <img src="docs/screenshots/deck_library.png" alt="Deck Library" width="900" />
+</p>
+
 - **True Decklists**: Import your exact 60-card / 100-card decklists directly using the MTGA export format (`.txt` or clipboard).
 - **Legitimacy Verification**: Rhystic Tracker filters out preset and starter decks to prevent skewed collection or archetype analytics.
-- **Card Size Sliders**: Choose between compact and expansive grid views.
+- **Deck Inspector Modal**: Inspect deck composition, mana curve, colors, and match history.
+
+<p align="center">
+  <img src="docs/screenshots/deck_inspector.png" alt="Deck Inspector" width="900" />
+</p>
 
 ---
 
-### Card Library & Scryfall Viewer
-- **450px Card Artwork**: High-definition card artwork fetched via Scryfall.
-- **Art / Style Selector**: Switch between different printings and card styles for any card.
-- **Responsive Layout**: On smaller viewports, panels gracefully collapse to ensure the card art remains clear and prominent.
+### Card Library & Persistent Combat Analytics
+The **Card Library** gives you an interactive collection viewer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics for every card you play.
+
+<p align="center">
+  <img src="docs/screenshots/card_library.png" alt="Card Library" width="900" />
+</p>
+
+#### 3-Panel Card Inspector & Analytics
+- **Panel 1 (Left)**: High-definition 450px card artwork with card style / printing selector.
+- **Panel 2 (Middle)**: Card metadata, rarity, deck inclusion list, and Scryfall oracle & flavor text.
+- **Panel 3 (Right)**: **Card Combat Analytics**:
+  - Total matches played and win rate when cast.
+  - Total damage dealt with **Face (Player)** vs **Permanents** split bar.
+  - **Combat Damage** vs **Spell / Ability Damage** classification.
+  - **Turn Cast Frequency Histogram** (mapped to player round turns).
+  - **MVP Deck Attribution**.
+
+<p align="center">
+  <img src="docs/screenshots/card_inspector.png" alt="Card Inspector" width="900" />
+</p>
 
 ---
 
