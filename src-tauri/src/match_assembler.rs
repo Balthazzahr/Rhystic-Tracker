@@ -47,6 +47,29 @@ pub struct MatchImpactfulRecord {
     pub seat_id: u32,
     pub total_damage: i32,
     pub max_hit: i32,
+    pub damage_to_player: i32,
+    pub damage_to_permanents: i32,
+    pub damage_combat: i32,
+    pub damage_spell: i32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CardDamageStats {
+    pub seat_id: u32,
+    pub total_damage: i32,
+    pub max_hit: i32,
+    pub damage_to_player: i32,
+    pub damage_to_permanents: i32,
+    pub damage_combat: i32,
+    pub damage_spell: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct LiveDamageFeedEvent {
+    pub source_instance_id: u32,
+    pub target_instance_id: u32,
+    pub amount: i32,
+    pub damage_type: u32, // 1 = combat, 2 = non-combat/spell
 }
 
 pub struct MatchAssembler {
@@ -73,9 +96,10 @@ pub struct MatchAssembler {
     pub turn_events: Vec<MatchTurnEventRecord>,
     pub turn_event_seqs: Vec<u64>,
     pub life_events: Vec<(u32, i32, i32, u32, u64)>, // (turn, old_life, new_life, seat_id, seq)
+    pub damage_feed_events: Vec<(LiveDamageFeedEvent, u64)>, // (damage_event, seq)
     pub feed_seq: u64,
     pub current_turn: u32,
-    pub impactful_cards: HashMap<u32, (u32, i32, i32)>, // grp_id -> (seat_id, total_damage, max_hit)
+    pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
     pub processed_msg_ids: HashSet<u64>,
     pub last_completed: Option<(MatchRecord, chrono::DateTime<Utc>)>,
 }
@@ -89,7 +113,7 @@ impl MatchAssembler {
             cached_deck_name: None,
             cached_deck_id: None,
             cached_commander_id: None,
-            match_legitimate: false,
+            match_legitimate: true,
             collection_draws: Vec::new(),
             current_player_life: 20,
             current_opp_life: 20,
@@ -102,6 +126,7 @@ impl MatchAssembler {
             turn_events: Vec::new(),
             turn_event_seqs: Vec::new(),
             life_events: Vec::new(),
+            damage_feed_events: Vec::new(),
             feed_seq: 0,
             current_turn: 1,
             impactful_cards: HashMap::new(),
@@ -122,10 +147,17 @@ impl MatchAssembler {
         self.current_opp_life = default_life;
         self.player_cards_seen.clear();
         self.opp_cards_seen.clear();
-        self.processed_msg_ids.clear();
-        self.life_events.clear();
-        self.current_turn = 1;
+        self.instance_map.clear();
+        self.instance_zone_map.clear();
+        self.instance_owner_map.clear();
+        self.recorded_actions.clear();
+        self.turn_events.clear();
         self.turn_event_seqs.clear();
+        self.life_events.clear();
+        self.damage_feed_events.clear();
+        self.impactful_cards.clear();
+        self.processed_msg_ids.clear();
+        self.current_turn = 1;
         self.feed_seq = 0;
         self.player_seat_id = 1;
         self.collection_draws.clear();
@@ -258,31 +290,34 @@ impl MatchAssembler {
 
         // Zone IDs (verified against real MTGA logs):
         //   Hand = 31/35, Library = 32/36, Battlefield = 28, Stack = 27,
-        //   Graveyard = 33, Exile = 29, Command = 26, Sideboard = 34.
-        const LIBRARY_ZONES: [u32; 2] = [32, 36];
+        //   Graveyard = 33, Exile = 29, Command = 26, Sideboard = 34, Limbo = 30.
         const HAND_ZONES: [u32; 2] = [31, 35];
+        const NON_DRAW_SOURCE_ZONES: [u32; 4] = [27, 28, 29, 33]; // Stack, Battlefield, Exile, Graveyard
 
         // Determine event type from zone transition.
-        // "draw" is strictly a card entering hand from the player's own library
-        // (natural draws, tutors, searches) OR a card already in hand that we're
-        // first learning about (opening hand — which also came from our library).
-        // Cards entering hand from graveyard/exile/stack, cast-from-opponent-
-        // library effects, spell copies, and tokens are NOT draws and do NOT
-        // indicate ownership. Borrowed cards (opponent-owned, stolen into hand)
-        // carry the opponent's ownerSeatId and are excluded downstream.
+        // "draw" is a card entering hand from the player's own library (natural draws, tutors, searches)
+        // or a card already in hand that we're first learning about (opening hand).
+        // Cards entering hand from graveyard/exile/battlefield/stack are bounces/returns, NOT draws.
         let is_hand = HAND_ZONES.contains(&zone_id);
-        let was_library = previous_zone.map(|p| LIBRARY_ZONES.contains(&p)).unwrap_or(false);
-        let learned_in_hand = learning_grp_now && is_hand
-            && previous_zone.map(|p| HAND_ZONES.contains(&p)).unwrap_or(false);
+        let from_non_draw = previous_zone.map(|p| NON_DRAW_SOURCE_ZONES.contains(&p)).unwrap_or(false);
         let is_play_zone = zone_id == 27 || zone_id == 28;
 
         let mut event_type = None;
-        if is_hand && (previous_zone != Some(zone_id) || (previous_zone.is_some() && learning_grp_now)) {
-            if was_library || learned_in_hand {
+        if is_hand && (previous_zone != Some(zone_id) || learning_grp_now) {
+            if !from_non_draw {
                 event_type = Some("draw".to_string());
             }
+        } else if zone_id == 28 && previous_zone.is_none() && !learning_grp_now {
+            // New object appearing directly on the battlefield without having passed through hand or stack
+            event_type = Some("token".to_string());
         } else if is_play_zone && previous_zone != Some(zone_id) {
             event_type = Some("play".to_string());
+        } else if previous_zone == Some(28) && zone_id == 33 {
+            // Battlefield -> Graveyard = Dies / Destroyed / Sacrificed
+            event_type = Some("dies".to_string());
+        } else if previous_zone == Some(28) && zone_id == 29 {
+            // Battlefield -> Exile = Exiled
+            event_type = Some("exile".to_string());
         }
 
         if let Some(etype) = event_type {
@@ -318,24 +353,70 @@ impl MatchAssembler {
         None
     }
 
-    /// Record damage/life-loss attributed to a card instance (from ModifiedLife /
-    /// DamageDealt annotations). Aggregates total impact and biggest single swing per card.
-    pub fn process_damage_event(&mut self, instance_id: u32, amount: i32) {
+    /// Record damage/life-loss attributed to a card instance (from DamageDealt annotations).
+    /// Aggregates total impact, biggest single swing, and face vs permanent splits.
+    pub fn process_damage_event(
+        &mut self,
+        instance_id: u32,
+        target_instance_id: u32,
+        amount: i32,
+        damage_type: u32, // 1 = combat, 2 = non-combat/spell
+    ) {
         let grp_id = self.instance_map.get(&instance_id).copied().unwrap_or(0);
         if grp_id == 0 {
             return;
         }
         let seat_id = self.instance_owner_map.get(&instance_id).copied().unwrap_or(0);
         let magnitude = amount.abs();
-        let entry = self.impactful_cards.entry(grp_id).or_insert((seat_id, 0, 0));
-        entry.1 += magnitude;
-        if magnitude > entry.2 {
-            entry.2 = magnitude;
+
+        let is_to_player = target_instance_id == 1 || target_instance_id == 2;
+        let is_combat = damage_type == 1;
+
+        let entry = self.impactful_cards.entry(grp_id).or_default();
+        if entry.seat_id == 0 {
+            entry.seat_id = seat_id;
         }
-        // Ensure seat is populated if it wasn't when the entry was created.
-        if entry.0 == 0 {
-            entry.0 = seat_id;
+        entry.total_damage += magnitude;
+        if magnitude > entry.max_hit {
+            entry.max_hit = magnitude;
         }
+        if is_to_player {
+            entry.damage_to_player += magnitude;
+        } else {
+            entry.damage_to_permanents += magnitude;
+        }
+        if is_combat {
+            entry.damage_combat += magnitude;
+        } else {
+            entry.damage_spell += magnitude;
+        }
+
+        // Also record to live damage feed for the HUD
+        self.damage_feed_events.push((
+            LiveDamageFeedEvent {
+                source_instance_id: instance_id,
+                target_instance_id,
+                amount: magnitude,
+                damage_type,
+            },
+            self.feed_seq,
+        ));
+
+        // Stash into turn_events so the match play timeline also reflects combat & spell damage
+        let dmg_event_type = if is_combat {
+            format!("damage:combat:{}:{}", magnitude, target_instance_id)
+        } else {
+            format!("damage:spell:{}:{}", magnitude, target_instance_id)
+        };
+        self.turn_events.push(MatchTurnEventRecord {
+            turn_number: self.current_turn,
+            seat_id,
+            event_type: dmg_event_type,
+            grp_id,
+            timestamp: Utc::now().to_rfc3339(),
+        });
+        self.turn_event_seqs.push(self.feed_seq);
+        self.feed_seq += 1;
     }
 
     pub fn update_game_state(&mut self, msg_id: Option<u64>, turn: u32, life_by_seat: &[(u32, i32)], active_seat: u32) {
@@ -350,40 +431,21 @@ impl MatchAssembler {
             self.current_turn = turn;
         }
 
-        // Map life totals by seat using the player's known seat id, recording
-        // a live "life" feed entry whenever a total changes.
-        let mut new_player_life: Option<i32> = None;
-        let mut new_opp_life: Option<i32> = None;
-        for (seat_id, life) in life_by_seat {
-            if *seat_id == self.player_seat_id {
-                new_player_life = Some(*life);
-            } else {
-                new_opp_life = Some(*life);
-            }
-        }
-        if let Some(life) = new_player_life {
-            if life != self.current_player_life {
-                self.life_events.push((self.current_turn, self.current_player_life, life, self.player_seat_id, self.feed_seq));
-                self.feed_seq += 1;
-                self.current_player_life = life;
-            }
-        }
-        if let Some(life) = new_opp_life {
-            if life != self.current_opp_life {
-                self.life_events.push((self.current_turn, self.current_opp_life, life, self.player_seat_id + 1, self.feed_seq));
-                self.feed_seq += 1;
-                self.current_opp_life = life;
-            }
-        }
-
-        if let Some(m) = &mut self.active_match {
-            if turn > m.turns {
-                m.turns = turn;
-            }
-            m.player_life_end = Some(self.current_player_life);
-            m.opponent_life_end = Some(self.current_opp_life);
-            if turn == 1 && active_seat != self.player_seat_id {
-                m.going_first = false;
+        for (seat, life) in life_by_seat {
+            if *seat == self.player_seat_id {
+                let old = self.current_player_life;
+                if old != *life {
+                    self.life_events.push((self.current_turn, old, *life, *seat, self.feed_seq));
+                    self.feed_seq += 1;
+                }
+                self.current_player_life = *life;
+            } else if *seat > 0 {
+                let old = self.current_opp_life;
+                if old != *life {
+                    self.life_events.push((self.current_turn, old, *life, *seat, self.feed_seq));
+                    self.feed_seq += 1;
+                }
+                self.current_opp_life = *life;
             }
         }
     }
@@ -392,8 +454,11 @@ impl MatchAssembler {
         if let Some(mut m) = self.active_match.take() {
             let is_win = winning_team_id == self.player_seat_id;
             m.result = if is_win { "win".to_string() } else { "loss".to_string() };
+            m.turns = self.current_turn;
             m.player_life_end = Some(self.current_player_life);
             m.opponent_life_end = Some(self.current_opp_life);
+            m.player_commander_id = self.cached_commander_id;
+
             let reason_clean = if reason.is_empty() { None } else { Some(reason.to_string()) };
             m.result_reason = reason_clean;
 
@@ -416,11 +481,15 @@ impl MatchAssembler {
             let turn_events = std::mem::take(&mut self.turn_events);
 
             let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.iter()
-                .map(|(grp_id, (seat_id, total, max_hit))| MatchImpactfulRecord {
+                .map(|(grp_id, stats)| MatchImpactfulRecord {
                     grp_id: *grp_id,
-                    seat_id: *seat_id,
-                    total_damage: *total,
-                    max_hit: *max_hit,
+                    seat_id: stats.seat_id,
+                    total_damage: stats.total_damage,
+                    max_hit: stats.max_hit,
+                    damage_to_player: stats.damage_to_player,
+                    damage_to_permanents: stats.damage_to_permanents,
+                    damage_combat: stats.damage_combat,
+                    damage_spell: stats.damage_spell,
                 })
                 .collect();
 

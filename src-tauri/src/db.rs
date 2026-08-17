@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS match_impactful_cards (
     seat_id INTEGER NOT NULL,
     total_damage INTEGER NOT NULL DEFAULT 0,
     max_hit INTEGER NOT NULL DEFAULT 0,
+    damage_to_player INTEGER NOT NULL DEFAULT 0,
+    damage_to_permanents INTEGER NOT NULL DEFAULT 0,
+    damage_combat INTEGER NOT NULL DEFAULT 0,
+    damage_spell INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
@@ -219,6 +223,21 @@ impl DatabaseManager {
                 .execute(&pool)
                 .await?;
             println!("[DB MIGRATION] Added icon_svg_uri column to sets_metadata table");
+        }
+
+        // Migration: add detailed damage tracking columns to match_impactful_cards
+        let imp_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('match_impactful_cards') WHERE name = 'damage_to_player'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if imp_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN damage_to_player INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN damage_to_permanents INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN damage_combat INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN damage_spell INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            println!("[DB MIGRATION] Added damage target and type columns to match_impactful_cards table");
         }
 
         // Migration: backfill cards_cache.cmc from mana_cost. Early imports stored cmc=0
@@ -374,8 +393,8 @@ impl DatabaseManager {
         for imp in impactful {
             sqlx::query(
                 r#"
-                INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit, damage_to_player, damage_to_permanents, damage_combat, damage_spell)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#
             )
             .bind(&match_rec.match_id)
@@ -383,6 +402,10 @@ impl DatabaseManager {
             .bind(imp.seat_id as i64)
             .bind(imp.total_damage as i64)
             .bind(imp.max_hit as i64)
+            .bind(imp.damage_to_player as i64)
+            .bind(imp.damage_to_permanents as i64)
+            .bind(imp.damage_combat as i64)
+            .bind(imp.damage_spell as i64)
             .execute(&mut *tx)
             .await?;
         }

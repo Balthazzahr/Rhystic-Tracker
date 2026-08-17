@@ -13,7 +13,7 @@ pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
     MatchCreated { match_id: String, format_name: String, reserved_players: serde_json::Value },
     DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32>, deck_id: Option<String> },
-    GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, life_by_seat: Vec<(u32, i32)>, active_seat: u32, damage_events: Vec<(u32, i32)> },
+    GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, life_by_seat: Vec<(u32, i32)>, active_seat: u32, damage_events: Vec<(u32, u32, i32, u32)> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
     Unknown,
 }
@@ -181,10 +181,10 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     // of returning on the first one that has content, otherwise per-turn draws
                     // and plays that appear in later messages on the same line are dropped.
                     let mut batch: Vec<(u32, Option<u32>, Option<u32>, u32)> = Vec::new();
-                    let mut last_turn = 0u32;
-                    let mut last_active = 1u32;
+                    let mut last_turn: u32 = 0;
                     let mut life_by_seat: Vec<(u32, i32)> = Vec::new();
-                    let mut damage_events: Vec<(u32, i32)> = Vec::new();
+                    let mut last_active: u32 = 1;
+                    let mut damage_events: Vec<(u32, u32, i32, u32)> = Vec::new();
                     let mut any_content = false;
 
                     for msg in msgs {
@@ -257,20 +257,33 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                         if affector_id == 0 {
                                             continue;
                                         }
-                                        // details[].key == "damage", valueInt32 = amount.
+                                        let target_id = a.get("affectedIds").and_then(|arr| arr.as_array())
+                                            .and_then(|arr| arr.first())
+                                            .and_then(|x| x.as_u64())
+                                            .unwrap_or(0) as u32;
+
+                                        let mut amount = 0i32;
+                                        let mut dtype = 1u32; // Default to combat (1)
+
                                         if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
                                             for d in details {
                                                 let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
                                                 if key == "damage" {
-                                                    let amount = d.get("valueInt32").and_then(|v| v.as_array())
+                                                    amount = d.get("valueInt32").and_then(|v| v.as_array())
                                                         .and_then(|arr| arr.first())
                                                         .and_then(|x| x.as_i64())
                                                         .unwrap_or(0) as i32;
-                                                    if amount != 0 {
-                                                        damage_events.push((affector_id, amount));
-                                                    }
+                                                } else if key == "type" {
+                                                    dtype = d.get("valueInt32").and_then(|v| v.as_array())
+                                                        .and_then(|arr| arr.first())
+                                                        .and_then(|x| x.as_u64())
+                                                        .unwrap_or(1) as u32;
                                                 }
                                             }
+                                        }
+
+                                        if amount != 0 {
+                                            damage_events.push((affector_id, target_id, amount, dtype));
                                         }
                                     }
                                 }

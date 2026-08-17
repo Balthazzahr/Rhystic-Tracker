@@ -1184,22 +1184,112 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
     }
     let decks = decks_q.fetch_all(pool).await.map_err(|e| e.to_string())?;
 
-    // Impactful-card stats aggregated across all printings.
+    // Impactful-card and damage stats aggregated across all printings (PLAYER ONLY).
     let impactful_sql = format!(
         r#"
         SELECT COUNT(*) as times_impactful,
-               COALESCE(SUM(total_damage), 0) as total_damage,
-               COALESCE(MAX(max_hit), 0) as max_hit
-        FROM match_impactful_cards
-        WHERE grp_id IN ({})
+               COALESCE(SUM(i.total_damage), 0) as total_damage,
+               COALESCE(MAX(i.max_hit), 0) as max_hit,
+               COALESCE(SUM(i.damage_to_player), 0) as damage_to_player,
+               COALESCE(SUM(i.damage_to_permanents), 0) as damage_to_permanents,
+               COALESCE(SUM(i.damage_combat), 0) as damage_combat,
+               COALESCE(SUM(i.damage_spell), 0) as damage_spell
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        WHERE i.grp_id IN ({}) AND i.seat_id = m.hero_seat_id
         "#,
         placeholders
     );
-    let mut impactful_q = sqlx::query_as::<_, (i64, i64, i64)>(&impactful_sql);
+    let mut impactful_q = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(&impactful_sql);
     for id in &grp_ids {
         impactful_q = impactful_q.bind(*id);
     }
     let impactful = impactful_q.fetch_one(pool).await.map_err(|e| e.to_string())?;
+
+    // Matches played + win rate when played (PLAYER ONLY):
+    // Count distinct matches where this card was played by the player, and how many of those were wins.
+    let played_sql = format!(
+        r#"
+        SELECT 
+            COUNT(DISTINCT m.id) as matches_played,
+            COALESCE(SUM(CASE WHEN m.result = 'win' THEN 1 ELSE 0 END), 0) as wins_when_played
+        FROM matches m
+        JOIN match_turn_events e ON m.id = e.match_id
+        WHERE e.event_type = 'play' AND e.grp_id IN ({}) AND e.seat_id = m.hero_seat_id
+        "#,
+        placeholders
+    );
+    let mut played_q = sqlx::query_as::<_, (i64, i64)>(&played_sql);
+    for id in &grp_ids {
+        played_q = played_q.bind(*id);
+    }
+    let (matches_played, wins_when_played) = played_q.fetch_one(pool).await.unwrap_or((0, 0));
+
+    // Turn cast distribution (rounds 1 through 6+) (PLAYER ONLY):
+    // In MTGA, turn_number is incremented for every half-turn (Turn 1 = Player 1 Turn 1, Turn 2 = Player 2 Turn 1, etc.).
+    // We map this to game rounds: round = (turn_number + 1) / 2 so "Turn 3" matches Player Round 3.
+    let turn_dist_sql = format!(
+        r#"
+        SELECT ((e.turn_number + 1) / 2) as game_round, COUNT(*) as cnt
+        FROM match_turn_events e
+        JOIN matches m ON e.match_id = m.id
+        WHERE e.event_type = 'play' AND e.grp_id IN ({}) AND e.seat_id = m.hero_seat_id
+        GROUP BY game_round
+        ORDER BY game_round ASC
+        "#,
+        placeholders
+    );
+    let mut turn_dist_q = sqlx::query_as::<_, (i64, i64)>(&turn_dist_sql);
+    for id in &grp_ids {
+        turn_dist_q = turn_dist_q.bind(*id);
+    }
+    let turn_rows = turn_dist_q.fetch_all(pool).await.unwrap_or_default();
+    let mut turn_distribution: Vec<serde_json::Value> = Vec::new();
+    let mut total_cast_turns = 0f64;
+    let mut total_casts = 0f64;
+    for (rnd, cnt) in turn_rows {
+        total_cast_turns += (rnd as f64) * (cnt as f64);
+        total_casts += cnt as f64;
+        turn_distribution.push(serde_json::json!({
+            "turn": rnd,
+            "count": cnt,
+        }));
+    }
+    let avg_cast_turn = if total_casts > 0.0 {
+        (total_cast_turns / total_casts * 10.0).round() / 10.0
+    } else {
+        0.0
+    };
+
+    // Best performing deck (PLAYER ONLY):
+    let best_deck_sql = format!(
+        r#"
+        SELECT m.player_deck_name,
+               COUNT(DISTINCT m.id) as deck_matches,
+               SUM(CASE WHEN m.result = 'win' THEN 1 ELSE 0 END) as deck_wins
+        FROM matches m
+        JOIN match_turn_events e ON m.id = e.match_id
+        WHERE e.event_type = 'play' AND e.grp_id IN ({}) AND e.seat_id = m.hero_seat_id AND m.player_deck_name IS NOT NULL AND m.player_deck_name != ''
+        GROUP BY m.player_deck_name
+        HAVING deck_matches >= 1
+        ORDER BY (CAST(deck_wins AS FLOAT) / deck_matches) DESC, deck_matches DESC
+        LIMIT 1
+        "#,
+        placeholders
+    );
+    let mut best_deck_q = sqlx::query_as::<_, (String, i64, i64)>(&best_deck_sql);
+    for id in &grp_ids {
+        best_deck_q = best_deck_q.bind(*id);
+    }
+    let best_deck = best_deck_q.fetch_optional(pool).await.ok().flatten().map(|(name, m_cnt, w_cnt)| {
+        let wr = if m_cnt > 0 { (w_cnt as f64 / m_cnt as f64) * 100.0 } else { 0.0 };
+        serde_json::json!({
+            "name": name,
+            "matches": m_cnt,
+            "wins": w_cnt,
+            "win_rate": wr.round() as i64,
+        })
+    });
 
     let printings: Vec<serde_json::Value> = printings_rows.iter().map(|r| {
         let raw_cmc: i64 = r.get("cmc");
@@ -1223,14 +1313,31 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
 
     let decks_list: Vec<String> = decks.iter().map(|(d,)| d.clone()).collect();
 
+    let win_rate = if matches_played > 0 {
+        ((wins_when_played as f64 / matches_played as f64) * 100.0).round() as i64
+    } else {
+        0
+    };
+
     Ok(serde_json::json!({
         "printings": printings,
         "stats": {
             "deck_count": decks_list.len(),
             "decks": decks_list,
+            "matches_played": matches_played,
+            "wins_when_played": wins_when_played,
+            "losses_when_played": matches_played.saturating_sub(wins_when_played),
+            "win_rate": win_rate,
             "times_impactful": impactful.0,
             "total_damage": impactful.1,
             "max_hit": impactful.2,
+            "damage_to_player": impactful.3,
+            "damage_to_permanents": impactful.4,
+            "damage_combat": impactful.5,
+            "damage_spell": impactful.6,
+            "turn_distribution": turn_distribution,
+            "avg_cast_turn": avg_cast_turn,
+            "best_deck": best_deck,
         },
     }))
 }
@@ -1513,6 +1620,34 @@ fn clear_universe_cache() {
     UNIVERSE_CACHE.lock().unwrap().clear();
 }
 
+/// Merge per-printing card entries by name into a single row per card (like
+/// Arena's collection). Owned copies sum across printings, capped at 4; the
+/// representative keeps the newest printing's set/art.
+fn merge_collection_by_name(cards: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    let mut merged: Vec<serde_json::Value> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for card in cards {
+        let name = card.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if let Some(&i) = index.get(&name) {
+            let existing = &mut merged[i];
+            let have = existing.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let add = card.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            existing["owned_count"] = serde_json::json!((have + add).min(4));
+            // Keep the newer printing (higher release date) for set/art.
+            let cur_rel = existing.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("");
+            let new_rel = card.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("");
+            if new_rel > cur_rel {
+                *existing = card;
+                existing["owned_count"] = serde_json::json!((have + add).min(4));
+            }
+        } else {
+            index.insert(name.clone(), merged.len());
+            merged.push(card);
+        }
+    }
+    merged
+}
+
 /// (Vec<String> W/U/B/R/G/C), `rarities` (Vec<i64>), `types` (Vec<String>
 /// card-type substrings), plus `search` (name substring). `sort` + `sort_dir`.
 ///
@@ -1573,6 +1708,19 @@ async fn query_collection(
         }));
     }
 
+    // 1b. Global collection stats over the FULL universe (every card in the
+    //     client), independent of the current filters — the footer's
+    //     "owned / all cards in client" figure. Merged by name so the counts
+    //     reflect unique cards, like the collection grid.
+    let global_merged = merge_collection_by_name(cards.clone());
+    let total_cards_global = global_merged.len() as i64;
+    let total_owned_cards_global = global_merged.iter()
+        .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
+        .count() as i64;
+    let total_owned_copies_all_global: i64 = global_merged.iter()
+        .filter_map(|c| c.get("owned_count").and_then(|v| v.as_i64()))
+        .sum();
+
     // 2. Metadata filters in memory (mirrors the previous SQL WHERE clauses,
     //    applied per-printing BEFORE the by-name merge so results match).
     if !sets.is_empty() {
@@ -1625,30 +1773,7 @@ async fn query_collection(
     //    (like Arena's collection: one row per card, not per printing). Copies
     //    sum across printings, capped at 4. The representative keeps the newest
     //    printing's set/art.
-    if !cards.is_empty() {
-        let mut merged: Vec<serde_json::Value> = Vec::new();
-        let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        for card in cards {
-            let name = card.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            if let Some(&i) = index.get(&name) {
-                let existing = &mut merged[i];
-                let have = existing.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0);
-                let add = card.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0);
-                existing["owned_count"] = serde_json::json!((have + add).min(4));
-                // Keep the newer printing (higher release date) for set/art.
-                let cur_rel = existing.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("");
-                let new_rel = card.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("");
-                if new_rel > cur_rel {
-                    *existing = card;
-                    existing["owned_count"] = serde_json::json!((have + add).min(4));
-                }
-            } else {
-                index.insert(name.clone(), merged.len());
-                merged.push(card);
-            }
-        }
-        cards = merged;
-    }
+    cards = merge_collection_by_name(cards);
 
     // 4. Ownership filter. `owned` = collected (>=1), `unowned` = not collected.
     //    An exact `copies` value (1..=4) narrows to exactly that many copies.
@@ -1665,35 +1790,32 @@ async fn query_collection(
 
     sort_collection_cards(&mut cards, &sort, &sort_dir);
 
-    let total_cards = cards.len() as i64;
+    let filtered_count = cards.len() as i64;
 
-    // Ownership stats over the full filtered set (header counts).
-    let total_owned_cards = cards.iter()
+    // Ownership stats over the filtered set (page-scoped, unused by the UI).
+    let total_owned_cards_filtered = cards.iter()
         .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
         .count() as i64;
-    let total_owned_copies_all: i64 = cards.iter()
-        .filter_map(|c| c.get("owned_count").and_then(|v| v.as_i64()))
-        .sum();
     let owned_grp_ids: Vec<i64> = cards.iter()
         .filter(|c| c.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0) > 0)
         .filter_map(|c| c.get("grp_id").and_then(|v| v.as_i64()))
         .collect();
-    let total_owned_copies: i64 = cards.iter()
+    let total_owned_copies_filtered: i64 = cards.iter()
         .filter_map(|c| c.get("owned_count").and_then(|v| v.as_i64()))
         .sum();
 
     Ok(serde_json::json!({
         "cards": cards,
         "page": 1,
-        "page_size": total_cards,
+        "page_size": filtered_count,
         "total_pages": 1,
         "summary": {
-            "total_cards": total_cards,
-            "owned_cards": total_owned_cards,
+            "total_cards": total_cards_global,
+            "owned_cards": total_owned_cards_filtered,
             "owned_grp_ids": owned_grp_ids,
-            "total_owned_copies": total_owned_copies,
-            "total_owned_cards": total_owned_cards,
-            "total_owned_copies_all": total_owned_copies_all,
+            "total_owned_copies": total_owned_copies_filtered,
+            "total_owned_cards": total_owned_cards_global,
+            "total_owned_copies_all": total_owned_copies_all_global,
         },
     }))
 }
@@ -2679,6 +2801,7 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
     let rows = sqlx::query(
         r#"
         SELECT i.grp_id, i.seat_id, i.total_damage, i.max_hit,
+               i.damage_to_player, i.damage_to_permanents, i.damage_combat, i.damage_spell,
                c.name, c.card_type, c.mana_cost, c.rarity
         FROM match_impactful_cards i
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
@@ -2716,6 +2839,10 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
         let seat_id: i64 = r.get("seat_id");
         let total_damage: i64 = r.get("total_damage");
         let max_hit: i64 = r.get("max_hit");
+        let damage_to_player: i64 = r.try_get("damage_to_player").unwrap_or(0);
+        let damage_to_permanents: i64 = r.try_get("damage_to_permanents").unwrap_or(0);
+        let damage_combat: i64 = r.try_get("damage_combat").unwrap_or(0);
+        let damage_spell: i64 = r.try_get("damage_spell").unwrap_or(0);
         let name: Option<String> = r.get("name");
         let card_type: Option<String> = r.get("card_type");
         let mana_cost: Option<String> = r.get("mana_cost");
@@ -2726,8 +2853,8 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
         let cmc = card_db::get_card_metadata(db.pool(), grp_id)
             .await.ok().flatten().map(|c| c.cmc).unwrap_or(0);
 
-        // Impactful threshold: at least 6 total damage dealt, OR cast for 5+ CMC.
-        if total_damage < 6 && cmc < 5 {
+        // Impactful threshold: at least 5 total damage dealt.
+        if total_damage < 5 {
             continue;
         }
 
@@ -2738,40 +2865,10 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
             "is_opponent": seat_id != 0 && seat_id != hero_seat_id,
             "total_damage": total_damage,
             "max_hit": max_hit,
-            "cmc": cmc,
-            "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
-            "card_type": card_type,
-            "mana_cost": mana_cost,
-            "rarity": rarity.unwrap_or(0),
-        }));
-    }
-
-    for r in played_rows {
-        let grp_id: i64 = r.get("grp_id");
-        if seen_grp.contains(&grp_id) {
-            continue;
-        }
-        let seat_id: i64 = r.get("seat_id");
-        let name: Option<String> = r.get("name");
-        let card_type: Option<String> = r.get("card_type");
-        let mana_cost: Option<String> = r.get("mana_cost");
-        let rarity: Option<i64> = r.get("rarity");
-
-        let cmc = card_db::get_card_metadata(db.pool(), grp_id)
-            .await.ok().flatten().map(|c| c.cmc).unwrap_or(0);
-
-        // Only include high-mana plays (5+ CMC) that weren't already flagged by damage.
-        if cmc < 5 {
-            continue;
-        }
-
-        seen_grp.insert(grp_id);
-        result.push(serde_json::json!({
-            "grp_id": grp_id,
-            "seat_id": seat_id,
-            "is_opponent": seat_id != 0 && seat_id != hero_seat_id,
-            "total_damage": 0,
-            "max_hit": 0,
+            "damage_to_player": damage_to_player,
+            "damage_to_permanents": damage_to_permanents,
+            "damage_combat": damage_combat,
+            "damage_spell": damage_spell,
             "cmc": cmc,
             "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
             "card_type": card_type,
@@ -2820,13 +2917,20 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
             let mut merged: Vec<(u64, serde_json::Value)> = Vec::new();
 
             for (e, seq) in assembler.turn_events.iter().zip(assembler.turn_event_seqs.iter()) {
-                let name = card_db::get_card_metadata(db_for_names.pool(), e.grp_id as i64)
-                    .await.ok().flatten().map(|c| c.name).unwrap_or_else(|| format!("#{}", e.grp_id));
+                // Damage events are already formatted and provided via damage_feed_events.
+                // Skip damage records here so they aren't processed as 'play' actions in the HUD feed.
+                if e.event_type.starts_with("damage:") {
+                    continue;
+                }
+                let meta = card_db::get_card_metadata(db_for_names.pool(), e.grp_id as i64).await.ok().flatten();
+                let name = meta.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", e.grp_id));
+                let card_type = meta.as_ref().and_then(|c| c.card_type.clone());
                 merged.push((*seq, serde_json::json!({
                     "type": e.event_type,
                     "seat_id": e.seat_id,
                     "is_player": e.seat_id == assembler.player_seat_id,
                     "name": name,
+                    "card_type": card_type,
                     "grp_id": e.grp_id,
                 })));
             }
@@ -2844,6 +2948,36 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                 })));
             }
 
+            for (dmg, seq) in assembler.damage_feed_events.iter() {
+                let src_grp = assembler.instance_map.get(&dmg.source_instance_id).copied().unwrap_or(0);
+                let src_seat = assembler.instance_owner_map.get(&dmg.source_instance_id).copied().unwrap_or(assembler.player_seat_id);
+                let meta = card_db::get_card_metadata(db_for_names.pool(), src_grp as i64).await.ok().flatten();
+                let src_name = meta.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", src_grp));
+                let card_type = meta.as_ref().and_then(|c| c.card_type.clone());
+
+                let target_name = if dmg.target_instance_id == assembler.player_seat_id {
+                    "You".to_string()
+                } else if dmg.target_instance_id == 1 || dmg.target_instance_id == 2 {
+                    active.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string())
+                } else {
+                    let tgt_grp = assembler.instance_map.get(&dmg.target_instance_id).copied().unwrap_or(0);
+                    card_db::get_card_metadata(db_for_names.pool(), tgt_grp as i64)
+                        .await.ok().flatten().map(|c| c.name).unwrap_or_else(|| "Permanent".to_string())
+                };
+
+                merged.push((*seq, serde_json::json!({
+                    "type": "damage",
+                    "seat_id": src_seat,
+                    "is_player": src_seat == assembler.player_seat_id,
+                    "name": src_name,
+                    "card_type": card_type,
+                    "target_name": target_name,
+                    "amount": dmg.amount,
+                    "damage_type": if dmg.damage_type == 1 { "Combat" } else { "Spell" },
+                    "grp_id": src_grp,
+                })));
+            }
+
             merged.sort_by_key(|(seq, _)| *seq);
             // Keep only the most recent 30 entries.
             let mstart = merged.len().saturating_sub(30);
@@ -2853,12 +2987,14 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
         // Resolve commander names and deck colors from the card cache so the HUD can
         // display them without an extra IPC round-trip.
         let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
-        let player_cmdr = if let Some(gid) = active.player_commander_id {
-            card_db::get_card_metadata(db.pool(), gid as i64).await.ok().flatten()
-        } else { None };
-        let opp_cmdr = if let Some(gid) = active.opponent_commander_id {
-            card_db::get_card_metadata(db.pool(), gid as i64).await.ok().flatten()
-        } else { None };
+        let mut player_cmdr = None;
+        let mut opp_cmdr = None;
+        if let Some(gid) = assembler.cached_commander_id {
+            player_cmdr = card_db::get_card_metadata(db.pool(), gid as i64).await.ok().flatten();
+        }
+        if let Some(gid) = active.opponent_commander_id {
+            opp_cmdr = card_db::get_card_metadata(db.pool(), gid as i64).await.ok().flatten();
+        }
 
         let mut player_colors: Vec<String> = Vec::new();
         let mut opp_colors: Vec<String> = Vec::new();
@@ -2929,10 +3065,10 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
         }))
     } else {
         // No active match. If a match just completed, keep reporting its result
-        // for a short window (e.g. 30s) so the HUD can show a result overlay.
+        // for a short window (10s) so the HUD can show a result overlay.
         if let Some((record, completed_at)) = &assembler.last_completed {
             let elapsed = chrono::Utc::now().signed_duration_since(*completed_at);
-            if elapsed.num_seconds() < 30 {
+            if elapsed.num_seconds() < 10 {
                 let reason = record.result_reason.as_deref().unwrap_or("");
                 let reason_label = if reason.contains("Concede") {
                     if record.result == "win" { "Opponent Conceded" } else { "Player Conceded" }
@@ -3096,8 +3232,8 @@ async fn process_tailer_events(
                             for (instance_id, grp_id, owner_seat, zone_id) in objects {
                                 assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
                             }
-                            for (instance_id, amount) in damage_events {
-                                assembler.process_damage_event(instance_id, amount);
+                            for (instance_id, target_id, amount, dtype) in damage_events {
+                                assembler.process_damage_event(instance_id, target_id, amount, dtype);
                             }
                             assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                             let draws = assembler.drain_collection_draws();

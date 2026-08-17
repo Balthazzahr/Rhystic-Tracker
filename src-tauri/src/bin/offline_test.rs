@@ -45,8 +45,8 @@ fn main() {
                     for (instance_id, grp_id, owner_seat, zone_id) in objects {
                         assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
                     }
-                    for (instance_id, amount) in damage_events {
-                        assembler.process_damage_event(instance_id, amount);
+                    for (instance_id, target_id, amount, dtype) in damage_events {
+                        assembler.process_damage_event(instance_id, target_id, amount, dtype);
                     }
                     assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                 }
