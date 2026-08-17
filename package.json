@@ -1,7 +1,7 @@
 {
   "name": "rhystic-tracker",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
