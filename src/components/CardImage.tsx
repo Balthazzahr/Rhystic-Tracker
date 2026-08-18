@@ -69,10 +69,15 @@ async function ensureLocalImage(
     ? `${name}|${normSet}|${cleanCn}`
     : name;
 
-  // 1. Already cached locally? (returns the file path if so)
+  // 1. Already cached locally? (Tauri IPC checks exact printing first, then fallback generic file on disk)
   try {
     const cached = await invoke<string | null>('has_card_image', { name: cacheName, version });
-    if (cached) return convertFileSrc(cached);
+    if (cached) {
+      const url = convertFileSrc(cached);
+      srcCache.set(`${version}:${cacheName}`, url);
+      srcCache.set(`${version}:${name}`, url);
+      return url;
+    }
   } catch { /* fall through */ }
 
   // 2. Resolve + download via the shared rate-limited queue.
@@ -85,7 +90,10 @@ async function ensureLocalImage(
         const bytes = await blobToBytes(blob);
         if (bytes.length > 500) {
           const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
-          return convertFileSrc(path);
+          const url = convertFileSrc(path);
+          srcCache.set(`${version}:${cacheName}`, url);
+          srcCache.set(`${version}:${name}`, url);
+          return url;
         }
       } catch {
         // Fall through to named lookup
@@ -99,7 +107,10 @@ async function ensureLocalImage(
       const bytes = await blobToBytes(blob);
       if (bytes.length > 500) {
         const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
-        return convertFileSrc(path);
+        const url = convertFileSrc(path);
+        srcCache.set(`${version}:${cacheName}`, url);
+        srcCache.set(`${version}:${name}`, url);
+        return url;
       }
       return null;
     } catch {

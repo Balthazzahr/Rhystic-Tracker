@@ -5,6 +5,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  Home,
   LayoutGrid,
   Table2,
   SlidersHorizontal,
@@ -129,7 +130,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const gridWrapRef = useRef<HTMLDivElement>(null);
   const [gridSize, setGridSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
-  // Measure the card-grid area so we can auto-fit columns/rows of fixed cards.
+  // Measure the content area so we can auto-fit columns/rows of fixed cards in card view.
   // Only drives CLIENT-SIDE pagination (never the network fetch), so resizing
   // the window can't cause refetch loops.
   useEffect(() => {
@@ -148,7 +149,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [view]);
+  }, []);
 
   // Cards have a FIXED footprint per size mode. The grid fits as many rows and
   // columns as the available space allows — both are driven purely by window
@@ -259,12 +260,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
   const displayedCards = cards.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   useEffect(() => {
-    // Don't fetch until the grid has been measured — on first render gridSize
-    // is {0,0} which gives a wrong pageSize (e.g. 3 in large-card mode).
-    if (gridSize.w > 0 && gridSize.h > 0) {
+    // In table view, pageSize is fixed at 100 so we can fetch immediately.
+    // In card view, we wait until gridSize is measured (or fetch immediately if already measured).
+    if (view === 'table' || (gridSize.w > 0 && gridSize.h > 0)) {
       fetchCollection();
     }
-  }, [fetchCollection, gridSize]);
+  }, [fetchCollection, view, gridSize.w > 0 && gridSize.h > 0]);
 
   // Reset to page 1 whenever filters/sort change (but not when only paging).
   const filterKey = [ownedFilter, selectedSets.join(','), selectedColors.join(','), selectedRarities.join(','), selectedTypes.join(','), cmcFilter, copiesFilter, search, sort, sortDir].join('|');
@@ -919,10 +920,12 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       )}
 
       {/* Content: cards grid or table */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar relative">
+      <div
+        ref={gridWrapRef}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar relative"
+      >
         {view === 'cards' && (
           <div
-            ref={gridWrapRef}
             className="h-full min-h-0 flex flex-wrap content-center items-start justify-center gap-3"
             style={{ paddingTop: 4, paddingBottom: 4 }}
           >
@@ -987,6 +990,18 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
       <div className="shrink-0 flex items-center gap-4 pt-1">
         {totalPages > 1 && (
           <>
+            <button
+              onClick={() => {
+                pageDirRef.current = 'prev';
+                setPage(1);
+              }}
+              disabled={safePage <= 1}
+              className="flex items-center justify-center p-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
+              style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+              title="First page"
+            >
+              <Home className="w-3.5 h-3.5" />
+            </button>
             <div className="flex-1" />
             <button
               onClick={() => goPage('prev')}

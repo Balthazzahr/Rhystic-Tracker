@@ -112,7 +112,7 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
     let query_cards_start = std::time::Instant::now();
     let bulk_rows = sqlx::query(
         r#"
-        SELECT mc.match_id, mc.is_opponent, c.mana_cost, c.color_identity, c.colors, mc.count
+        SELECT mc.match_id, mc.is_opponent, c.mana_cost, c.color_identity, c.colors, c.card_type, mc.count
         FROM match_cards mc
         JOIN cards_cache c ON mc.grp_id = c.grp_id
         "#
@@ -139,27 +139,28 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
         let mana_cost: Option<String> = r.get("mana_cost");
         let color_identity: Option<String> = r.get("color_identity");
         let colors: Option<String> = r.get("colors");
+        let card_type: Option<String> = r.get("card_type");
         let count: i64 = r.get("count");
 
         let entry = map.entry(match_id).or_insert_with(|| MatchCardAggregate {
-            curve: vec![0i64; 7],
+            curve: vec![0i64; 9],
             colors: HashSet::new(),
             opponent_colors: HashSet::new(),
         });
 
+        // Mana curve: skip lands/tokens and empty-cost cards.
+        let is_land_token = card_type.as_deref()
+            .map(|t| { let lt = t.to_lowercase(); lt.contains("land") || lt.contains("token") })
+            .unwrap_or(false);
         if let Some(cost) = &mana_cost {
-            let cmc = card_db::parse_mtga_cmc(cost);
-            let bin = match cmc as usize {
-                0 => 0,
-                1 => 0,
-                2 => 1,
-                3 => 2,
-                4 => 3,
-                5 => 4,
-                6 => 5,
-                _ => 6,
-            };
-            entry.curve[bin] += count;
+            if !is_land_token && !cost.is_empty() {
+                let cmc = card_db::parse_mtga_cmc(cost);
+                let bin = match cmc as usize {
+                    0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7,
+                    _ => 8,
+                };
+                entry.curve[bin] += count;
+            }
         }
 
         // Player cards contribute to the mana curve AND player colors; opponent cards
@@ -204,7 +205,7 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
 
     for m in raw_matches {
         let agg = map.remove(&m.match_id);
-        let curve = agg.as_ref().map(|a| a.curve.clone()).unwrap_or_else(|| vec![0i64; 7]);
+        let curve = agg.as_ref().map(|a| a.curve.clone()).unwrap_or_else(|| vec![0i64; 9]);
         
         let mut colors_arr: Vec<String> = agg
             .as_ref()
@@ -362,7 +363,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     //    every card -> empty colors). This mirrors the verified aggregation.
     let card_rows = sqlx::query(
         r#"
-        SELECT m.hero_deck_name as deck_name, c.mana_cost, c.color_identity, c.colors,
+        SELECT m.hero_deck_name as deck_name, c.card_type, c.mana_cost, c.color_identity, c.colors,
                SUM(mc.count) as count
         FROM match_cards mc
         JOIN matches m ON mc.match_id = m.id
@@ -544,7 +545,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         // Colors + curve.
         use std::collections::HashSet;
         let mut colors: HashSet<String> = HashSet::new();
-        let mut curve = vec![0i64; 7];
+        let mut curve = vec![0i64; 9];
         // Color-identity pollution guard: only count a card's colors toward the deck's
         // identity if it appeared in >=20% of the deck's matches (min 2). This filters
         // one-off anomalies (stolen/borrowed cards, legacy is_opponent mislabels) while
@@ -554,23 +555,24 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             let cdeck: String = card.get("deck_name");
             if cdeck != deck_name { continue; }
             let mana_cost: Option<String> = card.get("mana_cost");
+            let card_type: Option<String> = card.get("card_type");
             let color_identity: Option<String> = card.get("color_identity");
             let colors_str: Option<String> = card.get("colors");
             let count: i64 = card.get("count");
 
+            // Mana curve: skip lands/tokens and empty-cost cards.
+            let is_land_token = card_type.as_deref()
+                .map(|t| { let lt = t.to_lowercase(); lt.contains("land") || lt.contains("token") })
+                .unwrap_or(false);
             if let Some(cost) = &mana_cost {
-                let cmc = card_db::parse_mtga_cmc(cost);
-                let bin = match cmc as usize {
-                    0 => 0,
-                    1 => 0,
-                    2 => 1,
-                    3 => 2,
-                    4 => 3,
-                    5 => 4,
-                    6 => 5,
-                    _ => 6,
-                };
-                curve[bin] += count;
+                if !is_land_token && !cost.is_empty() {
+                    let cmc = card_db::parse_mtga_cmc(cost);
+                    let bin = match cmc as usize {
+                        0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7,
+                        _ => 8,
+                    };
+                    curve[bin] += count;
+                }
             }
             if count >= color_min_count {
                 for src in [color_identity, colors_str].into_iter().flatten() {
@@ -1035,9 +1037,9 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         }
     }
 
-    // Mana value histogram: bin by CMC (bins 0, 1, 2, 3, 4, 5, 6, 7+).
-    // Lands are excluded entirely — the curve reflects spell costs only.
-    let mut curve = vec![0i64; 8];
+    // Mana value histogram: bin by CMC (bins 0, 1, 2, 3, 4, 5, 6, 7, 8+).
+    // Lands and tokens are excluded entirely — the curve reflects spell costs only.
+    let mut curve = vec![0i64; 9];
     // Card type distribution: map primary type (last keyword wins).
     let mut type_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     // Mana color distribution: each card counts once toward each of its colors.
@@ -1061,14 +1063,18 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         let ci: Option<String> = r.get("color_identity");
         let cols: Option<String> = r.get("colors");
 
-        let is_land = ct.as_deref().map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
+        let is_land_token = ct.as_deref().map(|t| {
+            let lt = t.to_lowercase();
+            lt.contains("land") || lt.contains("token")
+        }).unwrap_or(false);
 
         // Mana value bin (spells only — lands/tokens without a cost excluded).
         if let Some(cost) = &mana_cost {
-            if !is_land {
+            if !is_land_token && !cost.is_empty() {
                 let cmc = card_db::parse_mtga_cmc(cost);
                 let bin = match cmc as usize {
-                    0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, _ => 7,
+                    0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7,
+                    _ => 8,
                 };
                 curve[bin] += 1;
             }
@@ -1078,9 +1084,9 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         let cat = chart_category(ct.as_deref().unwrap_or("Other"));
         *type_map.entry(cat).or_insert(0) += 1;
 
-        // Mana colors (each card counts once per color it has). Lands are
+        // Mana colors (each card counts once per color it has). Lands/tokens are
         // excluded — this distribution reflects spell colors only.
-        if !is_land {
+        if !is_land_token {
             // Brawl color-identity guard: cards outside the commander's identity
             // are legacy leaks and must not pollute the color distribution.
             if is_brawl && !commander_identity.is_empty() {
@@ -1971,24 +1977,53 @@ fn card_img_filename(name: &str, version: &str) -> String {
 }
 
 /// Save a downloaded card image (bytes) to the local cache. Returns the file
-/// path the frontend can pass to convertFileSrc.
+/// path the frontend can pass to convertFileSrc. If saved under a specific
+/// printing (`Name|Set|CN`), also saves under the generic card name if that
+/// does not yet exist.
 #[tauri::command]
 fn save_card_image(app: tauri::AppHandle, name: String, version: String, data: Vec<u8>) -> Result<String, String> {
-    let path = card_img_cache_dir(&app)?.join(card_img_filename(&name, &version));
+    let dir = card_img_cache_dir(&app)?;
+    let path = dir.join(card_img_filename(&name, &version));
     std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+
+    // If saved with a specific printing key (e.g. "Card Name|dom|16"), also ensure
+    // the generic base name file exists so lookups without printing find it.
+    if let Some(base_name) = name.split('|').next() {
+        let trimmed_base = base_name.trim();
+        if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
+            let generic_path = dir.join(card_img_filename(trimmed_base, &version));
+            if !generic_path.exists() {
+                let _ = std::fs::write(&generic_path, &data);
+            }
+        }
+    }
+
     Ok(path.to_string_lossy().to_string())
 }
 
 /// If a card image is already cached locally, return its file path (for
-/// convertFileSrc); otherwise null.
+/// convertFileSrc); otherwise null. Checks exact printing filename first, then
+/// falls back to checking the generic card name on disk.
 #[tauri::command]
 fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Result<Option<String>, String> {
-    let path = card_img_cache_dir(&app)?.join(card_img_filename(&name, &version));
-    if path.exists() {
-        Ok(Some(path.to_string_lossy().to_string()))
-    } else {
-        Ok(None)
+    let dir = card_img_cache_dir(&app)?;
+    let exact_path = dir.join(card_img_filename(&name, &version));
+    if exact_path.exists() {
+        return Ok(Some(exact_path.to_string_lossy().to_string()));
     }
+
+    // Fallback: If querying a specific printing ("Name|Set|CN"), check if generic ("Name") exists.
+    if let Some(base_name) = name.split('|').next() {
+        let trimmed_base = base_name.trim();
+        if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
+            let generic_path = dir.join(card_img_filename(trimmed_base, &version));
+            if generic_path.exists() {
+                return Ok(Some(generic_path.to_string_lossy().to_string()));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 /// Per-deck "% owned" stats. Uses the True Decklist when one is imported,
