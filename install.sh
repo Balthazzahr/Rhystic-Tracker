@@ -55,7 +55,6 @@ chmod +x "$INSTALL_DIR/$EXEC_NAME"
 ICON_SOURCE=""
 for candidate in \
     "$SCRIPT_DIR/src-tauri/icons/icon.png" \
-    "$SCRIPT_DIR/src/assets/symbolIcon.png" \
     "$SCRIPT_DIR/icons/icon.png" \
     "$SCRIPT_DIR/icon.png"; do
     if [ -f "$candidate" ]; then
