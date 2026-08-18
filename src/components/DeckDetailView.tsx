@@ -24,11 +24,11 @@ interface DeckDetailViewProps {
 const scryfallArtUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
 
-// Mana value histogram (bins 0, 1, 2, 3, 4, 5, 6, 7+). Bars fill the full
+// Mana value histogram (bins 0, 1, 2, 3, 4, 5, 6, 7, 8+). Bars fill the full
 // cell height; each bar shows its mana value label underneath, hover shows count.
 type Tip = { text: string; x: number; y: number };
 function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette: any; onTip: (t: Tip | null) => void }) {
-  const labels = ['0', '1', '2', '3', '4', '5', '6', '7+'];
+  const labels = ['0', '1', '2', '3', '4', '5', '6', '7', '8+'];
   // Hide the 0-CMC column if the deck has no 0-cost spells.
   const startIdx = (bins[0] || 0) > 0 ? 0 : 1;
   const visible = bins.slice(startIdx);

@@ -908,11 +908,14 @@ export default function App() {
   ];
 
   const renderManaHistogram = (curve?: number[]) => {
-    const bins = curve || [0, 0, 0, 0, 0, 0, 0];
-    const maxVal = Math.max(...bins, 1);
+    const bins = curve || [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const startIdx = (bins[0] || 0) > 0 ? 0 : 1;
+    const visible = bins.slice(startIdx);
+    const labels = ['0','1','2','3','4','5','6','7','8+'].slice(startIdx);
+    const maxVal = Math.max(...visible, 1);
     return (
-      <div className="flex items-end gap-1 h-8 w-24 px-1 py-0.5 rounded bg-black/40 border border-white/5" title={`Mana Curve Bins (1..7+): ${bins.join(', ')}`}>
-        {bins.map((val, idx) => {
+      <div className="flex items-end gap-1 h-[45px] w-[136px] px-1 py-0.5 rounded bg-black/40 border border-white/5" title={`Mana Curve Bins (0-8+): ${bins.join(', ')}`}>
+        {visible.map((val, idx) => {
           const heightPct = Math.max((val / maxVal) * 100, 15);
           return (
             <div 
@@ -1814,14 +1817,15 @@ export default function App() {
               {/* Table Header */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
                 <div className="flex items-center py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
-                  <div className="flex-1 min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
-                  <div className="hidden xl:flex w-[170px] shrink-0 justify-center">{renderDeckColHeader('Key Cards', '')}</div>
-                  <div className="w-[160px] shrink-0 flex justify-center">{renderDeckColHeader('Colors', 'colors')}</div>
-                  <div className="w-[140px] shrink-0 flex justify-center">{renderDeckColHeader('Format', 'format')}</div>
-                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Games', 'games')}</div>
-                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('W/L', 'record')}</div>
-                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
-                  <div className="w-[130px] shrink-0 flex justify-center">{renderDeckColHeader('Source', '')}</div>
+                  <div className="flex-[5] min-w-[200px]">{renderDeckColHeader('Deck', 'deck_name')}</div>
+                  <div className="hidden xl:flex flex-[2] min-w-[140px] justify-center">{renderDeckColHeader('Key Cards', '')}</div>
+                  <div className="flex-[1.5] min-w-[100px] flex justify-center">{renderDeckColHeader('Colors', 'colors')}</div>
+                  <div className="flex-[2] min-w-[120px] flex justify-center">{renderDeckColHeader('Mana Curve', '')}</div>
+                  <div className="flex-[1.5] min-w-[100px] flex justify-center">{renderDeckColHeader('Format', 'format')}</div>
+                  <div className="flex-[1] min-w-[80px] flex justify-center">{renderDeckColHeader('Games', 'games')}</div>
+                  <div className="flex-[1.5] min-w-[100px] flex justify-center">{renderDeckColHeader('W/L', 'record')}</div>
+                  <div className="flex-[1.5] min-w-[90px] flex justify-center">{renderDeckColHeader('Win Rate', 'winrate')}</div>
+                  <div className="w-[50px] shrink-0 flex justify-center">{renderDeckColHeader('Source', '')}</div>
                 </div>
               </div>
 
@@ -1845,7 +1849,7 @@ export default function App() {
                           }}
                         >
                           {/* Deck Art + Name (left-aligned) */}
-                          <div className="flex-1 min-w-[200px] flex items-center gap-3">
+                          <div className="flex-[5] min-w-[200px] flex items-center gap-3">
                             {renderDeckArt(d, 'w-14 h-14')}
                             <div className="min-w-0">
                               <div className="text-[22px] font-bold truncate" style={{ color: palette?.accent || '#38BDF8' }}>
@@ -1855,7 +1859,7 @@ export default function App() {
                           </div>
 
                           {/* Key Cards (low-priority column — drops first on narrow widths) */}
-                          <div className="hidden xl:flex w-[170px] shrink-0 items-center justify-center gap-1.5">
+                          <div className="hidden xl:flex flex-[2] min-w-[140px] items-center justify-center gap-1.5">
                             {(d.key_cards || []).slice(0, 3).map((k: any) => (
                               <CardNameTooltip key={k.grp_id} name={k.name}>
                                 <CardImage
@@ -1871,12 +1875,17 @@ export default function App() {
                           </div>
 
                           {/* Colors */}
-                          <div className="w-[160px] shrink-0 flex justify-center">
+                          <div className="flex-[1.5] min-w-[100px] flex justify-center">
                             {renderDeckColorIdentity(d.colors, 22)}
                           </div>
 
+                          {/* Mana Curve */}
+                          <div className="flex-[2] min-w-[120px]">
+                            {renderManaHistogram(d.mana_curve)}
+                          </div>
+
                           {/* Format chips (centered) */}
-                          <div className="w-[140px] shrink-0 flex flex-wrap gap-1 justify-center">
+                          <div className="flex-[1.5] min-w-[100px] flex flex-wrap gap-1 justify-center">
                             {(d.formats || []).map((f: any, i: number) => {
                               const chip = formatChipColor(f.format);
                               return (
@@ -1888,25 +1897,25 @@ export default function App() {
                           </div>
 
                           {/* Games */}
-                          <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
+                          <div className="flex-[1] min-w-[80px] text-center font-mono text-[22px] font-bold" style={{ color: palette?.accent || '#38BDF8' }}>
                             {d.total_matches}
                           </div>
 
                           {/* W/L */}
-                          <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold">
+                          <div className="flex-[1.5] min-w-[100px] text-center font-mono text-[22px] font-bold">
                             <span className="text-emerald-400">{d.wins}</span>
                             <span className="opacity-50" style={{ color: palette?.subtext }}> / </span>
                             <span className="text-rose-400">{d.losses}</span>
                           </div>
 
                           {/* Win Rate */}
-                          <div className="w-[130px] shrink-0 text-center font-mono text-[22px] font-bold" style={{ color: winRateColor(d.winrate) }}>
+                          <div className="flex-[1.5] min-w-[90px] text-center font-mono text-[22px] font-bold" style={{ color: winRateColor(d.winrate) }}>
                             {d.winrate}
                           </div>
 
                           {/* Source: gold cards icon if true decklist, grey log
                               icon if only logged cards. */}
-                          <div className="w-[130px] shrink-0 flex items-center justify-center">
+                          <div className="w-[50px] shrink-0 flex items-center justify-center">
                             <span
                               className="flex items-center justify-center"
                               style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF', fontSize: 16 }}
@@ -2011,13 +2020,13 @@ export default function App() {
               {/* Sticky Table Header with Rebalanced Column Layout */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
                 <div className="flex items-center uppercase text-sm font-semibold py-3 px-4 gap-2" style={{ color: palette?.subtext }}>
-                  <div className="w-[160px] shrink-0">Date</div>
-                  <div className="w-[80px] shrink-0">Result</div>
-                  <div className="w-[95px] shrink-0">Format</div>
-                  {showColorsCol && <div className="w-[65px] shrink-0">Colors</div>}
-                  <div className="flex-1 min-w-[160px] truncate">Deck Name</div>
-                  <div className="w-[150px] shrink-0 truncate">Opponent</div>
-                  {showCurveCol && <div className="w-[120px] shrink-0">Mana Curve</div>}
+                  <div className="flex-[1.3] shrink-0 truncate">Date</div>
+                  <div className="flex-[0.6] shrink-0 text-center">Result</div>
+                  <div className="flex-[1] shrink-0 text-center">Format</div>
+                  {showColorsCol && <div className="w-[120px] shrink-0 text-center">Colors</div>}
+                  <div className="flex-[3] min-w-0 truncate">Deck Name</div>
+                  <div className="flex-[2] min-w-0 truncate">Opponent</div>
+                  {showCurveCol && <div className="w-[148px] shrink-0 text-center">Mana Curve</div>}
                 </div>
               </div>
 
@@ -2048,13 +2057,13 @@ export default function App() {
                           borderColor: `${palette?.border || '#2A2F3D'}44`,
                         }}
                       >
-                        {/* 1. Date: 160px */}
-                        <div className="w-[160px] shrink-0 opacity-60 font-mono text-sm truncate">
+                        {/* 1. Date */}
+                        <div className="flex-[1.3] shrink-0 opacity-60 font-mono text-sm truncate">
                           {formatDateShort(m.timestamp)}
                         </div>
 
-                        {/* 2. Result: 80px */}
-                        <div className="w-[80px] shrink-0">
+                        {/* 2. Result */}
+                        <div className="flex-[0.6] shrink-0 text-center">
                           {m.result === 'win' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                               <CheckCircle2 className="w-3 h-3" /> WIN
@@ -2066,33 +2075,33 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* 3. Format: 95px */}
-                        <div className="w-[95px] shrink-0 font-semibold truncate">
+                        {/* 3. Format */}
+                        <div className="flex-[1] shrink-0 font-semibold truncate text-center">
                           <span className="px-2 py-0.5 rounded text-sm font-mono border bg-black/40" style={{ borderColor: palette?.border }}>
                             {m.format_name}
                           </span>
                         </div>
 
-                        {/* 4. Colors: 65px (2-row wrapped for 5-color decks) */}
+                        {/* 4. Colors */}
                         {showColorsCol && (
-                          <div className="w-[65px] shrink-0 overflow-hidden">
+                          <div className="w-[120px] shrink-0 text-center overflow-hidden">
                             {renderDeckColorIdentity(m.deck_colors)}
                           </div>
                         )}
 
-                        {/* 5. Deck Name: flex-1 (+4 points) */}
-                        <div className="flex-1 min-w-[160px] font-bold text-lg truncate" style={{ color: palette?.accent || '#38BDF8' }}>
+                        {/* 5. Deck Name (highest priority) */}
+                        <div className="flex-[3] min-w-0 font-bold text-lg truncate" style={{ color: palette?.accent || '#38BDF8' }}>
                           {m.player_deck_name}
                         </div>
 
-                        {/* 6. Opponent Name: 150px */}
-                        <div className="w-[150px] shrink-0 font-medium opacity-80 truncate">
+                        {/* 6. Opponent Name */}
+                        <div className="flex-[2] min-w-0 font-medium opacity-80 truncate">
                           {m.opponent_name || 'Opponent'}
                         </div>
 
-                        {/* 7. Mana Curve: 120px */}
+                        {/* 7. Mana Curve */}
                         {showCurveCol && (
-                          <div className="w-[120px] shrink-0">
+                          <div className="w-[148px] shrink-0">
                             {renderManaHistogram(m.mana_curve)}
                           </div>
                         )}
