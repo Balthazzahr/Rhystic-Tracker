@@ -40,7 +40,7 @@ if [ -z "$BIN_SOURCE" ]; then
     echo "❌ Error: Could not find compiled binary or AppImage."
     echo ""
     echo "   If building from source, run:"
-    echo "     npm run build && (cd src-tauri && cargo build --release)"
+    echo "     npm run build:app"
     echo ""
     echo "   If using the release tarball, ensure the binary is in the same directory as this script."
     exit 1

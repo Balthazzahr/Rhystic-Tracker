@@ -1,11 +1,12 @@
 {
   "name": "rhystic-tracker",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
     "build": "vite build",
+    "build:app": "npm run build && npx @tauri-apps/cli build --no-bundle",
     "preview": "vite preview",
     "tauri": "bash -c 'source $HOME/.cargo/env && tauri \"$@\"' --"
   },

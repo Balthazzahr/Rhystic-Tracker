@@ -213,9 +213,8 @@ export default function App() {
   const [overlayScryfall, setOverlayScryfall] = useState<any>(null);
   const [overlayScryfallLoading, setOverlayScryfallLoading] = useState(false);
   const [overlaySelected, setOverlaySelected] = useState<string | null>(null);
-  // Flavor text per printing, keyed by printingKey. Fetched lazily so the flavor
-  // shown matches the selected art/set.
   const [overlayFlavors, setOverlayFlavors] = useState<Record<string, string>>({});
+  const [collectionRefreshTrigger, setCollectionRefreshTrigger] = useState(0);
 
   // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
   // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
@@ -1380,7 +1379,11 @@ export default function App() {
 
         {/* VIEW 2: Collection */}
         {activeTab === 'collection' && (
-          <CollectionView palette={palette} onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)} />
+          <CollectionView
+            palette={palette}
+            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            refreshTrigger={collectionRefreshTrigger}
+          />
         )}
 
         {/* VIEW 3: Live Match HUD (Stage 4) */}
@@ -2198,21 +2201,20 @@ export default function App() {
               <X className="w-4 h-4" /> Close
             </button>
 
-            <div className="flex flex-row flex-nowrap items-center justify-center gap-5 max-w-full">
-              {/* PANEL 1: Card image + set/art selector (enlarged by another ~15% to 450px - never hidden) */}
-              <div className="w-[450px] max-w-[90vw] shrink-0 flex flex-col">
-                <div className="rounded-xl overflow-hidden border shadow-2xl shrink-0" style={{ borderColor: palette?.border }}>
-                  <img
-                    src={scryfallPrintingImageUrl(
-                      deckCardOverlay.card.name,
-                      overlayPrintings.find((p) => printingKey(p) === overlaySelected)
-                    )}
-                    alt={deckCardOverlay.card.name}
-                    className="w-full h-auto block"
-                  />
-                </div>
-                <p className="mt-2.5 text-[9px] font-mono uppercase tracking-wide opacity-50 shrink-0">Card Style / Set</p>
-                <div className="mt-1 shrink-0">
+            <div className="flex flex-row flex-nowrap items-start justify-center gap-5 max-w-full">
+              {/* PANEL 1: Card image + set/art selector (clean card art with no background overhang) */}
+              <div className="w-[440px] max-w-[90vw] shrink-0 flex flex-col">
+                <img
+                  src={scryfallPrintingImageUrl(
+                    deckCardOverlay.card.name,
+                    overlayPrintings.find((p) => printingKey(p) === overlaySelected)
+                  )}
+                  alt={deckCardOverlay.card.name}
+                  className="w-full h-auto rounded-[18px] shadow-2xl block border"
+                  style={{ borderColor: `${palette?.border || '#2A2F3D'}88` }}
+                />
+                <div className="mt-3 shrink-0">
+                  <p className="text-[9px] font-mono uppercase tracking-wide opacity-50 mb-1">Card Style / Set</p>
                   <CustomDropdown
                     options={overlayPrintings.length === 0
                       ? [{ value: '', label: overlayPrintingsLoading ? 'Loading printings…' : 'No printings found' }]
@@ -2239,9 +2241,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* PANEL 2: Card info & Oracle text (hidden on small viewports < 920px) */}
+              {/* PANEL 2: Card info & Oracle text (auto height, top-aligned with card art) */}
               <div
-                className="hidden min-[920px]:flex w-[380px] max-w-full h-[580px] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3 shrink-0 flex-col justify-between"
+                className="hidden min-[920px]:flex w-[390px] max-w-full max-h-[640px] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3.5 shrink-0 flex-col"
                 style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
               >
                 <div className="space-y-3">
@@ -2251,6 +2253,7 @@ export default function App() {
                       {parseMtgaManaCost(deckCardOverlay.card.mana_cost || '').map((s, i) => <ManaFontPip key={i} symbol={s} size={18} />)}
                     </span>
                   </div>
+
                   {deckCardOverlay.isCommander && (
                     <p className="text-[11px] font-mono uppercase tracking-wide font-bold" style={{ color: palette?.accent || '#38BDF8' }}>Commander</p>
                   )}
@@ -2380,11 +2383,58 @@ export default function App() {
                     );
                   })()}
                 </div>
+
+                {/* Ownership 4-Diamond Selector - Pinned to bottom of card details box */}
+                <div className="mt-4 pt-2.5 shrink-0 border-t" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg border bg-black/30" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
+                    <span className="text-[10px] font-mono uppercase tracking-wide opacity-60">Owned Copies</span>
+                    <div className="flex items-center gap-2.5">
+                      {[1, 2, 3, 4].map((slot) => {
+                        const curOwned = overlayStats?.owned_count ?? deckCardOverlay?.card?.owned_count ?? 0;
+                        const isFilled = slot <= curOwned;
+                        return (
+                          <button
+                            key={slot}
+                            onClick={async () => {
+                              const newCount = (slot === 1 && curOwned === 1) ? 0 : slot;
+                              const targetGrp = deckCardOverlay.card.grp_id || overlayPrintings[0]?.grp_id;
+                              if (!targetGrp) return;
+                              setOverlayStats((prev: any) => prev ? { ...prev, owned_count: newCount } : { owned_count: newCount });
+                              setDeckCardOverlay((prev: any) => prev ? { ...prev, card: { ...prev.card, owned_count: newCount } } : prev);
+                              try {
+                                await invoke('update_collection_card_count', { grpId: targetGrp, count: newCount });
+                                setCollectionRefreshTrigger((prev) => prev + 1);
+                                window.dispatchEvent(
+                                  new CustomEvent('rhystic-collection-updated', {
+                                    detail: { grpId: targetGrp, count: newCount },
+                                  })
+                                );
+                              } catch (err) {
+                                console.error('Failed to update card ownership:', err);
+                              }
+                            }}
+                            className="group p-0.5 transition-transform hover:scale-125 focus:outline-none"
+                            title={`Set ${slot} copy owned`}
+                          >
+                            <span
+                              className="inline-block w-2.5 h-2.5 rotate-45 transition-colors border"
+                              style={{
+                                backgroundColor: isFilled ? (palette?.accent || '#38BDF8') : 'transparent',
+                                borderColor: isFilled ? (palette?.accent || '#38BDF8') : (palette?.subtext || '#94A3B8'),
+                                boxShadow: isFilled ? `0 0 6px ${palette?.accent || '#38BDF8'}88` : 'none',
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* PANEL 3: Persistent Card Combat Analytics (hidden on viewports < 1320px) */}
+              {/* PANEL 3: Persistent Card Combat Analytics (hidden on viewports < 1320px, top-aligned) */}
               <div
-                className="hidden min-[1320px]:block w-[380px] max-w-full h-[580px] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3.5 shrink-0"
+                className="hidden min-[1320px]:block w-[390px] max-w-full max-h-[640px] overflow-y-auto custom-scrollbar rounded-xl border p-4 space-y-3.5 shrink-0"
                 style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
               >
                 <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>

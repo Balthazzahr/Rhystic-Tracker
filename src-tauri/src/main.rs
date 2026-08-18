@@ -1340,9 +1340,26 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
         0
     };
 
+    // Owned copies across printings (capped at 4)
+    let owned_sql = format!(
+        r#"
+        SELECT COALESCE(SUM(owned_count), 0) as total_owned
+        FROM collection_cards
+        WHERE grp_id IN ({})
+        "#,
+        placeholders
+    );
+    let mut owned_q = sqlx::query_as::<_, (i64,)>(&owned_sql);
+    for id in &grp_ids {
+        owned_q = owned_q.bind(*id);
+    }
+    let (total_owned,) = owned_q.fetch_one(pool).await.unwrap_or((0,));
+    let owned_count = total_owned.min(4);
+
     Ok(serde_json::json!({
         "printings": printings,
         "stats": {
+            "owned_count": owned_count,
             "deck_count": decks_list.len(),
             "decks": decks_list,
             "matches_played": matches_played,
@@ -1363,13 +1380,13 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
     }))
 }
 
-/// Manual collection correction (backend capability this milestone; UI lands
-/// with the Collection milestone). Sets a card's owned_count to an explicit
+/// Manual collection correction. Sets a card's owned_count to an explicit
 /// value clamped to [0,4]. A value of 0 removes the card from the collection.
 #[tauri::command]
 async fn update_collection_card_count(grp_id: i64, count: i64) -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     db.set_collection_card_count(grp_id, count).await.map_err(|e| e.to_string())?;
+    clear_universe_cache();
     let owned = db.is_card_owned(grp_id).await.map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "grp_id": grp_id, "owned": owned }))
 }
@@ -1591,18 +1608,19 @@ async fn build_universe(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<UniverseC
                sm.name as set_name, sm.released_at as set_released_at
         FROM cards_cache c
         LEFT JOIN sets_metadata sm ON c.set_code = sm.set_code
+        WHERE (c.card_type IS NULL OR c.card_type NOT LIKE '%Token%')
         "#
     )
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    let mut out = Vec::with_capacity(rows.len());
+    let mut raw_cards = Vec::with_capacity(rows.len());
     for r in rows {
         let raw_cmc: i64 = r.get("cmc");
         let mana_cost: Option<String> = r.get("mana_cost");
         let cmc = if raw_cmc == 0 { card_db::parse_mtga_cmc(mana_cost.as_deref().unwrap_or("")) } else { raw_cmc };
-        out.push(UniverseCard {
+        raw_cards.push(UniverseCard {
             grp_id: r.get("grp_id"),
             name: r.get::<String, _>("name"),
             mana_cost,
@@ -1617,6 +1635,64 @@ async fn build_universe(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<UniverseC
             collector_number: r.get("collector_number"),
         });
     }
+
+    // Identify subordinate split-card face entries (e.g. 'Appeal' or 'Authority'
+    // when 'Appeal /// Authority' or 'Appeal // Authority' exists for the same set+collector_number).
+    let mut split_subparts: std::collections::HashSet<(String, String, String)> = std::collections::HashSet::new();
+    for c in &raw_cards {
+        let s_code = c.set_code.as_deref().unwrap_or("").to_string();
+        let c_num = c.collector_number.as_deref().unwrap_or("").to_string();
+        if c.name.contains("///") {
+            for part in c.name.split("///") {
+                split_subparts.insert((s_code.clone(), c_num.clone(), part.trim().to_string()));
+            }
+        } else if c.name.contains(" // ") {
+            for part in c.name.split(" // ") {
+                split_subparts.insert((s_code.clone(), c_num.clone(), part.trim().to_string()));
+            }
+        }
+    }
+
+    // Identify Alchemy "Specialize" / in-game variant faces (e.g. Alora, Ambergris, Skanos variants sharing the same set+collector_number)
+    // where multiple cards in the same set+collector_number group share the same base name prefix.
+    let mut cn_groups: std::collections::HashMap<(String, String), Vec<(i64, String)>> = std::collections::HashMap::new();
+    for c in &raw_cards {
+        let s_code = c.set_code.as_deref().unwrap_or("").to_string();
+        let c_num = c.collector_number.as_deref().unwrap_or("").to_string();
+        cn_groups.entry((s_code, c_num)).or_default().push((c.grp_id, c.name.clone()));
+    }
+
+    let mut specialize_subs: std::collections::HashSet<i64> = std::collections::HashSet::new();
+    for ((_s, _cn), members) in cn_groups {
+        if members.len() > 1 {
+            let base_name = &members[0].1;
+            let root = base_name.split(',').next().unwrap_or("").split_whitespace().next().unwrap_or("");
+            if !root.is_empty() {
+                let matching: Vec<_> = members.iter().filter(|m| m.1.starts_with(root)).collect();
+                if matching.len() > 1 {
+                    for m in matching.iter().skip(1) {
+                        specialize_subs.insert(m.0);
+                    }
+                }
+            }
+        }
+    }
+
+    let out: Vec<UniverseCard> = raw_cards
+        .into_iter()
+        .filter(|c| {
+            let s_code = c.set_code.as_deref().unwrap_or("").to_string();
+            let c_num = c.collector_number.as_deref().unwrap_or("").to_string();
+            if split_subparts.contains(&(s_code, c_num, c.name.clone())) {
+                return false;
+            }
+            if specialize_subs.contains(&c.grp_id) {
+                return false;
+            }
+            true
+        })
+        .collect();
+
     Ok(out)
 }
 
@@ -2004,21 +2080,38 @@ fn save_card_image(app: tauri::AppHandle, name: String, version: String, data: V
 /// If a card image is already cached locally, return its file path (for
 /// convertFileSrc); otherwise null. Checks exact printing filename first, then
 /// falls back to checking the generic card name on disk.
+/// If requesting 'small' resolution and 'normal' is already cached on disk, returns 'normal'.
 #[tauri::command]
 fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Result<Option<String>, String> {
     let dir = card_img_cache_dir(&app)?;
+
+    // 1. Exact printing match with requested version
     let exact_path = dir.join(card_img_filename(&name, &version));
     if exact_path.exists() {
         return Ok(Some(exact_path.to_string_lossy().to_string()));
     }
 
-    // Fallback: If querying a specific printing ("Name|Set|CN"), check if generic ("Name") exists.
+    // 2. If 'small' requested, check if higher-resolution 'normal' is already on disk
+    if version == "small" {
+        let exact_normal = dir.join(card_img_filename(&name, "normal"));
+        if exact_normal.exists() {
+            return Ok(Some(exact_normal.to_string_lossy().to_string()));
+        }
+    }
+
+    // 3. Fallback: If querying a specific printing ("Name|Set|CN"), check if generic ("Name") exists.
     if let Some(base_name) = name.split('|').next() {
         let trimmed_base = base_name.trim();
         if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
             let generic_path = dir.join(card_img_filename(trimmed_base, &version));
             if generic_path.exists() {
                 return Ok(Some(generic_path.to_string_lossy().to_string()));
+            }
+            if version == "small" {
+                let generic_normal = dir.join(card_img_filename(trimmed_base, "normal"));
+                if generic_normal.exists() {
+                    return Ok(Some(generic_normal.to_string_lossy().to_string()));
+                }
             }
         }
     }
@@ -3550,9 +3643,9 @@ mod tests {
     async fn seed_card(pool: &sqlx::Pool<sqlx::Sqlite>, grp_id: i64, name: &str, mana_cost: &str, ci: &str, set: &str, rarity: i64, card_type: &str) {
         sqlx::query(
             "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number, card_type, last_updated) \
-             VALUES (?, ?, ?, 0, '', ?, ?, ?, '0', ?, DATETIME('now'))"
+             VALUES (?, ?, ?, 0, '', ?, ?, ?, ?, ?, DATETIME('now'))"
         )
-        .bind(grp_id).bind(name).bind(mana_cost).bind(ci).bind(set).bind(rarity).bind(card_type)
+        .bind(grp_id).bind(name).bind(mana_cost).bind(ci).bind(set).bind(rarity).bind(grp_id.to_string()).bind(card_type)
         .execute(pool).await.expect("seed card");
     }
 

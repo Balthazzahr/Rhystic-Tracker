@@ -24,6 +24,7 @@ import { CustomDropdown } from './CustomDropdown';
 interface CollectionViewProps {
   palette: any;
   onShowCard: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
+  refreshTrigger?: number;
 }
 
 interface CollectionCard {
@@ -80,7 +81,7 @@ const SORT_OPTIONS = [
   { value: 'count', label: 'Owned Count' },
 ];
 
-function CollectionView({ palette, onShowCard }: CollectionViewProps) {
+function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewProps) {
   const [cards, setCards] = useState<CollectionCard[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -265,7 +266,22 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
     if (view === 'table' || (gridSize.w > 0 && gridSize.h > 0)) {
       fetchCollection();
     }
-  }, [fetchCollection, view, gridSize.w > 0 && gridSize.h > 0]);
+  }, [fetchCollection, view, gridSize.w > 0 && gridSize.h > 0, refreshTrigger]);
+
+  // Also listen for collection update events
+  useEffect(() => {
+    const handleCollectionUpdate = (e: any) => {
+      const { grpId, count } = e.detail || {};
+      if (grpId !== undefined && count !== undefined) {
+        setCards((prev) =>
+          prev.map((c) => (c.grp_id === grpId ? { ...c, owned_count: count } : c))
+        );
+      }
+      fetchCollection();
+    };
+    window.addEventListener('rhystic-collection-updated', handleCollectionUpdate);
+    return () => window.removeEventListener('rhystic-collection-updated', handleCollectionUpdate);
+  }, [fetchCollection]);
 
   // Reset to page 1 whenever filters/sort change (but not when only paging).
   const filterKey = [ownedFilter, selectedSets.join(','), selectedColors.join(','), selectedRarities.join(','), selectedTypes.join(','), cmcFilter, copiesFilter, search, sort, sortDir].join('|');
@@ -429,45 +445,18 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
 
   const renderOwnedControl = (card: CollectionCard) => {
     const isOwned = card.owned_count > 0;
-    const busy = busyGrp === card.grp_id;
     if (!isOwned) {
       return (
-        <div className="flex items-center justify-between w-full">
-          <span className="text-[12px] font-mono font-bold tabular-nums opacity-40">0 / 4</span>
-          <span className="text-[10px] font-mono opacity-40">not owned</span>
-        </div>
+        <span className="text-[12px] font-mono opacity-30 text-center block w-full">—</span>
       );
     }
     return (
-      <>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => adjustCount(card, -1)}
-            disabled={busy || card.owned_count <= 0}
-            title="Reduce owned copies"
-            className="p-1 rounded-lg border transition-colors hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
-            style={{ borderColor: `${palette?.border}66`, color: palette?.text }}
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <span
-            className="text-[13px] font-mono font-bold tabular-nums min-w-[14px] text-center"
-            style={{ color: card.owned_count >= 4 ? '#34D399' : palette?.text }}
-          >
-            {card.owned_count}
-          </span>
-          <button
-            onClick={() => adjustCount(card, 1)}
-            disabled={busy || card.owned_count >= 4}
-            title="Increase owned copies"
-            className="p-1 rounded-lg border transition-colors hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
-            style={{ borderColor: `${palette?.border}66`, color: palette?.text }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-[10px] font-mono opacity-50">/ 4</span>
-        </div>
-      </>
+      <span
+        className="text-[12px] font-mono font-bold tabular-nums text-center block w-full"
+        style={{ color: card.owned_count >= 4 ? '#34D399' : palette?.text }}
+      >
+        {card.owned_count}
+      </span>
     );
   };
 
@@ -487,7 +476,7 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
           {card.name ? (
             <CardImage
               name={card.name}
-              version="normal"
+              version={isOwned ? 'normal' : 'small'}
               printing={getCardStylePref(card.name) || { setCode: card.set_code, collectorNumber: card.collector_number }}
               alt={cardName}
               className="absolute inset-0 w-full h-full object-cover"
@@ -496,20 +485,19 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
             <div className="absolute inset-0 w-full h-full bg-black" />
           )}
         </div>
-        {/* Ownership dots: big dots = owned copies, small dots = remaining,
+        {/* Ownership diamonds: filled diamonds = owned copies, outline diamonds = unowned,
             shown bottom-center left-to-right. */}
-        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-10 flex items-end gap-1">
+        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
           {[0, 1, 2, 3].map((i) => {
             const owned = i < card.owned_count;
             return (
               <span
                 key={i}
-                className="rounded-full"
+                className="inline-block w-2 h-2 rotate-45 transition-colors border"
                 style={{
-                  width: owned ? 9 : 6,
-                  height: owned ? 9 : 6,
-                  backgroundColor: owned ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.45)',
-                  boxShadow: '0 0 3px rgba(0,0,0,0.8)',
+                  backgroundColor: owned ? (palette?.accent || '#38BDF8') : 'transparent',
+                  borderColor: owned ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.45)',
+                  boxShadow: owned ? `0 0 4px ${palette?.accent || '#38BDF8'}aa` : '0 0 2px rgba(0,0,0,0.8)',
                 }}
               />
             );
@@ -946,11 +934,11 @@ function CollectionView({ palette, onShowCard }: CollectionViewProps) {
                     const key = colSortKey(col);
                     const sortable = key != null;
                     return (
-                      <th key={col} className="px-3 py-2">
+                      <th key={col} className={`px-3 py-2 ${col === 'Owned' ? 'text-center w-16' : ''}`}>
                         {sortable ? (
                           <button
                             onClick={() => sortByColumn(key!)}
-                            className="group flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold hover:opacity-100"
+                            className={`group flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold hover:opacity-100 ${col === 'Owned' ? 'justify-center w-full' : ''}`}
                             style={{ color: sort === key ? (palette?.accent || '#38BDF8') : palette?.subtext }}
                           >
                             {col}

@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive guide for **Rhystic Tracker v1.0.0-rc1**. This document explains how Rhystic Tracker functions, how to configure your Linux environment, how to utilize every feature, and how to troubleshoot common questions.
+Welcome to the comprehensive guide for **Rhystic Tracker v1.0.1**. This document explains how Rhystic Tracker functions, how to configure your Linux environment, how to utilize every feature, and how to troubleshoot common questions.
 
 ---
 
@@ -113,8 +113,8 @@ If compiling from source on your distribution:
 ```bash
 git clone https://github.com/Balthazzahr/Rhystic-Tracker.git
 cd Rhystic-Tracker
-npm install && npm run build
-(cd src-tauri && cargo build --release)
+npm install
+npm run build:app
 ./install.sh
 ```
 

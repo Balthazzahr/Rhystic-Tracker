@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.0.0--rc1-38BDF8?style=flat-square&logo=git" alt="Version 1.0.0-rc1" /></a>
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.0.1-38BDF8?style=flat-square&logo=git" alt="Version 1.0.1" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
@@ -110,14 +110,9 @@ sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel li
 git clone https://github.com/Balthazzahr/Rhystic-Tracker.git
 cd Rhystic-Tracker
 
-# Install frontend dependencies and build assets
+# Install dependencies and build self-contained release app
 npm install
-npm run build
-
-# Build the optimized release binary
-cd src-tauri
-cargo build --release
-cd ..
+npm run build:app
 
 # Run installer to place binary and desktop shortcuts
 ./install.sh
