@@ -30,6 +30,24 @@ fn redact_str(s: &str) -> String {
     }
 }
 
+#[derive(serde::Serialize)]
+struct AppEnvironmentInfo {
+    environment: String,
+    is_test: bool,
+    db_name: String,
+}
+
+#[tauri::command]
+fn get_app_environment() -> AppEnvironmentInfo {
+    let env = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    let is_prod = env.to_lowercase() == "production";
+    AppEnvironmentInfo {
+        environment: if is_prod { "production".to_string() } else { "development".to_string() },
+        is_test: !is_prod,
+        db_name: if is_prod { "rhystic.db".to_string() } else { "rhystic_dev.db".to_string() },
+    }
+}
+
 #[tauri::command]
 fn get_active_theme(theme_id: String) -> ManaTheme {
     get_mana_theme(&theme_id)
@@ -3284,7 +3302,7 @@ async fn run_tailer_supervisor(
 /// table (retained indefinitely). Used to detect preset decks that slip through
 /// the keyword rules.
 async fn record_match_deck_audit(
-    db_manager: &std::sync::Arc<DatabaseManager>,
+    db_manager: &DatabaseManager,
     assembler: &MatchAssembler,
     match_id: &str,
 ) {
@@ -3298,6 +3316,80 @@ async fn record_match_deck_audit(
         None => (true, Some("no deck identity")),
     };
     let _ = db_manager.upsert_match_deck(match_id, deck_name.as_deref(), deck_id.as_deref(), preset, reason).await;
+}
+
+async fn dispatch_parsed_event(
+    event: ParsedEvent,
+    assembler: &mut MatchAssembler,
+    db_manager: &DatabaseManager,
+) {
+    match event {
+        ParsedEvent::Auth { screen_name, client_id } => {
+            assembler.set_player_user_id(client_id.clone());
+            println!(
+                "[EVENT 1: AUTH] Authenticated User: screen_name = \"{}\", client_id = \"{}\"",
+                redact_str(&screen_name),
+                redact_str(&client_id)
+            );
+        }
+        ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
+            assembler.start_match(match_id.clone(), format_name.clone());
+            assembler.update_reserved_players(&reserved_players);
+            println!(
+                "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Player Seat = {}, Opponent = \"{}\"",
+                redact_str(&match_id),
+                format_name,
+                assembler.player_seat_id,
+                redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
+            );
+        }
+        ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, deck_id, total_cards } => {
+            assembler.set_deck(deck_name.clone(), deck_id.clone(), commander_id, main_deck.clone());
+            println!(
+                "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Deck ID = {:?}, Commander GRPID = {:?}, Total Cards = {}, Legitimate = {}",
+                deck_name,
+                deck_id,
+                commander_id,
+                total_cards,
+                assembler.match_legitimate
+            );
+        }
+        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
+            if turn_number > 0 {
+                assembler.current_turn = turn_number;
+            }
+            for (instance_id, grp_id, owner_seat, zone_id) in objects {
+                assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
+            }
+            for (instance_id, target_id, amount, dtype) in damage_events {
+                assembler.process_damage_event(instance_id, target_id, amount, dtype);
+            }
+            assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
+            let draws = assembler.drain_collection_draws();
+            if !draws.is_empty() {
+                for g in draws {
+                    let _ = db_manager.add_collection_draw(g as i64).await;
+                }
+            }
+        }
+        ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
+            if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                println!(
+                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
+                    redact_str(&record.match_id),
+                    record.result,
+                    reason,
+                    record.player_life_end,
+                    record.opponent_life_end,
+                    turn_events.len(),
+                    impactful.len()
+                );
+                let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
+                record_match_deck_audit(db_manager, assembler, &record.match_id).await;
+            }
+        }
+        ParsedEvent::Unknown => {}
+    }
 }
 
 /// Process tailer events (line parsing / JSON buffering / match assembly).
@@ -3335,122 +3427,38 @@ async fn process_tailer_events(
                     json_buffer.clear();
 
                     let mut assembler = assembler_ref.lock().await;
-
-                    match parse_line(&payload_str) {
-                        ParsedEvent::Auth { screen_name, client_id } => {
-                            assembler.set_player_user_id(client_id.clone());
-                            println!(
-                                "[EVENT 1: AUTH] Authenticated User: screen_name = \"{}\", client_id = \"{}\"",
-                                redact_str(&screen_name),
-                                redact_str(&client_id)
-                            );
-                        }
-                        ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-                            assembler.start_match(match_id.clone(), format_name.clone());
-                            assembler.update_reserved_players(&reserved_players);
-                            println!(
-                                "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Player Seat = {}, Opponent = \"{}\"",
-                                redact_str(&match_id),
-                                format_name,
-                                assembler.player_seat_id,
-                                redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
-                            );
-                        }
-                        ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, deck_id, total_cards } => {
-                            assembler.set_deck(deck_name.clone(), deck_id.clone(), commander_id, main_deck.clone());
-                            println!(
-                                "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Deck ID = {:?}, Commander GRPID = {:?}, Total Cards = {}, Legitimate = {}",
-                                deck_name,
-                                deck_id,
-                                commander_id,
-                                total_cards,
-                                assembler.match_legitimate
-                            );
-                        }
-                        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
-                            // Advance the turn BEFORE processing objects so plays/draws in this
-                            // message are attributed to the correct turn. MTGA only emits turnNumber
-                            // at turn boundaries, so without this, cards played in later turns get
-                            // stamped with the previous turn (causing impossible "round 1" plays).
-                            if turn_number > 0 {
-                                assembler.current_turn = turn_number;
-                            }
-                            for (instance_id, grp_id, owner_seat, zone_id) in objects {
-                                assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
-                            }
-                            for (instance_id, target_id, amount, dtype) in damage_events {
-                                assembler.process_damage_event(instance_id, target_id, amount, dtype);
-                            }
-                            assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
-                            let draws = assembler.drain_collection_draws();
-                            if !draws.is_empty() {
-                                for g in draws {
-                                    let _ = db_manager.add_collection_draw(g as i64).await;
-                                }
-                            }
-                        }
-                        ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                            if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
-                                println!(
-                                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
-                                    redact_str(&record.match_id),
-                                    record.result,
-                                    reason,
-                                    record.player_life_end,
-                                    record.opponent_life_end,
-                                    turn_events.len(),
-                                    impactful.len()
-                                );
-                                let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
-                                record_match_deck_audit(&db_manager, &assembler, &record.match_id).await;
-                            }
-                        }
-                        ParsedEvent::Unknown => {}
-                    }
+                    let parsed = parse_line(&payload_str);
+                    dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
                 }
             } else {
                 let mut assembler = assembler_ref.lock().await;
-                match parse_line(&line) {
-                    ParsedEvent::Auth { screen_name, client_id } => {
-                        assembler.set_player_user_id(client_id.clone());
-                    }
-                    ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-                        assembler.start_match(match_id.clone(), format_name.clone());
-                        assembler.update_reserved_players(&reserved_players);
-                    }
-                    ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, deck_id, total_cards } => {
-                        assembler.set_deck(deck_name.clone(), deck_id.clone(), commander_id, main_deck.clone());
-                        println!(
-                            "[EVENT 3: DECK_SUBMITTED] Deck = \"{}\", Deck ID = {:?}, Commander GRPID = {:?}, Total Cards = {}, Legitimate = {}",
-                            deck_name,
-                            deck_id,
-                            commander_id,
-                            total_cards,
-                            assembler.match_legitimate
-                        );
-                    }
-                    ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-                        if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
-                            let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
-                            record_match_deck_audit(&db_manager, &assembler, &record.match_id).await;
-                        }
-                    }
-                    _ => {}
-                }
+                let parsed = parse_line(&line);
+                dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
             }
         }
     }
 }
 
 fn main() {
-    // CRITICAL: Must be set BEFORE GTK/WebKit initializes any display connections to prevent DMA-BUF Wayland protocol crashes on NVIDIA drivers
+    // CRITICAL: Must be set BEFORE GTK/WebKit initializes any display connections to prevent DMA-BUF Wayland protocol crashes and black screens on NVIDIA/Linux drivers
     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    if std::env::var("GDK_BACKEND").is_err() {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
 
     let shared_assembler = std::sync::Arc::new(tokio::sync::Mutex::new(MatchAssembler::new()));
     let shared_state = SharedMatchState(shared_assembler.clone());
 
-    // Launch Tauri Native App Window with tokio async setup
+    // Launch Tauri Native App Window with single-instance enforcement and tokio async setup
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .manage(shared_state)
         .setup(move |app| {
@@ -3486,19 +3494,38 @@ fn main() {
                 let _ = get_universe(db_manager.pool()).await;
             });
 
+            let is_prod = std::env::var("RHYSTIC_ENV").map(|v| v.to_lowercase() == "production").unwrap_or(false);
+
+            if let Some(window) = app.get_webview_window("main") {
+                if !is_prod {
+                    let _ = window.set_title("Rhystic Tracker (Test Environment)");
+                }
+            }
+
             // 1. Build and register System Tray Icon
-            let icon_bytes = include_bytes!("../icons/icon.png");
+            let icon_bytes = if is_prod {
+                include_bytes!("../icons/icon.png").as_slice()
+            } else {
+                include_bytes!("../icons/icon_test.png").as_slice()
+            };
             let icon_live_bytes = include_bytes!("../icons/icon_live.png");
             let default_tray_icon = Image::from_bytes(icon_bytes)?;
             let live_tray_icon = Image::from_bytes(icon_live_bytes)?;
 
-            let open_item = MenuItem::with_id(app, "open", "Open Rhystic Tracker", true, None::<&str>)?;
+            let open_label = if is_prod { "Open Rhystic Tracker" } else { "Open Rhystic Tracker (Test)" };
+            let open_item = MenuItem::with_id(app, "open", open_label, true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit Rhystic Tracker", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&open_item, &quit_item])?;
 
+            let default_tooltip = if is_prod {
+                "Rhystic Tracker".to_string()
+            } else {
+                "Rhystic Tracker (Test Environment)".to_string()
+            };
+
             let tray = TrayIconBuilder::with_id("main-tray")
                 .icon(default_tray_icon.clone())
-                .tooltip("Rhystic Tracker")
+                .tooltip(&default_tooltip)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
@@ -3539,6 +3566,7 @@ fn main() {
             // Background task: monitor live match state and update Tray Icon & Context Menu
             let app_handle = app.handle().clone();
             let monitor_assembler = shared_assembler.clone();
+            let default_tooltip_clone = default_tooltip.clone();
             tauri::async_runtime::spawn(async move {
                 let mut was_in_match = false;
                 loop {
@@ -3562,7 +3590,7 @@ fn main() {
                                 let _ = tray_icon_handle.set_tooltip(Some(format!("Rhystic Tracker — In Match (vs {})", if opp_name.is_empty() { "Opponent" } else { &opp_name })));
                                 
                                 if let Ok(live_item) = MenuItem::with_id(&app_handle, "live_match", &match_label, true, None::<&str>) {
-                                    if let Ok(open_item) = MenuItem::with_id(&app_handle, "open", "Open Rhystic Tracker", true, None::<&str>) {
+                                    if let Ok(open_item) = MenuItem::with_id(&app_handle, "open", open_label, true, None::<&str>) {
                                         if let Ok(quit_item) = MenuItem::with_id(&app_handle, "quit", "Quit Rhystic Tracker", true, None::<&str>) {
                                             if let Ok(updated_menu) = Menu::with_items(&app_handle, &[&live_item, &open_item, &quit_item]) {
                                                 let _ = tray_icon_handle.set_menu(Some(updated_menu));
@@ -3572,8 +3600,8 @@ fn main() {
                                 }
                             } else {
                                 let _ = tray_icon_handle.set_icon(Some(default_tray_icon.clone()));
-                                let _ = tray_icon_handle.set_tooltip(Some("Rhystic Tracker"));
-                                if let Ok(open_item) = MenuItem::with_id(&app_handle, "open", "Open Rhystic Tracker", true, None::<&str>) {
+                                let _ = tray_icon_handle.set_tooltip(Some(&default_tooltip_clone));
+                                if let Ok(open_item) = MenuItem::with_id(&app_handle, "open", open_label, true, None::<&str>) {
                                     if let Ok(quit_item) = MenuItem::with_id(&app_handle, "quit", "Quit Rhystic Tracker", true, None::<&str>) {
                                         if let Ok(default_menu) = Menu::with_items(&app_handle, &[&open_item, &quit_item]) {
                                             let _ = tray_icon_handle.set_menu(Some(default_menu));
@@ -3598,6 +3626,7 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            get_app_environment,
             get_active_theme,
             get_matches_count,
             get_recent_matches,

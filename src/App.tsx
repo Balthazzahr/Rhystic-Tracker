@@ -186,6 +186,15 @@ export default function App() {
       unlisten.then(f => f());
     };
   }, []);
+
+  // Environment info (test environment vs production)
+  const [envInfo, setEnvInfo] = useState<{ environment: string; is_test: boolean; db_name: string } | null>(null);
+  useEffect(() => {
+    invoke<any>('get_app_environment')
+      .then(info => setEnvInfo(info))
+      .catch(err => console.error('Failed to get app environment:', err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');
@@ -1220,7 +1229,7 @@ export default function App() {
         <div className="flex flex-col flex-1 min-h-0">
           {/* Logo Brand Section: symbol icon always shown, centered. */}
           <div 
-            className={`flex items-center justify-center shrink-0 transition-all pt-3 pb-5 ${
+            className={`flex flex-col items-center justify-center shrink-0 transition-all pt-3 pb-4 ${
               isSidebarCollapsed ? 'px-0' : 'px-2'
             } ${splashState !== 'done' ? 'opacity-0' : 'opacity-100'}`}
           >
@@ -1231,6 +1240,22 @@ export default function App() {
                 isSidebarCollapsed ? 'h-8' : 'h-[75px]'
               }`}
             />
+            {envInfo?.is_test && (
+              <div 
+                className={`mt-2.5 rounded-full border font-mono font-bold tracking-wider transition-all select-none flex items-center justify-center gap-1.5 shadow-sm ${
+                  isSidebarCollapsed ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-3 py-0.5'
+                }`}
+                style={{
+                  backgroundColor: 'rgba(147, 51, 234, 0.2)',
+                  borderColor: 'rgba(168, 85, 247, 0.5)',
+                  color: '#E9D5FF',
+                }}
+                title="Running in safe isolated test environment against rhystic_dev.db"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <span>{isSidebarCollapsed ? 'TEST' : 'TEST ENV'}</span>
+              </div>
+            )}
           </div>
 
           {/* Navigation Links — stays in place below the icon whether the sidebar
@@ -1365,6 +1390,7 @@ export default function App() {
             onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
             hideBrandHeader={splashState !== 'done'}
+            isTestEnv={envInfo?.is_test}
           />
         )}
 
@@ -2617,7 +2643,7 @@ export default function App() {
         <div
           onClick={() => setSplashState('done')}
           className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-[1500ms] ease-in-out ${
-            splashState === 'animating' ? 'bg-black/0 backdrop-blur-none pointer-events-none' : 'bg-black/50 backdrop-blur-sm'
+            splashState === 'animating' ? 'bg-black/0 pointer-events-none' : 'bg-black/60'
           }`}
         >
           {/* Animated Container: holds the centered icon + text logo on splash, then translates/scales into resting positions */}

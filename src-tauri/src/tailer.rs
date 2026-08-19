@@ -159,8 +159,20 @@ impl FileTailer {
         let mut reader = BufReader::new(current_file);
 
         if !self.read_from_start {
-            if let Err(e) = reader.seek(SeekFrom::End(0)) {
-                eprintln!("[TAILER] Error seeking to end: {}", e);
+            // Seek backwards up to 512KB to catch recent pre-match deck submissions (EventSetDeckV3) or Auth packets if launched mid-queue
+            let file_len = current_meta.len();
+            let lookback = 512 * 1024; // 512KB
+            let start_pos = if file_len > lookback {
+                file_len - lookback
+            } else {
+                0
+            };
+            if let Err(e) = reader.seek(SeekFrom::Start(start_pos)) {
+                eprintln!("[TAILER] Error seeking startup lookback: {}", e);
+            } else if start_pos > 0 {
+                // Discard the first line as it may be a partial line from mid-byte seek
+                let mut discard = String::new();
+                let _ = reader.read_line(&mut discard);
             }
         } else {
             println!("[TAILER] Reading log from beginning (catching existing game state)...");

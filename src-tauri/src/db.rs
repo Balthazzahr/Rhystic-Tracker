@@ -240,6 +240,35 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added damage target and type columns to match_impactful_cards table");
         }
 
+        // Migration: deduplicate any duplicate rows in match_cards, match_turn_events,
+        // and match_impactful_cards caused by previous multi-instance or non-idempotent upserts.
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM match_cards
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM match_cards GROUP BY match_id, grp_id, is_opponent
+            );
+            "#
+        ).execute(&pool).await;
+
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM match_turn_events
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM match_turn_events GROUP BY match_id, turn_number, seat_id, event_type, grp_id, timestamp
+            );
+            "#
+        ).execute(&pool).await;
+
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM match_impactful_cards
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM match_impactful_cards GROUP BY match_id, grp_id, seat_id
+            );
+            "#
+        ).execute(&pool).await;
+
         // Migration: backfill cards_cache.cmc from mana_cost. Early imports stored cmc=0
         // for every card. Recompute using the same parse_mtga_cmc() logic the rest of the
         // app relies on. Truly idempotent: only updates rows where the recomputed cmc
@@ -354,6 +383,23 @@ impl DatabaseManager {
         .bind("{}")
         .execute(&mut *tx)
         .await?;
+
+        // Purge any prior child records for this match_id so re-upserting (or replaying)
+        // is strictly idempotent and does not accumulate duplicate turn events or card rows.
+        sqlx::query("DELETE FROM match_cards WHERE match_id = ?")
+            .bind(&match_rec.match_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("DELETE FROM match_turn_events WHERE match_id = ?")
+            .bind(&match_rec.match_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query("DELETE FROM match_impactful_cards WHERE match_id = ?")
+            .bind(&match_rec.match_id)
+            .execute(&mut *tx)
+            .await?;
 
         // Save cards seen to match_cards table
         for card in cards {
@@ -917,5 +963,66 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(row.map(|(n, p)| (n, p)).unwrap(), ("Dying Lands v2".to_string(), false));
+    }
+
+    #[tokio::test]
+    async fn test_upsert_match_is_strictly_idempotent() {
+        let db = in_memory_db().await;
+        let match_rec = MatchRecord {
+            match_id: "match-dup-test-1".to_string(),
+            timestamp: Utc::now(),
+            date_str: "2026-08-19 12:00:00".to_string(),
+            format_name: "Brawl".to_string(),
+            result: "win".to_string(),
+            duration_seconds: 120,
+            turns: 5,
+            going_first: true,
+            hero_seat_id: 1,
+            player_deck_name: "Test Deck".to_string(),
+            player_commander_id: None,
+            player_commander_name: None,
+            player_life_end: Some(25),
+            opponent_name: Some("Opponent".to_string()),
+            opponent_commander_id: None,
+            opponent_commander_name: None,
+            opponent_mulligans: Some(0),
+            opponent_life_end: Some(0),
+            result_reason: Some("Conceded".to_string()),
+        };
+
+        let cards = vec![
+            MatchCardRecord { grp_id: 100, is_opponent: false, count: 1 },
+            MatchCardRecord { grp_id: 200, is_opponent: true, count: 1 },
+        ];
+        let turn_events = vec![
+            MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "draw".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:01Z".to_string() },
+            MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "play".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:05Z".to_string() },
+        ];
+        let impactful = vec![
+            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0 },
+        ];
+
+        // Call upsert_match once
+        db.upsert_match(&match_rec, &cards, &turn_events, &impactful).await.unwrap();
+
+        // Call upsert_match a second time (simulating re-upsert / multi-instance replay)
+        db.upsert_match(&match_rec, &cards, &turn_events, &impactful).await.unwrap();
+
+        let card_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM match_cards WHERE match_id = 'match-dup-test-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        let event_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM match_turn_events WHERE match_id = 'match-dup-test-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        let imp_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM match_impactful_cards WHERE match_id = 'match-dup-test-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+
+        assert_eq!(card_count, 2, "match_cards should have 2 rows, not doubled");
+        assert_eq!(event_count, 2, "match_turn_events should have 2 rows, not doubled");
+        assert_eq!(imp_count, 1, "match_impactful_cards should have 1 row, not doubled");
     }
 }

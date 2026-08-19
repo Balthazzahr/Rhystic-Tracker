@@ -88,6 +88,7 @@ interface DashboardViewProps {
   onSelectDeck: (deckName: string) => void;
   onShowCard: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
   hideBrandHeader?: boolean;
+  isTestEnv?: boolean;
 }
 
 // ---- small helpers (duplicated locally to keep the component self-contained) ----
@@ -157,6 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectDeck,
   onShowCard,
   hideBrandHeader = false,
+  isTestEnv = false,
 }) => {
   const [chartFormat, setChartFormat] = useState('ALL');
   const [chartTime, setChartTime] = useState('MONTH');
@@ -515,12 +517,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
       {/* Top-center brand: icon (left) + text logo (right), side by side */}
       <div 
-        className={`flex items-center justify-center gap-3 shrink-0 transition-opacity duration-500 ${
+        className={`flex flex-col items-center justify-center shrink-0 transition-opacity duration-500 ${
           hideBrandHeader ? 'opacity-0' : 'opacity-100'
         }`}
       >
-        <img src={iconSvg} alt="" className="h-[72px] w-auto object-contain drop-shadow-md" />
-        <img src={logoSvg} alt="Rhystic Tracker" className="h-[83px] w-auto object-contain drop-shadow-md" />
+        <div className="flex items-center justify-center gap-3">
+          <img src={iconSvg} alt="" className="h-[72px] w-auto object-contain drop-shadow-md" />
+          <img src={logoSvg} alt="Rhystic Tracker" className="h-[83px] w-auto object-contain drop-shadow-md" />
+        </div>
+        {isTestEnv && (
+          <div className="mt-1 inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-bold tracking-wider bg-purple-950/70 border border-purple-500/50 text-purple-300 shadow-md">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span>TEST ENVIRONMENT</span>
+            <span className="opacity-40">•</span>
+            <span className="opacity-70 text-[10px] lowercase font-normal">rhystic_dev.db</span>
+          </div>
+        )}
       </div>
 
       {/* Top row: 4 stat cells */}
