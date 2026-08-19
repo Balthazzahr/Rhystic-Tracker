@@ -3,7 +3,7 @@
 **Application Name:** Rhystic Tracker  
 **Identifier:** `com.rhystic.tracker`  
 **License:** MIT  
-**Current Version:** 1.0.1  
+**Current Version:** 1.1.0  
 **Category:** Game Companion & Combat Analytics  
 
 ---
