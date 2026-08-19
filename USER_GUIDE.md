@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive guide for **Rhystic Tracker v1.0.1**. This document explains how Rhystic Tracker functions, how to configure your Linux environment, how to utilize every feature, and how to troubleshoot common questions.
+Welcome to the comprehensive guide for **Rhystic Tracker v1.1.0**. This document explains how Rhystic Tracker functions, how to configure your Linux environment, how to utilize every feature, and how to troubleshoot common questions.
 
 ---
 
@@ -82,11 +82,11 @@ RHYSTIC_MTGA_RAW_DIR="/path/to/Raw/Card/Database" rhystic-tracker
 
 ### Option A: Pre-built Release (Fastest)
 
-1. Download `rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz` from the [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases).
+1. Download `rhystic-tracker-v1.1.0-linux-x86_64.tar.gz` from the [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases).
 2. Extract the archive and run the installer:
    ```bash
-   tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
-   cd rhystic-tracker-v1.0.0-rc1
+   tar -xzf rhystic-tracker-v1.1.0-linux-x86_64.tar.gz
+   cd rhystic-tracker-v1.1.0
    ./install.sh
    ```
 
@@ -216,7 +216,10 @@ The **Deck Library** tracks every deck you've played in MTGA, with true decklist
 
 - **True Decklists**: Import your exact 60-card / 100-card decklists directly using the MTGA export format (`.txt` or clipboard).
 - **Legitimacy Verification**: Rhystic Tracker filters out preset and starter decks to prevent skewed collection or archetype analytics.
-- **Deck Inspector Modal**: Inspect deck composition, mana curve, colors, and match history.
+- **Deck Inspector Modal**: 
+  - **Dynamic Scaling & Dismissal**: Scaled to 80% window width and 90% window height with instant dismissal via the <kbd>Esc</kbd> key or backdrop click.
+  - **Responsive 3-Column Decklist Expansion**: Automatically reorganizes card categories (*Creatures, Instants, Sorceries, Lands, Artifacts, Enchantments, Planeswalkers*) into **3 height-balanced columns** on wide displays, fitting 60-card standard and 100-card Commander decklists with minimal or zero scrolling.
+  - **Header Analytics**: Features an enlarged **Mana Distribution Pie Chart**, a full-height **Mana Value Curve Histogram** with a centered floating title overlay, and proportional **Card Types Breakdown Bars**.
 
 <p align="center">
   <img src="docs/screenshots/deck_inspector.png" alt="Deck Inspector" width="900" />
