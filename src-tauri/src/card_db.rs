@@ -34,6 +34,10 @@ pub fn find_latest_raw_card_db() -> Option<PathBuf> {
         candidate_dirs.push(home.join(".local/share/Steam/steamapps/common/MTGA/MTGA_Data/Downloads/Raw"));
         candidate_dirs.push(home.join(".steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads/Raw"));
         candidate_dirs.push(home.join(".wine/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads/Raw"));
+        #[cfg(target_os = "macos")]
+        candidate_dirs.push(
+            home.join("Library/Application Support/com.wizards.mtga/Downloads/Raw"),
+        );
     }
 
     candidate_dirs
