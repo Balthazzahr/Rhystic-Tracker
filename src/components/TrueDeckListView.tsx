@@ -33,20 +33,8 @@ const TYPE_ICONS: Record<string, string> = {
   Artifact: 'ms-artifact',
   Land: 'ms-land',
   Token: 'ms-token',
-  Other: 'ms-multicolor',
+  Other: 'ms-other',
 };
-
-// Primary card type, last keyword wins (mirrors backend chart_category).
-function categorize(cardType?: string | null): string {
-  const lower = (cardType || '').toLowerCase();
-  if (lower.includes('token')) return 'Token';
-  for (const kw of ['planeswalker', 'battle', 'creature', 'land', 'enchantment', 'artifact', 'instant', 'sorcery']) {
-    if (lower.includes(kw)) {
-      return kw[0].toUpperCase() + kw.slice(1);
-    }
-  }
-  return 'Other';
-}
 
 // MTGA rarity codes: 1=Land, 2=Common, 3=Uncommon, 4=Rare, 5=Mythic.
 const RARITY_INFO: Record<number, { label: string; color: string }> = {
@@ -56,10 +44,41 @@ const RARITY_INFO: Record<number, { label: string; color: string }> = {
   4: { label: 'Rare', color: '#D4AF37' },
   5: { label: 'Mythic', color: '#F97316' },
 };
-const rarityLabel = (r: number) => RARITY_INFO[r]?.label || '-';
+
+function categorize(cardType?: string | null): string {
+  if (!cardType) return 'Other';
+  const lower = cardType.toLowerCase();
+  for (const kw of ['planeswalker', 'battle', 'creature', 'land', 'enchantment', 'artifact', 'instant', 'sorcery']) {
+    if (lower.includes(kw)) {
+      return kw[0].toUpperCase() + kw.slice(1);
+    }
+  }
+  return 'Other';
+}
+
+const rarityLabel = (r: number) => RARITY_INFO[r]?.label || 'Common';
 const rarityColor = (r: number) => RARITY_INFO[r]?.color || '#9CA3AF';
 
 function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: TrueDeckListViewProps) {
+  const [isWide, setIsWide] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1400 : false);
+
+  useEffect(() => {
+    let rAF = 0;
+    const onResize = () => {
+      cancelAnimationFrame(rAF);
+      rAF = requestAnimationFrame(() => {
+        setIsWide(window.innerWidth >= 1400);
+      });
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(rAF);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+
+  const numCols = isWide ? 3 : 2;
+
   const cards: CardEntry[] = data?.cards || [];
   const sideboard: CardEntry[] = data?.sideboard || [];
 
@@ -82,13 +101,25 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
   }
   const ordered = TYPE_ORDER.filter(t => groups.has(t));
 
-  // Distribute into two independent columns by card count.
+  // Distribute into 2 or 3 balanced columns by estimated item height
   const colA: string[] = [];
   const colB: string[] = [];
-  const hA = () => colA.reduce((s, g) => s + groups.get(g)!.length, 0);
-  const hB = () => colB.reduce((s, g) => s + groups.get(g)!.length, 0);
+  const colC: string[] = [];
+
+  const hA = () => colA.reduce((s, g) => s + (groups.get(g)?.length || 0) + 2, 0);
+  const hB = () => colB.reduce((s, g) => s + (groups.get(g)?.length || 0) + 2, 0);
+  const hC = () => colC.reduce((s, g) => s + (groups.get(g)?.length || 0) + 2, 0);
+
   for (const cat of ordered) {
-    if (hA() <= hB()) colA.push(cat); else colB.push(cat);
+    if (numCols === 3) {
+      const minH = Math.min(hA(), hB(), hC());
+      if (hA() === minH) colA.push(cat);
+      else if (hB() === minH) colB.push(cat);
+      else colC.push(cat);
+    } else {
+      if (hA() <= hB()) colA.push(cat);
+      else colB.push(cat);
+    }
   }
 
   const renderRow = (card: CardEntry) => {
@@ -132,7 +163,6 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
   );
 
   const totalCards = cards.reduce((s, c) => s + c.count, 0);
-  const commanderSymbols = commanderCard ? parseMtgaManaCost(commanderCard.mana_cost || '') : [];
 
   const renderCommander = () => {
     if (!commanderCard) return null;
@@ -164,7 +194,7 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
 
       {/* Card columns */}
       <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-        <div className="grid gap-x-8 gap-y-5 items-start" style={{ gridTemplateColumns: `repeat(2, minmax(0,1fr))` }}>
+        <div className="grid gap-x-6 gap-y-5 items-start" style={{ gridTemplateColumns: `repeat(${numCols}, minmax(0, 1fr))` }}>
           <div className="min-w-0 space-y-5">
             {renderCommander()}
             {colA.map(renderGroup)}
@@ -172,6 +202,11 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
           <div className="min-w-0 space-y-5">
             {colB.map(renderGroup)}
           </div>
+          {numCols === 3 && (
+            <div className="min-w-0 space-y-5">
+              {colC.map(renderGroup)}
+            </div>
+          )}
         </div>
 
         {/* Sideboard */}

@@ -80,6 +80,25 @@ const rarityLabel = (r: number) => RARITY_INFO[r]?.label || 'Common';
 const rarityColor = (r: number) => RARITY_INFO[r]?.color || '#E5E7EB';
 
 export function DeckCardList({ deckName, palette, onShowCard }: DeckCardListProps) {
+  const [isWide, setIsWide] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1400 : false);
+
+  useEffect(() => {
+    let rAF = 0;
+    const onResize = () => {
+      cancelAnimationFrame(rAF);
+      rAF = requestAnimationFrame(() => {
+        setIsWide(window.innerWidth >= 1400);
+      });
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(rAF);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+
+  const numCols = isWide ? 3 : 2;
+
   const [data, setData] = useState<DeckCardsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,14 +145,24 @@ export function DeckCardList({ deckName, palette, onShowCard }: DeckCardListProp
 
   const ordered = TYPE_ORDER.filter(t => groups.has(t));
 
-  // Distribute groups into two independent columns so each column flows its own
-  // content (next group starts right below the previous one in that column).
+  // Distribute groups into 2 or 3 balanced columns
   const colA: string[] = [];
   const colB: string[] = [];
-  const heightA = (n: number) => colA.reduce((s, g) => s + groups.get(g)!.length, n);
-  const heightB = (n: number) => colB.reduce((s, g) => s + groups.get(g)!.length, n);
+  const colC: string[] = [];
+  const heightA = (n: number) => colA.reduce((s, g) => s + (groups.get(g)?.length || 0) + 2, n);
+  const heightB = (n: number) => colB.reduce((s, g) => s + (groups.get(g)?.length || 0) + 2, n);
+  const heightC = (n: number) => colC.reduce((s, g) => s + (groups.get(g)?.length || 0) + 2, n);
+
   for (const cat of ordered) {
-    if (heightA(0) <= heightB(0)) colA.push(cat); else colB.push(cat);
+    if (numCols === 3) {
+      const minH = Math.min(heightA(0), heightB(0), heightC(0));
+      if (heightA(0) === minH) colA.push(cat);
+      else if (heightB(0) === minH) colB.push(cat);
+      else colC.push(cat);
+    } else {
+      if (heightA(0) <= heightB(0)) colA.push(cat);
+      else colB.push(cat);
+    }
   }
 
   const renderGroup = (cat: string) => (
@@ -236,7 +265,7 @@ export function DeckCardList({ deckName, palette, onShowCard }: DeckCardListProp
 
       {/* Categorized card list */}
       <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-        <div className="grid gap-x-8 gap-y-5 items-start" style={{ gridTemplateColumns: `repeat(2, minmax(0,1fr))` }}>
+        <div className="grid gap-x-6 gap-y-5 items-start" style={{ gridTemplateColumns: `repeat(${numCols}, minmax(0, 1fr))` }}>
           <div className="min-w-0 space-y-5">
             {renderCommander()}
             {colA.map(renderGroup)}
@@ -244,6 +273,11 @@ export function DeckCardList({ deckName, palette, onShowCard }: DeckCardListProp
           <div className="min-w-0 space-y-5">
             {colB.map(renderGroup)}
           </div>
+          {numCols === 3 && (
+            <div className="min-w-0 space-y-5">
+              {colC.map(renderGroup)}
+            </div>
+          )}
         </div>
       </div>
     </div>

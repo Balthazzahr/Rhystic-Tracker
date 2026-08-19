@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
@@ -35,15 +35,30 @@ function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette:
   const visibleLabels = labels.slice(startIdx);
   const max = Math.max(...visible, 1);
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex-1 flex items-end gap-1 min-h-0">
+    <div className="relative flex-1 flex flex-col min-h-0 w-full h-full justify-end">
+      {/* Centered floating pill overlay inside top of histogram */}
+      <div className="absolute top-0 inset-x-0 flex justify-center z-10 pointer-events-none">
+        <span 
+          className="px-2.5 py-0.5 rounded-full text-[9px] font-mono uppercase tracking-wider font-bold shadow-md border"
+          style={{ 
+            backgroundColor: 'rgba(0, 0, 0, 0.65)', 
+            borderColor: 'rgba(255, 255, 255, 0.15)',
+            color: '#FFFFFF'
+          }}
+        >
+          Mana Value
+        </span>
+      </div>
+
+      {/* Bars taking full height */}
+      <div className="flex-1 flex items-end gap-1.5 min-h-0 pt-6">
         {visible.map((val, i) => (
           <div key={i} className="flex-1 h-full flex flex-col justify-end">
             <div
-              className="w-full rounded-t-sm"
+              className="w-full rounded-t-sm transition-all hover:opacity-80"
               style={{
-                height: `${Math.max((val / max) * 100, 3)}%`,
-                backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.1)',
+                height: `${Math.max((val / max) * 100, 4)}%`,
+                backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.08)',
               }}
               onMouseEnter={(e) => onTip({ text: `${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
               onMouseMove={(e) => onTip({ text: `${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
@@ -52,9 +67,9 @@ function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette:
           </div>
         ))}
       </div>
-      <div className="flex gap-1 mt-1 shrink-0">
+      <div className="flex gap-1.5 mt-1.5 shrink-0">
         {visibleLabels.map((l, idx) => (
-          <span key={idx} className="flex-1 text-center text-[9px] font-mono opacity-60 leading-none">{l}</span>
+          <span key={idx} className="flex-1 text-center text-[10px] font-mono opacity-60 leading-none">{l}</span>
         ))}
       </div>
     </div>
@@ -66,17 +81,17 @@ function CardTypeBars({ data, palette, onTip }: { data: { type: string; count: n
   if (!data || data.length === 0) return <div className="text-xs font-mono opacity-40">No card type data</div>;
   const max = Math.max(...data.map(d => d.count), 1);
   return (
-    <div className="flex-1 space-y-1 flex flex-col justify-center min-h-0">
+    <div className="flex-1 space-y-1.5 flex flex-col justify-center min-h-0">
       {data.map((d) => (
         <div
           key={d.type}
-          className="flex items-center gap-1.5 group cursor-help"
+          className="flex items-center gap-2 group cursor-help"
           onMouseEnter={(e) => onTip({ text: `${d.type}: ${d.count}`, x: e.clientX, y: e.clientY })}
           onMouseMove={(e) => onTip({ text: `${d.type}: ${d.count}`, x: e.clientX, y: e.clientY })}
           onMouseLeave={() => onTip(null)}
         >
-          <span className="w-20 shrink-0 text-[10px] font-semibold truncate" style={{ color: palette?.text }}>{d.type}</span>
-          <div className="flex-1 h-1.5 rounded bg-white/5 overflow-hidden">
+          <span className="w-24 shrink-0 text-[11px] font-semibold truncate" style={{ color: palette?.text }}>{d.type}</span>
+          <div className="flex-1 h-2 rounded bg-white/5 overflow-hidden">
             <div className="h-full rounded" style={{ width: `${(d.count / max) * 100}%`, backgroundColor: palette?.accent || '#38BDF8' }} />
           </div>
         </div>
@@ -94,14 +109,14 @@ const RADIAN = Math.PI / 180;
 function ManaPie({ data }: { data: { color: string; count: number }[] }) {
   if (!data || data.length === 0) return <div className="text-xs font-mono opacity-40">No mana distribution data</div>;
   return (
-    <PieChart width={170} height={170}>
+    <PieChart width={175} height={160}>
       <Pie
         data={data}
         dataKey="count"
         nameKey="color"
         cx="50%"
         cy="50%"
-        outerRadius={80}
+        outerRadius={76}
         paddingAngle={0}
         stroke="none"
         labelLine={false}
@@ -111,7 +126,7 @@ function ManaPie({ data }: { data: { color: string; count: number }[] }) {
           const r = outerRadius * 0.62;
           const x = cx + r * Math.cos(-midAngle * RADIAN);
           const y = cy + r * Math.sin(-midAngle * RADIAN);
-          const size = Math.max(10, Math.min(30, outerRadius * 0.95 * Math.sqrt(percent)));
+          const size = Math.max(14, Math.min(30, outerRadius * 0.95 * Math.sqrt(percent)));
           return (
             <foreignObject x={x - size / 2} y={y - size / 2} width={size} height={size}>
               <div className="w-full h-full flex items-center justify-center">
@@ -211,30 +226,54 @@ export function DeckDetailView({
     return () => { cancelled = true; };
   }, [isOpen, deckName, importResult]);
 
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !deckName) return;
     // Browser-style back navigation: push history so the mouse back button works.
-    window.history.pushState({ deckDetail: deckName }, '');
-    const onPop = () => onBack();
+    try {
+      window.history.pushState({ deckDetail: deckName }, '');
+    } catch (e) {
+      // Ignore pushState rate-limit errors if any
+    }
+    const onPop = () => onBackRef.current();
     window.addEventListener('popstate', onPop);
     return () => {
       window.removeEventListener('popstate', onPop);
     };
-  }, [isOpen, deckName, onBack]);
+  }, [isOpen, deckName]);
+
+  // Escape key handler to close modal or sub-modals
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (exportOpen) {
+          setExportOpen(false);
+        } else if (importOpen) {
+          if (!importBusy) setImportOpen(false);
+        } else {
+          onBack();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, exportOpen, importOpen, importBusy, onBack]);
 
   if (!isOpen || !detail) return null;
 
   const winrateNum = parseFloat(detail.winrate) || 0;
   const playTotal = (detail.play?.wins || 0) + (detail.play?.losses || 0);
-  const drawTotal = (detail.draw?.wins || 0) + (detail.draw?.losses || 0);
-  const playWinPct = playTotal > 0 ? ((detail.play?.wins || 0) / playTotal) * 100 : 0;
-  const drawWinPct = drawTotal > 0 ? ((detail.draw?.wins || 0) / drawTotal) * 100 : 0;
+  const playWinPct = detail.play?.total ? (detail.play.wins / detail.play.total) * 100 : 0;
+  const drawWinPct = detail.draw?.total ? (detail.draw.wins / detail.draw.total) * 100 : 0;
 
   // Win/loss bar continuum: green fills left-to-right for wins, red fills
   // right-to-left for losses, with win% shown above.
   const winLossBar = (wins: number, losses: number, winPct: number) => {
     const total = wins + losses;
-    const winShare = total > 0 ? (wins / total) * 100 : 0;
+    const winShare = total > 0 ? (wins / total) * 100 : 50;
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between text-[11px] font-mono font-bold">
@@ -251,9 +290,13 @@ export function DeckDetailView({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-none">
+    <div 
+      onClick={onBack}
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
+    >
       <div
-        className="w-full max-w-6xl h-[85vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative"
+        onClick={(e) => e.stopPropagation()}
+        className="w-[80vw] h-[90vh] max-w-[80vw] max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative"
         style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
       >
         {/* Header bar */}
@@ -265,7 +308,7 @@ export function DeckDetailView({
           >
             <ChevronLeft className="w-4 h-4" /> Deck Library
           </button>
-          <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (mouse back)">
+          <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (Esc)">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -331,17 +374,14 @@ export function DeckDetailView({
               </div>
 
               {/* Row 2: mana distribution pie + mana value histogram + card types */}
-              <div className="grid grid-cols-[auto_1fr_1fr] gap-4 pt-4 border-t" style={{ borderColor: `${palette?.border}66` }}>
-                <div className="rounded-xl border p-2 flex flex-col items-center justify-center" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
-                  <p className="text-[9px] font-mono uppercase tracking-wider font-bold mb-1 opacity-60" style={{ color: palette?.accent }}>Mana Distribution</p>
+              <div className="grid grid-cols-[230px_1fr_1fr] gap-4 pt-4 border-t h-[180px]" style={{ borderColor: `${palette?.border}66` }}>
+                <div className="rounded-xl border p-2 flex items-center justify-center h-full min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
                   <ManaPie data={detail.mana_distribution || []} />
                 </div>
-                <div className="rounded-xl border p-3 flex flex-col min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
-                  <p className="text-[9px] font-mono uppercase tracking-wider font-bold mb-2 opacity-60" style={{ color: palette?.accent }}>Mana Value</p>
+                <div className="rounded-xl border p-3 flex flex-col h-full min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
                   <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
                 </div>
-                <div className="rounded-xl border p-3 flex flex-col min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
-                  <p className="text-[9px] font-mono uppercase tracking-wider font-bold mb-2 opacity-60" style={{ color: palette?.accent }}>Card Types</p>
+                <div className="rounded-xl border px-4 py-3 flex flex-col h-full min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
                   <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
                 </div>
               </div>

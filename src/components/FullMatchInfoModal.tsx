@@ -35,28 +35,35 @@ export function FullMatchInfoModal({
 }: FullMatchInfoModalProps) {
   const [subTab, setSubTab] = useState<'cards' | 'timeline'>('cards');
 
+  // Escape key handler to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !selectedMatch) return null;
 
   // Helper to render deck color identity pips (accepts either a WUBRG string or array)
-  const renderDeckColorIdentity = (colorStr?: any) => {
-    const colors = Array.isArray(colorStr)
-      ? colorStr.filter(c => ['W', 'U', 'B', 'R', 'G'].includes(c))
-      : (typeof colorStr === 'string' && colorStr !== 'C')
-        ? colorStr.split('').filter(c => ['W', 'U', 'B', 'R', 'G'].includes(c))
-        : [];
-    if (colors.length === 0) {
-      return <ManaPip symbol="C" size={16} />;
-    }
+  const renderDeckColorIdentity = (colors: any) => {
+    if (!colors) return <ManaPip symbol="C" size={14} />;
+    const list = Array.isArray(colors) ? colors : colors.split('').filter((c: string) => ['W', 'U', 'B', 'R', 'G'].includes(c));
+    if (list.length === 0) return <ManaPip symbol="C" size={14} />;
     return (
-      <div className="flex items-center gap-0.5">
-        {colors.map((c, idx) => (
-          <ManaPip key={idx} symbol={c} size={14} />
+      <div className="flex gap-0.5 items-center">
+        {list.map((c: string, i: number) => (
+          <ManaPip key={i} symbol={c} size={14} />
         ))}
       </div>
     );
   };
 
-  // Derive how the match was won/lost from the MTGA result reason.
+  // Human-friendly match outcome subtitle. For concedes / timeouts,
   // "ResultReason_Concede" + result tells us who conceded.
   const matchOutcome = (m: any): string => {
     const reason = m.result_reason || '';
@@ -75,9 +82,13 @@ export function FullMatchInfoModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-none">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
+    >
       <div 
-        className="w-full max-w-6xl h-[85vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative"
+        onClick={(e) => e.stopPropagation()}
+        className="w-[80vw] h-[90vh] max-w-[80vw] max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative"
         style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
       >
         {/* Header Bar: Prominent Fighting-Game Style VS Header with Centered Win/Loss Banner */}
