@@ -404,8 +404,18 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         return "Standard".to_string();
     }
 
-    // Check specific MTG Arena format keywords
-    if s.contains("brawl") || s.contains("commander") {
+    // Check high-priority event types first (these can encompass sub-formats like MWM_HistoricPauper, Direct_Standard, etc.)
+    if s.contains("mwm") || s.contains("midweek") {
+        "Midweek Magic".to_string()
+    } else if s.contains("bot") || s.contains("aibot") || s.contains("sparky") || s.contains("practice") {
+        "Bot Match".to_string()
+    } else if s.contains("direct") || s.contains("challenge") || s.contains("friendly") {
+        "Direct Challenge".to_string()
+    } else if s.contains("colorchallenge") || s.contains("tutorial") {
+        "Color Challenge".to_string()
+    } else if s.contains("gladiator") {
+        "Gladiator".to_string()
+    } else if s.contains("brawl") || s.contains("commander") {
         if s.contains("standard") {
             "Standard Brawl".to_string()
         } else {
@@ -447,16 +457,6 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         } else {
             "Standard".to_string()
         }
-    } else if s.contains("bot") || s.contains("aibot") || s.contains("sparky") || s.contains("practice") {
-        "Bot Match".to_string()
-    } else if s.contains("direct") || s.contains("challenge") || s.contains("friendly") {
-        "Direct Challenge".to_string()
-    } else if s.contains("gladiator") {
-        "Gladiator".to_string()
-    } else if s.contains("mwm") || s.contains("midweek") {
-        "Midweek Magic".to_string()
-    } else if s.contains("colorchallenge") || s.contains("tutorial") {
-        "Color Challenge".to_string()
     } else {
         raw_event_id.replace('_', " ")
     }
@@ -478,10 +478,14 @@ mod tests {
         assert_eq!(normalize_format("Explorer_Ranked"), "Explorer (Ranked)");
 
         // Brawl vs Standard Brawl Distinction Tests
-        assert_eq!(normalize_format("MWM_Brawl_20260811"), "Brawl");
         assert_eq!(normalize_format("Brawl_Play"), "Brawl");
         assert_eq!(normalize_format("Standard_Brawl_Play"), "Standard Brawl");
-        assert_eq!(normalize_format("MWM_Standard_Brawl_20260101"), "Standard Brawl");
+
+        // Midweek Magic Tests (regardless of underlying format e.g. Historic Pauper, Brawl, Standard)
+        assert_eq!(normalize_format("MWM_HistoricPauper_20260818"), "Midweek Magic");
+        assert_eq!(normalize_format("MWM_Brawl_20260811"), "Midweek Magic");
+        assert_eq!(normalize_format("MWM_Standard_Brawl_20260101"), "Midweek Magic");
+        assert_eq!(normalize_format("MWM_SpecialEvent"), "Midweek Magic");
 
         // Limited & Casual Tests
         assert_eq!(normalize_format("PremierDraft_WOE_2023"), "Draft");
@@ -489,7 +493,6 @@ mod tests {
         assert_eq!(normalize_format("AIBotMatch_Rebalanced"), "Bot Match");
         assert_eq!(normalize_format("DirectGame_Challenge"), "Direct Challenge");
         assert_eq!(normalize_format("Gladiator_Play"), "Gladiator");
-        assert_eq!(normalize_format("MWM_SpecialEvent"), "Midweek Magic");
     }
 
     #[test]
