@@ -2,6 +2,37 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.1.3] - 2026-08-20
+
+### 🌟 Added
+- **Comprehensive MTGA Formats Support**:
+  - Full GRE parser categorization and database normalization for all MTGA formats: Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match (Sparky/Practice), Direct Challenge, Midweek Magic, and Gladiator.
+  - Dynamically populated format filter dropdowns across the Dashboard and Match History.
+  - Extended mana-pip-themed badge palettes with distinct, recognizable colors for each format.
+  - Extended commander detection in Match History, Full Match Inspector, and Live Match HUD to all Brawl format variants (Standard Brawl & Brawl).
+- **Dashboard Trending Win Rate Graph Overhaul**:
+  - **Dynamic Dropdown Selector**: Replaced horizontal format buttons with an accessible, dark-themed styled `<select>` dropdown menu.
+  - **Redesigned Time Windows**:
+    - `Today`: Hourly wins & losses bar graph.
+    - `Past 7 Days`: Daily bar graph + daily rolling trend line.
+    - `Past 30 Days`: Daily bar graph + daily rolling trend line.
+    - `Past 12 Months`: Week-by-week aggregated bar graph + weekly rolling trend line.
+    - `All Time`: Month-by-month aggregated bar graph + monthly rolling trend line.
+  - **Dual-Colored Threshold Trend Line**: Vibrant green (`#22C55E`) above 50% and vibrant red (`#EF4444`) below 50% with an exact 50% threshold alignment and subtle transition blend.
+  - **Background Area Wash**: Subtle horizontal time-series area shading under the trend line matching the win rate status (green above 50%, red below 50%).
+  - **Edge-to-Edge Span**: Extended the trend line and background shading to span the absolute left and right boundaries of the graph.
+  - **Histogram Outlines**: Added thin white borders to win and loss bars for clean visual separation.
+  - **Snappy Graph Transitions**: Removed slow floaty animations (`isAnimationActive={false}`) for immediate zero-lag filter switching.
+- **Unified Single-Source Versioning**:
+  - Created `src/version.ts` exporting `APP_VERSION` from `package.json` to guarantee synchronous version displays across the Splash Screen and Settings view.
+
+### ⚡ Fixed
+- **Bot Matches & "Selected Deck" Fallback**:
+  - Added multi-source deck catalog ingestion and match card fingerprint resolution in the SQLite database manager.
+  - Automatically resolved previously misattributed bot matches to their true catalog names (e.g. `'MonoWhite - Auras (Standard)'`).
+
+---
+
 ## [1.1.2] - 2026-08-20
 
 ### 🌟 Added

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.1.2-38BDF8?style=flat-square&logo=git" alt="Version 1.1.2" /></a>
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.1.3-38BDF8?style=flat-square&logo=git" alt="Version 1.1.3" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
@@ -28,13 +28,16 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## ✨ Features at a Glance
 
-- 📊 **Dashboard**: Today's and all-time record, win rate trends, current streak counter, daily match grouping, and rotating deck spotlights.
-- ⚔️ **Live Match HUD**: Real-time game state tracker showing hero and opponent life changes, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with MTG font icons.
-- 🔍 **Full Match Inspector & Turn Timeline**: Granular play-by-play combat replay per turn, dynamic Commander artwork scaling, damage magnitude badges (`[4 DMG]`), card types, life swings, and victory/defeat causes.
+- 🧙‍♂️ **First-Time Setup Wizard & Dynamic Discovery**: Guided 3-step setup with real-time log detection across Steam Proton, Lutris, Bottles, and Heroic prefixes, plus instant startup card indexing (26,000+ cards in ~150ms).
+- 🏆 **Comprehensive MTGA Formats Coverage**: Native categorization and distinct colored badges for all 13 formats (Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match with precon resolution, Direct Challenge, Midweek Magic, and Gladiator).
+- 📊 **Dashboard & Time-Series Win Rate Analytics**: Today's and all-time records, active streak counter, daily match grouping, and an overhauled time-series graph with 5 time windows (`Today`, `7 Days`, `30 Days`, `12 Months`, `All Time`), dual-colored 50% threshold trend line (green/red), and volume histograms.
+- ⚔️ **Live Match HUD**: Real-time game state tracker showing hero/opponent commanders, life swings, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with authentic MTG font icons.
+- 🔍 **Full Match Inspector & Turn Timeline**: Responsive viewport scaling ($80\text{vw} \times 90\text{vh}$), universal <kbd>Esc</kbd> / backdrop dismissal, play-by-play combat replay per turn, damage magnitude badges (`[4 DMG]`), card types, and victory/defeat causes.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
-- 🃏 **Deck & Card Library**: Visual collection explorer with dual **Landscape Art Crop** (with translucent mana bars) and **Portrait Full Card** viewing modes, true-decklist import/export (`.txt` / MTGA format), and persistent set printing selection.
+- 🃏 **Deck Library & 3-Column Inspector**: True-decklist import/export (`.txt` / MTGA format), starter deck exclusions, responsive 3-column decklist expansion for widescreen displays, enlarged mana distribution pie chart, and centered `MANA VALUE` histogram pill overlay.
   - *Note on Collection Tracking*: Because MTGA has removed raw collection dumps from client logs, Rhystic Tracker derives owned inventory strictly through verified True Decklists. This ensures temporary or in-game cards (from *heist, theft, copy, clone, or conjure* mechanics) never pollute your genuine collection database.
-- ⚙️ **Settings & Configuration**: Dynamic 2-column control panel with local image cache manager (live disk usage, purge, pre-download), database storage inspector with 1-click native DB backup export, startup tab preferences, log auto-discovery, and 5 color-identity mana themes.
+- 🖼️ **Card Library & Dual Art Mode Viewers**: Visual collection explorer with dual **Landscape Art Crop** (with top translucent mana cost bar) and **Portrait Full Card** modes, 4-diamond interactive ownership controls, and persistent alternate set printing selection.
+- ⚙️ **Settings & Storage Suite**: Dynamic 2-column control panel with local image cache manager (live disk usage, purge, pre-download), database storage inspector with 1-click native DB backup export, startup tab preferences, log auto-discovery, manual card re-syncing, and wizard re-run tools.
 - 🎨 **Five Color-Identity Mana Themes**: Dynamic White, Blue, Black, Red, and Green themes that meticulously tint the entire application.
 
 ---
