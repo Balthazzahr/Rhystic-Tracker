@@ -340,7 +340,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   ];
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto">
+    <div className="flex-1 min-h-0 w-full max-w-7xl mx-auto overflow-y-auto custom-scrollbar space-y-6 pb-6">
       {/* Header Row: Title on Left, Version Badge on Right */}
       <div className="flex items-center justify-between gap-4 pb-2 border-b" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
         <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
