@@ -8,6 +8,8 @@ dist/
 src-tauri/gen/
 launch.sh
 run.sh
+launch-test.sh
+src-tauri/migrate_database.py
 
 # Agent & internal instruction documents
 AGENTS.md
