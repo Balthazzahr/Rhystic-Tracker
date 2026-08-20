@@ -186,7 +186,6 @@ async function ensureLocalImage(
           const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
           const url = convertFileSrc(path);
           srcCache.set(`${version}:${cacheName}`, url);
-          srcCache.set(`${version}:${name}`, url);
           return url;
         }
       } catch {
@@ -229,10 +228,10 @@ interface CardImageProps {
  * then swaps to the image (name/spinner disappear).
  */
 export function CardImage({ name, version = 'art_crop', printing, className, style, alt, onClick }: CardImageProps) {
-  const printKey = printing?.setCode && printing.collectorNumber
-    ? `${printing.setCode}|${printing.collectorNumber}`
-    : '';
-  const cacheKey = `${version}:${printKey || name}`;
+  const normSet = normalizeScryfallSetCode(printing?.setCode);
+  const cleanCn = cleanCollectorNumber(printing?.collectorNumber);
+  const cacheName = normSet && cleanCn ? `${name}|${normSet}|${cleanCn}` : name;
+  const cacheKey = `${version}:${cacheName}`;
   const [src, setSrc] = useState<string | null>(() => srcCache.get(cacheKey) || null);
   const [failed, setFailed] = useState(false);
   const mountedRef = useRef(true);
@@ -250,6 +249,7 @@ export function CardImage({ name, version = 'art_crop', printing, className, sty
       return () => { mountedRef.current = false; };
     }
 
+    setSrc(null);
     let cancelled = false;
     (async () => {
       const url = await ensureLocalImage(name, version, printing);

@@ -12,6 +12,8 @@ import {
   X,
   ZoomIn,
   ZoomOut,
+  Image as ImageIcon,
+  RectangleVertical,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
@@ -102,14 +104,23 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [cmcFilter, setCmcFilter] = useState<number | null>(null);
   const [copiesFilter, setCopiesFilter] = useState<number | null>(null);
-  const [sort, setSort] = useState<string>('name');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sort, setSort] = useState<string>(() => {
+    const saved = localStorage.getItem('defaultCollectionSort');
+    if (saved && ['name', 'cmc', 'rarity', 'set', 'released', 'count'].includes(saved)) {
+      return saved;
+    }
+    return 'released';
+  });
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
+    const saved = localStorage.getItem('defaultCollectionSort');
+    return saved === 'released' || !saved ? 'desc' : 'asc';
+  });
   const [showAdvModal, setShowAdvModal] = useState(false);
 
   const [setOptions, setSetOptions] = useState<{ set_code: string; name: string | null; released_at: string | null; icon_svg_uri: string | null }[]>([]);
   const [setNameQuery, setSetNameQuery] = useState('');
 
-  // View mode + card size, persisted locally.
+  // View mode + card size + art mode, persisted locally.
   const [view, setView] = useState<'cards' | 'table'>(() => {
     const saved = localStorage.getItem('collectionView');
     return saved === 'table' ? 'table' : 'cards';
@@ -118,14 +129,36 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     const saved = localStorage.getItem('collectionCardSize');
     return saved === 'small' ? 'small' : 'large';
   });
+  const [artMode, setArtMode] = useState<'crop' | 'full'>(() => {
+    const saved = localStorage.getItem('collectionArtMode');
+    return saved === 'full' ? 'full' : 'crop';
+  });
+  useEffect(() => {
+    localStorage.setItem('collectionArtMode', artMode);
+  }, [artMode]);
 
-  // Cards keep a FIXED footprint per size mode (small / large). The grid fits
-  // as many rows and columns as the available space allows — window width
-  // drives columns, window height drives rows, both instantly.
-  const CARD_W_SMALL = 194;
-  const CARD_H_SMALL = 271;
-  const CARD_W_LARGE = 250;
-  const CARD_H_LARGE = 380;
+  const [styleRev, setStyleRev] = useState(0);
+  useEffect(() => {
+    const handleStyleChange = () => setStyleRev((r) => r + 1);
+    window.addEventListener('rhystic-card-style-changed', handleStyleChange);
+    return () => window.removeEventListener('rhystic-card-style-changed', handleStyleChange);
+  }, []);
+
+  useEffect(() => {
+    setStyleRev((r) => r + 1);
+  }, [refreshTrigger]);
+
+  // Mode-dependent card footprints:
+  // Full Card (Portrait 63:88 aspect ratio):
+  //   Small: 188 x 262 (Guarantees 4 rows minimum and 7 cols)
+  //   Large: 266 x 372 (Fits 3 rows and 6 cols)
+  // Art Crop (Landscape ~1.38 aspect ratio):
+  //   Small: 236 x 170 (Fills edge and top/bottom padding in 6 cols x 6 rows)
+  //   Large: 376 x 268 (Fits 4 cols x 4 rows)
+  const CARD_W_SMALL = artMode === 'crop' ? 236 : 188;
+  const CARD_H_SMALL = artMode === 'crop' ? 170 : 262;
+  const CARD_W_LARGE = artMode === 'crop' ? 376 : 266;
+  const CARD_H_LARGE = artMode === 'crop' ? 268 : 372;
   const GRID_GAP = 12;
 
   const gridWrapRef = useRef<HTMLDivElement>(null);
@@ -463,10 +496,12 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   const renderCardTile = (card: CollectionCard) => {
     const isOwned = card.owned_count > 0;
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
+    const stylePref = card.name ? getCardStylePref(card.name) : null;
+    const activePrinting = stylePref || (card.set_code && card.collector_number ? { setCode: card.set_code, collectorNumber: card.collector_number } : undefined);
 
     return (
       <button
-        key={card.grp_id}
+        key={`${card.grp_id}-${styleRev}-${activePrinting?.setCode || ''}-${activePrinting?.collectorNumber || ''}`}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
         className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:shadow-xl hover:ring-2 theme-ring shrink-0"
         style={{ width: cardW, height: cardH }}
@@ -476,15 +511,31 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           {card.name ? (
             <CardImage
               name={card.name}
-              version={isOwned ? 'normal' : 'small'}
-              printing={getCardStylePref(card.name) || { setCode: card.set_code, collectorNumber: card.collector_number }}
+              version={artMode === 'crop' ? 'art_crop' : (isOwned ? 'normal' : 'small')}
+              printing={activePrinting}
               alt={cardName}
-              className="absolute inset-0 w-full h-full object-cover"
+              className={`absolute inset-0 w-full h-full ${artMode === 'crop' ? 'object-cover' : 'object-contain'}`}
             />
           ) : (
             <div className="absolute inset-0 w-full h-full bg-black" />
           )}
         </div>
+
+        {/* Top Name & Mana Bar for Landscape Art Crop Mode */}
+        {artMode === 'crop' && (
+          <div className="absolute top-0 inset-x-0 z-10 px-2 py-1 bg-black/75 backdrop-blur-xs flex items-center justify-between gap-1.5 border-b border-white/10">
+            <span className="text-[11px] font-bold text-white truncate drop-shadow-sm leading-tight">
+              {cardName}
+            </span>
+            {card.mana_cost && (
+              <div className="flex items-center gap-0.5 shrink-0">
+                {parseMtgaManaCost(card.mana_cost).map((sym, idx) => (
+                  <ManaPip key={idx} symbol={sym} size={12} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {/* Ownership diamonds: filled diamonds = owned copies, outline diamonds = unowned,
             shown bottom-center left-to-right. */}
         <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
@@ -875,6 +926,39 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
             style={{ color: palette?.text }}
           >
             <Table2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Card Art Mode toggle: Crop (Illustration Only) vs Full Card (Frame & Rules Text) */}
+        <div 
+          className="flex items-center rounded-xl border overflow-hidden" 
+          style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}
+        >
+          <button
+            onClick={() => setArtMode('crop')}
+            disabled={view !== 'cards'}
+            title={view === 'cards' ? "Illustration only (Art Crop)" : "Art mode only applies to card view"}
+            className={`flex items-center justify-center px-2.5 py-2 transition-all ${
+              view === 'cards' 
+                ? (artMode === 'crop' ? 'bg-white/10 shadow-inner' : 'opacity-50 hover:opacity-100')
+                : 'opacity-40 cursor-not-allowed'
+            }`}
+            style={{ color: palette?.text }}
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setArtMode('full')}
+            disabled={view !== 'cards'}
+            title={view === 'cards' ? "Full card with rules text & border" : "Art mode only applies to card view"}
+            className={`flex items-center justify-center px-2.5 py-2 transition-all ${
+              view === 'cards' 
+                ? (artMode === 'full' ? 'bg-white/10 shadow-inner' : 'opacity-50 hover:opacity-100')
+                : 'opacity-40 cursor-not-allowed'
+            }`}
+            style={{ color: palette?.text }}
+          >
+            <RectangleVertical className="w-3.5 h-3.5" />
           </button>
         </div>
 
