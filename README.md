@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  <strong>The open-source, local-first companion and combat analytics engine for Magic: The Gathering Arena on Linux.</strong>
+  <strong>The open-source, local-first companion and combat analytics engine for Magic: The Gathering Arena on Linux & macOS.</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.1.1-38BDF8?style=flat-square&logo=git" alt="Version 1.1.1" /></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux Platform" />
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux and macOS Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
   <img src="https://img.shields.io/badge/license-MIT-emerald?style=flat-square" alt="License MIT" />
@@ -18,7 +18,7 @@
 
 ## ⚡ What is Rhystic Tracker?
 
-**Rhystic Tracker** is a native, ultra-responsive desktop companion for MTG Arena on Linux. It continuously parses MTGA's `Player.log` in real time, persisting every match, mulligan, card draw, spell resolution, token creation, permanent destruction, and combat damage swing into a local SQLite database on your machine.
+**Rhystic Tracker** is a native, ultra-responsive desktop companion for MTG Arena on Linux and macOS. It continuously parses MTGA's `Player.log` in real time, persisting every match, mulligan, card draw, spell resolution, token creation, permanent destruction, and combat damage swing into a local SQLite database on your machine.
 
 Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers maximum visual performance and instant zero-latency queries without cloud requirements, tracking accounts, or telemetry.
 
@@ -92,7 +92,7 @@ If you prefer to compile from source or clone the repository:
 
 #### 1. Install System Dependencies
 
-Rhystic Tracker uses Tauri v2, which requires WebKitGTK and standard GTK3 build libraries.
+Rhystic Tracker uses Tauri v2, which requires WebKitGTK and standard GTK3 build libraries on Linux.
 
 **Debian / Ubuntu / Pop!_OS / Linux Mint:**
 ```bash
@@ -108,6 +108,11 @@ sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget openssl appmenu-gtk-
 **Fedora / RHEL:**
 ```bash
 sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel @development-tools nodejs npm
+```
+
+**macOS:**
+```bash
+xcode-select --install
 ```
 
 #### 2. Install Node.js & Rust (if not already installed)
