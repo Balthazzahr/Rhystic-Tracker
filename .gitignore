@@ -11,3 +11,6 @@ run.sh
 
 # Agent & internal instruction documents
 AGENTS.md
+ARCHITECTURE.md
+PROJECT_SPEC.md
+ROADMAP.md
