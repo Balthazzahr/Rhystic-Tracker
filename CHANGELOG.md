@@ -2,6 +2,31 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.1.2] - 2026-08-20
+
+### 🌟 Added
+- **First-Time Setup Wizard**:
+  - Guided 3-step onboarding modal triggered on fresh installations (or when `cards_cache` is empty).
+  - Step 1: Automatic `Player.log` discovery across Steam Proton, Lutris, Bottles, Heroic, and Wine prefixes with live path status and MTGA Detailed Logging reminder.
+  - Step 2: Live animated card database sync status with one-click re-indexing (~150ms).
+  - Step 3: Combat analytics readiness confirmation and instant transition into the Dashboard.
+- **Dynamic Log-Derived Path Discovery for Lutris & Custom Drives**:
+  - Automatically derives the MTGA Raw Card Database directory from the active `Player.log` path (walking up from `drive_c/users/...` in Lutris to find `Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads/Raw/` and from `steamapps/compatdata/...` to `steamapps/common/MTGA/...`).
+  - Broadened discovery across all mounted disk roots (`/mnt/*`, `/media/*`, `/run/media/*/*`, `/teradrive`), Lutris folders (`~/Games/mtga`, `~/Games/magic-the-gathering-arena`), Bottles, and Heroic prefixes.
+- **Automatic Startup Card DB Sync**:
+  - Background startup task automatically checks if `cards_cache` is empty and indexes all 26,000+ cards into SQLite in ~150ms without blocking UI initialization.
+- **Settings Card DB Diagnostics & Wizard Re-Run**:
+  - Added live indexed card universe indicator (`26,572 cards ready`) in Settings under Database & Storage Management.
+  - Added a 1-click **Re-sync Cards** button.
+  - Added a **Re-run Setup Wizard…** action protected by a safety confirmation dialog to re-verify paths anytime without losing match history.
+- **1-Line Web Installer**:
+  - Automated `curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash` command that auto-downloads the latest release package, configures desktop launchers, and registers icons.
+
+### ⚡ Fixed
+- **Empty Card Cache & Unknown Cards on Fresh Installs**: Resolved issue where fresh installations had 0 rows in `cards_cache`, causing True Decklist imports to fail, Card Library to be blank, and match cards to appear as "Unknown Card".
+
+---
+
 ## [1.1.1] - 2026-08-20
 
 ### 🌟 Added
