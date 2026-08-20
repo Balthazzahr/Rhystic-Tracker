@@ -79,6 +79,7 @@ pub struct MatchAssembler {
     pub cached_deck_name: Option<String>,
     pub cached_deck_id: Option<String>,
     pub cached_commander_id: Option<u32>,
+    pub known_decks: HashMap<String, (String, Option<u32>, Vec<u32>)>,
     /// True when the current (or cached) deck is a legitimate user deck, not a
     /// preset. Only legitimate matches feed the draw-based collection.
     pub match_legitimate: bool,
@@ -113,6 +114,7 @@ impl MatchAssembler {
             cached_deck_name: None,
             cached_deck_id: None,
             cached_commander_id: None,
+            known_decks: HashMap::new(),
             match_legitimate: true,
             collection_draws: Vec::new(),
             current_player_life: 20,
@@ -139,6 +141,25 @@ impl MatchAssembler {
         self.player_user_id = Some(user_id);
     }
 
+    pub fn register_deck_catalog(&mut self, decks: Vec<(String, String, Option<u32>, Vec<u32>)>) {
+        for (did, dname, cmd, main) in decks {
+            if !did.is_empty() {
+                self.known_decks.insert(did.clone(), (dname.clone(), cmd, main));
+                if self.cached_deck_id.as_deref() == Some(&did) {
+                    if self.cached_deck_name.is_none() || self.cached_deck_name.as_deref() == Some("Selected Deck") {
+                        if !dname.is_empty() {
+                            self.cached_deck_name = Some(dname.clone());
+                            self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&dname).is_none();
+                        }
+                    }
+                    if self.cached_commander_id.is_none() && cmd.is_some() {
+                        self.cached_commander_id = cmd;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn start_match(&mut self, match_id: String, format_name: String) {
         let now = Utc::now();
         let default_life = if format_name.to_lowercase().contains("brawl") { 25 } else { 20 };
@@ -162,16 +183,30 @@ impl MatchAssembler {
         self.player_seat_id = 1;
         self.collection_draws.clear();
 
-        // Legitimacy is based on the cached deck (submitted pre-match via
-        // EventSetDeckV2). If no deck identity is known (e.g. course-deck /
-        // DeckSelect path), the match is treated as NOT legitimate.
-        self.match_legitimate = self.cached_deck_name.as_deref()
-            .map(crate::deck_legitimacy::preset_deck_reason)
-            .unwrap_or(Some("no deck identity"))
-            .is_none();
+        // Resolve deck name from cached deck or catalog lookup by cached_deck_id
+        let mut deck_name = self.cached_deck_name.clone().unwrap_or_default();
+        let mut commander_id = self.cached_commander_id;
 
-        let deck_name = self.cached_deck_name.clone().unwrap_or_else(|| "Selected Deck".to_string());
-        let commander_id = self.cached_commander_id;
+        if deck_name.is_empty() || deck_name == "Selected Deck" {
+            if let Some(did) = &self.cached_deck_id {
+                if let Some((name, cmd, _)) = self.known_decks.get(did) {
+                    if !name.is_empty() {
+                        deck_name = name.clone();
+                        self.cached_deck_name = Some(name.clone());
+                    }
+                    if commander_id.is_none() && cmd.is_some() {
+                        commander_id = *cmd;
+                        self.cached_commander_id = *cmd;
+                    }
+                }
+            }
+        }
+
+        if deck_name.is_empty() {
+            deck_name = "Selected Deck".to_string();
+        }
+
+        self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
 
         self.active_match = Some(MatchRecord {
             match_id,
@@ -224,17 +259,38 @@ impl MatchAssembler {
         }
     }
 
-    pub fn set_deck(&mut self, deck_name: String, deck_id: Option<String>, commander_id: Option<u32>, main_deck: Vec<u32>) {
-        self.cached_deck_name = Some(deck_name.clone());
-        if deck_id.is_some() {
-            self.cached_deck_id = deck_id;
+    pub fn set_deck(&mut self, mut deck_name: String, deck_id: Option<String>, mut commander_id: Option<u32>, mut main_deck: Vec<u32>) {
+        if deck_name.is_empty() {
+            if let Some(did) = &deck_id {
+                if let Some((name, cmd, main)) = self.known_decks.get(did) {
+                    deck_name = name.clone();
+                    if commander_id.is_none() {
+                        commander_id = *cmd;
+                    }
+                    if main_deck.is_empty() {
+                        main_deck = main.clone();
+                    }
+                }
+            }
         }
-        self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
+
+        if !deck_name.is_empty() {
+            self.cached_deck_name = Some(deck_name.clone());
+            self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
+        }
+        if let Some(did) = &deck_id {
+            self.cached_deck_id = Some(did.clone());
+            if !deck_name.is_empty() {
+                self.known_decks.insert(did.clone(), (deck_name.clone(), commander_id, main_deck.clone()));
+            }
+        }
         if commander_id.is_some() {
             self.cached_commander_id = commander_id;
         }
         if let Some(m) = &mut self.active_match {
-            m.player_deck_name = deck_name;
+            if !deck_name.is_empty() {
+                m.player_deck_name = deck_name;
+            }
             if commander_id.is_some() {
                 m.player_commander_id = commander_id;
             }
@@ -493,10 +549,53 @@ impl MatchAssembler {
                 })
                 .collect();
 
+            // Attempt in-memory deck resolution if player_deck_name is still "Selected Deck" or empty
+            if m.player_deck_name.is_empty() || m.player_deck_name == "Selected Deck" {
+                if let Some(resolved) = self.resolve_deck_from_match(&card_records, m.player_commander_id) {
+                    m.player_deck_name = resolved.clone();
+                    self.cached_deck_name = Some(resolved.clone());
+                    self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&resolved).is_none();
+                }
+            }
+
             self.last_completed = Some((m.clone(), Utc::now()));
             return Some((m, card_records, turn_events, impactful_records));
         }
         None
+    }
+
+    pub fn resolve_deck_from_match(&self, hero_cards: &[MatchCardRecord], commander_id: Option<u32>) -> Option<String> {
+        let hero_card_set: HashSet<u32> = hero_cards.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id).collect();
+        if hero_card_set.is_empty() {
+            return None;
+        }
+
+        // 1. Match by commander if available
+        if let Some(cmd) = commander_id {
+            for (_, (name, c_cmd, _)) in &self.known_decks {
+                if *c_cmd == Some(cmd) && !name.is_empty() {
+                    return Some(name.clone());
+                }
+            }
+        }
+
+        // 2. Match by card overlap against known decks
+        let mut best_name = None;
+        let mut best_score = 0;
+
+        for (_, (name, _, main)) in &self.known_decks {
+            if main.is_empty() || name.is_empty() {
+                continue;
+            }
+            let main_set: HashSet<u32> = main.iter().copied().collect();
+            let overlap = hero_card_set.intersection(&main_set).count();
+            if overlap > best_score && overlap >= 3 {
+                best_score = overlap;
+                best_name = Some(name.clone());
+            }
+        }
+
+        best_name
     }
 }
 
@@ -528,5 +627,43 @@ mod tests {
         // 3. Assert pre-cached deck_name and commander_id were preserved and NOT wiped to fallback
         assert_eq!(active.player_deck_name, "Dying Lands");
         assert_eq!(active.player_commander_id, Some(91719));
+    }
+
+    #[test]
+    fn test_deck_catalog_lookup_on_start_match() {
+        let mut assembler = MatchAssembler::new();
+
+        // 1. Ingest catalog from StartHook / Courses
+        assembler.register_deck_catalog(vec![
+            ("deck-uuid-1".to_string(), "MonoWhite - Auras (Standard)".to_string(), None, vec![86715, 97964, 92090]),
+        ]);
+
+        // 2. Simulate match queued with only cached_deck_id (e.g. headless deck submission)
+        assembler.cached_deck_id = Some("deck-uuid-1".to_string());
+        assembler.start_match("match-123".to_string(), "Bot Match".to_string());
+
+        let active = assembler.active_match.as_ref().expect("Active match should exist");
+        assert_eq!(active.player_deck_name, "MonoWhite - Auras (Standard)");
+        assert!(assembler.match_legitimate);
+    }
+
+    #[test]
+    fn test_resolve_deck_from_match_fingerprint() {
+        let mut assembler = MatchAssembler::new();
+
+        assembler.register_deck_catalog(vec![
+            ("deck-auras".to_string(), "MonoWhite - Auras (Standard)".to_string(), None, vec![86715, 97964, 92090, 92081, 96608]),
+            ("deck-mono-red".to_string(), "MonoRed Burn".to_string(), None, vec![101, 102, 103, 104, 105]),
+        ]);
+
+        let hero_cards = vec![
+            MatchCardRecord { grp_id: 86715, is_opponent: false, count: 4 },
+            MatchCardRecord { grp_id: 97964, is_opponent: false, count: 2 },
+            MatchCardRecord { grp_id: 92090, is_opponent: false, count: 2 },
+            MatchCardRecord { grp_id: 92081, is_opponent: false, count: 2 },
+        ];
+
+        let resolved = assembler.resolve_deck_from_match(&hero_cards, None);
+        assert_eq!(resolved, Some("MonoWhite - Auras (Standard)".to_string()));
     }
 }

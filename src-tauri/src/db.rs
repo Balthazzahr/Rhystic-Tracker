@@ -306,6 +306,59 @@ impl DatabaseManager {
             }
         }
 
+        // Migration: automatically resolve any historical matches where hero_deck_name = 'Selected Deck' or empty
+        let selected_deck_matches = sqlx::query(
+            "SELECT id, hero_commander_id FROM matches WHERE hero_deck_name = 'Selected Deck' OR hero_deck_name IS NULL OR hero_deck_name = ''"
+        )
+        .fetch_all(&pool)
+        .await?;
+
+        if !selected_deck_matches.is_empty() {
+            let temp_mgr = Self { pool: pool.clone(), db_filename: db_filename.clone() };
+            for m_row in selected_deck_matches {
+                let mid: String = m_row.get("id");
+                let cmd_id: Option<i64> = m_row.get("hero_commander_id");
+
+                let hero_card_rows = sqlx::query(
+                    "SELECT grp_id FROM match_cards WHERE match_id = ? AND is_opponent = 0"
+                )
+                .bind(&mid)
+                .fetch_all(&pool)
+                .await?;
+
+                let hero_gids: Vec<i64> = hero_card_rows.iter().map(|r| r.get("grp_id")).collect();
+                if let Ok(Some(resolved_name)) = temp_mgr.resolve_deck_for_cards(&hero_gids, cmd_id).await {
+                    let preset = crate::deck_legitimacy::preset_deck_reason(&resolved_name).is_some();
+                    let reason = crate::deck_legitimacy::preset_deck_reason(&resolved_name);
+
+                    sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE id = ?")
+                        .bind(&resolved_name)
+                        .bind(&mid)
+                        .execute(&pool)
+                        .await?;
+
+                    sqlx::query(
+                        r#"
+                        INSERT INTO match_decks (match_id, deck_name, preset_deck, exclusion_reason, submitted_at)
+                        VALUES (?, ?, ?, ?, datetime('now'))
+                        ON CONFLICT(match_id) DO UPDATE SET
+                            deck_name = excluded.deck_name,
+                            preset_deck = excluded.preset_deck,
+                            exclusion_reason = excluded.exclusion_reason
+                        "#
+                    )
+                    .bind(&mid)
+                    .bind(&resolved_name)
+                    .bind(preset)
+                    .bind(reason)
+                    .execute(&pool)
+                    .await?;
+
+                    println!("[DB MIGRATION] Resolved match {} ('Selected Deck') -> '{}'", mid, resolved_name);
+                }
+            }
+        }
+
         Ok(Self { pool, db_filename })
     }
 
@@ -344,7 +397,139 @@ impl DatabaseManager {
         Ok(())
     }
 
+    /// Resolves the deck name by fingerprinting hero played card IDs against known decklists in SQLite.
+    pub async fn resolve_deck_for_cards(&self, hero_grp_ids: &[i64], commander_id: Option<i64>) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        if hero_grp_ids.is_empty() && commander_id.is_none() {
+            return Ok(None);
+        }
+
+        // Fetch all deck lists
+        let deck_rows = sqlx::query(
+            "SELECT deck_name, cards_json, commander_grp_id FROM deck_lists"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        if deck_rows.is_empty() {
+            return Ok(None);
+        }
+
+        // Fetch all cards cache for name mapping
+        let card_rows = sqlx::query(
+            "SELECT grp_id, name, card_type FROM cards_cache"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut card_map: std::collections::HashMap<i64, (String, String)> = std::collections::HashMap::new();
+        for r in &card_rows {
+            let gid: i64 = r.get("grp_id");
+            let name: String = r.get("name");
+            let ctype: Option<String> = r.get("card_type");
+            card_map.insert(gid, (name, ctype.unwrap_or_default()));
+        }
+
+        let basic_lands: std::collections::HashSet<&str> = [
+            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
+            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
+            "Snow-Covered Mountain", "Snow-Covered Forest",
+        ].into_iter().collect();
+
+        // 1. Check commander match first
+        if let Some(cmd_id) = commander_id {
+            if cmd_id > 0 {
+                let cmd_name = card_map.get(&cmd_id).map(|(n, _)| n.as_str());
+                for r in &deck_rows {
+                    let dname: String = r.get("deck_name");
+                    let d_cmd_id: Option<i64> = r.get("commander_grp_id");
+                    if d_cmd_id == Some(cmd_id) {
+                        return Ok(Some(dname));
+                    }
+                    if let (Some(cn), Some(d_cid)) = (cmd_name, d_cmd_id) {
+                        if let Some((d_cn, _)) = card_map.get(&d_cid) {
+                            if d_cn == cn {
+                                return Ok(Some(dname));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Collect hero non-basic card names
+        let mut hero_non_basics = Vec::new();
+        for gid in hero_grp_ids {
+            if let Some((cname, ctype)) = card_map.get(gid) {
+                if !basic_lands.contains(cname.as_str()) && !ctype.contains("Basic Land") {
+                    hero_non_basics.push(cname.as_str());
+                }
+            }
+        }
+
+        if hero_non_basics.is_empty() {
+            return Ok(None);
+        }
+
+        let mut best_deck = None;
+        let mut best_score = i32::MIN;
+
+        for r in &deck_rows {
+            let dname: String = r.get("deck_name");
+            let cards_json: String = r.get("cards_json");
+
+            let mut deck_card_names = std::collections::HashSet::new();
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cards_json) {
+                if let Some(arr) = v.as_array() {
+                    for item in arr {
+                        let gid_opt = item.get("grp_id").and_then(|g| g.as_i64())
+                            .or_else(|| item.as_i64());
+                        if let Some(gid) = gid_opt {
+                            if let Some((name, _)) = card_map.get(&gid) {
+                                deck_card_names.insert(name.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if deck_card_names.is_empty() {
+                continue;
+            }
+
+            let mut overlap = 0i32;
+            let mut mismatches = 0i32;
+
+            for name in &hero_non_basics {
+                if deck_card_names.contains(name) {
+                    overlap += 1;
+                } else {
+                    mismatches += 1;
+                }
+            }
+
+            if overlap == 0 {
+                continue;
+            }
+
+            let score = overlap * 3 - mismatches * 10;
+            if score > best_score && (mismatches == 0 || overlap >= 4) {
+                best_score = score;
+                best_deck = Some(dname);
+            }
+        }
+
+        Ok(best_deck)
+    }
+
     pub async fn upsert_match(&self, match_rec: &MatchRecord, cards: &[MatchCardRecord], turn_events: &[MatchTurnEventRecord], impactful: &[MatchImpactfulRecord]) -> Result<(), Box<dyn std::error::Error>> {
+        let mut resolved_deck_name = match_rec.player_deck_name.clone();
+        if resolved_deck_name.is_empty() || resolved_deck_name == "Selected Deck" {
+            let hero_gids: Vec<i64> = cards.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
+            if let Ok(Some(name)) = self.resolve_deck_for_cards(&hero_gids, match_rec.player_commander_id.map(|c| c as i64)).await {
+                resolved_deck_name = name;
+            }
+        }
+
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -358,6 +543,8 @@ impl DatabaseManager {
                 result = excluded.result,
                 duration_seconds = excluded.duration_seconds,
                 turns = excluded.turns,
+                hero_deck_name = CASE WHEN excluded.hero_deck_name != 'Selected Deck' THEN excluded.hero_deck_name ELSE matches.hero_deck_name END,
+                hero_commander_id = COALESCE(excluded.hero_commander_id, matches.hero_commander_id),
                 hero_life_end = excluded.hero_life_end,
                 opponent_life_end = excluded.opponent_life_end,
                 result_reason = excluded.result_reason
@@ -372,7 +559,7 @@ impl DatabaseManager {
         .bind(match_rec.turns as i64)
         .bind(match_rec.going_first)
         .bind(match_rec.hero_seat_id as i64)
-        .bind(&match_rec.player_deck_name)
+        .bind(&resolved_deck_name)
         .bind(match_rec.player_commander_id.map(|c| c as i64))
         .bind(match_rec.player_life_end)
         .bind(&match_rec.opponent_name)
@@ -1024,5 +1211,41 @@ mod tests {
         assert_eq!(card_count, 2, "match_cards should have 2 rows, not doubled");
         assert_eq!(event_count, 2, "match_turn_events should have 2 rows, not doubled");
         assert_eq!(imp_count, 1, "match_impactful_cards should have 1 row, not doubled");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_deck_for_cards() {
+        let db = in_memory_db().await;
+
+        // Insert cards into cards_cache
+        sqlx::query(
+            "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, rarity, last_updated, card_type) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)"
+        )
+        .bind(86715).bind("Spellbook Vendor").bind("o1oW").bind(2).bind(2).bind("Creature — Human Peasant")
+        .execute(db.pool()).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, rarity, last_updated, card_type) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)"
+        )
+        .bind(97964).bind("Skyward Spider").bind("o2oW").bind(3).bind(1).bind("Creature — Spider")
+        .execute(db.pool()).await.unwrap();
+
+        sqlx::query(
+            "INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, rarity, last_updated, card_type) VALUES (?, ?, ?, ?, ?, datetime('now'), ?)"
+        )
+        .bind(83677).bind("Plains").bind("").bind(0).bind(0).bind("Basic Land — Plains")
+        .execute(db.pool()).await.unwrap();
+
+        // Insert deck list
+        sqlx::query(
+            "INSERT INTO deck_lists (deck_name, cards_json, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))"
+        )
+        .bind("MonoWhite - Auras (Standard)")
+        .bind(r#"[{"grp_id": 86715, "count": 4}, {"grp_id": 97964, "count": 4}, {"grp_id": 83677, "count": 20}]"#)
+        .execute(db.pool()).await.unwrap();
+
+        let hero_gids = vec![86715, 97964, 83677];
+        let resolved = db.resolve_deck_for_cards(&hero_gids, None).await.unwrap();
+        assert_eq!(resolved, Some("MonoWhite - Auras (Standard)".to_string()));
     }
 }

@@ -66,6 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         assembler.match_legitimate
                     );
                 }
+                ParsedEvent::DeckCatalogBatch { decks } => {
+                    let count = decks.len();
+                    assembler.register_deck_catalog(decks);
+                    println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
+                }
                 ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
                     if turn_number > 0 { assembler.current_turn = turn_number; }
                     for (instance_id, grp_id, owner_seat, zone_id) in objects {
