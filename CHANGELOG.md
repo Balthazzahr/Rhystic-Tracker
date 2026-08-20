@@ -2,6 +2,18 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.1.4] - 2026-08-20
+
+### ⚡ Fixed
+- **On the Play vs. On the Draw (`going_first`) Tracking**:
+  - Captured Turn 1 active seat (`turnInfo.activePlayer`) to dynamically and accurately resolve whether the player is on the play or on the draw.
+  - Added fallback check against Turn 1 records in `match_turn_events`.
+  - Added database migration reconciling historical matches with known Turn 1 event seats.
+- **Match Duration Calculation**:
+  - Implemented elapsed match duration calculation (`(match_end - match_start).num_seconds()`) upon match completion, resolving zero-minute match records in Match History and Dashboard.
+- **Midweek Magic Format Prioritization**:
+  - Prioritized rotating special event IDs (`mwm`, `midweek`) above underlying deck construction formats (e.g. Historic Pauper, Brawl) in format normalization.
+
 ## [1.1.3] - 2026-08-20
 
 ### 🌟 Added
