@@ -1,6 +1,6 @@
 # Rhystic Tracker — Development Roadmap
 
-**Current Release:** v1.1.0 (Released 2026-08-19)  
+**Current Release:** v1.1.1 (Released 2026-08-20)  
 **Status:** Active Production  
 
 ---
@@ -36,6 +36,14 @@
 - [x] **Single-Instance Restriction**: Integrated `tauri-plugin-single-instance` to focus existing windows on duplicate launches.
 - [x] **Dual-Environment Test Pipeline**: Created isolated test environment (`./launch-test.sh` / `rhystic-tracker-test`) with auto-snapshotting `rhystic_dev.db`.
 - [x] **Navigation & Resize Crash Prevention**: Stabilized `history.pushState` to eliminate rate-limit exceptions and WebKit rendering thread drops.
+
+### Version 1.1.1 (Settings Overhaul, Card Art Mode & Inspector Polish)
+- [x] **Settings & Configuration Overhaul**: Responsive dynamic 2-column layout with right-aligned version badge, MTGA log discovery guide, Desktop tray & Live HUD toggles, startup/sort preferences, Mana Themes, Image Cache Manager (live stats, purge, pre-download), and Database Storage Management with 1-click DB backup export file dialog.
+- [x] **Card Library Dual Art Modes**: Added toolbar toggle between Landscape Art Crop mode (with top semi-transparent title & `<ManaPip />` mana cost bar) and Portrait Full Card mode.
+- [x] **Card Art Selection Persistence**: Fixed cache-checking bug in `has_card_image` to reliably download and save chosen alternate set printings with live cross-view synchronization.
+- [x] **Viewport & Grid Density Optimization**: Calibrated card footprints across all 4 modes (Large/Small × Portrait/Landscape) to eliminate dead padding, guarantee 4 rows minimum in small portrait mode, and maximize 6×6 card density in small landscape mode.
+- [x] **Full Match Inspector Polish**: Dynamic vertical scaling for Commander artwork cards in Brawl matches with bottom-pinned match specs.
+- [x] **Splash Screen Redesign**: Replaced sliding animation with clean static presentation (enlarged ~160% glowing logos, bold version text, instant fadeout).
 
 ---
 

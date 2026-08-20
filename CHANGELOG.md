@@ -2,7 +2,32 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [1.1.0] - 2026-08-19
+## [1.1.1] - 2026-08-20
+
+### 🌟 Added
+- **Settings & Configuration Overhaul**:
+  - **Dynamic 2-Column Responsive Layout**: Reorganized all configuration cards into an expansive, height-balanced 2-column grid (`SETTINGS AND CONFIGURATION`) with right-aligned version badge (`v1.1.1` + Test Environment tag).
+  - **Local Card Image Cache Manager**: Real-time storage stats (`MB` used / file count) with **Clear Image Cache** and **Pre-download Collection Art** actions.
+  - **Database & Storage Management**: Live database filename and storage metrics (`rhystic.db` / `rhystic_dev.db`, file size, total match count) with native 1-click **Backup / Export Database** file save dialog (`export_database_backup`).
+  - **App & Collection Preferences**: Dropdown selectors for **Default Startup Tab** (Dashboard, Live Match HUD, Match History, Deck Library, Card Library) and **Default Collection Sort Order** (Release Date, Mana Value, Rarity, Alphabetical, Ownership Count).
+  - **Live Match Auto-Switch**: Toggle to automatically navigate to the Live Match HUD tab whenever MTG Arena match start events are detected.
+  - **Rebalanced Column Hierarchy**: Balanced Mana Theme Customization into the left column with smooth vertical scrolling support on smaller viewports.
+- **Card Library Dual Art Modes & Viewport Optimization**:
+  - **Segmented Toolbar Toggle**: Added toggle between **Illustration Only (`<Image />`)** and **Full Card with Rules Text (`<RectangleVertical />`)**.
+  - **Landscape Art Crop Mode**: Switches card footprints to native illustration landscape aspect (~1.38:1), eliminating vertical/horizontal distortion.
+  - **Top Name & Mana Bar**: Added a semi-transparent dark banner (`bg-black/75 backdrop-blur-xs`) pinned across the top of landscape cards displaying the card name and parsed `<ManaPip />` mana cost symbols.
+  - **Recalibrated Card Footprints**: Optimized card dimensions across all 4 modes (Large Portrait `266×372`, Large Landscape `376×268`, Small Portrait `188×262`, Small Landscape `236×170`) to eliminate peripheral dead margins, enforce 4 rows minimum in small portrait mode, and maximize 6×6 card density in small landscape mode.
+- **Full Match Inspector Polish**:
+  - Dynamically scaled Commander artwork cards in the left column to expand and consume all available vertical space, pinning match spec details cleanly to the bottom.
+- **Splash Screen Redesign**:
+  - Removed sliding animation in favor of a clean centered presentation with instant dismissal after 2 seconds (or on click).
+  - Enlarged symbol icon (`145px`) and logo (`110px`) by ~160% with glowing drop shadows and bold monospace version subtitle.
+
+### ⚡ Fixed
+- **Card Art Selection Persistence**: Removed generic fallback short-circuit in `has_card_image` (Rust IPC) that was returning default cached card files instead of downloading selected alternate set printings.
+- **Cross-Component Style Synchronization**: Added event-driven style revision triggers (`rhystic-card-style-changed`) so changing set artwork in the inspector immediately updates the Card Library preview and persists across sessions.
+
+---
 
 ### 🌟 Added
 - **Modal Dismissal Protocols & Dynamic Scaling**:
