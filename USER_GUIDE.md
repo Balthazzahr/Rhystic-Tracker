@@ -76,6 +76,13 @@ You can also point Rhystic Tracker to a custom raw card database cache if needed
 RHYSTIC_MTGA_RAW_DIR="/path/to/Raw/Card/Database" rhystic-tracker
 ```
 
+### Environment Mode (`RHYSTIC_ENV`)
+Standard builds of Rhystic Tracker read the `RHYSTIC_ENV` environment variable, defaulting to `development` (using `rhystic_dev.db`) when unset:
+```bash
+RHYSTIC_ENV=development rhystic-tracker
+```
+Release builds compiled with the `production-env` cargo feature (`cargo build --features production-env`) are always `production` (using `rhystic.db`) — this cannot be overridden at runtime.
+
 ---
 
 ## 4. Desktop Integration & Launcher Setup

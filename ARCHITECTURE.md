@@ -208,6 +208,7 @@ The system continuously tails and parses MTGA's client log (`Player.log`), build
 1. **Database Isolation & Dual-Environment Snapshotting**:
    - Production instances use `~/.config/rhystic-tracker/rhystic.db` (enforced via `RHYSTIC_ENV=production`).
    - Development & Test builds use `rhystic_dev.db` (`RHYSTIC_ENV=development`). The `launch-test.sh` script automatically creates a fresh clone of `rhystic.db` -> `rhystic_dev.db` before launch, enabling full testing against realistic data without touching or modifying the live production database.
+   - `RHYSTIC_ENV` resolution order (`DatabaseManager::resolve_env()` in `src-tauri/src/db.rs`): builds compiled with the `production-env` cargo feature (`src-tauri/Cargo.toml`, opt-in — enable via `--features production-env` for release/bundled builds) are always `production`. Without the feature (the default, used for dev builds), the `RHYSTIC_ENV` environment variable applies if set (e.g. by `install.sh`'s desktop entry or `launch-test.sh`), otherwise `development`.
    - Unit tests use isolated in-memory or temporary test databases and are programmatically prevented from touching real config directories.
 
 2. **Single-Instance Enforcement**:

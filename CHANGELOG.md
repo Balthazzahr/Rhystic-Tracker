@@ -2,6 +2,11 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [Unreleased]
+
+### 🌟 Added
+- **Compile-Time Production Mode via Cargo Feature**: Added the opt-in `production-env` cargo feature. Builds compiled with `--features production-env` (release/bundled builds) are always `production` regardless of environment. Default builds keep the previous behavior: `RHYSTIC_ENV` environment variable if set, otherwise `development`.
+
 ## [1.1.0] - 2026-08-19
 
 ### 🌟 Added
