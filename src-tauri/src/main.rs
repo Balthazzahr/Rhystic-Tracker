@@ -2191,6 +2191,111 @@ async fn get_database_stats() -> Result<DatabaseStats, String> {
     })
 }
 
+#[derive(serde::Serialize)]
+struct SetupStatus {
+    setup_completed: bool,
+    card_count: i64,
+    log_path: Option<String>,
+    raw_path: Option<String>,
+}
+
+#[tauri::command]
+async fn get_setup_status() -> Result<SetupStatus, String> {
+    let settings = settings::load_settings();
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let card_count: i64 = sqlx::query_scalar("SELECT count(*) FROM cards_cache")
+        .fetch_one(db.pool())
+        .await
+        .unwrap_or(0);
+
+    let log_path = settings.mtga_log_path.clone().or_else(|| {
+        tailer::discover_log_path().map(|p| p.to_string_lossy().to_string())
+    });
+
+    let raw_path = card_db::find_latest_raw_card_db().map(|p| p.to_string_lossy().to_string());
+
+    Ok(SetupStatus {
+        setup_completed: settings.setup_completed && card_count > 0,
+        card_count,
+        log_path,
+        raw_path,
+    })
+}
+
+#[tauri::command]
+async fn complete_setup() -> Result<(), String> {
+    let mut settings = settings::load_settings();
+    settings.setup_completed = true;
+    settings::save_settings(&settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn reset_setup_wizard() -> Result<(), String> {
+    let mut settings = settings::load_settings();
+    settings.setup_completed = false;
+    settings::save_settings(&settings).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+struct SyncCardDbResult {
+    success: bool,
+    card_count: usize,
+    elapsed_ms: u128,
+    raw_path: Option<String>,
+    error: Option<String>,
+}
+
+#[tauri::command]
+async fn sync_card_database() -> Result<SyncCardDbResult, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let raw_path = card_db::find_latest_raw_card_db().map(|p| p.to_string_lossy().to_string());
+
+    match card_db::sync_card_cache(db.pool()).await {
+        Ok((count, elapsed_ms)) => {
+            clear_universe_cache();
+            Ok(SyncCardDbResult {
+                success: true,
+                card_count: count,
+                elapsed_ms,
+                raw_path,
+                error: None,
+            })
+        }
+        Err(e) => {
+            Ok(SyncCardDbResult {
+                success: false,
+                card_count: 0,
+                elapsed_ms: 0,
+                raw_path,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_raw_card_db_status() -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM cards_cache")
+        .fetch_one(db.pool())
+        .await
+        .unwrap_or(0);
+    let raw_path = card_db::find_latest_raw_card_db().map(|p| p.to_string_lossy().to_string());
+    Ok(serde_json::json!({
+        "card_count": count,
+        "raw_path": raw_path,
+    }))
+}
+
+#[tauri::command]
+async fn set_raw_path(path: String) -> Result<String, String> {
+    let mut settings = settings::load_settings();
+    let trimmed = path.trim().to_string();
+    settings.mtga_raw_dir = if trimmed.is_empty() { None } else { Some(trimmed.clone()) };
+    settings::save_settings(&settings).map_err(|e| e.to_string())?;
+    Ok(trimmed)
+}
+
 #[tauri::command]
 async fn export_database_backup(destination_path: String) -> Result<String, String> {
     let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
@@ -3553,8 +3658,7 @@ fn main() {
                 run_tailer_supervisor(path_rx, db_manager, assembler_ref).await;
             });
 
-            // Pre-warm the collection card universe in the background so the
-            // first Card Library visit renders immediately.
+            // Background card database auto-sync on startup if cards_cache is empty
             tauri::async_runtime::spawn(async move {
                 let db_manager = match DatabaseManager::init().await {
                     Ok(d) => d,
@@ -3563,6 +3667,16 @@ fn main() {
                         return;
                     }
                 };
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM cards_cache")
+                    .fetch_one(db_manager.pool())
+                    .await
+                    .unwrap_or(0);
+                if count == 0 {
+                    println!("[STARTUP] cards_cache is empty. Triggering automatic background card sync...");
+                    if let Ok((synced_count, elapsed_ms)) = card_db::sync_card_cache(db_manager.pool()).await {
+                        println!("[STARTUP] Auto-synced {} cards into cards_cache in {} ms", synced_count, elapsed_ms);
+                    }
+                }
                 let _ = get_universe(db_manager.pool()).await;
             });
 
@@ -3735,7 +3849,13 @@ fn main() {
             get_cache_stats,
             clear_image_cache,
             get_database_stats,
-            export_database_backup
+            export_database_backup,
+            get_setup_status,
+            complete_setup,
+            reset_setup_wizard,
+            sync_card_database,
+            get_raw_card_db_status,
+            set_raw_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -44,6 +44,7 @@ import { DashboardView } from './components/DashboardView';
 import { CardNameTooltip } from './components/CardNameTooltip';
 import { CardImage } from './components/CardImage';
 import CollectionView from './components/CollectionView';
+import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
 
@@ -189,6 +190,22 @@ export default function App() {
     invoke<any>('get_app_environment')
       .then(info => setEnvInfo(info))
       .catch(err => console.error('Failed to get app environment:', err));
+  }, []);
+
+  // First-time Setup Wizard State
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  useEffect(() => {
+    invoke<{ setup_completed: boolean; card_count: number }>('get_setup_status')
+      .then(status => {
+        if (!status.setup_completed) {
+          setShowSetupWizard(true);
+        }
+      })
+      .catch(err => console.error('Failed to check setup status:', err));
+
+    const handleOpenWizard = () => setShowSetupWizard(true);
+    window.addEventListener('open-setup-wizard', handleOpenWizard);
+    return () => window.removeEventListener('open-setup-wizard', handleOpenWizard);
   }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -2650,6 +2667,19 @@ export default function App() {
         </div>
       )}
 
+      {/* FIRST-TIME SETUP WIZARD */}
+      {showSetupWizard && !showSplash && (
+        <FirstTimeSetupWizard
+          theme={palette}
+          activeThemeId={activeThemeId}
+          setActiveThemeId={setActiveThemeId}
+          onFinish={() => {
+            setShowSetupWizard(false);
+            setCollectionRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
       {/* SPLASH SCREEN */}
       {showSplash && (
         <div
@@ -2669,7 +2699,7 @@ export default function App() {
             />
             <div className="pt-3 text-center">
               <span className="text-base font-mono font-extrabold tracking-widest text-white drop-shadow-md uppercase">
-                v1.1.1{envInfo?.is_test ? ' — Test Environment' : ''}
+                v1.1.2{envInfo?.is_test ? ' — Test Environment' : ''}
               </span>
             </div>
           </div>
