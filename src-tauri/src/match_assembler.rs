@@ -100,6 +100,8 @@ pub struct MatchAssembler {
     pub damage_feed_events: Vec<(LiveDamageFeedEvent, u64)>, // (damage_event, seq)
     pub feed_seq: u64,
     pub current_turn: u32,
+    pub turn_1_active_seat: Option<u32>,
+    pub match_start_time: Option<chrono::DateTime<Utc>>,
     pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
     pub processed_msg_ids: HashSet<u64>,
     pub last_completed: Option<(MatchRecord, chrono::DateTime<Utc>)>,
@@ -131,6 +133,8 @@ impl MatchAssembler {
             damage_feed_events: Vec::new(),
             feed_seq: 0,
             current_turn: 1,
+            turn_1_active_seat: None,
+            match_start_time: None,
             impactful_cards: HashMap::new(),
             processed_msg_ids: HashSet::new(),
             last_completed: None,
@@ -182,6 +186,8 @@ impl MatchAssembler {
         self.feed_seq = 0;
         self.player_seat_id = 1;
         self.collection_draws.clear();
+        self.turn_1_active_seat = None;
+        self.match_start_time = Some(now);
 
         // Resolve deck name from cached deck or catalog lookup by cached_deck_id
         let mut deck_name = self.cached_deck_name.clone().unwrap_or_default();
@@ -216,7 +222,7 @@ impl MatchAssembler {
             result: "unknown".to_string(),
             duration_seconds: 0,
             turns: 0,
-            going_first: true,
+            going_first: true, // Will be resolved dynamically when turn 1 active seat is processed
             hero_seat_id: self.player_seat_id,
             player_deck_name: deck_name,
             player_commander_id: commander_id,
@@ -244,6 +250,9 @@ impl MatchAssembler {
                         self.player_seat_id = system_seat;
                         if let Some(m) = &mut self.active_match {
                             m.hero_seat_id = system_seat;
+                            if let Some(t1_seat) = self.turn_1_active_seat {
+                                m.going_first = t1_seat == system_seat;
+                            }
                         }
                     }
                 } else {
@@ -487,6 +496,13 @@ impl MatchAssembler {
             self.current_turn = turn;
         }
 
+        if (turn == 1 || self.current_turn == 1) && active_seat > 0 && self.turn_1_active_seat.is_none() {
+            self.turn_1_active_seat = Some(active_seat);
+            if let Some(m) = &mut self.active_match {
+                m.going_first = active_seat == self.player_seat_id;
+            }
+        }
+
         for (seat, life) in life_by_seat {
             if *seat == self.player_seat_id {
                 let old = self.current_player_life;
@@ -514,6 +530,33 @@ impl MatchAssembler {
             m.player_life_end = Some(self.current_player_life);
             m.opponent_life_end = Some(self.current_opp_life);
             m.player_commander_id = self.cached_commander_id;
+
+            // Resolve going_first accurately from turn 1 active seat or turn 1 events
+            if let Some(t1_seat) = self.turn_1_active_seat {
+                m.going_first = t1_seat == self.player_seat_id;
+            } else if let Some(first_t1) = self.turn_events.iter().find(|e| e.turn_number == 1 && e.seat_id > 0) {
+                m.going_first = first_t1.seat_id == self.player_seat_id;
+            } else {
+                m.going_first = self.player_seat_id == 1;
+            }
+
+            // Calculate match duration in seconds (use turn event timestamps if available to cover mid-match restarts)
+            let mut event_span = 0u32;
+            if let (Some(first), Some(last)) = (self.turn_events.first(), self.turn_events.last()) {
+                if let (Ok(t_start), Ok(t_end)) = (
+                    chrono::DateTime::parse_from_rfc3339(&first.timestamp),
+                    chrono::DateTime::parse_from_rfc3339(&last.timestamp),
+                ) {
+                    let diff = (t_end - t_start).num_seconds();
+                    if diff > 0 {
+                        event_span = diff as u32;
+                    }
+                }
+            }
+
+            let now = Utc::now();
+            let wall_elapsed = self.match_start_time.map(|st| (now - st).num_seconds().max(0) as u32).unwrap_or(0);
+            m.duration_seconds = event_span.max(wall_elapsed);
 
             let reason_clean = if reason.is_empty() { None } else { Some(reason.to_string()) };
             m.result_reason = reason_clean;
@@ -665,5 +708,52 @@ mod tests {
 
         let resolved = assembler.resolve_deck_from_match(&hero_cards, None);
         assert_eq!(resolved, Some("MonoWhite - Auras (Standard)".to_string()));
+    }
+
+    #[test]
+    fn test_going_first_play_vs_draw() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("user-hero".to_string());
+        assembler.start_match("match-play".to_string(), "Standard".to_string());
+
+        // Hero is seat 1, opponent is seat 2
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "user-hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "user-opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Turn 1 active player is seat 1 -> On the play!
+        assembler.update_game_state(Some(100), 1, &[(1, 20), (2, 20)], 1);
+
+        let (rec, _, _, _) = assembler.complete_match(1, "Concede").expect("match should complete");
+        assert!(rec.going_first, "Hero should be on the play when active player on turn 1 is hero seat");
+
+        // Now test On the draw
+        let mut assembler_draw = MatchAssembler::new();
+        assembler_draw.set_player_user_id("user-hero".to_string());
+        assembler_draw.start_match("match-draw".to_string(), "Standard".to_string());
+
+        assembler_draw.update_reserved_players(&serde_json::json!([
+            { "userId": "user-hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "user-opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Turn 1 active player is seat 2 (opponent) -> On the draw!
+        assembler_draw.update_game_state(Some(200), 1, &[(1, 20), (2, 20)], 2);
+
+        let (rec_draw, _, _, _) = assembler_draw.complete_match(2, "Concede").expect("match should complete");
+        assert!(!rec_draw.going_first, "Hero should be on the draw when active player on turn 1 is opponent seat");
+    }
+
+    #[test]
+    fn test_match_duration_calculation() {
+        let mut assembler = MatchAssembler::new();
+        assembler.start_match("match-dur".to_string(), "Standard".to_string());
+
+        // Manually adjust start time back by 120 seconds to simulate a 2-minute game
+        assembler.match_start_time = Some(Utc::now() - chrono::Duration::seconds(120));
+
+        let (rec, _, _, _) = assembler.complete_match(1, "Concede").expect("match should complete");
+        assert!(rec.duration_seconds >= 120, "Duration should be at least 120 seconds, got {}", rec.duration_seconds);
     }
 }

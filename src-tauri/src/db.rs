@@ -269,6 +269,39 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
+        // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
+        let _ = sqlx::query(
+            r#"
+            UPDATE matches
+            SET going_first = 0
+            WHERE id IN (
+                SELECT m.id
+                FROM matches m
+                JOIN match_turn_events e ON m.id = e.match_id AND e.turn_number = 1
+                WHERE m.hero_seat_id > 0 AND e.seat_id > 0 AND e.seat_id != m.hero_seat_id AND m.going_first = 1
+            );
+            "#
+        ).execute(&pool).await;
+
+        // Migration: Reconcile duration_seconds for historical matches using turn events span
+        let _ = sqlx::query(
+            r#"
+            UPDATE matches
+            SET duration_seconds = (
+                SELECT CAST(MAX(0, ROUND((JULIANDAY(MAX(e.timestamp)) - JULIANDAY(MIN(e.timestamp))) * 86400)) AS INTEGER)
+                FROM match_turn_events e
+                WHERE e.match_id = matches.id
+            )
+            WHERE duration_seconds = 0
+              AND id IN (
+                  SELECT match_id
+                  FROM match_turn_events
+                  GROUP BY match_id
+                  HAVING COUNT(id) > 1
+              );
+            "#
+        ).execute(&pool).await;
+
         // Migration: backfill cards_cache.cmc from mana_cost. Early imports stored cmc=0
         // for every card. Recompute using the same parse_mtga_cmc() logic the rest of the
         // app relies on. Truly idempotent: only updates rows where the recomputed cmc

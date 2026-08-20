@@ -228,9 +228,9 @@ impl FileTailer {
         let mut reader = BufReader::new(current_file);
 
         if !self.read_from_start {
-            // Seek backwards up to 512KB to catch recent pre-match deck submissions (EventSetDeckV3) or Auth packets if launched mid-queue
+            // Seek backwards up to 16MB to catch recent pre-match deck submissions (EventSetDeckV3), Auth packets, and active MatchGameRoomStateChangedEvent if launched mid-game
             let file_len = current_meta.len();
-            let lookback = 512 * 1024; // 512KB
+            let lookback = 16 * 1024 * 1024; // 16MB
             let start_pos = if file_len > lookback {
                 file_len - lookback
             } else {
