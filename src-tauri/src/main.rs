@@ -3531,6 +3531,11 @@ async fn dispatch_parsed_event(
                 assembler.match_legitimate
             );
         }
+        ParsedEvent::DeckCatalogBatch { decks } => {
+            let count = decks.len();
+            assembler.register_deck_catalog(decks);
+            println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
+        }
         ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
             if turn_number > 0 {
                 assembler.current_turn = turn_number;
@@ -3550,10 +3555,21 @@ async fn dispatch_parsed_event(
             }
         }
         ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-            if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+            if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                // If deck name is still "Selected Deck" or empty, resolve from database deck_lists
+                if record.player_deck_name.is_empty() || record.player_deck_name == "Selected Deck" {
+                    let hero_gids: Vec<i64> = card_records.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
+                    if let Ok(Some(resolved_name)) = db_manager.resolve_deck_for_cards(&hero_gids, record.player_commander_id.map(|c| c as i64)).await {
+                        record.player_deck_name = resolved_name.clone();
+                        assembler.cached_deck_name = Some(resolved_name.clone());
+                        assembler.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&resolved_name).is_none();
+                    }
+                }
+
                 println!(
-                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
+                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Deck = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
                     redact_str(&record.match_id),
+                    record.player_deck_name,
                     record.result,
                     reason,
                     record.player_life_end,
