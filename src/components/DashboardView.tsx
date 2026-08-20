@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
+  Area,
   Bar,
   Line,
   XAxis,
@@ -161,7 +162,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   isTestEnv = false,
 }) => {
   const [chartFormat, setChartFormat] = useState('ALL');
-  const [chartTime, setChartTime] = useState('MONTH');
+  const [chartTime, setChartTime] = useState('7D');
 
   // ---- Deck Spotlight fixed-design-size scaled unit ----
   // The marquee card + 6 key cards are designed once at a fixed reference size,
@@ -221,21 +222,154 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const chartData = useMemo(() => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const start7D = new Date(now.getTime() - 7 * 86400000);
+    const start30D = new Date(now.getTime() - 30 * 86400000);
+    const start12M = new Date(now.getTime() - 365 * 86400000);
 
+    if (chartTime === 'TODAY') {
+      // Hourly bucketing for Today (no trend line)
+      const hourly = new Map<number, { wins: number; losses: number }>();
+      for (const m of winLossMatches) {
+        if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+        const d = new Date(m.timestamp);
+        if (d < startOfToday) continue;
+        const hour = d.getHours();
+        const e = hourly.get(hour) || { wins: 0, losses: 0 };
+        if (m.result === 'win') e.wins++;
+        else e.losses++;
+        hourly.set(hour, e);
+      }
+
+      let minHour = 24;
+      let maxHour = 0;
+      for (const h of hourly.keys()) {
+        if (h < minHour) minHour = h;
+        if (h > maxHour) maxHour = h;
+      }
+      if (minHour > maxHour) {
+        minHour = 0;
+        maxHour = now.getHours();
+      } else {
+        minHour = Math.max(0, minHour - 1);
+        maxHour = Math.min(23, Math.max(maxHour + 1, now.getHours()));
+      }
+
+      const rows = [];
+      for (let h = minHour; h <= maxHour; h++) {
+        const e = hourly.get(h) || { wins: 0, losses: 0 };
+        const label = `${String(h).padStart(2, '0')}:00`;
+        const total = e.wins + e.losses;
+        const winrate = total > 0 ? (e.wins / total) * 100 : 0;
+        rows.push({
+          date: `hour-${h}`,
+          label,
+          wins: e.wins,
+          losses: e.losses,
+          winrate: Math.round(winrate * 10) / 10,
+          trend: 0,
+        });
+      }
+      return rows;
+    }
+
+    if (chartTime === '12M') {
+      // Week-by-week bucketing for Past 12 Months
+      const weekly = new Map<string, { wins: number; losses: number; label: string; time: number }>();
+      for (const m of winLossMatches) {
+        if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+        const d = new Date(m.timestamp);
+        if (d < start12M) continue;
+
+        const dayOfWeek = (d.getDay() + 6) % 7;
+        const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek);
+        const key = localDateKey(weekStart);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const label = `${weekStart.getDate()} ${months[weekStart.getMonth()]}`;
+
+        const e = weekly.get(key) || { wins: 0, losses: 0, label, time: weekStart.getTime() };
+        if (m.result === 'win') e.wins++;
+        else e.losses++;
+        weekly.set(key, e);
+      }
+
+      const weeks = [...weekly.entries()].sort((a, b) => a[1].time - b[1].time);
+      return weeks.map(([date, { wins, losses, label }], idx) => {
+        const total = wins + losses;
+        const winrate = total > 0 ? (wins / total) * 100 : 0;
+        const windowStart = Math.max(0, idx - 3);
+        let sum = 0;
+        let n = 0;
+        for (let j = windowStart; j <= idx; j++) {
+          const e = weeks[j][1];
+          const t = e.wins + e.losses;
+          if (t > 0) {
+            sum += (e.wins / t) * 100;
+            n++;
+          }
+        }
+        const trend = n > 0 ? sum / n : 0;
+        return {
+          date,
+          label,
+          wins,
+          losses,
+          winrate: Math.round(winrate * 10) / 10,
+          trend: Math.round(trend * 10) / 10,
+        };
+      });
+    }
+
+    if (chartTime === 'ALL') {
+      // Monthly bucketing for All Time
+      const monthly = new Map<string, { wins: number; losses: number; label: string; time: number }>();
+      for (const m of winLossMatches) {
+        if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+        const d = new Date(m.timestamp);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const label = `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
+
+        const e = monthly.get(key) || { wins: 0, losses: 0, label, time: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
+        if (m.result === 'win') e.wins++;
+        else e.losses++;
+        monthly.set(key, e);
+      }
+
+      const monthsArr = [...monthly.entries()].sort((a, b) => a[1].time - b[1].time);
+      return monthsArr.map(([date, { wins, losses, label }], idx) => {
+        const total = wins + losses;
+        const winrate = total > 0 ? (wins / total) * 100 : 0;
+        const windowStart = Math.max(0, idx - 2);
+        let sum = 0;
+        let n = 0;
+        for (let j = windowStart; j <= idx; j++) {
+          const e = monthsArr[j][1];
+          const t = e.wins + e.losses;
+          if (t > 0) {
+            sum += (e.wins / t) * 100;
+            n++;
+          }
+        }
+        const trend = n > 0 ? sum / n : 0;
+        return {
+          date,
+          label,
+          wins,
+          losses,
+          winrate: Math.round(winrate * 10) / 10,
+          trend: Math.round(trend * 10) / 10,
+        };
+      });
+    }
+
+    // Default daily bucketing for '7D' and '30D'
     const daily = new Map<string, { wins: number; losses: number }>();
+    const cutoff = chartTime === '7D' ? start7D : start30D;
+
     for (const m of winLossMatches) {
       if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
       const d = new Date(m.timestamp);
-      let inPeriod = true;
-      if (chartTime === 'TODAY') inPeriod = d >= startOfToday;
-      else if (chartTime === 'WEEK') inPeriod = d >= startOfWeek;
-      else if (chartTime === 'MONTH') inPeriod = d >= startOfMonth;
-      else if (chartTime === 'YEAR') inPeriod = d >= startOfYear;
-      if (!inPeriod) continue;
+      if (d < cutoff) continue;
 
       const key = matchDayKey(m);
       if (!key) continue;
@@ -281,6 +415,93 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const scaled = Math.ceil(busiest * 1.25);
     return Math.max(scaled, 5);
   }, [chartData]);
+
+  // Extend trendline & area to the absolute visual edges of the chart by padding edge boundary entries
+  const extendedChartData = useMemo(() => {
+    if (!chartData || chartData.length <= 1) return chartData;
+    const first = chartData[0];
+    const last = chartData[chartData.length - 1];
+
+    const leftPad = {
+      ...first,
+      date: '__edge_start__',
+      label: '',
+      wins: 0,
+      losses: 0,
+      isPad: true,
+    };
+
+    const rightPad = {
+      ...last,
+      date: '__edge_end__',
+      label: '',
+      wins: 0,
+      losses: 0,
+      isPad: true,
+    };
+
+    return [leftPad, ...chartData, rightPad];
+  }, [chartData]);
+
+  // Horizontal gradient stops across the X-axis (left to right) for both the trend line and background shading
+  const horizontalGradientStops = useMemo(() => {
+    const data = extendedChartData;
+    if (!data || data.length === 0) {
+      return [{ offset: '0%', color: '#22C55E', lineOpacity: 1, areaOpacity: 0.24 }];
+    }
+    const n = data.length;
+    if (n === 1) {
+      const isGreen = (data[0].trend ?? 50) >= 50;
+      const c = isGreen ? '#22C55E' : '#EF4444';
+      return [
+        { offset: '0%', color: c, lineOpacity: 1, areaOpacity: 0.24 },
+        { offset: '100%', color: c, lineOpacity: 1, areaOpacity: 0.24 },
+      ];
+    }
+
+    const stops: { offset: string; color: string; lineOpacity: number; areaOpacity: number }[] = [];
+
+    data.forEach((d, idx) => {
+      const pct = (idx / (n - 1)) * 100;
+      const isGreen = (d.trend ?? 50) >= 50;
+      const color = isGreen ? '#22C55E' : '#EF4444';
+      const areaOpacity = 0.24;
+
+      if (idx === 0) {
+        stops.push({ offset: '0%', color, lineOpacity: 1, areaOpacity });
+      } else {
+        const prev = data[idx - 1];
+        const prevIsGreen = (prev.trend ?? 50) >= 50;
+        const prevColor = prevIsGreen ? '#22C55E' : '#EF4444';
+        const prevPct = ((idx - 1) / (n - 1)) * 100;
+
+        if (prevIsGreen !== isGreen) {
+          // Crosses the 50% line between prev and current index!
+          const t1 = prev.trend ?? 50;
+          const t2 = d.trend ?? 50;
+          const fraction = Math.abs(t2 - t1) > 0 ? (50 - t1) / (t2 - t1) : 0.5;
+          const crossPct = prevPct + Math.max(0, Math.min(1, fraction)) * (pct - prevPct);
+          const blendDelta = Math.min(1.5, (pct - prevPct) * 0.2);
+
+          stops.push({
+            offset: `${Math.max(0, crossPct - blendDelta).toFixed(2)}%`,
+            color: prevColor,
+            lineOpacity: 1,
+            areaOpacity: 0.24,
+          });
+          stops.push({
+            offset: `${Math.min(100, crossPct + blendDelta).toFixed(2)}%`,
+            color,
+            lineOpacity: 1,
+            areaOpacity: 0.24,
+          });
+        }
+        stops.push({ offset: `${pct.toFixed(2)}%`, color, lineOpacity: 1, areaOpacity });
+      }
+    });
+
+    return stops;
+  }, [extendedChartData]);
 
   // ---- Recent matches grouped by day ----
 
@@ -580,39 +801,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Trending Win Rate
             </h2>
           </div>
-          <div className="flex items-center gap-2">
-            {formatOptions.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setChartFormat(opt.value)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all ${
-                  chartFormat === opt.value ? '' : 'opacity-40 hover:opacity-80'
-                }`}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Format Dropdown Selector */}
+            <div className="relative inline-flex items-center">
+              <select
+                value={chartFormat}
+                onChange={(e) => setChartFormat(e.target.value)}
+                className="px-3 py-1.5 rounded-xl text-xs font-mono font-bold border transition-all appearance-none pr-8 cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/20"
                 style={{
-                  backgroundColor: chartFormat === opt.value ? `${accent}1F` : 'transparent',
-                  borderColor: chartFormat === opt.value ? accent : border,
-                  color: chartFormat === opt.value ? accent : subtext,
+                  backgroundColor: palette?.mantle || '#12141A',
+                  borderColor: border,
+                  color: '#FFFFFF',
                 }}
               >
-                {opt.label}
-              </button>
-            ))}
-            {timeOptions.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setChartTime(opt.value)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all ${
-                  chartTime === opt.value ? '' : 'opacity-40 hover:opacity-80'
-                }`}
-                style={{
-                  backgroundColor: chartTime === opt.value ? `${accent}1F` : 'transparent',
-                  borderColor: chartTime === opt.value ? accent : border,
-                  color: chartTime === opt.value ? accent : subtext,
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
+                {formatOptions.map((opt) => (
+                  <option
+                    key={opt.value}
+                    value={opt.value}
+                    style={{ backgroundColor: '#12141A', color: '#FFFFFF' }}
+                  >
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronRight className="w-3.5 h-3.5 rotate-90 absolute right-2.5 pointer-events-none text-white/50" />
+            </div>
+
+            {/* Time Filter Buttons */}
+            <div className="flex items-center gap-1 p-0.5 rounded-xl border" style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: border }}>
+              {timeOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setChartTime(opt.value)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                    chartTime === opt.value ? 'shadow-sm' : 'opacity-40 hover:opacity-80'
+                  }`}
+                  style={{
+                    backgroundColor: chartTime === opt.value ? `${accent}25` : 'transparent',
+                    color: chartTime === opt.value ? accent : subtext,
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -621,7 +853,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="h-full flex items-center justify-center text-xs font-mono opacity-40">No matches in this range</div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: -10 }}>
+              <ComposedChart data={extendedChartData} margin={{ top: 8, right: 8, bottom: 0, left: -10 }}>
+                <defs>
+                  {/* Horizontal left-to-right gradient for the trend line */}
+                  <linearGradient id="winRateThresholdGradient" x1="0" y1="0" x2="1" y2="0">
+                    {horizontalGradientStops.map((s, idx) => (
+                      <stop key={idx} offset={s.offset} stopColor={s.color} stopOpacity={s.lineOpacity} />
+                    ))}
+                  </linearGradient>
+
+                  {/* Lowest-layer horizontal background area shading underneath the trend line */}
+                  <linearGradient id="winRateAreaGradient" x1="0" y1="0" x2="1" y2="0">
+                    {horizontalGradientStops.map((s, idx) => (
+                      <stop key={idx} offset={s.offset} stopColor={s.color} stopOpacity={s.areaOpacity} />
+                    ))}
+                  </linearGradient>
+                </defs>
                 <CartesianGrid stroke={border} strokeOpacity={0.25} vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -630,6 +877,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   tickLine={false}
                   interval="preserveStartEnd"
                   minTickGap={28}
+                  padding={{ left: 0, right: 0 }}
                 />
                 <YAxis
                   yAxisId="played"
@@ -660,7 +908,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     fontSize: 12,
                   }}
                   labelStyle={{ color: text }}
+                  filterNull={true}
                   formatter={(value: any, name: any, item: any) => {
+                    if (item?.payload?.isPad) return [null, null];
                     const dk = item?.dataKey ?? name;
                     if (dk === 'trend') return [`${value}%`, 'Trending Win Rate'];
                     if (dk === 'winrate') return [`${value}%`, 'Win Rate'];
@@ -669,10 +919,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11, color: subtext }} />
+
+                {/* Layer 1 (Lowest): Subtle area shading underneath the trend line */}
+                {chartTime !== 'TODAY' && (
+                  <Area 
+                    yAxisId="rate" 
+                    type="monotone" 
+                    dataKey="trend" 
+                    fill="url(#winRateAreaGradient)" 
+                    stroke="none"
+                    isAnimationActive={false}
+                    legendType="none"
+                    tooltipType="none"
+                  />
+                )}
+
+                {/* Layer 2: 50% Benchmark Dotted Reference Line */}
                 <ReferenceLine yAxisId="rate" y={50} stroke={subtext} strokeDasharray="4 4" strokeOpacity={0.6} />
-                <Bar yAxisId="played" dataKey="wins" stackId="a" fill={green} fillOpacity={0.75} name="Wins" />
-                <Bar yAxisId="played" dataKey="losses" stackId="a" fill={red} fillOpacity={0.75} name="Losses" />
-                <Line yAxisId="rate" type="monotone" dataKey="trend" stroke={accent} strokeWidth={2} dot={false} name="Trending Win Rate" />
+
+                {/* Layer 3: Game Histogram Stacked Bars with thin white outline */}
+                <Bar 
+                  yAxisId="played" 
+                  dataKey="wins" 
+                  stackId="a" 
+                  fill={green} 
+                  fillOpacity={0.82} 
+                  stroke="rgba(255, 255, 255, 0.4)" 
+                  strokeWidth={1} 
+                  name="Wins" 
+                  isAnimationActive={false} 
+                />
+                <Bar 
+                  yAxisId="played" 
+                  dataKey="losses" 
+                  stackId="a" 
+                  fill={red} 
+                  fillOpacity={0.82} 
+                  stroke="rgba(255, 255, 255, 0.4)" 
+                  strokeWidth={1} 
+                  name="Losses" 
+                  isAnimationActive={false} 
+                />
+
+                {/* Layer 4 (Top): Trending Win Rate Line */}
+                {chartTime !== 'TODAY' && (
+                  <Line 
+                    yAxisId="rate" 
+                    type="monotone" 
+                    dataKey="trend" 
+                    stroke="url(#winRateThresholdGradient)" 
+                    strokeWidth={3} 
+                    dot={false}
+                    isAnimationActive={false}
+                    name="Trending Win Rate" 
+                  />
+                )}
               </ComposedChart>
             </ResponsiveContainer>
           )}
@@ -721,7 +1022,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               {m.opponent_name || 'Unknown Opponent'}
                             </div>
                             <div className="text-[10px] font-mono truncate" style={{ color: subtext }}>
-                              {m.format_name === 'Brawl' && m.opponent_commander_name
+                              {m.format_name?.toLowerCase().includes('brawl') && m.opponent_commander_name
                                 ? m.opponent_commander_name
                                 : m.player_deck_name}
                             </div>

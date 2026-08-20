@@ -21,6 +21,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { ManaPip } from './ManaPip';
 import { CustomDropdown } from './CustomDropdown';
+import { APP_VERSION } from '../version';
 
 interface SettingsViewProps {
   palette: any;
@@ -34,7 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   palette, 
   activeThemeId, 
   setActiveThemeId,
-  version = '1.1.2',
+  version = APP_VERSION,
   isTestEnv = false,
 }) => {
   // Log path state

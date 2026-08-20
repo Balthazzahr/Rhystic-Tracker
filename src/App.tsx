@@ -47,6 +47,7 @@ import CollectionView from './components/CollectionView';
 import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
+import { APP_VERSION } from './version';
 
 // Renders a Nerd Font glyph (from the bundled NerdFontSymbols font) as an
 // inline icon. `glyph` is one of the `.nf-*` classes defined in index.css.
@@ -920,19 +921,50 @@ export default function App() {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  const formatOptions = [
-    { value: 'ALL', label: 'All Formats' },
-    { value: 'BRAWL', label: 'Brawl' },
-    { value: 'STANDARD', label: 'Standard' },
-    { value: 'HISTORIC', label: 'Historic' },
-  ];
+  const formatOptions = useMemo(() => {
+    const baseFormats = [
+      'Brawl',
+      'Standard Brawl',
+      'Standard',
+      'Historic',
+      'Timeless',
+      'Alchemy',
+      'Explorer',
+      'Draft',
+      'Sealed',
+      'Bot Match',
+      'Direct Challenge',
+      'Midweek Magic',
+      'Gladiator',
+    ];
+    const seen = new Set<string>();
+    const options = [{ value: 'ALL', label: 'All Formats' }];
+
+    // 1. Prioritize formats actually present in the user's match history
+    for (const m of matches) {
+      if (m.format_name && !seen.has(m.format_name.toUpperCase())) {
+        seen.add(m.format_name.toUpperCase());
+        options.push({ value: m.format_name.toUpperCase(), label: m.format_name });
+      }
+    }
+
+    // 2. Append standard curated formats not yet encountered
+    for (const bf of baseFormats) {
+      if (!seen.has(bf.toUpperCase())) {
+        seen.add(bf.toUpperCase());
+        options.push({ value: bf.toUpperCase(), label: bf });
+      }
+    }
+
+    return options;
+  }, [matches]);
 
   const timeOptions = [
-    { value: 'ALL', label: 'All Time' },
-    { value: 'YEAR', label: 'This Year' },
-    { value: 'MONTH', label: 'This Month' },
-    { value: 'WEEK', label: 'This Week' },
     { value: 'TODAY', label: 'Today' },
+    { value: '7D', label: 'Past 7 Days' },
+    { value: '30D', label: 'Past 30 Days' },
+    { value: '12M', label: 'Past 12 Months' },
+    { value: 'ALL', label: 'All Time' },
   ];
 
   const renderManaHistogram = (curve?: number[]) => {
@@ -1000,16 +1032,33 @@ export default function App() {
 
   // Muted format-chip colors, inspired by the mana pip palette but toned down.
   const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
-    switch (format.toLowerCase()) {
-      case 'brawl':
-        return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
-      case 'standard':
-        return { bg: '#F8717115', fg: '#FCA5A5', border: '#F8717130' };
-      case 'historic':
-        return { bg: '#34D39915', fg: '#6EE7B7', border: '#34D39930' };
-      default:
-        return { bg: '#94A3B815', fg: '#CBD5E1', border: '#94A3B830' };
+    const f = (format || '').toLowerCase();
+    if (f.includes('standard brawl')) {
+      return { bg: '#0284C715', fg: '#38BDF8', border: '#0284C735' };
+    } else if (f.includes('brawl')) {
+      return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
+    } else if (f.includes('standard')) {
+      return { bg: '#F8717115', fg: '#FCA5A5', border: '#F8717130' };
+    } else if (f.includes('historic')) {
+      return { bg: '#34D39915', fg: '#6EE7B7', border: '#34D39930' };
+    } else if (f.includes('timeless')) {
+      return { bg: '#A855F715', fg: '#C084FC', border: '#A855F730' };
+    } else if (f.includes('alchemy')) {
+      return { bg: '#F59E0B15', fg: '#FCD34D', border: '#F59E0B30' };
+    } else if (f.includes('explorer') || f.includes('pioneer')) {
+      return { bg: '#6366F115', fg: '#818CF8', border: '#6366F130' };
+    } else if (f.includes('draft') || f.includes('sealed') || f.includes('limited')) {
+      return { bg: '#EAB30815', fg: '#FDE047', border: '#EAB30830' };
+    } else if (f.includes('bot') || f.includes('sparky')) {
+      return { bg: '#14B8A615', fg: '#5EEAD4', border: '#14B8A630' };
+    } else if (f.includes('direct') || f.includes('challenge') || f.includes('friendly')) {
+      return { bg: '#F43F5E15', fg: '#FDA4AF', border: '#F43F5E30' };
+    } else if (f.includes('mwm') || f.includes('midweek')) {
+      return { bg: '#D946EF15', fg: '#F0ABFC', border: '#D946EF30' };
+    } else if (f.includes('gladiator')) {
+      return { bg: '#84CC1615', fg: '#BEF264', border: '#84CC1630' };
     }
+    return { bg: '#94A3B815', fg: '#CBD5E1', border: '#94A3B830' };
   };
 
   // Format timestamp as "14 Aug 26 14:52" (day, short month, 2-digit year, HH:MM)
@@ -1419,7 +1468,7 @@ export default function App() {
             palette={palette} 
             activeThemeId={activeThemeId} 
             setActiveThemeId={setActiveThemeId}
-            version="1.1.1"
+            version={APP_VERSION}
             isTestEnv={envInfo?.is_test}
           />
         )}
@@ -1506,9 +1555,7 @@ export default function App() {
                       <span className="text-sm font-mono uppercase opacity-60">Your Life</span>
                       <span className="text-xs font-mono opacity-50">{liveMatchState.player_cards_seen ?? 0} cards seen</span>
                     </div>
-                    <div className="text-5xl font-black text-emerald-400 font-mono shrink-0">{liveMatchState.player_life ?? 20} HP</div>
-
-                    {liveMatchState.format?.toUpperCase() === 'BRAWL' && liveMatchState.player_commander && (
+                    {liveMatchState.format?.toLowerCase().includes('brawl') && liveMatchState.player_commander && (
                       <div className="text-sm shrink-0">
                         <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Commander</span>
                         <span className="font-bold">{liveMatchState.player_commander.name}</span>
@@ -1539,7 +1586,7 @@ export default function App() {
                     </div>
                     <div className="text-5xl font-black text-rose-400 font-mono shrink-0">{liveMatchState.opponent_life ?? 20} HP</div>
 
-                    {liveMatchState.format?.toUpperCase() === 'BRAWL' && liveMatchState.opponent_commander && (
+                    {liveMatchState.format?.toLowerCase().includes('brawl') && liveMatchState.opponent_commander && (
                       <div className="text-sm shrink-0">
                         <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Commander</span>
                         <span className="font-bold">{liveMatchState.opponent_commander.name}</span>
@@ -2699,7 +2746,7 @@ export default function App() {
             />
             <div className="pt-3 text-center">
               <span className="text-base font-mono font-extrabold tracking-widest text-white drop-shadow-md uppercase">
-                v1.1.2{envInfo?.is_test ? ' — Test Environment' : ''}
+                v{APP_VERSION}{envInfo?.is_test ? ' — Test Environment' : ''}
               </span>
             </div>
           </div>

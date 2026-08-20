@@ -143,8 +143,8 @@ export function FullMatchInfoModal({
         <div className="flex-1 overflow-hidden grid grid-cols-12 p-6 gap-6">
           {/* Column 1: Left Match Metadata Sidebar (Col-Span 3) */}
           <div className="col-span-3 flex flex-col gap-4 min-h-0 h-full overflow-hidden pr-1">
-            {/* Brawl Side-by-Side Commander Cards (Item 6: Strictly Hidden for Non-Brawl Formats) */}
-            {selectedMatch?.format_name && selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
+            {/* Brawl / Standard Brawl Commander Cards */}
+            {selectedMatch?.format_name && selectedMatch.format_name.toLowerCase().includes('brawl') && (
               <div className="flex-1 min-h-0 flex flex-col p-3 rounded-2xl border gap-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
                 <p className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-60 shrink-0">Commanders</p>
                 <div className="flex-1 min-h-0 flex flex-col gap-2">
