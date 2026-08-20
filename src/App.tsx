@@ -44,8 +44,10 @@ import { DashboardView } from './components/DashboardView';
 import { CardNameTooltip } from './components/CardNameTooltip';
 import { CardImage } from './components/CardImage';
 import CollectionView from './components/CollectionView';
+import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
+import { APP_VERSION } from './version';
 
 // Renders a Nerd Font glyph (from the bundled NerdFontSymbols font) as an
 // inline icon. `glyph` is one of the `.nf-*` classes defined in index.css.
@@ -88,6 +90,15 @@ const scryfallPrintingImageUrl = (name: string, p?: any): string => {
     return `https://api.scryfall.com/cards/${encodeURIComponent(setCode)}/${encodeURIComponent(cn)}?format=image&version=normal`;
   }
   return `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
+};
+
+export const formatMatchDuration = (seconds?: number): string => {
+  if (!seconds || seconds <= 0) return '< 1m';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m === 0) return `${s}s`;
+  if (s === 0) return `${m}m`;
+  return `${m}m ${s}s`;
 };
 
 interface ManaTheme {
@@ -189,6 +200,22 @@ export default function App() {
     invoke<any>('get_app_environment')
       .then(info => setEnvInfo(info))
       .catch(err => console.error('Failed to get app environment:', err));
+  }, []);
+
+  // First-time Setup Wizard State
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  useEffect(() => {
+    invoke<{ setup_completed: boolean; card_count: number }>('get_setup_status')
+      .then(status => {
+        if (!status.setup_completed) {
+          setShowSetupWizard(true);
+        }
+      })
+      .catch(err => console.error('Failed to check setup status:', err));
+
+    const handleOpenWizard = () => setShowSetupWizard(true);
+    window.addEventListener('open-setup-wizard', handleOpenWizard);
+    return () => window.removeEventListener('open-setup-wizard', handleOpenWizard);
   }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -554,6 +581,10 @@ export default function App() {
     opponent_cards_seen?: number;
     last_event?: { type: string; grp_id: number; seat_id: number; is_player: boolean };
     recent_events?: { type: string; grp_id: number; seat_id: number; is_player: boolean; name: string; delta?: number }[];
+    duration_seconds?: number;
+    turns?: number;
+    timestamp?: string;
+    impactful_cards?: { grp_id: number; name: string; total_damage: number; max_hit: number; damage_combat: number; damage_spell: number }[];
     just_completed?: boolean;
     result?: string;
     result_reason?: string;
@@ -606,6 +637,10 @@ export default function App() {
             opponent_name: liveState.opponent_name,
             player_life: liveState.player_life,
             opponent_life: liveState.opponent_life,
+            duration_seconds: liveState.duration_seconds,
+            turns: liveState.turns,
+            timestamp: liveState.timestamp,
+            impactful_cards: liveState.impactful_cards || [],
             just_completed: true,
             result: liveState.result,
             result_reason: liveState.result_reason,
@@ -903,19 +938,50 @@ export default function App() {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  const formatOptions = [
-    { value: 'ALL', label: 'All Formats' },
-    { value: 'BRAWL', label: 'Brawl' },
-    { value: 'STANDARD', label: 'Standard' },
-    { value: 'HISTORIC', label: 'Historic' },
-  ];
+  const formatOptions = useMemo(() => {
+    const baseFormats = [
+      'Brawl',
+      'Standard Brawl',
+      'Standard',
+      'Historic',
+      'Timeless',
+      'Alchemy',
+      'Explorer',
+      'Draft',
+      'Sealed',
+      'Bot Match',
+      'Direct Challenge',
+      'Midweek Magic',
+      'Gladiator',
+    ];
+    const seen = new Set<string>();
+    const options = [{ value: 'ALL', label: 'All Formats' }];
+
+    // 1. Prioritize formats actually present in the user's match history
+    for (const m of matches) {
+      if (m.format_name && !seen.has(m.format_name.toUpperCase())) {
+        seen.add(m.format_name.toUpperCase());
+        options.push({ value: m.format_name.toUpperCase(), label: m.format_name });
+      }
+    }
+
+    // 2. Append standard curated formats not yet encountered
+    for (const bf of baseFormats) {
+      if (!seen.has(bf.toUpperCase())) {
+        seen.add(bf.toUpperCase());
+        options.push({ value: bf.toUpperCase(), label: bf });
+      }
+    }
+
+    return options;
+  }, [matches]);
 
   const timeOptions = [
-    { value: 'ALL', label: 'All Time' },
-    { value: 'YEAR', label: 'This Year' },
-    { value: 'MONTH', label: 'This Month' },
-    { value: 'WEEK', label: 'This Week' },
     { value: 'TODAY', label: 'Today' },
+    { value: '7D', label: 'Past 7 Days' },
+    { value: '30D', label: 'Past 30 Days' },
+    { value: '12M', label: 'Past 12 Months' },
+    { value: 'ALL', label: 'All Time' },
   ];
 
   const renderManaHistogram = (curve?: number[]) => {
@@ -983,16 +1049,33 @@ export default function App() {
 
   // Muted format-chip colors, inspired by the mana pip palette but toned down.
   const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
-    switch (format.toLowerCase()) {
-      case 'brawl':
-        return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
-      case 'standard':
-        return { bg: '#F8717115', fg: '#FCA5A5', border: '#F8717130' };
-      case 'historic':
-        return { bg: '#34D39915', fg: '#6EE7B7', border: '#34D39930' };
-      default:
-        return { bg: '#94A3B815', fg: '#CBD5E1', border: '#94A3B830' };
+    const f = (format || '').toLowerCase();
+    if (f.includes('standard brawl')) {
+      return { bg: '#0284C715', fg: '#38BDF8', border: '#0284C735' };
+    } else if (f.includes('brawl')) {
+      return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
+    } else if (f.includes('standard')) {
+      return { bg: '#F8717115', fg: '#FCA5A5', border: '#F8717130' };
+    } else if (f.includes('historic')) {
+      return { bg: '#34D39915', fg: '#6EE7B7', border: '#34D39930' };
+    } else if (f.includes('timeless')) {
+      return { bg: '#A855F715', fg: '#C084FC', border: '#A855F730' };
+    } else if (f.includes('alchemy')) {
+      return { bg: '#F59E0B15', fg: '#FCD34D', border: '#F59E0B30' };
+    } else if (f.includes('explorer') || f.includes('pioneer')) {
+      return { bg: '#6366F115', fg: '#818CF8', border: '#6366F130' };
+    } else if (f.includes('draft') || f.includes('sealed') || f.includes('limited')) {
+      return { bg: '#EAB30815', fg: '#FDE047', border: '#EAB30830' };
+    } else if (f.includes('bot') || f.includes('sparky')) {
+      return { bg: '#14B8A615', fg: '#5EEAD4', border: '#14B8A630' };
+    } else if (f.includes('direct') || f.includes('challenge') || f.includes('friendly')) {
+      return { bg: '#F43F5E15', fg: '#FDA4AF', border: '#F43F5E30' };
+    } else if (f.includes('mwm') || f.includes('midweek')) {
+      return { bg: '#D946EF15', fg: '#F0ABFC', border: '#D946EF30' };
+    } else if (f.includes('gladiator')) {
+      return { bg: '#84CC1615', fg: '#BEF264', border: '#84CC1630' };
     }
+    return { bg: '#94A3B815', fg: '#CBD5E1', border: '#94A3B830' };
   };
 
   // Format timestamp as "14 Aug 26 14:52" (day, short month, 2-digit year, HH:MM)
@@ -1402,7 +1485,7 @@ export default function App() {
             palette={palette} 
             activeThemeId={activeThemeId} 
             setActiveThemeId={setActiveThemeId}
-            version="1.1.1"
+            version={APP_VERSION}
             isTestEnv={envInfo?.is_test}
           />
         )}
@@ -1437,24 +1520,84 @@ export default function App() {
 
             {liveMatchState ? (
               <div className="flex-1 flex flex-col space-y-4 relative">
-                {/* Match Result Overlay: shown for a short window after the game ends */}
+                {/* Match Result Overlay: shown for a window after the game ends */}
                 {liveMatchState.just_completed && (
-                  <div className={`absolute inset-0 z-10 rounded-2xl border flex flex-col items-center justify-center space-y-4 backdrop-blur-xl animate-fade-in ${
-                    liveMatchState.result === 'win' ? 'bg-emerald-950/80 border-emerald-500/40' : 'bg-rose-950/80 border-rose-500/40'
+                  <div className={`absolute inset-0 z-20 rounded-2xl border flex flex-col items-center justify-center p-8 space-y-5 backdrop-blur-2xl animate-fade-in ${
+                    liveMatchState.result === 'win' ? 'bg-emerald-950/90 border-emerald-500/50 shadow-[0_0_60px_rgba(16,185,129,0.3)]' : 'bg-rose-950/90 border-rose-500/50 shadow-[0_0_60px_rgba(244,63,94,0.3)]'
                   }`}>
-                    <div className={`text-6xl font-black font-outfit uppercase tracking-widest ${liveMatchState.result === 'win' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {liveMatchState.result === 'win' ? 'VICTORY' : 'DEFEAT'}
+                    {/* Header Banner */}
+                    <div className="flex flex-col items-center space-y-1.5 text-center">
+                      <div className={`text-7xl font-black font-outfit uppercase tracking-widest drop-shadow-xl ${liveMatchState.result === 'win' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {liveMatchState.result === 'win' ? 'VICTORY' : 'DEFEAT'}
+                      </div>
+                      <div className="text-xl font-bold font-mono tracking-wide" style={{ color: palette?.text }}>
+                        {liveMatchState.reason_label || 'Match Ended'}
+                      </div>
                     </div>
-                    <div className="text-xl font-bold font-mono" style={{ color: palette?.text }}>
-                      {liveMatchState.reason_label || 'Match Ended'}
+
+                    {/* Match Statistics Pill Bar */}
+                    <div className="flex items-center gap-3.5 flex-wrap justify-center font-mono text-sm">
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-xl border bg-black/50 border-white/15 shadow-inner">
+                        <Clock className="w-4 h-4 text-sky-400" />
+                        <span className="opacity-60">Duration:</span>
+                        <span className="font-bold text-white">
+                          {formatMatchDuration(liveMatchState.duration_seconds)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-xl border bg-black/50 border-white/15 shadow-inner">
+                        <Swords className="w-4 h-4 text-amber-400" />
+                        <span className="opacity-60">Turns:</span>
+                        <span className="font-bold text-white">
+                          {liveMatchState.turns ?? 1} Turns
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-xl border bg-black/50 border-white/15 shadow-inner">
+                        <Activity className="w-4 h-4 text-emerald-400" />
+                        <span className="text-emerald-400 font-bold">{liveMatchState.player_life ?? 20} HP</span>
+                        <span className="opacity-40">vs</span>
+                        <span className="text-rose-400 font-bold">{liveMatchState.opponent_life ?? 0} HP</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-6 text-sm font-mono opacity-80">
-                      <span className="text-emerald-400">{liveMatchState.player_life ?? 20} HP</span>
-                      <span className="opacity-40">VS</span>
-                      <span className="text-rose-400">{liveMatchState.opponent_life ?? 0} HP</span>
-                    </div>
-                    <div className="text-[10px] font-mono uppercase tracking-wider opacity-50">
-                      {liveMatchState.format} • {liveMatchState.opponent_name || 'Opponent'}
+
+                    {/* Notable Plays / Big Impact Cards */}
+                    {liveMatchState.impactful_cards && liveMatchState.impactful_cards.length > 0 && (
+                      <div className="w-full max-w-2xl flex flex-col items-center space-y-2.5 pt-2">
+                        <div className="text-xs font-mono font-bold uppercase tracking-wider opacity-70 flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-400" /> Notable Cards & Plays
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-3.5 w-full">
+                          {liveMatchState.impactful_cards.map((card: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="relative overflow-hidden rounded-2xl border border-white/20 bg-black/70 flex items-center p-3 gap-3.5 shadow-xl min-w-[220px] max-w-[280px]"
+                            >
+                              {/* Scryfall Art Thumbnail */}
+                              <div className="w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-white/25 bg-slate-900 shadow">
+                                <img
+                                  src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(card.name)}&format=image&version=art_crop`}
+                                  alt={card.name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-bold truncate text-white" title={card.name}>
+                                  {card.name}
+                                </div>
+                                <div className="text-xs font-mono text-amber-300 font-bold mt-0.5">
+                                  {card.total_damage} DMG {card.max_hit > 0 && <span className="opacity-70 text-[11px] font-normal">(Max {card.max_hit})</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Match Context Footer */}
+                    <div className="text-xs font-mono uppercase tracking-wider opacity-70 pt-2">
+                      {liveMatchState.format} • {liveMatchState.player_deck_name} vs {liveMatchState.opponent_name || 'Opponent'}
                     </div>
                   </div>
                 )}
@@ -1490,8 +1633,7 @@ export default function App() {
                       <span className="text-xs font-mono opacity-50">{liveMatchState.player_cards_seen ?? 0} cards seen</span>
                     </div>
                     <div className="text-5xl font-black text-emerald-400 font-mono shrink-0">{liveMatchState.player_life ?? 20} HP</div>
-
-                    {liveMatchState.format?.toUpperCase() === 'BRAWL' && liveMatchState.player_commander && (
+                    {liveMatchState.format?.toLowerCase().includes('brawl') && liveMatchState.player_commander && (
                       <div className="text-sm shrink-0">
                         <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Commander</span>
                         <span className="font-bold">{liveMatchState.player_commander.name}</span>
@@ -1522,7 +1664,7 @@ export default function App() {
                     </div>
                     <div className="text-5xl font-black text-rose-400 font-mono shrink-0">{liveMatchState.opponent_life ?? 20} HP</div>
 
-                    {liveMatchState.format?.toUpperCase() === 'BRAWL' && liveMatchState.opponent_commander && (
+                    {liveMatchState.format?.toLowerCase().includes('brawl') && liveMatchState.opponent_commander && (
                       <div className="text-sm shrink-0">
                         <span className="opacity-50 text-[11px] uppercase font-semibold block mb-1">Commander</span>
                         <span className="font-bold">{liveMatchState.opponent_commander.name}</span>
@@ -2650,6 +2792,19 @@ export default function App() {
         </div>
       )}
 
+      {/* FIRST-TIME SETUP WIZARD */}
+      {showSetupWizard && !showSplash && (
+        <FirstTimeSetupWizard
+          theme={palette}
+          activeThemeId={activeThemeId}
+          setActiveThemeId={setActiveThemeId}
+          onFinish={() => {
+            setShowSetupWizard(false);
+            setCollectionRefreshTrigger(prev => prev + 1);
+          }}
+        />
+      )}
+
       {/* SPLASH SCREEN */}
       {showSplash && (
         <div
@@ -2669,7 +2824,7 @@ export default function App() {
             />
             <div className="pt-3 text-center">
               <span className="text-base font-mono font-extrabold tracking-widest text-white drop-shadow-md uppercase">
-                v1.1.1{envInfo?.is_test ? ' — Test Environment' : ''}
+                v{APP_VERSION}{envInfo?.is_test ? ' — Test Environment' : ''}
               </span>
             </div>
           </div>

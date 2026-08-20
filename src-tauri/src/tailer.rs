@@ -21,7 +21,10 @@ pub enum TailerEvent {
 pub fn discover_log_path() -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var("RHYSTIC_MTGA_LOG") {
         if !explicit.is_empty() {
-            return Some(PathBuf::from(explicit));
+            let p = PathBuf::from(explicit);
+            if p.exists() {
+                return Some(p);
+            }
         }
     }
 
@@ -38,73 +41,140 @@ pub fn discover_log_path() -> Option<PathBuf> {
     }
     
     // Candidate Steam library roots (both native layout and mounted libraries).
+    let mut candidates: Vec<PathBuf> = Vec::new();
     let mut roots: Vec<PathBuf> = Vec::new();
+
     if let Some(home) = dirs::home_dir() {
+        // Steam standard & Flatpak
         roots.push(home.join(".local/share/Steam"));
         roots.push(home.join(".steam/steam"));
         roots.push(home.join(".steam/root"));
-    }
-    // Any mounted Steam library folders (e.g. /mnt/*/SteamLibrary).
-    if let Ok(entries) = std::fs::read_dir("/mnt") {
-        for entry in entries.flatten() {
-            let p = entry.path().join("SteamLibrary");
-            if p.join("steamapps").exists() {
-                roots.push(p);
+        roots.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+        roots.push(home.join(".var/app/com.valvesoftware.Steam/.steam/steam"));
+
+        // Lutris prefixes
+        let lutris_bases = [
+            home.join("Games/magic-the-gathering-arena"),
+            home.join("Games/mtga"),
+            home.join("Games/Magic-The-Gathering-Arena"),
+            home.join(".local/share/lutris/runners/wine"),
+        ];
+        for base in lutris_bases {
+            if base.exists() {
+                // Check direct prefix drive_c/users
+                let users_dir = base.join("drive_c/users");
+                if let Ok(users) = std::fs::read_dir(&users_dir) {
+                    for u in users.flatten() {
+                        let p = u.path().join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                        if p.exists() { candidates.push(p); }
+                    }
+                }
+            }
+        }
+
+        // Bottles prefixes
+        let bottles_dir = home.join(".var/app/com.usebottles.bottles/data/bottles/bottles");
+        if let Ok(bottles) = std::fs::read_dir(&bottles_dir) {
+            for b in bottles.flatten() {
+                let users_dir = b.path().join("drive_c/users");
+                if let Ok(users) = std::fs::read_dir(&users_dir) {
+                    for u in users.flatten() {
+                        let p = u.path().join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                        if p.exists() { candidates.push(p); }
+                    }
+                }
+            }
+        }
+
+        // Heroic prefixes
+        let heroic_dir = home.join("Games/Heroic/Prefixes");
+        if let Ok(prefixes) = std::fs::read_dir(&heroic_dir) {
+            for pfx in prefixes.flatten() {
+                let users_dir = pfx.path().join("drive_c/users");
+                if let Ok(users) = std::fs::read_dir(&users_dir) {
+                    for u in users.flatten() {
+                        let p = u.path().join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                        if p.exists() { candidates.push(p); }
+                    }
+                }
+            }
+        }
+
+        // Wine standard prefix
+        let wine_users = home.join(".wine/drive_c/users");
+        if let Ok(users) = std::fs::read_dir(&wine_users) {
+            for u in users.flatten() {
+                let p = u.path().join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                if p.exists() { candidates.push(p); }
             }
         }
     }
+
+    // Mounted disks (/mnt, /media, /run/media/*, /teradrive)
+    let scan_mount_roots = ["/mnt", "/media", "/teradrive"];
+    for mount_root in scan_mount_roots {
+        if let Ok(entries) = std::fs::read_dir(mount_root) {
+            for entry in entries.flatten() {
+                let p = entry.path().join("SteamLibrary");
+                if p.join("steamapps").exists() {
+                    roots.push(p);
+                }
+                let p_direct = entry.path();
+                if p_direct.join("steamapps").exists() {
+                    roots.push(p_direct);
+                }
+            }
+        }
+    }
+    if let Ok(users) = std::fs::read_dir("/run/media") {
+        for u in users.flatten() {
+            if let Ok(drives) = std::fs::read_dir(u.path()) {
+                for drive in drives.flatten() {
+                    let p = drive.path().join("SteamLibrary");
+                    if p.join("steamapps").exists() {
+                        roots.push(p);
+                    }
+                    let p_direct = drive.path();
+                    if p_direct.join("steamapps").exists() {
+                        roots.push(p_direct);
+                    }
+                }
+            }
+        }
+    }
+
     roots.dedup();
 
-    // 1. Native Linux layout: MTGA_Data/Downloads/Player.log
-    let native = roots.iter().map(|r| {
-        r.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log")
-    });
-    if let Some(p) = native.into_iter().find(|p| p.exists()) {
-        return Some(p);
-    }
-
-    // 2. Wine/Proton compatdata prefixes:
-    //    <root>/steamapps/compatdata/*/pfx/drive_c/users/*/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log
+    // Check Steam compatdata in all roots
     for root in &roots {
+        // Native layout
+        let native = root.join("steamapps/common/MTGA/MTGA_Data/Downloads/Player.log");
+        if native.exists() { candidates.push(native); }
+
         let compat_dir = root.join("steamapps/compatdata");
-        let Ok(appids) = std::fs::read_dir(&compat_dir) else { continue };
-        for app in appids.flatten() {
-            let users_dir = app.path().join("pfx/drive_c/users");
-            let Ok(users) = std::fs::read_dir(&users_dir) else { continue };
-            for user in users.flatten() {
-                let p = user
-                    .path()
-                    .join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
-                if p.exists() {
-                    return Some(p);
+        if let Ok(appids) = std::fs::read_dir(&compat_dir) {
+            for app in appids.flatten() {
+                let users_dir = app.path().join("pfx/drive_c/users");
+                if let Ok(users) = std::fs::read_dir(&users_dir) {
+                    for user in users.flatten() {
+                        let p = user.path().join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
+                        if p.exists() { candidates.push(p); }
+                    }
                 }
             }
         }
     }
 
-    // 3. Standalone Wine (no Steam): default prefix + user profile.
-    if let Some(home) = dirs::home_dir() {
-        let p = home.join(
-            ".wine/drive_c/users/Public/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log",
-        );
-        if p.exists() {
-            return Some(p);
-        }
-        // Fall back to the first real user under the default prefix.
-        let users_dir = home.join(".wine/drive_c/users");
-        if let Ok(users) = std::fs::read_dir(&users_dir) {
-            for user in users.flatten() {
-                let p = user
-                    .path()
-                    .join("AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
+    candidates.dedup();
 
-    None
+    // Sort by most recently modified timestamp descending so the active game client is preferred
+    candidates.sort_by(|a, b| {
+        let time_a = std::fs::metadata(a).and_then(|m| m.modified()).ok();
+        let time_b = std::fs::metadata(b).and_then(|m| m.modified()).ok();
+        time_b.cmp(&time_a)
+    });
+
+    candidates.into_iter().next()
 }
 
 pub struct FileTailer {
@@ -171,9 +241,9 @@ impl FileTailer {
         let mut reader = BufReader::new(current_file);
 
         if !self.read_from_start {
-            // Seek backwards up to 512KB to catch recent pre-match deck submissions (EventSetDeckV3) or Auth packets if launched mid-queue
+            // Seek backwards up to 16MB to catch recent pre-match deck submissions (EventSetDeckV3), Auth packets, and active MatchGameRoomStateChangedEvent if launched mid-game
             let file_len = current_meta.len();
-            let lookback = 512 * 1024; // 512KB
+            let lookback = 16 * 1024 * 1024; // 16MB
             let start_pos = if file_len > lookback {
                 file_len - lookback
             } else {

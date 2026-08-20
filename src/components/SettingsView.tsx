@@ -21,6 +21,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { ManaPip } from './ManaPip';
 import { CustomDropdown } from './CustomDropdown';
+import { APP_VERSION } from '../version';
 
 interface SettingsViewProps {
   palette: any;
@@ -34,7 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   palette, 
   activeThemeId, 
   setActiveThemeId,
-  version = '1.1.1',
+  version = APP_VERSION,
   isTestEnv = false,
 }) => {
   // Log path state
@@ -74,6 +75,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [dbStats, setDbStats] = useState<{ db_filename: string; db_path: string; size_bytes: number; match_count: number } | null>(null);
   const [dbExporting, setDbExporting] = useState(false);
   const [dbExportSuccess, setDbExportSuccess] = useState<string | null>(null);
+
+  // Card Database sync & Wizard state
+  const [cardDbStatus, setCardDbStatus] = useState<{ card_count: number; raw_path: string | null } | null>(null);
+  const [cardDbSyncing, setCardDbSyncing] = useState(false);
+  const [cardDbSyncResult, setCardDbSyncResult] = useState<{ success: boolean; count: number; elapsedMs: number; error?: string } | null>(null);
+  const [showResetWizardModal, setShowResetWizardModal] = useState(false);
 
   // Helper to format bytes
   const formatBytes = (bytes: number) => {
@@ -142,10 +149,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  // Load card database status
+  const loadCardDbStatus = async () => {
+    try {
+      const res = await invoke<any>('get_raw_card_db_status');
+      if (res) setCardDbStatus(res);
+    } catch (e) {
+      console.error('Failed to get card database status:', e);
+    }
+  };
+
   useEffect(() => {
     loadCacheStats();
     loadDbStats();
+    loadCardDbStatus();
   }, []);
+
+  const handleSyncCardDb = async () => {
+    setCardDbSyncing(true);
+    setCardDbSyncResult(null);
+    try {
+      const res = await invoke<any>('sync_card_database');
+      setCardDbSyncResult({
+        success: res.success,
+        count: res.card_count,
+        elapsedMs: Number(res.elapsed_ms),
+        error: res.error || undefined
+      });
+      await loadCardDbStatus();
+      setTimeout(() => setCardDbSyncResult(null), 5000);
+    } catch (e: any) {
+      setCardDbSyncResult({
+        success: false,
+        count: 0,
+        elapsedMs: 0,
+        error: e?.toString() || 'Sync error'
+      });
+    } finally {
+      setCardDbSyncing(false);
+    }
+  };
+
+  const handleConfirmResetWizard = async () => {
+    try {
+      await invoke('reset_setup_wizard');
+      setShowResetWizardModal(false);
+      window.dispatchEvent(new CustomEvent('open-setup-wizard'));
+    } catch (e) {
+      console.error('Failed to reset setup wizard:', e);
+    }
+  };
 
   const handleClearCache = async () => {
     setCacheClearing(true);
@@ -682,6 +735,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
+            {/* MTGA Card Database Indexing Status */}
+            <div className="p-3.5 rounded-xl border space-y-2.5 bg-black/25" style={{ borderColor: palette?.border }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase font-semibold opacity-60">MTGA Indexed Card Universe</p>
+                  <p className="text-sm font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
+                    {cardDbStatus?.card_count ? (
+                      <span className="text-emerald-400">{cardDbStatus.card_count.toLocaleString()} Cards Indexed</span>
+                    ) : (
+                      <span className="text-amber-400">0 Cards (Sync Required)</span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={handleSyncCardDb}
+                  disabled={cardDbSyncing}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 hover:opacity-90 active:scale-95 disabled:opacity-50 border"
+                  style={{ backgroundColor: `${palette?.accent}22`, borderColor: `${palette?.accent}66`, color: palette?.accent }}
+                >
+                  <RefreshCw className={`w-3 h-3 ${cardDbSyncing ? 'animate-spin' : ''}`} />
+                  {cardDbSyncing ? 'Indexing…' : 'Re-sync Cards'}
+                </button>
+              </div>
+              <p className="text-[10px] font-mono break-all opacity-60">
+                Raw DB: {cardDbStatus?.raw_path || 'Auto-scanning Steam / Lutris / Wine'}
+              </p>
+              {cardDbSyncResult && (
+                <p className={`text-[11px] font-mono ${cardDbSyncResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {cardDbSyncResult.success ? `Indexed ${cardDbSyncResult.count.toLocaleString()} cards in ${cardDbSyncResult.elapsedMs}ms` : `Error: ${cardDbSyncResult.error}`}
+                </p>
+              )}
+            </div>
+
             <div className="space-y-1">
               <p className="text-[10px] uppercase font-semibold opacity-50">Active Database Path</p>
               <p className="text-[11px] font-mono break-all px-2.5 py-1.5 rounded-lg border bg-black/40 opacity-75" style={{ borderColor: palette?.border }}>
@@ -689,15 +775,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </p>
             </div>
 
-            <div className="pt-1">
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 onClick={handleExportDb}
                 disabled={dbExporting}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95"
+                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95"
                 style={{ backgroundColor: palette?.accent, color: '#0B0C10' }}
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
                 {dbExporting ? 'Exporting…' : 'Backup / Export Database…'}
+              </button>
+
+              <button
+                onClick={() => setShowResetWizardModal(true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 border border-white/10 hover:border-white/30 text-neutral-300 hover:text-white"
+                style={{ backgroundColor: `${palette?.mantle || '#12141A'}` }}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                Re-run Setup Wizard…
               </button>
             </div>
             {dbExportSuccess && (
@@ -772,6 +867,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* CONFIRMATION MODAL: RE-RUN SETUP WIZARD */}
+      {showResetWizardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
+          <div 
+            className="w-full max-w-md rounded-2xl border p-6 space-y-4 shadow-2xl"
+            style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
+          >
+            <div className="flex items-center space-x-3 text-sky-400">
+              <Sliders className="w-6 h-6" />
+              <h3 className="text-base font-bold text-white">Re-run First-Time Setup Wizard?</h3>
+            </div>
+            
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              This will re-open the initial setup wizard to verify your MTGA log path and re-index the card database. 
+              <br /><br />
+              <strong className="text-emerald-400">Your match history and deck lists will not be deleted.</strong>
+            </p>
+
+            <div className="pt-2 flex items-center justify-end space-x-3">
+              <button
+                onClick={() => setShowResetWizardModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-neutral-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmResetWizard}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 transition-colors shadow-lg active:scale-95"
+              >
+                Launch Setup Wizard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

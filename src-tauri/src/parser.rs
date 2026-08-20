@@ -13,6 +13,7 @@ pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
     MatchCreated { match_id: String, format_name: String, reserved_players: serde_json::Value },
     DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32>, deck_id: Option<String> },
+    DeckCatalogBatch { decks: Vec<(String, String, Option<u32>, Vec<u32>)> },
     GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, life_by_seat: Vec<(u32, i32)>, active_seat: u32, damage_events: Vec<(u32, u32, i32, u32)> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
     Unknown,
@@ -100,11 +101,87 @@ pub fn parse_line(line: &str) -> ParsedEvent {
         }
     }
 
-    // 3. Deck Selection / Submission (Event 3)
-    // Real Arena logs emit `EventSetDeckV2` (and older/newer `EventSetDeck` /
-    // `EventSetDeckV3` variants). Previously the parser keyed only on V3/deckSubmit,
-    // which never appears, silently mislabeling every match as "Selected Deck".
-    if line.contains("EventSetDeck") || line.contains("deckSubmit") {
+    // 3. Deck Catalog Ingestion (StartHook / DeckSummaries / EventGetCourses / Courses)
+    if line.contains("DeckSummaries") || line.contains("Courses") || line.contains("EventGetCourses") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                let mut catalog = Vec::new();
+
+                // Check DeckSummaries (e.g. from StartHook or DeckGetSummaries)
+                if let Some(summaries) = v.get("DeckSummaries").and_then(|s| s.as_array()) {
+                    let decks_map = v.get("Decks");
+                    for sum in summaries {
+                        let did = sum.get("DeckId").and_then(|d| d.as_str()).unwrap_or("").to_string();
+                        let dname = sum.get("Name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                        if !did.is_empty() || !dname.is_empty() {
+                            let mut main_deck = Vec::new();
+                            let mut cmd_id = None;
+                            if let Some(dobj) = decks_map.and_then(|m| m.get(&did)) {
+                                if let Some(main) = dobj.get("MainDeck").and_then(|m| m.as_array()) {
+                                    for c in main {
+                                        if let Some(cid) = c.get("cardId").and_then(|x| x.as_u64()) {
+                                            let qty = c.get("quantity").and_then(|q| q.as_u64()).unwrap_or(1);
+                                            for _ in 0..qty {
+                                                main_deck.push(cid as u32);
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Some(cmd) = dobj.get("CommandZone").and_then(|c| c.as_array()) {
+                                    if let Some(first) = cmd.first() {
+                                        cmd_id = first.get("cardId").and_then(|c| c.as_u64()).map(|c| c as u32);
+                                    }
+                                }
+                            }
+                            catalog.push((did, dname, cmd_id, main_deck));
+                        }
+                    }
+                }
+
+                // Check Courses array (e.g. from EventGetCourses / EventGetCoursesV2)
+                if let Some(courses) = v.get("Courses").and_then(|c| c.as_array()) {
+                    for course in courses {
+                        if let Some(sum) = course.get("CourseDeckSummary") {
+                            let did = sum.get("DeckId").and_then(|d| d.as_str()).unwrap_or("").to_string();
+                            let dname = sum.get("Name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                            let mut main_deck = Vec::new();
+                            let mut cmd_id = None;
+                            if let Some(deck) = course.get("CourseDeck") {
+                                if let Some(main) = deck.get("MainDeck").and_then(|m| m.as_array()) {
+                                    for c in main {
+                                        if let Some(cid) = c.get("cardId").and_then(|x| x.as_u64()) {
+                                            let qty = c.get("quantity").and_then(|q| q.as_u64()).unwrap_or(1);
+                                            for _ in 0..qty {
+                                                main_deck.push(cid as u32);
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Some(cmd) = deck.get("CommandZone").and_then(|c| c.as_array()) {
+                                    if let Some(first) = cmd.first() {
+                                        cmd_id = first.get("cardId").and_then(|c| c.as_u64()).map(|c| c as u32);
+                                    }
+                                }
+                            }
+                            if !did.is_empty() || !dname.is_empty() {
+                                catalog.push((did, dname, cmd_id, main_deck));
+                            }
+                        }
+                    }
+                }
+
+                if !catalog.is_empty() {
+                    return ParsedEvent::DeckCatalogBatch { decks: catalog };
+                }
+            }
+        }
+    }
+
+    // 4. Deck Selection / Submission / Upsert (Event 3)
+    // Real Arena logs emit `EventSetDeckV2`, `EventSetDeckV3`, `DeckUpsertDeckV3`,
+    // `CourseDeckSummary`, and `deckSubmit` payloads.
+    if line.contains("EventSetDeck") || line.contains("DeckUpsertDeck") || line.contains("deckSubmit") || line.contains("CourseDeckSummary") {
         if let Some(start) = line.find('{') {
             let json_str = &line[start..];
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
@@ -127,7 +204,16 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                         if let Some(id) = summary.get("DeckId").and_then(|d| d.as_str()) {
                             deck_id = Some(id.to_string());
                         }
+                    } else {
+                        // Direct top-level fields (e.g. DeckId / Name in response)
+                        if let Some(name) = obj.get("Name").and_then(|n| n.as_str()) {
+                            deck_name = name.to_string();
+                        }
+                        if let Some(id) = obj.get("DeckId").and_then(|d| d.as_str()) {
+                            deck_id = Some(id.to_string());
+                        }
                     }
+
                     if let Some(deck) = obj.get("Deck").or_else(|| obj.get("CourseDeck")) {
                         if let Some(main) = deck.get("MainDeck").and_then(|m| m.as_array()) {
                             for card in main {
@@ -149,10 +235,8 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     }
                 }
 
-                if !main_deck.is_empty() {
-                    if deck_name.is_empty() {
-                        deck_name = "Selected Deck".to_string();
-                    }
+                // If we extracted a deck name, deck ID, or main deck cards, emit DeckSubmitted
+                if !deck_name.is_empty() || !main_deck.is_empty() || deck_id.is_some() {
                     let total_cards = main_deck.len();
                     return ParsedEvent::DeckSubmitted {
                         deck_name,
@@ -320,14 +404,28 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         return "Standard".to_string();
     }
 
-    // Check specific MTG Arena format keywords
-    if s.contains("brawl") || s.contains("commander") {
-        // TODO: "Standard Brawl" string patterns (e.g. Standard_Brawl_Play) are an assumption based on naming conventions, 
-        // not yet verified against a live Standard Brawl log payload. Verify against a real live match when played.
+    // Check high-priority event types first (these can encompass sub-formats like MWM_HistoricPauper, Direct_Standard, etc.)
+    if s.contains("mwm") || s.contains("midweek") {
+        "Midweek Magic".to_string()
+    } else if s.contains("bot") || s.contains("aibot") || s.contains("sparky") || s.contains("practice") {
+        "Bot Match".to_string()
+    } else if s.contains("direct") || s.contains("challenge") || s.contains("friendly") {
+        "Direct Challenge".to_string()
+    } else if s.contains("colorchallenge") || s.contains("tutorial") {
+        "Color Challenge".to_string()
+    } else if s.contains("gladiator") {
+        "Gladiator".to_string()
+    } else if s.contains("brawl") || s.contains("commander") {
         if s.contains("standard") {
             "Standard Brawl".to_string()
         } else {
             "Brawl".to_string()
+        }
+    } else if s.contains("timeless") {
+        if s.contains("ranked") {
+            "Timeless (Ranked)".to_string()
+        } else {
+            "Timeless".to_string()
         }
     } else if s.contains("historic") {
         if s.contains("ranked") {
@@ -347,7 +445,11 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         } else {
             "Explorer".to_string()
         }
-    } else if s.contains("draft") || s.contains("sealed") || s.contains("limited") {
+    } else if s.contains("draft") {
+        "Draft".to_string()
+    } else if s.contains("sealed") {
+        "Sealed".to_string()
+    } else if s.contains("limited") {
         "Limited".to_string()
     } else if s == "play" || s.contains("standard") {
         if s.contains("ranked") {
@@ -355,11 +457,6 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         } else {
             "Standard".to_string()
         }
-    } else if s.contains("bot") || s.contains("aibot") {
-        "Bot Match".to_string()
-    } else if s.contains("mwm") {
-        // Generic Midweek Magic fallback if format keyword is not matched above
-        "Midweek Magic".to_string()
     } else {
         raw_event_id.replace('_', " ")
     }
@@ -375,18 +472,27 @@ mod tests {
         assert_eq!(normalize_format("Standard_Ranked"), "Standard (Ranked)");
         assert_eq!(normalize_format("Historic_Play"), "Historic");
         assert_eq!(normalize_format("Historic_Ranked"), "Historic (Ranked)");
+        assert_eq!(normalize_format("Timeless_Play"), "Timeless");
+        assert_eq!(normalize_format("Timeless_Ranked"), "Timeless (Ranked)");
+        assert_eq!(normalize_format("Alchemy_Play"), "Alchemy");
+        assert_eq!(normalize_format("Explorer_Ranked"), "Explorer (Ranked)");
 
         // Brawl vs Standard Brawl Distinction Tests
-        assert_eq!(normalize_format("MWM_Brawl_20260811"), "Brawl");
         assert_eq!(normalize_format("Brawl_Play"), "Brawl");
         assert_eq!(normalize_format("Standard_Brawl_Play"), "Standard Brawl");
-        assert_eq!(normalize_format("MWM_Standard_Brawl_20260101"), "Standard Brawl");
 
-        // Generic MWM & Limited Tests
-        assert_eq!(normalize_format("MWM_Standard_20260101"), "Standard");
+        // Midweek Magic Tests (regardless of underlying format e.g. Historic Pauper, Brawl, Standard)
+        assert_eq!(normalize_format("MWM_HistoricPauper_20260818"), "Midweek Magic");
+        assert_eq!(normalize_format("MWM_Brawl_20260811"), "Midweek Magic");
+        assert_eq!(normalize_format("MWM_Standard_Brawl_20260101"), "Midweek Magic");
         assert_eq!(normalize_format("MWM_SpecialEvent"), "Midweek Magic");
-        assert_eq!(normalize_format("PremierDraft_WOE_2023"), "Limited");
+
+        // Limited & Casual Tests
+        assert_eq!(normalize_format("PremierDraft_WOE_2023"), "Draft");
+        assert_eq!(normalize_format("Sealed_FDN_2024"), "Sealed");
         assert_eq!(normalize_format("AIBotMatch_Rebalanced"), "Bot Match");
+        assert_eq!(normalize_format("DirectGame_Challenge"), "Direct Challenge");
+        assert_eq!(normalize_format("Gladiator_Play"), "Gladiator");
     }
 
     #[test]
@@ -437,6 +543,33 @@ mod tests {
         match parse_line(line) {
             ParsedEvent::Unknown => {}
             other => panic!("expected Unknown for bare response line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_deck_catalog_batch_parsing() {
+        let line = r#"{"Courses":[{"CourseId":"c1","CourseDeckSummary":{"DeckId":"d1","Name":"MonoWhite - Auras (Standard)"},"CourseDeck":{"MainDeck":[{"cardId":86715,"quantity":4}]}}]}"#;
+        match parse_line(line) {
+            ParsedEvent::DeckCatalogBatch { decks } => {
+                assert_eq!(decks.len(), 1);
+                assert_eq!(decks[0].0, "d1");
+                assert_eq!(decks[0].1, "MonoWhite - Auras (Standard)");
+                assert_eq!(decks[0].3.len(), 4);
+            }
+            other => panic!("expected DeckCatalogBatch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_headless_course_summary_parsing() {
+        let line = r#"{"CourseDeckSummary":{"DeckId":"d2","Name":"MonoWhite - Auras (Standard)"}}"#;
+        match parse_line(line) {
+            ParsedEvent::DeckSubmitted { deck_name, deck_id, total_cards, .. } => {
+                assert_eq!(deck_name, "MonoWhite - Auras (Standard)");
+                assert_eq!(deck_id.as_deref(), Some("d2"));
+                assert_eq!(total_cards, 0);
+            }
+            other => panic!("expected DeckSubmitted, got {:?}", other),
         }
     }
 }

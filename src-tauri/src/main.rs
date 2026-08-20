@@ -2191,6 +2191,111 @@ async fn get_database_stats() -> Result<DatabaseStats, String> {
     })
 }
 
+#[derive(serde::Serialize)]
+struct SetupStatus {
+    setup_completed: bool,
+    card_count: i64,
+    log_path: Option<String>,
+    raw_path: Option<String>,
+}
+
+#[tauri::command]
+async fn get_setup_status() -> Result<SetupStatus, String> {
+    let settings = settings::load_settings();
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let card_count: i64 = sqlx::query_scalar("SELECT count(*) FROM cards_cache")
+        .fetch_one(db.pool())
+        .await
+        .unwrap_or(0);
+
+    let log_path = settings.mtga_log_path.clone().or_else(|| {
+        tailer::discover_log_path().map(|p| p.to_string_lossy().to_string())
+    });
+
+    let raw_path = card_db::find_latest_raw_card_db().map(|p| p.to_string_lossy().to_string());
+
+    Ok(SetupStatus {
+        setup_completed: settings.setup_completed && card_count > 0,
+        card_count,
+        log_path,
+        raw_path,
+    })
+}
+
+#[tauri::command]
+async fn complete_setup() -> Result<(), String> {
+    let mut settings = settings::load_settings();
+    settings.setup_completed = true;
+    settings::save_settings(&settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn reset_setup_wizard() -> Result<(), String> {
+    let mut settings = settings::load_settings();
+    settings.setup_completed = false;
+    settings::save_settings(&settings).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+struct SyncCardDbResult {
+    success: bool,
+    card_count: usize,
+    elapsed_ms: u128,
+    raw_path: Option<String>,
+    error: Option<String>,
+}
+
+#[tauri::command]
+async fn sync_card_database() -> Result<SyncCardDbResult, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let raw_path = card_db::find_latest_raw_card_db().map(|p| p.to_string_lossy().to_string());
+
+    match card_db::sync_card_cache(db.pool()).await {
+        Ok((count, elapsed_ms)) => {
+            clear_universe_cache();
+            Ok(SyncCardDbResult {
+                success: true,
+                card_count: count,
+                elapsed_ms,
+                raw_path,
+                error: None,
+            })
+        }
+        Err(e) => {
+            Ok(SyncCardDbResult {
+                success: false,
+                card_count: 0,
+                elapsed_ms: 0,
+                raw_path,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_raw_card_db_status() -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM cards_cache")
+        .fetch_one(db.pool())
+        .await
+        .unwrap_or(0);
+    let raw_path = card_db::find_latest_raw_card_db().map(|p| p.to_string_lossy().to_string());
+    Ok(serde_json::json!({
+        "card_count": count,
+        "raw_path": raw_path,
+    }))
+}
+
+#[tauri::command]
+async fn set_raw_path(path: String) -> Result<String, String> {
+    let mut settings = settings::load_settings();
+    let trimmed = path.trim().to_string();
+    settings.mtga_raw_dir = if trimmed.is_empty() { None } else { Some(trimmed.clone()) };
+    settings::save_settings(&settings).map_err(|e| e.to_string())?;
+    Ok(trimmed)
+}
+
 #[tauri::command]
 async fn export_database_backup(destination_path: String) -> Result<String, String> {
     let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
@@ -3304,7 +3409,7 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
         // for a short window (10s) so the HUD can show a result overlay.
         if let Some((record, completed_at)) = &assembler.last_completed {
             let elapsed = chrono::Utc::now().signed_duration_since(*completed_at);
-            if elapsed.num_seconds() < 10 {
+            if elapsed.num_seconds() < 13 {
                 let reason = record.result_reason.as_deref().unwrap_or("");
                 let reason_label = if reason.contains("Concede") {
                     if record.result == "win" { "Opponent Conceded" } else { "Player Conceded" }
@@ -3313,6 +3418,47 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                 } else {
                     if record.result == "win" { "Victory" } else { "Defeat" }
                 };
+
+                let db = DatabaseManager::init().await.ok();
+                let mut impactful_cards_arr = Vec::new();
+                if let Some(db_mgr) = &db {
+                    let pool = db_mgr.pool();
+                    let rows = sqlx::query(
+                        r#"
+                        SELECT i.grp_id, COALESCE(c.name, 'Unknown') as card_name,
+                               i.total_damage, i.max_hit, i.damage_combat, i.damage_spell
+                        FROM match_impactful_cards i
+                        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+                        WHERE i.match_id = ? AND i.seat_id = ?
+                        ORDER BY i.total_damage DESC, i.max_hit DESC
+                        LIMIT 3
+                        "#
+                    )
+                    .bind(&record.match_id)
+                    .bind(record.hero_seat_id as i64)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
+
+                    for r in rows {
+                        let gid: i64 = r.get("grp_id");
+                        let name: String = r.get("card_name");
+                        let total_dmg: i64 = r.get("total_damage");
+                        let max_hit: i64 = r.get("max_hit");
+                        let dmg_combat: i64 = r.get("damage_combat");
+                        let dmg_spell: i64 = r.get("damage_spell");
+
+                        impactful_cards_arr.push(serde_json::json!({
+                            "grp_id": gid,
+                            "name": name,
+                            "total_damage": total_dmg,
+                            "max_hit": max_hit,
+                            "damage_combat": dmg_combat,
+                            "damage_spell": dmg_spell,
+                        }));
+                    }
+                }
+
                 return Ok(serde_json::json!({
                     "is_active": false,
                     "just_completed": true,
@@ -3325,6 +3471,10 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "opponent_name": record.opponent_name,
                     "player_life": record.player_life_end.unwrap_or(20),
                     "opponent_life": record.opponent_life_end.unwrap_or(0),
+                    "duration_seconds": record.duration_seconds,
+                    "turns": record.turns,
+                    "timestamp": record.date_str,
+                    "impactful_cards": impactful_cards_arr,
                 }));
             }
         }
@@ -3426,6 +3576,11 @@ async fn dispatch_parsed_event(
                 assembler.match_legitimate
             );
         }
+        ParsedEvent::DeckCatalogBatch { decks } => {
+            let count = decks.len();
+            assembler.register_deck_catalog(decks);
+            println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
+        }
         ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
             if turn_number > 0 {
                 assembler.current_turn = turn_number;
@@ -3445,10 +3600,21 @@ async fn dispatch_parsed_event(
             }
         }
         ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-            if let Some((record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+            if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                // If deck name is still "Selected Deck" or empty, resolve from database deck_lists
+                if record.player_deck_name.is_empty() || record.player_deck_name == "Selected Deck" {
+                    let hero_gids: Vec<i64> = card_records.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
+                    if let Ok(Some(resolved_name)) = db_manager.resolve_deck_for_cards(&hero_gids, record.player_commander_id.map(|c| c as i64)).await {
+                        record.player_deck_name = resolved_name.clone();
+                        assembler.cached_deck_name = Some(resolved_name.clone());
+                        assembler.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&resolved_name).is_none();
+                    }
+                }
+
                 println!(
-                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
+                    "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Deck = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
                     redact_str(&record.match_id),
+                    record.player_deck_name,
                     record.result,
                     reason,
                     record.player_life_end,
@@ -3553,8 +3719,7 @@ fn main() {
                 run_tailer_supervisor(path_rx, db_manager, assembler_ref).await;
             });
 
-            // Pre-warm the collection card universe in the background so the
-            // first Card Library visit renders immediately.
+            // Background card database auto-sync on startup if cards_cache is empty
             tauri::async_runtime::spawn(async move {
                 let db_manager = match DatabaseManager::init().await {
                     Ok(d) => d,
@@ -3563,6 +3728,16 @@ fn main() {
                         return;
                     }
                 };
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM cards_cache")
+                    .fetch_one(db_manager.pool())
+                    .await
+                    .unwrap_or(0);
+                if count == 0 {
+                    println!("[STARTUP] cards_cache is empty. Triggering automatic background card sync...");
+                    if let Ok((synced_count, elapsed_ms)) = card_db::sync_card_cache(db_manager.pool()).await {
+                        println!("[STARTUP] Auto-synced {} cards into cards_cache in {} ms", synced_count, elapsed_ms);
+                    }
+                }
                 let _ = get_universe(db_manager.pool()).await;
             });
 
@@ -3735,7 +3910,13 @@ fn main() {
             get_cache_stats,
             clear_image_cache,
             get_database_stats,
-            export_database_backup
+            export_database_backup,
+            get_setup_status,
+            complete_setup,
+            reset_setup_wizard,
+            sync_card_database,
+            get_raw_card_db_status,
+            set_raw_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,8 +5,12 @@ use std::path::PathBuf;
 pub struct AppSettings {
     #[serde(default)]
     pub mtga_log_path: Option<String>,
+    #[serde(default)]
+    pub mtga_raw_dir: Option<String>,
     #[serde(default = "default_minimize_to_tray")]
     pub minimize_to_tray: bool,
+    #[serde(default)]
+    pub setup_completed: bool,
 }
 
 fn default_minimize_to_tray() -> bool {
@@ -17,7 +21,9 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             mtga_log_path: None,
+            mtga_raw_dir: None,
             minimize_to_tray: true,
+            setup_completed: false,
         }
     }
 }
@@ -25,7 +31,12 @@ impl Default for AppSettings {
 fn settings_path() -> Option<PathBuf> {
     let mut dir = dirs::config_dir()?;
     dir.push("rhystic-tracker");
-    dir.push("settings.json");
+    let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    if env_mode.eq_ignore_ascii_case("production") {
+        dir.push("settings.json");
+    } else {
+        dir.push("settings_dev.json");
+    }
     Some(dir)
 }
 

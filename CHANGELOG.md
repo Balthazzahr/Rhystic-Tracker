@@ -8,6 +8,79 @@ All notable changes to Rhystic Tracker are documented here.
 
 - **Compile-Time Production Mode via Cargo Feature**: Added the opt-in `production-env` cargo feature. Builds compiled with `--features production-env` (release/bundled builds) are always `production` regardless of environment. Default builds keep the previous behavior: `RHYSTIC_ENV` environment variable if set, otherwise `development`.
 
+## [1.1.4] - 2026-08-20
+
+### ⚡ Fixed
+
+- **On the Play vs. On the Draw (`going_first`) Tracking**:
+  - Captured Turn 1 active seat (`turnInfo.activePlayer`) to dynamically and accurately resolve whether the player is on the play or on the draw.
+  - Added fallback check against Turn 1 records in `match_turn_events`.
+  - Added database migration reconciling historical matches with known Turn 1 event seats.
+- **Match Duration Calculation**:
+  - Implemented elapsed match duration calculation (`(match_end - match_start).num_seconds()`) upon match completion, resolving zero-minute match records in Match History and Dashboard.
+- **Midweek Magic Format Prioritization**:
+  - Prioritized rotating special event IDs (`mwm`, `midweek`) above underlying deck construction formats (e.g. Historic Pauper, Brawl) in format normalization.
+
+## [1.1.3] - 2026-08-20
+
+### 🌟 Added
+
+- **Comprehensive MTGA Formats Support**:
+  - Full GRE parser categorization and database normalization for all MTGA formats: Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match (Sparky/Practice), Direct Challenge, Midweek Magic, and Gladiator.
+  - Dynamically populated format filter dropdowns across the Dashboard and Match History.
+  - Extended mana-pip-themed badge palettes with distinct, recognizable colors for each format.
+  - Extended commander detection in Match History, Full Match Inspector, and Live Match HUD to all Brawl format variants (Standard Brawl & Brawl).
+- **Dashboard Trending Win Rate Graph Overhaul**:
+  - **Dynamic Dropdown Selector**: Replaced horizontal format buttons with an accessible, dark-themed styled `<select>` dropdown menu.
+  - **Redesigned Time Windows**:
+    - `Today`: Hourly wins & losses bar graph.
+    - `Past 7 Days`: Daily bar graph + daily rolling trend line.
+    - `Past 30 Days`: Daily bar graph + daily rolling trend line.
+    - `Past 12 Months`: Week-by-week aggregated bar graph + weekly rolling trend line.
+    - `All Time`: Month-by-month aggregated bar graph + monthly rolling trend line.
+  - **Dual-Colored Threshold Trend Line**: Vibrant green (`#22C55E`) above 50% and vibrant red (`#EF4444`) below 50% with an exact 50% threshold alignment and subtle transition blend.
+  - **Background Area Wash**: Subtle horizontal time-series area shading under the trend line matching the win rate status (green above 50%, red below 50%).
+  - **Edge-to-Edge Span**: Extended the trend line and background shading to span the absolute left and right boundaries of the graph.
+  - **Histogram Outlines**: Added thin white borders to win and loss bars for clean visual separation.
+  - **Snappy Graph Transitions**: Removed slow floaty animations (`isAnimationActive={false}`) for immediate zero-lag filter switching.
+- **Unified Single-Source Versioning**:
+  - Created `src/version.ts` exporting `APP_VERSION` from `package.json` to guarantee synchronous version displays across the Splash Screen and Settings view.
+
+### ⚡ Fixed
+
+- **Bot Matches & "Selected Deck" Fallback**:
+  - Added multi-source deck catalog ingestion and match card fingerprint resolution in the SQLite database manager.
+  - Automatically resolved previously misattributed bot matches to their true catalog names (e.g. `'MonoWhite - Auras (Standard)'`).
+
+---
+
+## [1.1.2] - 2026-08-20
+
+### 🌟 Added
+
+- **First-Time Setup Wizard**:
+  - Guided 3-step onboarding modal triggered on fresh installations (or when `cards_cache` is empty).
+  - Step 1: Automatic `Player.log` discovery across Steam Proton, Lutris, Bottles, Heroic, and Wine prefixes with live path status and MTGA Detailed Logging reminder.
+  - Step 2: Live animated card database sync status with one-click re-indexing (~150ms).
+  - Step 3: Combat analytics readiness confirmation and instant transition into the Dashboard.
+- **Dynamic Log-Derived Path Discovery for Lutris & Custom Drives**:
+  - Automatically derives the MTGA Raw Card Database directory from the active `Player.log` path (walking up from `drive_c/users/...` in Lutris to find `Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads/Raw/` and from `steamapps/compatdata/...` to `steamapps/common/MTGA/...`).
+  - Broadened discovery across all mounted disk roots (`/mnt/*`, `/media/*`, `/run/media/*/*`, `/teradrive`), Lutris folders (`~/Games/mtga`, `~/Games/magic-the-gathering-arena`), Bottles, and Heroic prefixes.
+- **Automatic Startup Card DB Sync**:
+  - Background startup task automatically checks if `cards_cache` is empty and indexes all 26,000+ cards into SQLite in ~150ms without blocking UI initialization.
+- **Settings Card DB Diagnostics & Wizard Re-Run**:
+  - Added live indexed card universe indicator (`26,572 cards ready`) in Settings under Database & Storage Management.
+  - Added a 1-click **Re-sync Cards** button.
+  - Added a **Re-run Setup Wizard…** action protected by a safety confirmation dialog to re-verify paths anytime without losing match history.
+- **1-Line Web Installer**:
+  - Automated `curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash` command that auto-downloads the latest release package, configures desktop launchers, and registers icons.
+
+### ⚡ Fixed
+
+- **Empty Card Cache & Unknown Cards on Fresh Installs**: Resolved issue where fresh installations had 0 rows in `cards_cache`, causing True Decklist imports to fail, Card Library to be blank, and match cards to appear as "Unknown Card".
+
+---
+
 ## [1.1.1] - 2026-08-20
 
 ### 🌟 Added

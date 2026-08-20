@@ -28,29 +28,32 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## ✨ Features at a Glance
 
-- 📊 **Dashboard**: Today's and all-time record, win rate trends, current streak counter, daily match grouping, and rotating deck spotlights.
-- ⚔️ **Live Match HUD**: Real-time game state tracker showing hero and opponent life changes, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with MTG font icons.
-- 🔍 **Full Match Inspector & Turn Timeline**: Granular play-by-play combat replay per turn, dynamic Commander artwork scaling, damage magnitude badges (`[4 DMG]`), card types, life swings, and victory/defeat causes.
+- 🧙‍♂️ **First-Time Setup Wizard & Dynamic Discovery**: Guided 3-step setup with real-time log detection across Steam Proton, Lutris, Bottles, and Heroic prefixes, plus instant startup card indexing (26,000+ cards in ~150ms).
+- 🏆 **Comprehensive MTGA Formats Coverage**: Native categorization and distinct colored badges for all 13 formats (Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match with precon resolution, Direct Challenge, Midweek Magic, and Gladiator).
+- 📊 **Dashboard & Time-Series Win Rate Analytics**: Today's and all-time records, active streak counter, daily match grouping, and an overhauled time-series graph with 5 time windows (`Today`, `7 Days`, `30 Days`, `12 Months`, `All Time`), dual-colored 50% threshold trend line (green/red), and volume histograms.
+- ⚔️ **Live Match HUD**: Real-time game state tracker showing hero/opponent commanders, life swings, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with authentic MTG font icons.
+- 🔍 **Full Match Inspector & Turn Timeline**: Responsive viewport scaling ($80\text{vw} \times 90\text{vh}$), universal <kbd>Esc</kbd> / backdrop dismissal, play-by-play combat replay per turn, damage magnitude badges (`[4 DMG]`), card types, and victory/defeat causes.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
-- 🃏 **Deck & Card Library**: Visual collection explorer with dual **Landscape Art Crop** (with translucent mana bars) and **Portrait Full Card** viewing modes, true-decklist import/export (`.txt` / MTGA format), and persistent set printing selection.
-  - *Note on Collection Tracking*: Because MTGA has removed raw collection dumps from client logs, Rhystic Tracker derives owned inventory strictly through verified True Decklists. This ensures temporary or in-game cards (from *heist, theft, copy, clone, or conjure* mechanics) never pollute your genuine collection database.
-- ⚙️ **Settings & Configuration**: Dynamic 2-column control panel with local image cache manager (live disk usage, purge, pre-download), database storage inspector with 1-click native DB backup export, startup tab preferences, log auto-discovery, and 5 color-identity mana themes.
+- 🃏 **Deck Library & 3-Column Inspector**: True-decklist import/export (`.txt` / MTGA format), starter deck exclusions, responsive 3-column decklist expansion for widescreen displays, enlarged mana distribution pie chart, and centered `MANA VALUE` histogram pill overlay.
+  - _Note on Collection Tracking_: Because MTGA has removed raw collection dumps from client logs, Rhystic Tracker derives owned inventory strictly through verified True Decklists. This ensures temporary or in-game cards (from _heist, theft, copy, clone, or conjure_ mechanics) never pollute your genuine collection database.
+- 🖼️ **Card Library & Dual Art Mode Viewers**: Visual collection explorer with dual **Landscape Art Crop** (with top translucent mana cost bar) and **Portrait Full Card** modes, 4-diamond interactive ownership controls, and persistent alternate set printing selection.
+- ⚙️ **Settings & Storage Suite**: Dynamic 2-column control panel with local image cache manager (live disk usage, purge, pre-download), database storage inspector with 1-click native DB backup export, startup tab preferences, log auto-discovery, manual card re-syncing, and wizard re-run tools.
 - 🎨 **Five Color-Identity Mana Themes**: Dynamic White, Blue, Black, Red, and Green themes that meticulously tint the entire application.
 
 ---
 
 ## 📸 Screenshots Showcase
 
-| Dashboard | Live Match HUD |
-| :---: | :---: |
+|                  Dashboard                   |                  Live Match HUD                  |
+| :------------------------------------------: | :----------------------------------------------: |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Live Match HUD](docs/screenshots/live_hud.png) |
 
-| Match History & Match Inspector | Turn Playback & Combat Timeline |
-| :---: | :---: |
+|           Match History & Match Inspector            |                      Turn Playback & Combat Timeline                       |
+| :--------------------------------------------------: | :------------------------------------------------------------------------: |
 | ![Match History](docs/screenshots/match_history.png) | ![Match Inspector Timeline](docs/screenshots/match_inspector_timeline.png) |
 
-| Deck Library & True Decklist Inspector | Card Library & Combat Analytics |
-| :---: | :---: |
+|       Deck Library & True Decklist Inspector       |            Card Library & Combat Analytics             |
+| :------------------------------------------------: | :----------------------------------------------------: |
 | ![Deck Library](docs/screenshots/deck_library.png) | ![Card Inspector](docs/screenshots/card_inspector.png) |
 
 ---
@@ -65,7 +68,7 @@ Run the automated installer in your terminal. It automatically fetches the lates
 curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash
 ```
 
-*(Alternatively using `wget`: `wget -qO- https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash`)*
+_(Alternatively using `wget`: `wget -qO- https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash`)_
 
 The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
 
@@ -76,6 +79,7 @@ The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers hig
 ### Option 2: Manual Download from GitHub Releases
 
 If you prefer to download the archive manually:
+
 1. Download the release package (`.tar.gz`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
 2. Extract the archive and run `./install.sh`:
    ```bash
@@ -94,28 +98,33 @@ If you prefer to compile from source or clone the repository:
 
 Rhystic Tracker uses Tauri v2, which requires WebKitGTK and standard GTK3 build libraries on Linux.
 
-**Debian / Ubuntu / Pop!_OS / Linux Mint:**
+**Debian / Ubuntu / Pop!\_OS / Linux Mint:**
+
 ```bash
 sudo apt update
 sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential curl wget file libssl-dev libjavascriptcoregtk-4.1-dev nodejs npm
 ```
 
 **Arch Linux / Omarchy / Manjaro:**
+
 ```bash
 sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget openssl appmenu-gtk-module libappindicator-gtk3 librsvg nodejs npm
 ```
 
 **Fedora / RHEL:**
+
 ```bash
 sudo dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel @development-tools nodejs npm
 ```
 
 **macOS:**
+
 ```bash
 xcode-select --install
 ```
 
 #### 2. Install Node.js & Rust (if not already installed)
+
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://www.rust-lang.org/tools/install): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 
@@ -139,7 +148,8 @@ npm run build:app
 ### 📦 Runtime Dependencies (For Pre-built Binaries)
 
 If running the pre-built release binary on a minimal or newly installed Linux system, ensure the WebKitGTK 4.1 runtime is present:
-- **Pop!_OS / Ubuntu / Debian:** `sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1`
+
+- **Pop!\_OS / Ubuntu / Debian:** `sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1`
 - **Arch Linux:** `sudo pacman -S webkit2gtk-4.1 libappindicator-gtk3`
 - **Fedora:** `sudo dnf install webkit2gtk4.1 libappindicator-gtk3`
 
