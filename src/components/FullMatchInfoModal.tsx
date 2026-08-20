@@ -142,45 +142,45 @@ export function FullMatchInfoModal({
         {/* Modal Body: Spacious 2-Panel Layout (Left Sidebar + Center Main View) */}
         <div className="flex-1 overflow-hidden grid grid-cols-12 p-6 gap-6">
           {/* Column 1: Left Match Metadata Sidebar (Col-Span 3) */}
-          <div className="col-span-3 flex flex-col space-y-4 overflow-y-auto pr-1">
+          <div className="col-span-3 flex flex-col gap-4 min-h-0 h-full overflow-hidden pr-1">
             {/* Brawl Side-by-Side Commander Cards (Item 6: Strictly Hidden for Non-Brawl Formats) */}
             {selectedMatch?.format_name && selectedMatch.format_name.toUpperCase() === 'BRAWL' && (
-              <div className="p-3 rounded-2xl border space-y-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                <p className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-60">Commanders</p>
-                <div className="space-y-2">
+              <div className="flex-1 min-h-0 flex flex-col p-3 rounded-2xl border gap-2" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <p className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-60 shrink-0">Commanders</p>
+                <div className="flex-1 min-h-0 flex flex-col gap-2">
                   {/* Player Commander */}
-                  <div className="p-2 rounded-xl border bg-black/40 text-center space-y-1" style={{ borderColor: palette?.border }}>
-                    <p className="text-[9px] font-mono opacity-50 uppercase">Player Commander</p>
+                  <div className="flex-1 min-h-0 flex flex-col p-2 rounded-xl border bg-black/40 text-center gap-1 overflow-hidden" style={{ borderColor: palette?.border }}>
+                    <p className="text-[9px] font-mono opacity-50 uppercase shrink-0">Player Commander</p>
                     {commanderInfo?.player_commander ? (
                       <>
                         <img 
                           src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(commanderInfo.player_commander.name)}&format=image&version=art_crop`}
                           alt={commanderInfo.player_commander.name}
-                          className="w-full h-24 object-cover rounded-lg border border-white/10"
+                          className="flex-1 min-h-0 w-full object-cover rounded-lg border border-white/10"
                         />
-                        <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.player_commander.name}</p>
+                        <p className="text-xs font-bold truncate shrink-0" style={{ color: palette?.text }}>{commanderInfo.player_commander.name}</p>
                       </>
                     ) : (
-                      <div className="h-20 rounded-lg border border-dashed flex items-center justify-center text-[10px] opacity-40 font-mono" style={{ borderColor: palette?.border }}>
+                      <div className="flex-1 min-h-0 rounded-lg border border-dashed flex items-center justify-center text-[10px] opacity-40 font-mono" style={{ borderColor: palette?.border }}>
                         No Cmdr
                       </div>
                     )}
                   </div>
 
                   {/* Opponent Commander */}
-                  <div className="p-2 rounded-xl border bg-black/40 text-center space-y-1" style={{ borderColor: palette?.border }}>
-                    <p className="text-[9px] font-mono opacity-50 uppercase">Opponent Commander</p>
+                  <div className="flex-1 min-h-0 flex flex-col p-2 rounded-xl border bg-black/40 text-center gap-1 overflow-hidden" style={{ borderColor: palette?.border }}>
+                    <p className="text-[9px] font-mono opacity-50 uppercase shrink-0">Opponent Commander</p>
                     {commanderInfo?.opponent_commander ? (
                       <>
                         <img 
                           src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(commanderInfo.opponent_commander.name)}&format=image&version=art_crop`}
                           alt={commanderInfo.opponent_commander.name}
-                          className="w-full h-24 object-cover rounded-lg border border-white/10"
+                          className="flex-1 min-h-0 w-full object-cover rounded-lg border border-white/10"
                         />
-                        <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{commanderInfo.opponent_commander.name}</p>
+                        <p className="text-xs font-bold truncate shrink-0" style={{ color: palette?.text }}>{commanderInfo.opponent_commander.name}</p>
                       </>
                     ) : (
-                      <div className="h-20 rounded-lg border border-dashed flex flex-col items-center justify-center text-[10px] opacity-40 font-mono px-2 text-center" style={{ borderColor: palette?.border }}>
+                      <div className="flex-1 min-h-0 rounded-lg border border-dashed flex flex-col items-center justify-center text-[10px] opacity-40 font-mono px-2 text-center" style={{ borderColor: palette?.border }}>
                         <span>Uncast /</span>
                         <span>Unknown</span>
                       </div>
@@ -191,7 +191,7 @@ export function FullMatchInfoModal({
             )}
 
             {/* Match Specs Sidebar Panel */}
-            <div className="p-4 rounded-2xl border space-y-3 text-xs" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+            <div className="p-4 rounded-2xl border space-y-3 text-xs shrink-0" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: palette?.border }}>
                 <span className="opacity-60 text-[10px] uppercase font-semibold">Format</span>
                 <span className="font-bold font-mono px-2 py-0.5 rounded border bg-black/40" style={{ borderColor: palette?.border }}>{selectedMatch.format_name}</span>

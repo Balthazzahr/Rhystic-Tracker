@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.1.0-38BDF8?style=flat-square&logo=git" alt="Version 1.1.0" /></a>
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.1.1-38BDF8?style=flat-square&logo=git" alt="Version 1.1.1" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
@@ -30,10 +30,11 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 - 📊 **Dashboard**: Today's and all-time record, win rate trends, current streak counter, daily match grouping, and rotating deck spotlights.
 - ⚔️ **Live Match HUD**: Real-time game state tracker showing hero and opponent life changes, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with MTG font icons.
-- 🔍 **Full Match Inspector & Turn Timeline**: Granular play-by-play combat replay per turn, highlighting damage magnitude (`[4 DMG]`), card types, life swings, and victory/defeat causes.
+- 🔍 **Full Match Inspector & Turn Timeline**: Granular play-by-play combat replay per turn, dynamic Commander artwork scaling, damage magnitude badges (`[4 DMG]`), card types, life swings, and victory/defeat causes.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
-- 🃏 **Deck & Card Library**: Visual collection explorer, full true-decklist import/export (`.txt` / MTGA format), deck legitimacy verification (protects stats from preset/starter decks), and 450px high-resolution card artwork viewers with Scryfall oracle texts.
+- 🃏 **Deck & Card Library**: Visual collection explorer with dual **Landscape Art Crop** (with translucent mana bars) and **Portrait Full Card** viewing modes, true-decklist import/export (`.txt` / MTGA format), and persistent set printing selection.
   - *Note on Collection Tracking*: Because MTGA has removed raw collection dumps from client logs, Rhystic Tracker derives owned inventory strictly through verified True Decklists. This ensures temporary or in-game cards (from *heist, theft, copy, clone, or conjure* mechanics) never pollute your genuine collection database.
+- ⚙️ **Settings & Configuration**: Dynamic 2-column control panel with local image cache manager (live disk usage, purge, pre-download), database storage inspector with 1-click native DB backup export, startup tab preferences, log auto-discovery, and 5 color-identity mana themes.
 - 🎨 **Five Color-Identity Mana Themes**: Dynamic White, Blue, Black, Red, and Green themes that meticulously tint the entire application.
 
 ---
@@ -56,26 +57,36 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## 🚀 Quick Start & Installation
 
-### Option 1: Pre-built Release (Recommended)
+### Option 1: One-Line Installer (Recommended)
 
-Download the latest release tarball from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases):
+Run the automated installer in your terminal. It automatically fetches the latest release, installs the binary, registers the application icon, and sets up your desktop launcher:
 
 ```bash
-# 1. Download and extract the latest release package
-tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
-cd rhystic-tracker-v1.0.0-rc1
-
-# 2. Run the desktop installer (registers icon and launcher automatically)
-./install.sh
+curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash
 ```
 
-The tarball contains the pre-compiled binary (`rhystic-tracker-x86_64-linux`) and `install.sh`. The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
+*(Alternatively using `wget`: `wget -qO- https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash`)*
+
+The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
 
 > **Note:** `install.sh` automatically sets `GDK_BACKEND=x11` in the desktop launcher so the app works correctly on both X11 and Wayland sessions (via XWayland).
 
 ---
 
-### Option 2: Build from Source
+### Option 2: Manual Download from GitHub Releases
+
+If you prefer to download the archive manually:
+1. Download the release package (`.tar.gz`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
+2. Extract the archive and run `./install.sh`:
+   ```bash
+   tar -xzf rhystic-tracker-*.tar.gz
+   cd rhystic-tracker-*/
+   ./install.sh
+   ```
+
+---
+
+### Option 3: Build from Source
 
 If you prefer to compile from source or clone the repository:
 

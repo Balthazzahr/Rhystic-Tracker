@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive guide for **Rhystic Tracker v1.1.0**. This document explains how Rhystic Tracker functions, how to configure your Linux environment, how to utilize every feature, and how to troubleshoot common questions.
+Welcome to the comprehensive guide for **Rhystic Tracker v1.1.1**. This document explains how Rhystic Tracker functions, how to configure your Linux environment, how to utilize every feature, and how to troubleshoot common questions.
 
 ---
 
@@ -19,7 +19,8 @@ Welcome to the comprehensive guide for **Rhystic Tracker v1.1.0**. This document
    - [Full Match Inspector & Turn Playback](#full-match-inspector--turn-playback)
    - [Lifetime Card Combat Analytics](#lifetime-card-combat-analytics)
    - [Deck Library & True Decklist Management](#deck-library--true-decklist-management)
-   - [Card Library & Scryfall Viewer](#card-library--scryfall-viewer)
+   - [Card Library & Dual Art Mode Viewers](#card-library--persistent-combat-analytics)
+   - [Settings & Configuration Control Panel](#settings--configuration-control-panel)
    - [Theming Engine](#theming-engine)
 6. [Data Storage & Privacy](#6-data-storage--privacy)
 7. [Frequently Asked Questions (FAQ)](#7-frequently-asked-questions-faq)
@@ -87,17 +88,25 @@ Release builds compiled with the `production-env` cargo feature (`cargo build --
 
 ## 4. Desktop Integration & Launcher Setup
 
-### Option A: Pre-built Release (Fastest)
+### Option A: One-Line Installer (Recommended)
 
-1. Download `rhystic-tracker-v1.1.0-linux-x86_64.tar.gz` from the [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases).
+Run the automated installer in your terminal:
+```bash
+curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash
+```
+*(Or with `wget`: `wget -qO- https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash`)*
+
+### Option B: Manual Download from GitHub Releases
+
+1. Download the release package (`.tar.gz`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
 2. Extract the archive and run the installer:
    ```bash
-   tar -xzf rhystic-tracker-v1.1.0-linux-x86_64.tar.gz
-   cd rhystic-tracker-v1.1.0
+   tar -xzf rhystic-tracker-*.tar.gz
+   cd rhystic-tracker-*/
    ./install.sh
    ```
 
-### Option B: Building from Source
+### Option C: Building from Source
 
 If compiling from source on your distribution:
 
@@ -249,19 +258,35 @@ To maintain **100% data integrity**, Rhystic Tracker implements the following ar
 2. **Game Play vs Owned Integrity (Theft & Copy Protection)**: Every card cast in a match is logged by the engine. However, cards created in-game via **token generators, clone/copy mechanics (e.g., *Spark Double*), conjure, heist, or card-theft effects (e.g., *Gonti*, *Thief of Sanity*, *Ragavan*)** are not real collection cards. By strictly deriving owned inventory from verified True Decklists, Rhystic Tracker guarantees that borrowed or generated spells never artificially pollute your genuine collection stats.
 3. **Card Analytics Hub**: The Card Library is designed as an accessible combat analytics hub for the cards you own and play. Every card displays how often you've cast it across your decks, its win rate impact, and its direct combat potency. If Wizards of the Coast re-enables full client inventory dumps in future log updates, Rhystic Tracker is architected to automatically ingest full collection dumps seamlessly.
 
-#### 3-Panel Card Inspector & Analytics
-- **Panel 1 (Left)**: High-definition 450px card artwork with card style / printing selector.
-- **Panel 2 (Middle)**: Card metadata, rarity, deck inclusion list, and Scryfall oracle & flavor text.
-- **Panel 3 (Right)**: **Card Combat Analytics**:
-  - Total matches played and win rate when cast.
-  - Total damage dealt with **Face (Player)** vs **Permanents** split bar.
-  - **Combat Damage** vs **Spell / Ability Damage** classification.
-  - **Turn Cast Frequency Histogram** (mapped to player round turns).
-  - **MVP Deck Attribution**.
+#### Dual Art Mode Viewers
+In the top toolbar of the Card Library, switch seamlessly between:
+- 🖼️ **Landscape Art Crop Mode (`<Image />`)**: Displays uncropped Magic card illustrations in their native landscape aspect ratio, accompanied by a semi-transparent top title bar with card name and parsed `<ManaPip />` mana costs.
+- 🎴 **Portrait Full Card Mode (`<RectangleVertical />`)**: Displays the classic complete card face with frames, mana costs, and full rules text.
 
-<p align="center">
-  <img src="docs/screenshots/card_inspector.png" alt="Card Inspector" width="900" />
-</p>
+#### Persistent Printing & Set Selection
+When inspecting any card, selecting an alternate set printing from the **Card Style / Set** dropdown immediately updates the main Card Library grid with the chosen artwork and persists across sessions.
+
+---
+
+### Settings & Configuration Control Panel
+The **Settings and Configuration** page provides complete control over Rhystic Tracker's local services, storage, and preferences arranged in a responsive 2-column layout:
+
+- **MTGA Log Path Configuration**: Live discovery and validation of `Player.log` with support for Steam Proton prefixes, Lutris, Bottles, and custom directory browsers.
+- **Desktop & Background Behavior**:
+  - *Minimize to System Tray on Close*: Keep match tailing running silently in the background.
+  - *Auto-Switch to Live Match HUD*: Automatically jump to the real-time match tracker when game start signals are detected.
+- **Application & Collection Preferences**:
+  - *Default Startup Tab*: Choose which view opens on launch (Dashboard, Live Match HUD, Match History, Deck Library, Card Library).
+  - *Default Collection Sort Order*: Choose default card sorting (Release Date, Mana Value, Rarity, Alphabetical, Ownership Count).
+- **Local Card Image Cache Manager**:
+  - Displays real-time disk storage size (`MB`) and cached card image count.
+  - **Clear Image Cache**: Purges stored Scryfall webp card images to free disk space.
+  - **Pre-download Collection Art**: Downloads high-resolution artwork for every card in your collection for instant offline browsing.
+- **Database & Storage Management**:
+  - Displays active database filename (`rhystic.db` / `rhystic_dev.db`), absolute file path, disk size, and total recorded match count.
+  - **Backup / Export Database**: 1-Click native Save File dialog to export an exact SQLite snapshot of your match history and collection for safe backups.
+- **Set Metadata & Release Schedules**: View total known MTG expansions and synchronize new set releases directly from Scryfall.
+- **Mana Theme Customization**: Switch between 5 color identity theme presets (White, Blue, Black, Red, Green).
 
 ---
 

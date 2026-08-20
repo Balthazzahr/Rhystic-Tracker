@@ -150,29 +150,25 @@ export default function App() {
     }
   }, [isSidebarCollapsedManual]);
 
-  // Navigation & Filter State: Always default to 'dashboard' on launch
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>('dashboard');
+  // Navigation & Filter State: Respect defaultStartupTab from settings, falling back to 'dashboard'
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'matches' | 'live' | 'decks' | 'collection' | 'settings'>(() => {
+    const savedDefault = localStorage.getItem('defaultStartupTab');
+    if (savedDefault && ['dashboard', 'matches', 'live', 'decks', 'collection', 'settings'].includes(savedDefault)) {
+      return savedDefault as any;
+    }
+    return 'dashboard';
+  });
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
-  // First-launch Cinematic Splash Screen Animation State
-  const [splashState, setSplashState] = useState<'showing' | 'animating' | 'done'>('showing');
+  // First-launch Splash Screen State (2.0s duration, instant dismiss)
+  const [showSplash, setShowSplash] = useState(true);
   useEffect(() => {
-    // Stage 1: Display large centered splash for 2.0s
-    const t1 = setTimeout(() => {
-      setSplashState('animating');
+    const t = setTimeout(() => {
+      setShowSplash(false);
     }, 2000);
-
-    // Stage 2: Animate for 1.5s (2x faster, total 3.5s), then unmount overlay completely
-    const t2 = setTimeout(() => {
-      setSplashState('done');
-    }, 3500);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    return () => clearTimeout(t);
   }, []);
 
   // Listen for navigation events from the system tray menu
@@ -484,11 +480,13 @@ export default function App() {
         if (printings.length > 0) {
           // Prefer the saved card-style preference; else the newest printing.
           const pref = getCardStylePref(name);
-          const saved = pref?.setCode && pref?.collectorNumber
-            ? printings.find((p) => String(p.set_code) === String(pref.setCode)
-                && String(p.collector_number) === String(pref.collectorNumber))
+          const prefKey = pref?.setCode && pref?.collectorNumber
+            ? `${normalizeScryfallSetCode(pref.setCode)}|${cleanCollectorNumber(pref.collectorNumber)}`
             : null;
-          setOverlaySelected(saved ? printingKey(saved) : printingKey(printings[0]));
+          const saved = prefKey
+            ? printings.find((p) => printingKey(p) === prefKey)
+            : null;
+          setOverlaySelected(saved ? printingKey(saved) : (prefKey || printingKey(printings[0])));
         }
         // Fetch flavor text for each printing so it matches the selected art.
         const flavors: Record<string, string> = {};
@@ -573,7 +571,12 @@ export default function App() {
       try {
         const liveState = await invoke<any>('get_live_match_state');
         if (liveState && liveState.is_active) {
-          wasActive = true;
+          if (!wasActive) {
+            wasActive = true;
+            if (localStorage.getItem('autoSwitchLiveHud') === 'true') {
+              setActiveTab('live');
+            }
+          }
           setLiveMatchState({
             status: 'IN_MATCH',
             match_id: liveState.match_id,
@@ -1231,7 +1234,7 @@ export default function App() {
           <div 
             className={`flex flex-col items-center justify-center shrink-0 transition-all pt-3 pb-4 ${
               isSidebarCollapsed ? 'px-0' : 'px-2'
-            } ${splashState !== 'done' ? 'opacity-0' : 'opacity-100'}`}
+            }`}
           >
             <img 
               src={symbolIcon} 
@@ -1252,8 +1255,8 @@ export default function App() {
                 }}
                 title="Running in safe isolated test environment against rhystic_dev.db"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                <span>{isSidebarCollapsed ? 'TEST' : 'TEST ENV'}</span>
+                <span className="text-[11px] leading-none">🧙</span>
+                {!isSidebarCollapsed && <span>TEST ENV</span>}
               </div>
             )}
           </div>
@@ -1389,7 +1392,6 @@ export default function App() {
             }}
             onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
-            hideBrandHeader={splashState !== 'done'}
             isTestEnv={envInfo?.is_test}
           />
         )}
@@ -1399,7 +1401,9 @@ export default function App() {
           <SettingsView 
             palette={palette} 
             activeThemeId={activeThemeId} 
-            setActiveThemeId={setActiveThemeId} 
+            setActiveThemeId={setActiveThemeId}
+            version="1.1.1"
+            isTestEnv={envInfo?.is_test}
           />
         )}
 
@@ -2259,6 +2263,14 @@ export default function App() {
                             setCode: p.set_code,
                             collectorNumber: p.collector_number,
                           });
+                          setCollectionRefreshTrigger((t) => t + 1);
+                          window.dispatchEvent(new CustomEvent('rhystic-card-style-changed', {
+                            detail: {
+                              name: deckCardOverlay.card.name,
+                              setCode: p.set_code,
+                              collectorNumber: p.collector_number,
+                            }
+                          }));
                         }
                       }
                     }}
@@ -2638,54 +2650,27 @@ export default function App() {
         </div>
       )}
 
-      {/* FIRST-LAUNCH CINEMATIC SPLASH SCREEN & MORPH ANIMATION */}
-      {splashState !== 'done' && (
+      {/* SPLASH SCREEN */}
+      {showSplash && (
         <div
-          onClick={() => setSplashState('done')}
-          className={`fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none transition-all duration-[1500ms] ease-in-out ${
-            splashState === 'animating' ? 'bg-black/0 pointer-events-none' : 'bg-black/60'
-          }`}
+          onClick={() => setShowSplash(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none bg-black/85 backdrop-blur-md"
         >
-          {/* Animated Container: holds the centered icon + text logo on splash, then translates/scales into resting positions */}
-          <div className="relative w-full h-full pointer-events-none overflow-hidden">
-            {/* 1. SYMBOL ICON: Animates from center (2.2x scale) -> Top-Left Sidebar Icon (1.0x resting size) */}
-            <div
-              className="absolute transition-all duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{
-                left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? '36px' : '110px'),
-                top: splashState === 'showing' ? '40%' : '52px',
-                transform: splashState === 'showing' 
-                  ? 'translate(-50%, -50%) scale(2.2)' 
-                  : `translate(-50%, -50%) scale(${isSidebarCollapsed ? '0.43' : '1.0'})`,
-                opacity: 1,
-              }}
-            >
-              <img
-                src={symbolIcon}
-                alt="Rhystic Tracker"
-                className="w-auto h-[75px] object-contain drop-shadow-[0_15px_40px_rgba(56,189,248,0.5)]"
-                style={{ imageRendering: 'auto' }}
-              />
-            </div>
-
-            {/* 2. TEXT LOGO: Animates from center below icon (2.0x scale) -> Top-Center Dashboard Header (1.0x resting size) */}
-            <div
-              className="absolute transition-all duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{
-                left: splashState === 'showing' ? '50%' : (isSidebarCollapsed ? 'calc(50% + 36px + 36px)' : 'calc(50% + 110px + 36px)'),
-                top: splashState === 'showing' ? '60%' : '58px',
-                transform: splashState === 'showing' 
-                  ? 'translate(-50%, -50%) scale(2.0)' 
-                  : 'translate(-50%, -50%) scale(1.0)',
-                opacity: 1,
-              }}
-            >
-              <img
-                src={logoImg}
-                alt="Rhystic Tracker"
-                className="w-auto h-[83px] max-w-[80vw] object-contain drop-shadow-[0_15px_45px_rgba(0,0,0,0.9)]"
-                style={{ imageRendering: 'auto' }}
-              />
+          <div className="flex flex-col items-center justify-center space-y-6">
+            <img
+              src={symbolIcon}
+              alt="Rhystic Tracker"
+              className="w-auto h-[145px] object-contain drop-shadow-[0_20px_50px_rgba(56,189,248,0.6)]"
+            />
+            <img
+              src={logoImg}
+              alt="Rhystic Tracker"
+              className="w-auto h-[110px] max-w-[85vw] object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.95)]"
+            />
+            <div className="pt-3 text-center">
+              <span className="text-base font-mono font-extrabold tracking-widest text-white drop-shadow-md uppercase">
+                v1.1.1{envInfo?.is_test ? ' — Test Environment' : ''}
+              </span>
             </div>
           </div>
         </div>

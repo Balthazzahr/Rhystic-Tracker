@@ -2103,7 +2103,7 @@ fn save_card_image(app: tauri::AppHandle, name: String, version: String, data: V
 fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Result<Option<String>, String> {
     let dir = card_img_cache_dir(&app)?;
 
-    // 1. Exact printing match with requested version
+    // 1. Exact match with requested version
     let exact_path = dir.join(card_img_filename(&name, &version));
     if exact_path.exists() {
         return Ok(Some(exact_path.to_string_lossy().to_string()));
@@ -2117,24 +2117,96 @@ fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Resul
         }
     }
 
-    // 3. Fallback: If querying a specific printing ("Name|Set|CN"), check if generic ("Name") exists.
-    if let Some(base_name) = name.split('|').next() {
-        let trimmed_base = base_name.trim();
-        if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
-            let generic_path = dir.join(card_img_filename(trimmed_base, &version));
-            if generic_path.exists() {
-                return Ok(Some(generic_path.to_string_lossy().to_string()));
-            }
-            if version == "small" {
-                let generic_normal = dir.join(card_img_filename(trimmed_base, "normal"));
-                if generic_normal.exists() {
-                    return Ok(Some(generic_normal.to_string_lossy().to_string()));
+    Ok(None)
+}
+
+#[derive(serde::Serialize)]
+struct CacheStats {
+    size_bytes: u64,
+    file_count: usize,
+}
+
+#[tauri::command]
+fn get_cache_stats(app: tauri::AppHandle) -> Result<CacheStats, String> {
+    let dir = card_img_cache_dir(&app)?;
+    let mut total_size = 0u64;
+    let mut count = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    total_size += meta.len();
+                    count += 1;
                 }
             }
         }
     }
+    Ok(CacheStats { size_bytes: total_size, file_count: count })
+}
 
-    Ok(None)
+#[tauri::command]
+fn clear_image_cache(app: tauri::AppHandle) -> Result<CacheStats, String> {
+    let dir = card_img_cache_dir(&app)?;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+    Ok(CacheStats { size_bytes: 0, file_count: 0 })
+}
+
+#[derive(serde::Serialize)]
+struct DatabaseStats {
+    db_filename: String,
+    db_path: String,
+    size_bytes: u64,
+    match_count: i64,
+}
+
+#[tauri::command]
+async fn get_database_stats() -> Result<DatabaseStats, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let match_count = db.get_match_count().await.unwrap_or(0);
+    let db_filename = db.db_filename.clone();
+
+    let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    let is_prod = env_mode.to_lowercase() == "production";
+    let config_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("rhystic-tracker");
+    let actual_path = config_dir.join(if is_prod { "rhystic.db" } else { "rhystic_dev.db" });
+
+    let size_bytes = std::fs::metadata(&actual_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    Ok(DatabaseStats {
+        db_filename,
+        db_path: actual_path.to_string_lossy().to_string(),
+        size_bytes,
+        match_count,
+    })
+}
+
+#[tauri::command]
+async fn export_database_backup(destination_path: String) -> Result<String, String> {
+    let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    let is_prod = env_mode.to_lowercase() == "production";
+    let config_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("rhystic-tracker");
+    let src_path = config_dir.join(if is_prod { "rhystic.db" } else { "rhystic_dev.db" });
+
+    if !src_path.exists() {
+        return Err("Source database file does not exist".to_string());
+    }
+
+    let dest = std::path::PathBuf::from(&destination_path);
+    std::fs::copy(&src_path, &dest).map_err(|e| format!("Failed to copy database: {}", e))?;
+    Ok(format!("Database backup successfully created at {:?}", destination_path))
 }
 
 /// Per-deck "% owned" stats. Uses the True Decklist when one is imported,
@@ -3659,7 +3731,11 @@ fn main() {
             get_log_path,
             set_log_path,
             get_minimize_to_tray,
-            set_minimize_to_tray
+            set_minimize_to_tray,
+            get_cache_stats,
+            clear_image_cache,
+            get_database_stats,
+            export_database_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
