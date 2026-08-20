@@ -57,26 +57,36 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## 🚀 Quick Start & Installation
 
-### Option 1: Pre-built Release (Recommended)
+### Option 1: One-Line Installer (Recommended)
 
-Download the latest release tarball from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases):
+Run the automated installer in your terminal. It automatically fetches the latest release, installs the binary, registers the application icon, and sets up your desktop launcher:
 
 ```bash
-# 1. Download and extract the latest release package
-tar -xzf rhystic-tracker-v1.0.0-rc1-linux-x86_64.tar.gz
-cd rhystic-tracker-v1.0.0-rc1
-
-# 2. Run the desktop installer (registers icon and launcher automatically)
-./install.sh
+curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash
 ```
 
-The tarball contains the pre-compiled binary (`rhystic-tracker-x86_64-linux`) and `install.sh`. The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
+*(Alternatively using `wget`: `wget -qO- https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash`)*
+
+The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers high-resolution application icons into `~/.local/share/icons/`, and creates the desktop entry so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **Cosmic**, **Rofi**, **Wofi**, **KDE Plasma**).
 
 > **Note:** `install.sh` automatically sets `GDK_BACKEND=x11` in the desktop launcher so the app works correctly on both X11 and Wayland sessions (via XWayland).
 
 ---
 
-### Option 2: Build from Source
+### Option 2: Manual Download from GitHub Releases
+
+If you prefer to download the archive manually:
+1. Download the release package (`.tar.gz`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
+2. Extract the archive and run `./install.sh`:
+   ```bash
+   tar -xzf rhystic-tracker-*.tar.gz
+   cd rhystic-tracker-*/
+   ./install.sh
+   ```
+
+---
+
+### Option 3: Build from Source
 
 If you prefer to compile from source or clone the repository:
 

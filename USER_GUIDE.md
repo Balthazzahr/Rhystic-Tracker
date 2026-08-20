@@ -81,17 +81,25 @@ RHYSTIC_MTGA_RAW_DIR="/path/to/Raw/Card/Database" rhystic-tracker
 
 ## 4. Desktop Integration & Launcher Setup
 
-### Option A: Pre-built Release (Fastest)
+### Option A: One-Line Installer (Recommended)
 
-1. Download `rhystic-tracker-v1.1.0-linux-x86_64.tar.gz` from the [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases).
+Run the automated installer in your terminal:
+```bash
+curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash
+```
+*(Or with `wget`: `wget -qO- https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash`)*
+
+### Option B: Manual Download from GitHub Releases
+
+1. Download the release package (`.tar.gz`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
 2. Extract the archive and run the installer:
    ```bash
-   tar -xzf rhystic-tracker-v1.1.0-linux-x86_64.tar.gz
-   cd rhystic-tracker-v1.1.0
+   tar -xzf rhystic-tracker-*.tar.gz
+   cd rhystic-tracker-*/
    ./install.sh
    ```
 
-### Option B: Building from Source
+### Option C: Building from Source
 
 If compiling from source on your distribution:
 
