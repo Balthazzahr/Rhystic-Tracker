@@ -3409,7 +3409,7 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
         // for a short window (10s) so the HUD can show a result overlay.
         if let Some((record, completed_at)) = &assembler.last_completed {
             let elapsed = chrono::Utc::now().signed_duration_since(*completed_at);
-            if elapsed.num_seconds() < 10 {
+            if elapsed.num_seconds() < 13 {
                 let reason = record.result_reason.as_deref().unwrap_or("");
                 let reason_label = if reason.contains("Concede") {
                     if record.result == "win" { "Opponent Conceded" } else { "Player Conceded" }
@@ -3418,6 +3418,47 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                 } else {
                     if record.result == "win" { "Victory" } else { "Defeat" }
                 };
+
+                let db = DatabaseManager::init().await.ok();
+                let mut impactful_cards_arr = Vec::new();
+                if let Some(db_mgr) = &db {
+                    let pool = db_mgr.pool();
+                    let rows = sqlx::query(
+                        r#"
+                        SELECT i.grp_id, COALESCE(c.name, 'Unknown') as card_name,
+                               i.total_damage, i.max_hit, i.damage_combat, i.damage_spell
+                        FROM match_impactful_cards i
+                        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+                        WHERE i.match_id = ? AND i.seat_id = ?
+                        ORDER BY i.total_damage DESC, i.max_hit DESC
+                        LIMIT 3
+                        "#
+                    )
+                    .bind(&record.match_id)
+                    .bind(record.hero_seat_id as i64)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
+
+                    for r in rows {
+                        let gid: i64 = r.get("grp_id");
+                        let name: String = r.get("card_name");
+                        let total_dmg: i64 = r.get("total_damage");
+                        let max_hit: i64 = r.get("max_hit");
+                        let dmg_combat: i64 = r.get("damage_combat");
+                        let dmg_spell: i64 = r.get("damage_spell");
+
+                        impactful_cards_arr.push(serde_json::json!({
+                            "grp_id": gid,
+                            "name": name,
+                            "total_damage": total_dmg,
+                            "max_hit": max_hit,
+                            "damage_combat": dmg_combat,
+                            "damage_spell": dmg_spell,
+                        }));
+                    }
+                }
+
                 return Ok(serde_json::json!({
                     "is_active": false,
                     "just_completed": true,
@@ -3430,6 +3471,10 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "opponent_name": record.opponent_name,
                     "player_life": record.player_life_end.unwrap_or(20),
                     "opponent_life": record.opponent_life_end.unwrap_or(0),
+                    "duration_seconds": record.duration_seconds,
+                    "turns": record.turns,
+                    "timestamp": record.date_str,
+                    "impactful_cards": impactful_cards_arr,
                 }));
             }
         }
