@@ -14,6 +14,12 @@
   <img src="https://img.shields.io/badge/license-MIT-emerald?style=flat-square" alt="License MIT" />
 </p>
 
+<p align="center">
+  <a href="docs/USER_GUIDE.md"><strong>📖 User Guide & Manual</strong></a> &nbsp;•&nbsp;
+  <a href="docs/CHANGELOG.md"><strong>📝 Release Changelog</strong></a> &nbsp;•&nbsp;
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><strong>📦 GitHub Releases</strong></a>
+</p>
+
 ---
 
 ## ⚡ What is Rhystic Tracker?

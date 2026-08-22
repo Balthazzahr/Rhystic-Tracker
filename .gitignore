@@ -9,6 +9,7 @@ src-tauri/gen/
 launch.sh
 run.sh
 launch-test.sh
+launch-fresh-test.sh
 src-tauri/migrate_database.py
 
 # Agent & internal instruction documents
