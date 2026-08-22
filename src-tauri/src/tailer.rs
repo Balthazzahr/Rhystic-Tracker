@@ -28,6 +28,19 @@ pub fn discover_log_path() -> Option<PathBuf> {
         }
     }
 
+    // macOS layout (Epic Games Store / standalone): Unity writes to
+    // ~/Library/Logs/Wizards Of The Coast/MTGA/Player.log
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            let p = home.join("Library/Logs/Wizards Of The Coast/MTGA/Player.log");
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    
+    // Candidate Steam library roots (both native layout and mounted libraries).
     let mut candidates: Vec<PathBuf> = Vec::new();
     let mut roots: Vec<PathBuf> = Vec::new();
 

@@ -137,6 +137,19 @@ impl DatabaseManager {
             "rhystic_dev.db".to_string()
         }
     }
+
+    /// Resolves the effective environment mode. Precedence:
+    /// 1. `production-env` cargo feature enabled (default for release/bundled
+    ///    builds) -> always "production".
+    /// 2. Otherwise, the RHYSTIC_ENV environment variable if set.
+    /// 3. Otherwise "development".
+    pub fn resolve_env() -> String {
+        if cfg!(feature = "production-env") {
+            return "production".to_string();
+        }
+        std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string())
+    }
+    
     pub async fn init() -> Result<Self, Box<dyn std::error::Error>> {
         // TEST SAFETY GUARD: Under `cargo test` this code path is the ONLY way a
         // test can obtain a database handle, so it is forced to a hardcoded
@@ -156,7 +169,7 @@ impl DatabaseManager {
         };
         tokio::fs::create_dir_all(&db_dir).await?;
 
-        let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+        let env_mode = Self::resolve_env();
 
         let db_filename = Self::resolve_db_filename(&env_mode);
 

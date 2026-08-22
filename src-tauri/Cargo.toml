@@ -6,6 +6,9 @@ description = "Rhystic Tracker Tauri Desktop Application"
 authors = ["Dave Pople"]
 edition = "2021"
 
+[features]
+production-env = []
+
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
 

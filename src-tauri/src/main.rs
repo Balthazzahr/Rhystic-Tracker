@@ -39,7 +39,7 @@ struct AppEnvironmentInfo {
 
 #[tauri::command]
 fn get_app_environment() -> AppEnvironmentInfo {
-    let env = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    let env = db::DatabaseManager::resolve_env();
     let is_prod = env.to_lowercase() == "production";
     AppEnvironmentInfo {
         environment: if is_prod { "production".to_string() } else { "development".to_string() },
@@ -3741,7 +3741,7 @@ fn main() {
                 let _ = get_universe(db_manager.pool()).await;
             });
 
-            let is_prod = std::env::var("RHYSTIC_ENV").map(|v| v.to_lowercase() == "production").unwrap_or(false);
+            let is_prod = db::DatabaseManager::resolve_env().to_lowercase() == "production";
 
             if let Some(window) = app.get_webview_window("main") {
                 if !is_prod {

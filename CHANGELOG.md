@@ -2,9 +2,16 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [Unreleased]
+
+### 🌟 Added
+
+- **Compile-Time Production Mode via Cargo Feature**: Added the opt-in `production-env` cargo feature. Builds compiled with `--features production-env` (release/bundled builds) are always `production` regardless of environment. Default builds keep the previous behavior: `RHYSTIC_ENV` environment variable if set, otherwise `development`.
+
 ## [1.1.4] - 2026-08-20
 
 ### ⚡ Fixed
+
 - **On the Play vs. On the Draw (`going_first`) Tracking**:
   - Captured Turn 1 active seat (`turnInfo.activePlayer`) to dynamically and accurately resolve whether the player is on the play or on the draw.
   - Added fallback check against Turn 1 records in `match_turn_events`.
@@ -17,6 +24,7 @@ All notable changes to Rhystic Tracker are documented here.
 ## [1.1.3] - 2026-08-20
 
 ### 🌟 Added
+
 - **Comprehensive MTGA Formats Support**:
   - Full GRE parser categorization and database normalization for all MTGA formats: Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match (Sparky/Practice), Direct Challenge, Midweek Magic, and Gladiator.
   - Dynamically populated format filter dropdowns across the Dashboard and Match History.
@@ -39,6 +47,7 @@ All notable changes to Rhystic Tracker are documented here.
   - Created `src/version.ts` exporting `APP_VERSION` from `package.json` to guarantee synchronous version displays across the Splash Screen and Settings view.
 
 ### ⚡ Fixed
+
 - **Bot Matches & "Selected Deck" Fallback**:
   - Added multi-source deck catalog ingestion and match card fingerprint resolution in the SQLite database manager.
   - Automatically resolved previously misattributed bot matches to their true catalog names (e.g. `'MonoWhite - Auras (Standard)'`).
@@ -48,6 +57,7 @@ All notable changes to Rhystic Tracker are documented here.
 ## [1.1.2] - 2026-08-20
 
 ### 🌟 Added
+
 - **First-Time Setup Wizard**:
   - Guided 3-step onboarding modal triggered on fresh installations (or when `cards_cache` is empty).
   - Step 1: Automatic `Player.log` discovery across Steam Proton, Lutris, Bottles, Heroic, and Wine prefixes with live path status and MTGA Detailed Logging reminder.
@@ -66,6 +76,7 @@ All notable changes to Rhystic Tracker are documented here.
   - Automated `curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/install.sh | bash` command that auto-downloads the latest release package, configures desktop launchers, and registers icons.
 
 ### ⚡ Fixed
+
 - **Empty Card Cache & Unknown Cards on Fresh Installs**: Resolved issue where fresh installations had 0 rows in `cards_cache`, causing True Decklist imports to fail, Card Library to be blank, and match cards to appear as "Unknown Card".
 
 ---
@@ -73,6 +84,7 @@ All notable changes to Rhystic Tracker are documented here.
 ## [1.1.1] - 2026-08-20
 
 ### 🌟 Added
+
 - **Settings & Configuration Overhaul**:
   - **Dynamic 2-Column Responsive Layout**: Reorganized all configuration cards into an expansive, height-balanced 2-column grid (`SETTINGS AND CONFIGURATION`) with right-aligned version badge (`v1.1.1` + Test Environment tag).
   - **Local Card Image Cache Manager**: Real-time storage stats (`MB` used / file count) with **Clear Image Cache** and **Pre-download Collection Art** actions.
@@ -92,12 +104,14 @@ All notable changes to Rhystic Tracker are documented here.
   - Enlarged symbol icon (`145px`) and logo (`110px`) by ~160% with glowing drop shadows and bold monospace version subtitle.
 
 ### ⚡ Fixed
+
 - **Card Art Selection Persistence**: Removed generic fallback short-circuit in `has_card_image` (Rust IPC) that was returning default cached card files instead of downloading selected alternate set printings.
 - **Cross-Component Style Synchronization**: Added event-driven style revision triggers (`rhystic-card-style-changed`) so changing set artwork in the inspector immediately updates the Card Library preview and persists across sessions.
 
 ---
 
 ### 🌟 Added
+
 - **Modal Dismissal Protocols & Dynamic Scaling**:
   - **Global Escape Key Dismissal**: Pressing <kbd>Esc</kbd> now closes any active inspector modal (`FullMatchInfoModal`, `DeckDetailView`, `OpponentH2HModal`), closing nested dialogs (e.g. Export / Import) first.
   - **Backdrop Click Dismissal**: Clicking anywhere on the darkened background outside modal cards smoothly closes the inspector.
@@ -116,6 +130,7 @@ All notable changes to Rhystic Tracker are documented here.
   - Created isolated Test Environment (`launch-test.sh` / `rhystic-tracker-test`) running on `rhystic_dev.db` with custom witch's hat badges, ensuring daily match history and real collection data remain 100% pristine during active testing.
 
 ### ⚡ Fixed
+
 - **History Navigation Rate Limiting Crash**: Resolved `SecurityError: history.pushState()` rate limit exception triggered during rapid window resizing with the Deck Inspector open.
 - **Match Upsert Idempotence**: Added atomic child record cleanup prior to match inserts, eliminating duplicated turn events and opening hands.
 - **WebKit Linux Rendering Safeguards**: Added `WEBKIT_DISABLE_DMABUF_RENDERER=1`, `WEBKIT_DISABLE_COMPOSITING_MODE=1`, and `GDK_BACKEND=x11` flags to ensure crisp rendering without black-screen compositing artifacts.
@@ -125,6 +140,7 @@ All notable changes to Rhystic Tracker are documented here.
 ## [1.0.1] - 2026-08-18
 
 ### 🌟 Added
+
 - **Diamond Ownership Indicator in Collection Grid**: Replaced card tile dots with glowing 4-diamond indicators representing owned copies (1–4).
 - **Interactive 4-Diamond Selector in Card Preview**: Added an interactive 4-diamond ownership adjuster pinned to the bottom of the card details panel.
   - Clicking slot 4 sets 4 copies; clicking slot 1 while 1 is owned toggles to 0.
@@ -133,9 +149,10 @@ All notable changes to Rhystic Tracker are documented here.
 - **Standardized App Build Pipeline (`npm run build:app`)**: Bundles frontend assets directly into the standalone Tauri binary using `npx @tauri-apps/cli build --no-bundle`, ensuring offline and self-contained operation without dependency on a local dev server.
 
 ### ⚡ Fixed
+
 - **Card Library De-Duplication**:
-  - Filtered out secondary Alchemy **Specialize** transform forms (e.g. *Ambergris*, *Alora*, *Skanos*, *Wyll*, etc.) so only the primary collectible card appears in the library.
-  - Filtered out subordinate split-card halves (e.g. *Appeal* and *Authority* when *Appeal // Authority* exists) and non-collectible tokens.
+  - Filtered out secondary Alchemy **Specialize** transform forms (e.g. _Ambergris_, _Alora_, _Skanos_, _Wyll_, etc.) so only the primary collectible card appears in the library.
+  - Filtered out subordinate split-card halves (e.g. _Appeal_ and _Authority_ when _Appeal // Authority_ exists) and non-collectible tokens.
 - **Card Preview Layout & Proportions**:
   - Removed container overhang and dark background boxes behind the card art.
   - Card art renders cleanly with its native Magic card aspect ratio.
@@ -148,6 +165,7 @@ All notable changes to Rhystic Tracker are documented here.
 ## [1.0.0] - 2026-08-12
 
 ### Initial Release
+
 - Real-time `Player.log` monitoring and event parsing.
 - Persistent SQLite match records, deck stats, and combat analytics.
 - Live Match HUD, Full Match Inspector, and Turn Playback timeline.

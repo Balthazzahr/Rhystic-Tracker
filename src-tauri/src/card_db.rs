@@ -108,7 +108,14 @@ pub fn find_latest_raw_card_db() -> Option<PathBuf> {
 
     // 4. Candidate directories scan across Steam, Lutris, Bottles, Heroic, Wine, and mounted drives
     let mut candidate_dirs = Vec::new();
-
+    
+    #[cfg(target_os = "macos")]
+    if let Some(home) = dirs::home_dir() {
+        candidate_dirs.push(
+            home.join("Library/Application Support/com.wizards.mtga/Downloads/Raw"),
+        );
+    }
+    
     if let Some(home) = dirs::home_dir() {
         // Standard Steam
         candidate_dirs.push(home.join(".local/share/Steam/steamapps/common/MTGA/MTGA_Data/Downloads/Raw"));
