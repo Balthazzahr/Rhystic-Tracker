@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name (e.g. v1.1.5)'
+        required: false
+        default: ''
+
+jobs:
+  build-linux:
+    name: Build Linux (x86_64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build Linux Binary
+        run: |
+          npm run build
+          cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Package Linux Artifact
+        run: |
+          mkdir -p dist-release
+          cp src-tauri/target/release/rhystic-tracker dist-release/rhystic-tracker
+          tar -czvf rhystic-tracker-linux-x86_64.tar.gz -C dist-release rhystic-tracker
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifact
+          path: rhystic-tracker-linux-x86_64.tar.gz
+
+  build-macos:
+    name: Build macOS (Universal)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build macOS Binary
+        run: |
+          npm run build
+          cargo build --release --features production-env --manifest-path src-tauri/Cargo.toml
+
+      - name: Package macOS Artifact
+        run: |
+          mkdir -p dist-release
+          cp src-tauri/target/release/rhystic-tracker dist-release/rhystic-tracker
+          tar -czvf rhystic-tracker-macos-universal.tar.gz -C dist-release rhystic-tracker
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifact
+          path: rhystic-tracker-macos-universal.tar.gz
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifact
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifact
+
+      - name: Generate Checksums
+        run: |
+          sha256sum rhystic-tracker-linux-x86_64.tar.gz rhystic-tracker-macos-universal.tar.gz > SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            rhystic-tracker-linux-x86_64.tar.gz
+            rhystic-tracker-macos-universal.tar.gz
+            SHA256SUMS.txt
+          generate_release_notes: true

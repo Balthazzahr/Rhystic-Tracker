@@ -2,11 +2,28 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [Unreleased]
+## [1.1.5] - 2026-08-22
 
 ### 🌟 Added
 
-- **Compile-Time Production Mode via Cargo Feature**: Added the opt-in `production-env` cargo feature. Builds compiled with `--features production-env` (release/bundled builds) are always `production` regardless of environment. Default builds keep the previous behavior: `RHYSTIC_ENV` environment variable if set, otherwise `development`.
+- **Mulligan Tracking & Opening Hand Lifecycle**:
+  - Full GRE pre-game and prompt parsing (Prompt 36 for Mulligan taken, Prompt 37 for Kept hand, and `ClientMessageType_MulliganResp`).
+  - Automated state machine buffering opening hand instances during Turn 0 to eliminate phantom 14+ Turn 1 card draw inflation.
+  - Granular tracking for shuffled-back cards (`mulligan`), London mulligan bottomed cards (`bottom`), and kept opening hands (`draw`).
+  - Persistent SQLite storage for `hero_mulligans` and `opponent_mulligans` with automated schema migrations.
+  - Dedicated **"Opening Phase & Mulligans"** section in the Match Play Timeline displaying color-coded action badges (`MULLIGAN`, `BOTTOM`, `KEPT`), mana pips, and card type icons.
+  - Match Specs sidebar summary displaying `Player vs Opponent` mulligan counts.
+- **Automated Multi-Platform GitHub Actions CI/CD Pipeline**:
+  - Configured `.github/workflows/release.yml` with dual matrix builds (`ubuntu-22.04` and `macos-latest`).
+  - Automatically compiles and packages Linux `x86_64` `.tar.gz` and macOS universal release artifacts with automated SHA256 checksum generation on release tags.
+- **macOS Platform Support (PR #3)**:
+  - Native macOS log (`~/Library/Logs/Wizards Of The Coast/MTGA/Player.log`) and raw card database discovery.
+  - Centralized `DatabaseManager::resolve_env()` and opt-in `production-env` cargo feature.
+
+### ⚡ Fixed
+
+- **Settings View Scrollbar Fix (PR #6)**:
+  - Fixed vertical overflow and scrolling constraints on the Settings and Configuration view for compact screens.
 
 ## [1.1.4] - 2026-08-20
 
