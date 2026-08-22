@@ -17,6 +17,7 @@ pub struct MatchRecord {
     pub player_commander_id: Option<u32>,
     pub player_commander_name: Option<String>,
     pub player_life_end: Option<i32>,
+    pub player_mulligans: Option<u32>,
     pub opponent_name: Option<String>,
     pub opponent_commander_id: Option<u32>,
     pub opponent_commander_name: Option<String>,
@@ -88,6 +89,10 @@ pub struct MatchAssembler {
     pub collection_draws: Vec<u32>,
     pub current_player_life: i32,
     pub current_opp_life: i32,
+    pub player_mulligans: u32,
+    pub opponent_mulligans: u32,
+    pub player_opening_hand: Vec<(u32, u32)>, // (instance_id, grp_id)
+    pub opening_hand_finalized: bool,
     pub player_cards_seen: HashMap<u32, u32>,
     pub opp_cards_seen: HashMap<u32, u32>,
     pub instance_map: HashMap<u32, u32>, // instanceId -> grpId
@@ -121,6 +126,10 @@ impl MatchAssembler {
             collection_draws: Vec::new(),
             current_player_life: 20,
             current_opp_life: 20,
+            player_mulligans: 0,
+            opponent_mulligans: 0,
+            player_opening_hand: Vec::new(),
+            opening_hand_finalized: false,
             player_cards_seen: HashMap::new(),
             opp_cards_seen: HashMap::new(),
             instance_map: HashMap::new(),
@@ -132,7 +141,7 @@ impl MatchAssembler {
             life_events: Vec::new(),
             damage_feed_events: Vec::new(),
             feed_seq: 0,
-            current_turn: 1,
+            current_turn: 0,
             turn_1_active_seat: None,
             match_start_time: None,
             impactful_cards: HashMap::new(),
@@ -170,6 +179,10 @@ impl MatchAssembler {
 
         self.current_player_life = default_life;
         self.current_opp_life = default_life;
+        self.player_mulligans = 0;
+        self.opponent_mulligans = 0;
+        self.player_opening_hand.clear();
+        self.opening_hand_finalized = false;
         self.player_cards_seen.clear();
         self.opp_cards_seen.clear();
         self.instance_map.clear();
@@ -182,7 +195,7 @@ impl MatchAssembler {
         self.damage_feed_events.clear();
         self.impactful_cards.clear();
         self.processed_msg_ids.clear();
-        self.current_turn = 1;
+        self.current_turn = 0;
         self.feed_seq = 0;
         self.player_seat_id = 1;
         self.collection_draws.clear();
@@ -228,6 +241,7 @@ impl MatchAssembler {
             player_commander_id: commander_id,
             player_commander_name: None,
             player_life_end: Some(default_life),
+            player_mulligans: Some(0),
             opponent_name: None,
             opponent_commander_id: None,
             opponent_commander_name: None,
@@ -315,11 +329,99 @@ impl MatchAssembler {
         std::mem::take(&mut self.collection_draws)
     }
 
+    pub fn handle_mulligan_decision(&mut self, seat_id: u32, is_mulligan: bool, _num_cards: Option<u32>) {
+        let is_player = seat_id == 0 || seat_id == self.player_seat_id;
+        if is_mulligan {
+            if is_player {
+                self.player_mulligans += 1;
+                if let Some(m) = &mut self.active_match {
+                    m.player_mulligans = Some(self.player_mulligans);
+                }
+                let cards_to_mulligan: Vec<u32> = self.player_opening_hand.drain(..).map(|(_, gid)| gid).collect();
+                for gid in cards_to_mulligan {
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: 0,
+                        seat_id: self.player_seat_id,
+                        event_type: "mulligan".to_string(),
+                        grp_id: gid,
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
+                    self.feed_seq += 1;
+                }
+            } else {
+                self.opponent_mulligans += 1;
+                if let Some(m) = &mut self.active_match {
+                    m.opponent_mulligans = Some(self.opponent_mulligans);
+                }
+                self.turn_events.push(MatchTurnEventRecord {
+                    turn_number: 0,
+                    seat_id,
+                    event_type: "mulligan".to_string(),
+                    grp_id: 0,
+                    timestamp: Utc::now().to_rfc3339(),
+                });
+                self.turn_event_seqs.push(self.feed_seq);
+                self.feed_seq += 1;
+            }
+        } else {
+            // Hand kept
+            if is_player {
+                self.finalize_opening_hand();
+            }
+        }
+    }
+
+    pub fn handle_deleted_instances(&mut self, deleted_ids: &[u32]) {
+        if self.current_turn == 0 && !self.opening_hand_finalized && !self.player_opening_hand.is_empty() {
+            let deleted_hand_count = self.player_opening_hand.iter().filter(|(i, _)| deleted_ids.contains(i)).count();
+            if deleted_hand_count >= 5 {
+                // Full opening hand was deleted -> Mulligan taken
+                self.handle_mulligan_decision(self.player_seat_id, true, None);
+            } else if deleted_hand_count > 0 {
+                // Individual cards deleted before turn 1 -> London mulligan put on bottom of library
+                for inst_id in deleted_ids {
+                    if let Some(pos) = self.player_opening_hand.iter().position(|(i, _)| i == inst_id) {
+                        let (_, gid) = self.player_opening_hand.remove(pos);
+                        self.turn_events.push(MatchTurnEventRecord {
+                            turn_number: 0,
+                            seat_id: self.player_seat_id,
+                            event_type: "bottom".to_string(),
+                            grp_id: gid,
+                            timestamp: Utc::now().to_rfc3339(),
+                        });
+                        self.turn_event_seqs.push(self.feed_seq);
+                        self.feed_seq += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn finalize_opening_hand(&mut self) {
+        if self.opening_hand_finalized {
+            return;
+        }
+        self.opening_hand_finalized = true;
+        let kept_cards: Vec<u32> = self.player_opening_hand.drain(..).map(|(_, gid)| gid).collect();
+        for gid in kept_cards {
+            *self.player_cards_seen.entry(gid).or_insert(0) += 1;
+            if self.match_legitimate {
+                self.collection_draws.push(gid);
+            }
+            self.turn_events.push(MatchTurnEventRecord {
+                turn_number: 0,
+                seat_id: self.player_seat_id,
+                event_type: "draw".to_string(),
+                grp_id: gid,
+                timestamp: Utc::now().to_rfc3339(),
+            });
+            self.turn_event_seqs.push(self.feed_seq);
+            self.feed_seq += 1;
+        }
+    }
+
     pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32) -> Option<(u32, u32, String)> {
-        // Track whether this call is the first time we learn the grp_id for this instance.
-        // MTGA can emit a game object with a null grpId first (card already in hand/library),
-        // then send the grpId in a later GameStateMessage. In that case the zone hasn't changed
-        // (previous_zone == zone_id) but we should still register the draw that was missed.
         let mut learning_grp_now = false;
         if let Some(gid) = grp_id {
             if gid > 0 {
@@ -359,11 +461,22 @@ impl MatchAssembler {
         const HAND_ZONES: [u32; 2] = [31, 35];
         const NON_DRAW_SOURCE_ZONES: [u32; 4] = [27, 28, 29, 33]; // Stack, Battlefield, Exile, Graveyard
 
-        // Determine event type from zone transition.
-        // "draw" is a card entering hand from the player's own library (natural draws, tutors, searches)
-        // or a card already in hand that we're first learning about (opening hand).
-        // Cards entering hand from graveyard/exile/battlefield/stack are bounces/returns, NOT draws.
         let is_hand = HAND_ZONES.contains(&zone_id);
+
+        // Pre-game opening hand buffering (Turn 0)
+        if self.current_turn == 0 {
+            if is_hand && seat_id == self.player_seat_id {
+                if !self.opening_hand_finalized {
+                    if !self.player_opening_hand.iter().any(|(i, _)| *i == instance_id) {
+                        self.player_opening_hand.push((instance_id, resolved_grp_id));
+                    }
+                    return None;
+                }
+            }
+        } else if !self.opening_hand_finalized {
+            self.finalize_opening_hand();
+        }
+
         let from_non_draw = previous_zone.map(|p| NON_DRAW_SOURCE_ZONES.contains(&p)).unwrap_or(false);
         let is_play_zone = zone_id == 27 || zone_id == 28;
 
@@ -394,9 +507,6 @@ impl MatchAssembler {
                 let target_map = if is_opponent { &mut self.opp_cards_seen } else { &mut self.player_cards_seen };
                 *target_map.entry(resolved_grp_id).or_insert(0) += 1;
 
-                // Collection signal: a draw of MY card (from my library into my
-                // hand) during a legitimate match. Borrowed cards (stolen from
-                // opponent) carry the opponent's ownerSeatId and are excluded.
                 if etype == "draw" && !is_opponent && self.match_legitimate {
                     self.collection_draws.push(resolved_grp_id);
                 }
@@ -493,6 +603,7 @@ impl MatchAssembler {
         }
 
         if turn > 0 {
+            self.finalize_opening_hand();
             self.current_turn = turn;
         }
 
@@ -523,6 +634,8 @@ impl MatchAssembler {
     }
 
     pub fn complete_match(&mut self, winning_team_id: u32, reason: &str) -> Option<(MatchRecord, Vec<MatchCardRecord>, Vec<MatchTurnEventRecord>, Vec<MatchImpactfulRecord>)> {
+        self.finalize_opening_hand();
+
         if let Some(mut m) = self.active_match.take() {
             let is_win = winning_team_id == self.player_seat_id;
             m.result = if is_win { "win".to_string() } else { "loss".to_string() };
@@ -530,6 +643,8 @@ impl MatchAssembler {
             m.player_life_end = Some(self.current_player_life);
             m.opponent_life_end = Some(self.current_opp_life);
             m.player_commander_id = self.cached_commander_id;
+            m.player_mulligans = Some(self.player_mulligans);
+            m.opponent_mulligans = Some(self.opponent_mulligans);
 
             // Resolve going_first accurately from turn 1 active seat or turn 1 events
             if let Some(t1_seat) = self.turn_1_active_seat {
@@ -755,5 +870,83 @@ mod tests {
 
         let (rec, _, _, _) = assembler.complete_match(1, "Concede").expect("match should complete");
         assert!(rec.duration_seconds >= 120, "Duration should be at least 120 seconds, got {}", rec.duration_seconds);
+    }
+
+    #[test]
+    fn test_opening_hand_no_mulligans() {
+        let mut assembler = MatchAssembler::new();
+        assembler.start_match("match-no-mul".to_string(), "Standard".to_string());
+
+        // 7 opening hand cards arrive at turn 0
+        for i in 1..=7 {
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31); // Hand zone
+        }
+
+        // Turn 1 starts, active player seat 1
+        assembler.update_game_state(Some(10), 1, &[(1, 20), (2, 20)], 1);
+
+        // Turn 1 play: player casts card 1
+        assembler.process_game_object(1, Some(101), Some(1), 28); // Battlefield
+
+        let (rec, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match should complete");
+        assert_eq!(rec.player_mulligans, Some(0));
+        assert_eq!(rec.opponent_mulligans, Some(0));
+
+        // Exactly 7 draw events at turn 0, 1 play event at turn 1
+        let turn_0_draws: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.event_type == "draw").collect();
+        let turn_1_events: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 1).collect();
+        assert_eq!(turn_0_draws.len(), 7);
+        assert_eq!(turn_1_events.len(), 1);
+        assert_eq!(turn_1_events[0].event_type, "play");
+    }
+
+    #[test]
+    fn test_hero_and_opponent_mulligan_cycle() {
+        let mut assembler = MatchAssembler::new();
+        assembler.start_match("match-mul".to_string(), "Standard".to_string());
+
+        // 1. Initial 7 cards dealt to Hero (inst 1..=7)
+        for i in 1..=7 {
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31);
+        }
+
+        // 2. Opponent takes a mulligan (Prompt 36 for seat 2)
+        assembler.handle_mulligan_decision(2, true, Some(6));
+
+        // 3. Hero takes a mulligan (Prompt 36 for seat 1)
+        assembler.handle_mulligan_decision(1, true, Some(6));
+
+        // 4. Hero gets 7 new cards (inst 11..=17)
+        for i in 11..=17 {
+            assembler.process_game_object(i, Some(200 + i), Some(1), 31);
+        }
+
+        // 5. London mulligan bottoming: 1 card (inst 17) bottomed
+        assembler.handle_deleted_instances(&[17]);
+
+        // 6. Hero keeps hand (Prompt 37 for seat 1)
+        assembler.handle_mulligan_decision(1, false, None);
+
+        // Turn 1 begins
+        assembler.update_game_state(Some(20), 1, &[(1, 20), (2, 20)], 1);
+
+        let (rec, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match should complete");
+        assert_eq!(rec.player_mulligans, Some(1));
+        assert_eq!(rec.opponent_mulligans, Some(1));
+
+        // Check turn 0 event breakdown:
+        // - 1 opponent mulligan event
+        // - 7 hero mulligan events
+        // - 1 hero bottom event
+        // - 6 hero draw events (the kept cards)
+        let opp_mulligans: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 2 && e.event_type == "mulligan").collect();
+        let hero_mulligans: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 1 && e.event_type == "mulligan").collect();
+        let hero_bottoms: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 1 && e.event_type == "bottom").collect();
+        let hero_draws: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 1 && e.event_type == "draw").collect();
+
+        assert_eq!(opp_mulligans.len(), 1);
+        assert_eq!(hero_mulligans.len(), 7);
+        assert_eq!(hero_bottoms.len(), 1);
+        assert_eq!(hero_draws.len(), 6);
     }
 }

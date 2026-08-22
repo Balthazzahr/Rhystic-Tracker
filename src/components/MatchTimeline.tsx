@@ -62,20 +62,24 @@ export function MatchTimeline({
     fetchEvents();
   }, [matchId, goingFirst]);
 
-  // Group turn events by round. MTGA's turnNumber increments once per player-turn,
-  // so a "round" (both players having taken a turn) spans two turn numbers:
-  // Round 1 = turns 1 & 2, Round 2 = turns 3 & 4, etc.
-  const eventsByRound = React.useMemo(() => {
+  // Separate pre-game opening phase (turn 0) from in-game rounds (turn >= 1).
+  const { openingEvents, eventsByRound } = React.useMemo(() => {
+    const opening: { player: TurnEventItem[]; opponent: TurnEventItem[] } = { player: [], opponent: [] };
     const map: Record<number, { player: TurnEventItem[]; opponent: TurnEventItem[] }> = {};
+
     for (const ev of turnEvents) {
-      const round = Math.ceil(ev.turn_number / 2);
-      if (!map[round]) {
-        map[round] = { player: [], opponent: [] };
-      }
       const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
-      (isPlayer ? map[round].player : map[round].opponent).push(ev);
+      if (ev.turn_number === 0) {
+        (isPlayer ? opening.player : opening.opponent).push(ev);
+      } else {
+        const round = Math.ceil(ev.turn_number / 2);
+        if (!map[round]) {
+          map[round] = { player: [], opponent: [] };
+        }
+        (isPlayer ? map[round].player : map[round].opponent).push(ev);
+      }
     }
-    return map;
+    return { openingEvents: opening, eventsByRound: map };
   }, [turnEvents, heroSeatId]);
 
   const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; border: string }> = {
@@ -120,18 +124,28 @@ export function MatchTimeline({
   const renderEventRow = (ev: TurnEventItem, isPlayer: boolean) => {
     const isDamage = ev.event_type.startsWith('damage:');
     let dmgAmount = '';
-    let isCombat = true;
     if (isDamage) {
       const parts = ev.event_type.split(':');
-      isCombat = parts[1] === 'combat';
       dmgAmount = parts[2] || '';
     }
 
+    const isMulligan = ev.event_type === 'mulligan';
+    const isBottom = ev.event_type === 'bottom';
+    const isHidden = ev.grp_id === 0;
+
+    const displayName = isHidden
+      ? (isMulligan ? 'Mulligan taken (Hand shuffled back)' : 'Card bottomed')
+      : ev.name;
+
     return (
       <div
-        key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}`}
-        onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
-        className="text-xs flex items-center justify-between p-1.5 rounded hover:bg-white/10 cursor-pointer group"
+        key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
+        onClick={() => {
+          if (!isHidden && onCardClick) {
+            onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number);
+          }
+        }}
+        className={`text-xs flex items-center justify-between p-1.5 rounded ${isHidden ? 'opacity-80' : 'hover:bg-white/10 cursor-pointer'} group`}
       >
         <div className="flex items-center gap-1.5 min-w-0">
           {isDamage ? (
@@ -142,9 +156,15 @@ export function MatchTimeline({
             (() => {
               let badgeText = 'PLAY';
               let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-              if (ev.event_type === 'draw') {
-                badgeText = 'DRAW';
-                badgeStyle = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+              if (isMulligan) {
+                badgeText = 'MULLIGAN';
+                badgeStyle = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+              } else if (isBottom) {
+                badgeText = 'BOTTOM';
+                badgeStyle = 'bg-orange-500/15 text-orange-400 border-orange-500/30';
+              } else if (ev.event_type === 'draw') {
+                badgeText = ev.turn_number === 0 ? 'KEPT' : 'DRAW';
+                badgeStyle = ev.turn_number === 0 ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/30';
               } else if (ev.event_type === 'token') {
                 badgeText = 'TOKEN';
                 badgeStyle = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
@@ -162,10 +182,12 @@ export function MatchTimeline({
               );
             })()
           )}
-          <span className="font-semibold text-xs truncate" style={{ color: palette?.text }}>{ev.name}</span>
-          {getCardTypeBadge(ev.card_type)}
+          <span className={`font-semibold text-xs truncate ${isHidden ? 'italic opacity-70' : ''}`} style={{ color: palette?.text }}>
+            {displayName}
+          </span>
+          {!isHidden && getCardTypeBadge(ev.card_type)}
         </div>
-        <RenderManaCost costStr={ev.mana_cost} size={12} />
+        {!isHidden && <RenderManaCost costStr={ev.mana_cost} size={12} />}
       </div>
     );
   };
@@ -205,56 +227,100 @@ export function MatchTimeline({
             </p>
           </div>
         ) : (
-          Object.entries(eventsByRound).map(([roundStr, cols]) => {
-            const roundNum = parseInt(roundStr, 10);
-            const playerCount = cols.player.length;
-            const opponentCount = cols.opponent.length;
-            if (playerCount === 0 && opponentCount === 0) return null;
-
-            return (
+          <>
+            {/* Opening Hand & Mulligans Phase (Turn 0) */}
+            {(openingEvents.player.length > 0 || openingEvents.opponent.length > 0) && (
               <div
-                key={roundNum}
-                className="p-3 rounded-xl border space-y-2"
+                className="p-3 rounded-xl border space-y-2 bg-gradient-to-r from-purple-950/20 via-transparent to-amber-950/20"
                 style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}88` }}
               >
                 <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: `${palette?.border}44` }}>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border" style={{ borderColor: palette?.border, color: palette?.accent }}>
-                    Round {roundNum}
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border" style={{ borderColor: palette?.border, color: '#A78BFA' }}>
+                    Opening Phase & Mulligans
                   </span>
-                  <span className="text-[9px] font-mono opacity-50">
-                    {`Turn ${roundNum * 2 - 1} + ${roundNum * 2}`}
-                  </span>
+                  <span className="text-[9px] font-mono opacity-50">Pre-Game</span>
                 </div>
 
-                {/* Two-column: Player vs Opponent actions for this round */}
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Player Column */}
+                  {/* Player Opening Hand */}
                   <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
                     <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
-                      You ({playerCount})
+                      You ({openingEvents.player.length})
                     </div>
-                    {playerCount === 0 ? (
-                      <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                    {openingEvents.player.length === 0 ? (
+                      <div className="text-[10px] font-mono opacity-30 p-1">No opening cards recorded</div>
                     ) : (
-                      cols.player.map((ev) => renderEventRow(ev, true))
+                      openingEvents.player.map((ev) => renderEventRow(ev, true))
                     )}
                   </div>
 
-                  {/* Opponent Column */}
+                  {/* Opponent Opening Hand */}
                   <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
                     <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
-                      {(opponentName || 'Opponent')} ({opponentCount})
+                      {(opponentName || 'Opponent')} ({openingEvents.opponent.length})
                     </div>
-                    {opponentCount === 0 ? (
-                      <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                    {openingEvents.opponent.length === 0 ? (
+                      <div className="text-[10px] font-mono opacity-30 p-1">No mulligans taken</div>
                     ) : (
-                      cols.opponent.map((ev) => renderEventRow(ev, false))
+                      openingEvents.opponent.map((ev) => renderEventRow(ev, false))
                     )}
                   </div>
                 </div>
               </div>
-            );
-          })
+            )}
+
+            {/* In-Game Rounds (Turn >= 1) */}
+            {Object.entries(eventsByRound).map(([roundStr, cols]) => {
+              const roundNum = parseInt(roundStr, 10);
+              const playerCount = cols.player.length;
+              const opponentCount = cols.opponent.length;
+              if (playerCount === 0 && opponentCount === 0) return null;
+
+              return (
+                <div
+                  key={roundNum}
+                  className="p-3 rounded-xl border space-y-2"
+                  style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}88` }}
+                >
+                  <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: `${palette?.border}44` }}>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border" style={{ borderColor: palette?.border, color: palette?.accent }}>
+                      Round {roundNum}
+                    </span>
+                    <span className="text-[9px] font-mono opacity-50">
+                      {`Turn ${roundNum * 2 - 1} + ${roundNum * 2}`}
+                    </span>
+                  </div>
+
+                  {/* Two-column: Player vs Opponent actions for this round */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Player Column */}
+                    <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
+                      <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                        You ({playerCount})
+                      </div>
+                      {playerCount === 0 ? (
+                        <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                      ) : (
+                        cols.player.map((ev) => renderEventRow(ev, true))
+                      )}
+                    </div>
+
+                    {/* Opponent Column */}
+                    <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
+                      <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                        {(opponentName || 'Opponent')} ({opponentCount})
+                      </div>
+                      {opponentCount === 0 ? (
+                        <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                      ) : (
+                        cols.opponent.map((ev) => renderEventRow(ev, false))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
 
         {/* Item 8: Color-Coded Final Match Outcome Marker at Bottom of Sequence */}

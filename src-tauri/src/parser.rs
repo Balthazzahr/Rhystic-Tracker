@@ -14,7 +14,17 @@ pub enum ParsedEvent {
     MatchCreated { match_id: String, format_name: String, reserved_players: serde_json::Value },
     DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32>, deck_id: Option<String> },
     DeckCatalogBatch { decks: Vec<(String, String, Option<u32>, Vec<u32>)> },
-    GameStateUpdateCombined { msg_id: Option<u64>, objects: Vec<(u32, Option<u32>, Option<u32>, u32)>, turn_number: u32, life_by_seat: Vec<(u32, i32)>, active_seat: u32, damage_events: Vec<(u32, u32, i32, u32)> },
+    GameStateUpdateCombined {
+        msg_id: Option<u64>,
+        objects: Vec<(u32, Option<u32>, Option<u32>, u32)>,
+        turn_number: u32,
+        life_by_seat: Vec<(u32, i32)>,
+        active_seat: u32,
+        damage_events: Vec<(u32, u32, i32, u32)>,
+        diff_deleted_ids: Vec<u32>,
+        mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
+    },
+    MulliganEvent { seat_id: u32, is_mulligan: bool, num_cards: Option<u32> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
     Unknown,
 }
@@ -250,8 +260,8 @@ pub fn parse_line(line: &str) -> ParsedEvent {
         }
     }
 
-    // 4. Game State Message (Event 4)
-    if line.contains("GREMessageType_GameStateMessage") {
+    // 4. Game State & In-Game Prompt Messages
+    if line.contains("GREMessageType_GameStateMessage") || line.contains("GREMessageType_PromptReq") || line.contains("GREMessageType_MulliganReq") {
         if let Some(start) = line.find('{') {
             let json_str = &line[start..];
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
@@ -260,41 +270,48 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     .and_then(|m| m.as_array());
 
                 if let Some(msgs) = messages {
-                    // A single log line can contain MANY GameStateMessage entries (one per
-                    // zone/state change). We must accumulate objects from ALL of them instead
-                    // of returning on the first one that has content, otherwise per-turn draws
-                    // and plays that appear in later messages on the same line are dropped.
                     let mut batch: Vec<(u32, Option<u32>, Option<u32>, u32)> = Vec::new();
                     let mut last_turn: u32 = 0;
                     let mut life_by_seat: Vec<(u32, i32)> = Vec::new();
                     let mut last_active: u32 = 1;
                     let mut damage_events: Vec<(u32, u32, i32, u32)> = Vec::new();
+                    let mut diff_deleted_ids: Vec<u32> = Vec::new();
+                    let mut mulligan_events: Vec<(u32, bool, Option<u32>)> = Vec::new();
                     let mut any_content = false;
 
                     for msg in msgs {
-                        if msg.get("type").and_then(|t| t.as_str()) == Some("GREMessageType_GameStateMessage") {
+                        let mtype = msg.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                        if mtype == "GREMessageType_GameStateMessage" {
                             let msg_id = msg.get("msgId").and_then(|m| m.as_u64());
                             if let Some(gsm) = msg.get("gameStateMessage") {
-                                 if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
-                                     for obj in objs {
-                                         let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                                         // Only extract card objects (ignore raw abilities)
-                                         if obj_type.contains("Card") || obj_type.is_empty() {
-                                             if let (Some(inst_id), Some(zone_id)) = (
-                                                 obj.get("instanceId").and_then(|i| i.as_u64()),
-                                                 obj.get("zoneId").and_then(|z| z.as_u64())
-                                             ) {
-                                                 let grp_id = obj.get("grpId")
-                                                     .or_else(|| obj.get("overlayGrpId"))
-                                                     .or_else(|| obj.get("objectSourceGrpId"))
-                                                     .and_then(|g| g.as_u64())
-                                                     .map(|g| g as u32);
-                                                 let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
-                                                 batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32));
-                                             }
-                                         }
-                                     }
-                                 }
+                                if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
+                                    for obj in objs {
+                                        let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                                        // Only extract card objects (ignore raw abilities)
+                                        if obj_type.contains("Card") || obj_type.is_empty() {
+                                            if let (Some(inst_id), Some(zone_id)) = (
+                                                obj.get("instanceId").and_then(|i| i.as_u64()),
+                                                obj.get("zoneId").and_then(|z| z.as_u64())
+                                            ) {
+                                                let grp_id = obj.get("grpId")
+                                                    .or_else(|| obj.get("overlayGrpId"))
+                                                    .or_else(|| obj.get("objectSourceGrpId"))
+                                                    .and_then(|g| g.as_u64())
+                                                    .map(|g| g as u32);
+                                                let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
+                                                batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if let Some(dels) = gsm.get("diffDeletedInstanceIds").and_then(|d| d.as_array()) {
+                                    for d in dels {
+                                        if let Some(did) = d.as_u64() {
+                                            diff_deleted_ids.push(did as u32);
+                                        }
+                                    }
+                                }
 
                                 let turn_info = gsm.get("turnInfo");
                                 let turn_number = turn_info.and_then(|t| t.get("turnNumber")).and_then(|n| n.as_u64()).unwrap_or(0) as u32;
@@ -323,11 +340,6 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                 }
 
                                 // Extract impactful-play annotations for damage attribution.
-                                // We use ONLY AnnotationType_DamageDealt, which MTGA emits once per
-                                // damaging source (so multi-attacker combat splits correctly across
-                                // each card). AnnotationType_ModifiedLife is deliberately NOT used:
-                                // it attributes the total life change to a single affectorId even
-                                // when the swing came from several cards, which misattributes damage.
                                 if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
                                     for a in anns {
                                         let ann_type = a.get("type").and_then(|t| t.as_array())
@@ -372,10 +384,35 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                     }
                                 }
 
-                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() {
+                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() || !diff_deleted_ids.is_empty() {
                                     any_content = true;
                                 }
                                 let _ = msg_id;
+                            }
+                        } else if mtype == "GREMessageType_PromptReq" {
+                            if let Some(prompt) = msg.get("prompt") {
+                                let prompt_id = prompt.get("promptId").and_then(|p| p.as_u64()).unwrap_or(0);
+                                let mut player_id = 0u32;
+                                let mut num_cards = None;
+                                if let Some(params) = prompt.get("parameters").and_then(|p| p.as_array()) {
+                                    for param in params {
+                                        let pname = param.get("parameterName").and_then(|p| p.as_str()).unwrap_or("");
+                                        if pname == "PlayerId" {
+                                            if let Some(ref_obj) = param.get("reference") {
+                                                player_id = ref_obj.get("id").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
+                                            }
+                                        } else if pname == "NumberOfCards" {
+                                            num_cards = param.get("numberValue").and_then(|n| n.as_u64()).map(|n| n as u32);
+                                        }
+                                    }
+                                }
+                                if prompt_id == 36 && player_id > 0 {
+                                    mulligan_events.push((player_id, true, num_cards));
+                                    any_content = true;
+                                } else if prompt_id == 37 && player_id > 0 {
+                                    mulligan_events.push((player_id, false, None));
+                                    any_content = true;
+                                }
                             }
                         }
                     }
@@ -388,7 +425,28 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                             life_by_seat,
                             active_seat: last_active,
                             damage_events,
+                            diff_deleted_ids,
+                            mulligan_events,
                         };
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Client Mulligan Response (Direct Decision)
+    if line.contains("ClientMessageType_MulliganResp") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                let target_obj = v.get("mulliganResp")
+                    .or_else(|| v.get("clientToGreMessage").and_then(|c| c.get("mulliganResp")));
+                if let Some(resp) = target_obj {
+                    let decision = resp.get("decision").and_then(|d| d.as_str()).unwrap_or("");
+                    if decision.contains("Mulligan") {
+                        return ParsedEvent::MulliganEvent { seat_id: 0, is_mulligan: true, num_cards: None };
+                    } else if decision.contains("Accept") || decision.contains("Keep") {
+                        return ParsedEvent::MulliganEvent { seat_id: 0, is_mulligan: false, num_cards: None };
                     }
                 }
             }

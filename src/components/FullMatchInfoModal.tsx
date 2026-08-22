@@ -218,6 +218,19 @@ export function FullMatchInfoModal({
                 <span className="font-bold text-amber-400">{selectedMatch.going_first ? 'Went First (Play)' : 'Went Second (Draw)'}</span>
               </div>
 
+              <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: palette?.border }}>
+                <span className="opacity-60 text-[10px] uppercase font-semibold">Mulligans</span>
+                <div className="font-mono font-bold text-xs text-right">
+                  <span className={(selectedMatch.player_mulligans ?? 0) > 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                    {selectedMatch.player_mulligans ?? 0}
+                  </span>
+                  <span className="opacity-40 px-1 font-normal">vs</span>
+                  <span className={(selectedMatch.opponent_mulligans ?? 0) > 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                    {selectedMatch.opponent_mulligans ?? 0}
+                  </span>
+                </div>
+              </div>
+
               {/* Item 3: Clean Single-Line Ending HP Comparison & Right Alignment */}
               <div className="flex items-center justify-between">
                 <span className="opacity-60 text-[10px] uppercase font-semibold shrink-0">Ending Life</span>

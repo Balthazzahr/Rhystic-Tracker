@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS matches (
     hero_deck_name TEXT,
     hero_commander_id INTEGER,
     hero_life_end INTEGER,
+    hero_mulligans INTEGER DEFAULT 0,
     opponent_name TEXT,
     opponent_commander_id INTEGER,
     opponent_mulligans INTEGER,
@@ -220,6 +221,20 @@ impl DatabaseManager {
                 .execute(&pool)
                 .await?;
             println!("[DB MIGRATION] Added result_reason column to matches table");
+        }
+
+        // Migration: add hero_mulligans column to matches
+        let hero_mul_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('matches') WHERE name = 'hero_mulligans'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if hero_mul_check.is_none() {
+            sqlx::query("ALTER TABLE matches ADD COLUMN hero_mulligans INTEGER DEFAULT 0")
+                .execute(&pool)
+                .await?;
+            println!("[DB MIGRATION] Added hero_mulligans column to matches table");
         }
 
         // Migration: add icon_svg_uri column to sets_metadata for databases created
@@ -582,9 +597,9 @@ impl DatabaseManager {
             r#"
             INSERT INTO matches (
                 id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_seat_id,
-                hero_deck_name, hero_commander_id, hero_life_end, opponent_name, opponent_commander_id,
+                hero_deck_name, hero_commander_id, hero_life_end, hero_mulligans, opponent_name, opponent_commander_id,
                 opponent_mulligans, opponent_life_end, result_reason, raw_payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 result = excluded.result,
                 duration_seconds = excluded.duration_seconds,
@@ -592,6 +607,8 @@ impl DatabaseManager {
                 hero_deck_name = CASE WHEN excluded.hero_deck_name != 'Selected Deck' THEN excluded.hero_deck_name ELSE matches.hero_deck_name END,
                 hero_commander_id = COALESCE(excluded.hero_commander_id, matches.hero_commander_id),
                 hero_life_end = excluded.hero_life_end,
+                hero_mulligans = excluded.hero_mulligans,
+                opponent_mulligans = excluded.opponent_mulligans,
                 opponent_life_end = excluded.opponent_life_end,
                 result_reason = excluded.result_reason
             "#
@@ -608,6 +625,7 @@ impl DatabaseManager {
         .bind(&resolved_deck_name)
         .bind(match_rec.player_commander_id.map(|c| c as i64))
         .bind(match_rec.player_life_end)
+        .bind(match_rec.player_mulligans.map(|m| m as i64))
         .bind(&match_rec.opponent_name)
         .bind(match_rec.opponent_commander_id.map(|c| c as i64))
         .bind(match_rec.opponent_mulligans.map(|m| m as i64))
@@ -713,7 +731,7 @@ impl DatabaseManager {
         let rows = sqlx::query(
             r#"
             SELECT m.id, m.timestamp, m.date_str, m.format, m.result, m.duration_seconds, m.turns, m.going_first,
-                   m.hero_deck_name, m.hero_commander_id, m.hero_life_end, m.opponent_name, m.opponent_commander_id,
+                   m.hero_deck_name, m.hero_commander_id, m.hero_life_end, m.hero_mulligans, m.opponent_name, m.opponent_commander_id,
                    m.opponent_mulligans, m.opponent_life_end, m.result_reason,
                    pc.name as hero_commander_name, oc.name as opponent_commander_name
             FROM matches m
@@ -751,6 +769,7 @@ impl DatabaseManager {
                 player_commander_id: row.get::<Option<i64>, _>("hero_commander_id").map(|c| c as u32),
                 player_commander_name: row.get("hero_commander_name"),
                 player_life_end: row.get("hero_life_end"),
+                player_mulligans: row.try_get::<Option<i64>, _>("hero_mulligans").ok().flatten().map(|m| m as u32),
                 opponent_name: row.get("opponent_name"),
                 opponent_commander_id: row.get::<Option<i64>, _>("opponent_commander_id").map(|c| c as u32),
                 opponent_commander_name: row.get("opponent_commander_name"),
@@ -1215,6 +1234,7 @@ mod tests {
             player_commander_id: None,
             player_commander_name: None,
             player_life_end: Some(25),
+            player_mulligans: Some(0),
             opponent_name: Some("Opponent".to_string()),
             opponent_commander_id: None,
             opponent_commander_name: None,

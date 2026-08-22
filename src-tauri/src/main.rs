@@ -252,6 +252,7 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
             "player_commander_id": m.player_commander_id,
             "player_commander_name": m.player_commander_name,
             "player_life_end": m.player_life_end,
+            "player_mulligans": m.player_mulligans,
             "opponent_name": m.opponent_name,
             "opponent_commander_id": m.opponent_commander_id,
             "opponent_commander_name": m.opponent_commander_name,
@@ -3581,9 +3582,12 @@ async fn dispatch_parsed_event(
             assembler.register_deck_catalog(decks);
             println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
         }
-        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
-            if turn_number > 0 {
-                assembler.current_turn = turn_number;
+        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, diff_deleted_ids, mulligan_events } => {
+            for (m_seat, is_mul, num_cards) in mulligan_events {
+                assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
+            }
+            if !diff_deleted_ids.is_empty() {
+                assembler.handle_deleted_instances(&diff_deleted_ids);
             }
             for (instance_id, grp_id, owner_seat, zone_id) in objects {
                 assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
@@ -3598,6 +3602,9 @@ async fn dispatch_parsed_event(
                     let _ = db_manager.add_collection_draw(g as i64).await;
                 }
             }
+        }
+        ParsedEvent::MulliganEvent { seat_id, is_mulligan, num_cards } => {
+            assembler.handle_mulligan_decision(seat_id, is_mulligan, num_cards);
         }
         ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
             if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {

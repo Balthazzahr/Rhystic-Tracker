@@ -71,8 +71,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     assembler.register_deck_catalog(decks);
                     println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
                 }
-                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events } => {
-                    if turn_number > 0 { assembler.current_turn = turn_number; }
+                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, diff_deleted_ids, mulligan_events } => {
+                    for (m_seat, is_mul, num_cards) in mulligan_events {
+                        assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
+                    }
+                    if !diff_deleted_ids.is_empty() {
+                        assembler.handle_deleted_instances(&diff_deleted_ids);
+                    }
                     for (instance_id, grp_id, owner_seat, zone_id) in objects {
                         assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
                     }
@@ -80,6 +85,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         assembler.process_damage_event(instance_id, target_id, amount, dtype);
                     }
                     assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
+                }
+                ParsedEvent::MulliganEvent { seat_id, is_mulligan, num_cards } => {
+                    assembler.handle_mulligan_decision(seat_id, is_mulligan, num_cards);
                 }
                 ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
                     if let Some((record, card_records, turn_event_records, impactful_records)) = assembler.complete_match(winning_team_id, &reason) {
