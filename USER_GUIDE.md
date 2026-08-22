@@ -171,6 +171,23 @@ curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/ins
 3. Generates the XDG desktop entry in `~/.local/share/applications/rhystic-tracker.desktop` with `GDK_BACKEND=x11` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` flags.
 4. Refreshes system desktop and icon databases so Rhystic Tracker appears immediately in your application launcher (**GNOME**, **Pop Launcher**, **COSMIC**, **KDE Plasma**, **Rofi**, **Wofi**).
 
+### macOS Installation & Gatekeeper Setup
+
+#### Installing the DMG:
+1. Download `rhystic-tracker-macos-universal.dmg` from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
+2. Open the `.dmg` file and drag **Rhystic Tracker** to your **Applications** folder.
+
+#### Opening the App (Bypassing Gatekeeper):
+Because Rhystic Tracker is an independent open-source project without a paid Apple Developer certificate, Apple Gatekeeper blocks opening on first launch with a *"cannot verify the developer / source"* notice.
+
+To open on first launch:
+- **Option 1 (Right-Click Open - Recommended)**: In Finder, open your **Applications** folder, **Right-click** (or hold <kbd>Control</kbd> and click) **Rhystic Tracker**, and select **Open**. Click **Open** in the confirmation dialog. macOS will remember this and allow standard launches going forward.
+- **Option 2 (System Settings)**: Open **System Settings** → **Privacy & Security**, scroll down to the **Security** section, and click **"Open Anyway"** next to Rhystic Tracker.
+- **Option 3 (Terminal)**:
+  ```bash
+  xattr -d com.apple.quarantine /Applications/Rhystic\ Tracker.app
+  ```
+
 ### Wayland, XWayland, and Steam Deck Guidelines
 
 Rhystic Tracker uses WebKitGTK with hardware-accelerated rendering. The launcher configured by `install.sh` automatically includes `GDK_BACKEND=x11`, which runs smoothly on both native X11 sessions and Wayland sessions (via XWayland).

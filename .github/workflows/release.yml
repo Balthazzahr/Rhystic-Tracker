@@ -68,26 +68,33 @@ jobs:
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Build macOS Binary
+      - name: Build macOS Bundle
         run: |
-          npm run build
-          cargo build --release --features production-env --manifest-path src-tauri/Cargo.toml
+          npx @tauri-apps/cli build --target universal-apple-darwin --features production-env
 
-      - name: Package macOS Artifact
+      - name: Package macOS Artifacts
         run: |
           mkdir -p dist-release
-          cp src-tauri/target/release/rhystic-tracker dist-release/rhystic-tracker
-          tar -czvf rhystic-tracker-macos-universal.tar.gz -C dist-release rhystic-tracker
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg dist-release/rhystic-tracker-macos-universal.dmg
+          tar -czvf dist-release/rhystic-tracker-macos-universal-app.tar.gz -C "src-tauri/target/universal-apple-darwin/release/bundle/macos" "Rhystic Tracker.app"
 
-      - name: Upload macOS Artifact
+      - name: Upload macOS DMG Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifact
-          path: rhystic-tracker-macos-universal.tar.gz
+          name: macos-dmg
+          path: dist-release/rhystic-tracker-macos-universal.dmg
+
+      - name: Upload macOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: dist-release/rhystic-tracker-macos-universal-app.tar.gz
 
   publish-release:
     name: Publish GitHub Release
@@ -104,20 +111,26 @@ jobs:
         with:
           name: linux-artifact
 
-      - name: Download macOS Artifact
+      - name: Download macOS DMG Artifact
         uses: actions/download-artifact@v4
         with:
-          name: macos-artifact
+          name: macos-dmg
+
+      - name: Download macOS App Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-app
 
       - name: Generate Checksums
         run: |
-          sha256sum rhystic-tracker-linux-x86_64.tar.gz rhystic-tracker-macos-universal.tar.gz > SHA256SUMS.txt
+          sha256sum rhystic-tracker-linux-x86_64.tar.gz rhystic-tracker-macos-universal.dmg rhystic-tracker-macos-universal-app.tar.gz > SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             rhystic-tracker-linux-x86_64.tar.gz
-            rhystic-tracker-macos-universal.tar.gz
+            rhystic-tracker-macos-universal.dmg
+            rhystic-tracker-macos-universal-app.tar.gz
             SHA256SUMS.txt
           generate_release_notes: true

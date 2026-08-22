@@ -74,19 +74,20 @@ The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers hig
 
 > **Note:** `install.sh` automatically sets `GDK_BACKEND=x11` in the desktop launcher so the app works correctly on both X11 and Wayland sessions (via XWayland).
 
----
-
 ### Option 2: Manual Download from GitHub Releases
 
-If you prefer to download the archive manually:
+- **Linux (`x86_64`)**:
+  1. Download `rhystic-tracker-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
+  2. Extract and run `./install.sh`:
+     ```bash
+     tar -xzf rhystic-tracker-linux-x86_64.tar.gz
+     ./install.sh
+     ```
 
-1. Download the release package (`.tar.gz`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
-2. Extract the archive and run `./install.sh`:
-   ```bash
-   tar -xzf rhystic-tracker-*.tar.gz
-   cd rhystic-tracker-*/
-   ./install.sh
-   ```
+- **macOS (Universal - Apple Silicon & Intel)**:
+  1. Download `rhystic-tracker-macos-universal.dmg` from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
+  2. Open the `.dmg` and drag **Rhystic Tracker** to your **Applications** folder.
+  3. *First launch Gatekeeper bypass*: Right-click (or Control-click) **Rhystic Tracker** in Applications, select **Open**, and confirm **Open**.
 
 ---
 
