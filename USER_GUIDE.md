@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.1.5**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
+Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.1.6**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
 
 ---
 

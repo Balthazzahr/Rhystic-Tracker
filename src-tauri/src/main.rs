@@ -3648,37 +3648,47 @@ async fn process_tailer_events(
     let mut in_json = false;
 
     while let Some(event) = rx.recv().await {
-        if let TailerEvent::Line(line) = event {
-            let trimmed = line.trim();
-
-            if !in_json && trimmed.starts_with('{') {
-                in_json = true;
-                json_buffer.clear();
+        match event {
+            TailerEvent::InitialCatchupComplete => {
+                let mut assembler = assembler_ref.lock().await;
+                assembler.is_live = true;
+                println!("[PROCESSOR] Tailer caught up with log. Live match event processing active.");
             }
+            TailerEvent::Rotated => {
+                println!("[PROCESSOR] Log rotated.");
+            }
+            TailerEvent::Line(line) => {
+                let trimmed = line.trim();
 
-            if in_json {
-                json_buffer.push_str(&line);
-                json_buffer.push('\n');
-
-                for ch in line.chars() {
-                    if ch == '{' { brace_depth += 1; }
-                    else if ch == '}' { brace_depth -= 1; }
+                if !in_json && trimmed.starts_with('{') {
+                    in_json = true;
+                    json_buffer.clear();
                 }
 
-                if brace_depth <= 0 {
-                    in_json = false;
-                    brace_depth = 0;
-                    let payload_str = json_buffer.clone();
-                    json_buffer.clear();
+                if in_json {
+                    json_buffer.push_str(&line);
+                    json_buffer.push('\n');
 
+                    for ch in line.chars() {
+                        if ch == '{' { brace_depth += 1; }
+                        else if ch == '}' { brace_depth -= 1; }
+                    }
+
+                    if brace_depth <= 0 {
+                        in_json = false;
+                        brace_depth = 0;
+                        let payload_str = json_buffer.clone();
+                        json_buffer.clear();
+
+                        let mut assembler = assembler_ref.lock().await;
+                        let parsed = parse_line(&payload_str);
+                        dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
+                    }
+                } else {
                     let mut assembler = assembler_ref.lock().await;
-                    let parsed = parse_line(&payload_str);
+                    let parsed = parse_line(&line);
                     dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
                 }
-            } else {
-                let mut assembler = assembler_ref.lock().await;
-                let parsed = parse_line(&line);
-                dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
             }
         }
     }

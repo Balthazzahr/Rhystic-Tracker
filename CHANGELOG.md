@@ -2,6 +2,14 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.1.6] - 2026-08-22
+
+### ⚡ Fixed
+
+- **Live Match HUD Startup Historical Result Overlay**:
+  - Emitted `TailerEvent::InitialCatchupComplete` when the log tailer finishes initial lookback catchup to distinguish historical startup processing from live gameplay.
+  - Guarded `last_completed` timestamping behind an `is_live` state machine check, preventing previous matches from triggering the 13-second match result splash screen upon every app launch.
+
 ## [1.1.5] - 2026-08-22
 
 ### 🌟 Added

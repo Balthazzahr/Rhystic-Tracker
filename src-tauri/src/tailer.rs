@@ -12,6 +12,7 @@ use tokio::time::sleep;
 pub enum TailerEvent {
     Line(String),
     Rotated,
+    InitialCatchupComplete,
 }
 
 /// Returns the first MTGA Player.log found from the standard install locations,
@@ -261,6 +262,7 @@ impl FileTailer {
         }
 
         let mut line_buf = String::new();
+        let mut is_initial_catchup = true;
 
         while self.running.load(Ordering::Relaxed) {
             // Check for file rotation/recreation or truncation
@@ -297,7 +299,14 @@ impl FileTailer {
             loop {
                 line_buf.clear();
                 match reader.read_line(&mut line_buf) {
-                    Ok(0) => break, // EOF reached, sleep and wait for new data
+                    Ok(0) => {
+                        if is_initial_catchup {
+                            is_initial_catchup = false;
+                            println!("[TAILER] Initial catchup complete. Live tailing active.");
+                            let _ = self.sender.send(TailerEvent::InitialCatchupComplete).await;
+                        }
+                        break; // EOF reached, sleep and wait for new data
+                    }
                     Ok(_) => {
                         let trimmed = line_buf.trim_end_matches(&['\r', '\n'][..]).to_string();
                         if let Err(_) = self.sender.send(TailerEvent::Line(trimmed)).await {

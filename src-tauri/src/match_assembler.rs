@@ -110,6 +110,7 @@ pub struct MatchAssembler {
     pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
     pub processed_msg_ids: HashSet<u64>,
     pub last_completed: Option<(MatchRecord, chrono::DateTime<Utc>)>,
+    pub is_live: bool,
 }
 
 impl MatchAssembler {
@@ -147,6 +148,7 @@ impl MatchAssembler {
             impactful_cards: HashMap::new(),
             processed_msg_ids: HashSet::new(),
             last_completed: None,
+            is_live: false,
         }
     }
 
@@ -716,7 +718,9 @@ impl MatchAssembler {
                 }
             }
 
-            self.last_completed = Some((m.clone(), Utc::now()));
+            if self.is_live {
+                self.last_completed = Some((m.clone(), Utc::now()));
+            }
             return Some((m, card_records, turn_events, impactful_records));
         }
         None
