@@ -42,7 +42,7 @@ pub struct MatchTurnEventRecord {
     pub timestamp: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchImpactfulRecord {
     pub grp_id: u32,
     pub seat_id: u32,
@@ -52,6 +52,7 @@ pub struct MatchImpactfulRecord {
     pub damage_to_permanents: i32,
     pub damage_combat: i32,
     pub damage_spell: i32,
+    pub titles: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -63,6 +64,7 @@ pub struct CardDamageStats {
     pub damage_to_permanents: i32,
     pub damage_combat: i32,
     pub damage_spell: i32,
+    pub titles: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +110,7 @@ pub struct MatchAssembler {
     pub turn_1_active_seat: Option<u32>,
     pub match_start_time: Option<chrono::DateTime<Utc>>,
     pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
+    pub last_hero_damage_hit: Option<(u32, i32, i32)>, // (grp_id, amount, opp_life_before)
     pub processed_msg_ids: HashSet<u64>,
     pub last_completed: Option<(MatchRecord, chrono::DateTime<Utc>)>,
     pub is_live: bool,
@@ -146,6 +149,7 @@ impl MatchAssembler {
             turn_1_active_seat: None,
             match_start_time: None,
             impactful_cards: HashMap::new(),
+            last_hero_damage_hit: None,
             processed_msg_ids: HashSet::new(),
             last_completed: None,
             is_live: false,
@@ -568,6 +572,23 @@ impl MatchAssembler {
             entry.damage_spell += magnitude;
         }
 
+        // Award Heavy Hitter achievement titles
+        if magnitude >= 15 {
+            if !entry.titles.contains(&"Juggernaut".to_string()) {
+                entry.titles.push("Juggernaut".to_string());
+            }
+        } else if magnitude >= 8 {
+            if !entry.titles.contains(&"Haymaker".to_string()) {
+                entry.titles.push("Haymaker".to_string());
+            }
+        }
+
+        // Track hero damage hits against opponent for lethal Executioner/Over-Killer
+        let opp_seat = if self.player_seat_id == 1 { 2 } else { 1 };
+        if seat_id == self.player_seat_id && target_instance_id == opp_seat {
+            self.last_hero_damage_hit = Some((grp_id, magnitude, self.current_opp_life));
+        }
+
         // Also record to live damage feed for the HUD
         self.damage_feed_events.push((
             LiveDamageFeedEvent {
@@ -676,7 +697,7 @@ impl MatchAssembler {
             m.duration_seconds = event_span.max(wall_elapsed);
 
             let reason_clean = if reason.is_empty() { None } else { Some(reason.to_string()) };
-            m.result_reason = reason_clean;
+            m.result_reason = reason_clean.clone();
 
             let mut card_records = Vec::new();
             for (grp_id, count) in &self.player_cards_seen {
@@ -694,6 +715,33 @@ impl MatchAssembler {
                 });
             }
 
+            // Evaluate Closer achievements
+            if is_win {
+                if self.current_opp_life <= 0 {
+                    if let Some((grp, amt, life_before)) = self.last_hero_damage_hit {
+                        let entry = self.impactful_cards.entry(grp).or_default();
+                        if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                        if !entry.titles.contains(&"Executioner".to_string()) {
+                            entry.titles.push("Executioner".to_string());
+                        }
+                        if amt - life_before >= 8 {
+                            if !entry.titles.contains(&"Over-Killer".to_string()) {
+                                entry.titles.push("Over-Killer".to_string());
+                            }
+                        }
+                    }
+                } else if reason.to_lowercase().contains("concede") {
+                    // Scoop Inducer: last resolved card played by hero in final turns
+                    if let Some(last_play) = self.turn_events.iter().rev().find(|e| e.seat_id == self.player_seat_id && e.event_type == "play" && e.turn_number >= self.current_turn.saturating_sub(1)) {
+                        let entry = self.impactful_cards.entry(last_play.grp_id).or_default();
+                        if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                        if !entry.titles.contains(&"Scoop Inducer".to_string()) {
+                            entry.titles.push("Scoop Inducer".to_string());
+                        }
+                    }
+                }
+            }
+
             let turn_events = std::mem::take(&mut self.turn_events);
 
             let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.iter()
@@ -706,6 +754,7 @@ impl MatchAssembler {
                     damage_to_permanents: stats.damage_to_permanents,
                     damage_combat: stats.damage_combat,
                     damage_spell: stats.damage_spell,
+                    titles: stats.titles.clone(),
                 })
                 .collect();
 
@@ -952,5 +1001,64 @@ mod tests {
         assert_eq!(hero_mulligans.len(), 7);
         assert_eq!(hero_bottoms.len(), 1);
         assert_eq!(hero_draws.len(), 6);
+    }
+
+    #[test]
+    fn test_achievement_titles_heavy_hitters_and_closers() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-achieve".to_string(), "Standard".to_string());
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        // Instance 1 = Grp 101 (deals 8 dmg -> Haymaker)
+        // Instance 2 = Grp 102 (deals 16 dmg -> Juggernaut + Executioner + Over-Killer)
+        assembler.process_game_object(1, Some(101), Some(1), 28);
+        assembler.process_game_object(2, Some(102), Some(1), 28);
+
+        // Hit 1: 8 damage to opponent (Opp life 20 -> 12)
+        assembler.process_damage_event(1, 2, 8, 1);
+        assembler.update_game_state(Some(2), 1, &[(1, 20), (2, 12)], 1);
+
+        // Hit 2: 16 damage to opponent (Opp life 12 -> -4, killing blow with 4 overkill)
+        assembler.process_damage_event(2, 2, 16, 1);
+        assembler.update_game_state(Some(3), 1, &[(1, 20), (2, -4)], 1);
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
+
+        let imp_101 = impactful.iter().find(|i| i.grp_id == 101).expect("grp 101 should exist");
+        let imp_102 = impactful.iter().find(|i| i.grp_id == 102).expect("grp 102 should exist");
+
+        assert!(imp_101.titles.contains(&"Haymaker".to_string()), "Card 101 should have Haymaker title");
+        assert!(!imp_101.titles.contains(&"Juggernaut".to_string()), "Card 101 should not have Juggernaut title");
+
+        assert!(imp_102.titles.contains(&"Juggernaut".to_string()), "Card 102 should have Juggernaut title");
+        assert!(imp_102.titles.contains(&"Executioner".to_string()), "Card 102 should have Executioner title");
+    }
+
+    #[test]
+    fn test_achievement_title_scoop_inducer() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-scoop".to_string(), "Standard".to_string());
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 4, &[(1, 20), (2, 20)], 1);
+
+        // Hero casts a big bomb (Instance 10 -> Grp 999)
+        assembler.process_game_object(10, Some(999), Some(1), 28);
+
+        // Opponent immediately concedes
+        let (_, _, _, impactful) = assembler.complete_match(1, "ResultReason_Concede").expect("match should complete");
+
+        let imp_999 = impactful.iter().find(|i| i.grp_id == 999).expect("grp 999 should be in impactful cards");
+        assert!(imp_999.titles.contains(&"Scoop Inducer".to_string()), "Card 999 should have Scoop Inducer title");
     }
 }

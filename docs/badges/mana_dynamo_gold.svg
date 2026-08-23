@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="goldBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFBEB" />
+      <stop offset="25%" stop-color="#FEF08A" />
+      <stop offset="65%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#451A03" />
+    </linearGradient>
+    <linearGradient id="goldRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#78350F" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#FEF08A" />
+    </linearGradient>
+    <linearGradient id="goldInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="50%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#78350F" />
+    </linearGradient>
+    <radialGradient id="goldField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#451A03" />
+      <stop offset="60%" stop-color="#1E0B02" />
+      <stop offset="100%" stop-color="#080200" />
+    </radialGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+  <!-- Gold Frame with Laurels & Crown -->
+  <g filter="url(#badgeShadow)">
+    <polygon points="10,44 24,34 24,52 6,64" fill="url(#goldBevel)" />
+    <polygon points="8,64 24,54 24,72 12,82" fill="url(#goldBevel)" />
+    <polygon points="110,44 96,34 96,52 114,64" fill="url(#goldBevel)" />
+    <polygon points="112,64 96,54 96,72 108,82" fill="url(#goldBevel)" />
+  </g>
+  <polygon points="44,108 60,119 76,108 60,104" fill="url(#goldBevel)" filter="url(#badgeShadow)" />
+
+  <path d="M60 4 L102 20 C108 48 104 84 60 116 C16 84 12 48 18 20 Z" fill="url(#goldBevel)" filter="url(#badgeShadow)" />
+  <path d="M60 9 L97 23 C102 48 98 79 60 108 C22 79 18 48 23 23 Z" fill="url(#goldRim)" />
+  <path d="M60 13 L93 26 C97 48 94 76 60 103 C26 76 23 48 27 26 Z" fill="url(#goldInner)" />
+  <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#goldField)" />
+
+  <polygon points="60,0 66,8 54,8" fill="url(#goldBevel)" />
+  <polygon points="60,2 61.5,6 66,7 62,8.5 60,12 58,8.5 54,7 58.5,6" fill="#FFFBEB" />
+  <circle cx="24" cy="24" r="2" fill="#FFFBEB" stroke="#78350F" stroke-width="0.8" />
+  <circle cx="96" cy="24" r="2" fill="#FFFBEB" stroke="#78350F" stroke-width="0.8" />
+
+      <!-- Nuclear Power Plant with Fat Base Hyperbolic Cooling Towers & True Radiation Trefoil Symbol -->
+      <g transform="translate(60, 48)">
+        <!-- Left Hyperbolic Cooling Tower -->
+        <path d="M-20 14 C-17 2 -12 -6 -13 -13 L-5 -13 C-6 -6 -1 2 2 14 Z" fill="#334155" stroke="#FFFBEB" stroke-width="1" />
+        <ellipse cx="-9" cy="-13" rx="4" ry="1.2" fill="#1E293B" stroke="#FFFBEB" stroke-width="0.6" />
+        <!-- Right Hyperbolic Cooling Tower -->
+        <path d="M-2 14 C1 2 6 -6 5 -13 L13 -13 C12 -6 17 2 20 14 Z" fill="#334155" stroke="#FFFBEB" stroke-width="1" />
+        <ellipse cx="9" cy="-13" rx="4" ry="1.2" fill="#1E293B" stroke="#FFFBEB" stroke-width="0.6" />
+        <!-- Foundation Base -->
+        <rect x="-22" y="14" width="44" height="4" fill="#1E293B" stroke="#FFFBEB" stroke-width="0.8" rx="1" />
+        <!-- Billowing Steam Clouds -->
+        <ellipse cx="-9" cy="-19" rx="6" ry="3.5" fill="#E2E8F0" opacity="0.85" />
+        <ellipse cx="-6" cy="-24" rx="5" ry="3" fill="#FFFFFF" opacity="0.95" />
+        <ellipse cx="9" cy="-19" rx="6" ry="3.5" fill="#E2E8F0" opacity="0.85" />
+        <ellipse cx="12" cy="-24" rx="5" ry="3" fill="#FFFFFF" opacity="0.95" />
+        <!-- Nuclear Radiation Trefoil Symbol (3 Fan Blades around Central Dot) -->
+        <g transform="translate(0, 4)">
+          <!-- Center Dot -->
+          <circle cx="0" cy="0" r="1.5" fill="#FDE047" />
+          <!-- Top Fan Blade -->
+          <path d="M-1.5 -2.2 A4.5 4.5 0 0 1 1.5 -2.2 L3.2 -6.5 A8 8 0 0 0 -3.2 -6.5 Z" fill="#FDE047" />
+          <!-- Bottom Right Fan Blade -->
+          <path d="M2.5 0.5 A4.5 4.5 0 0 1 1.2 2.5 L4.8 6.2 A8 8 0 0 0 7.8 1.5 Z" fill="#FDE047" />
+          <!-- Bottom Left Fan Blade -->
+          <path d="M-1.2 2.5 A4.5 4.5 0 0 1 -2.5 0.5 L-7.8 1.5 A8 8 0 0 0 -4.8 6.2 Z" fill="#FDE047" />
+        </g>
+      </g>
+</svg>

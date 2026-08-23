@@ -2,7 +2,62 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [1.1.6] - 2026-08-22
+## [1.2.0] - 2026-08-23
+
+### 🏆 Major Milestone: Global Card Achievements, Trophy Case & Leaderboards Hall of Fame
+
+This major milestone introduces the full **Global Achievements & Trophy Case** and **All-Time Leaderboards** suite, alongside native **macOS platform support**, **mulligan tracking with timeline playback**, and **multi-platform GitHub Actions release automation**.
+
+---
+
+### 🌟 Added
+
+- **Card Achievements & Trophy Case (`Achievements` View)**:
+  - **21 Custom Achievement Emblems**: Unique vector emblems across 7 distinct MTG categories (*Combat*, *Counters*, *Closer*, *Ramp*, *Tokens*, *Defense*, *Card Draw*).
+  - **Dynamic Multi-Tier System**: Bronze, Silver, and Gold tiers with objective, value-based threshold descriptions (e.g. `12+`, `18+`, `25+`).
+  - **Highest-Tier Trophy Priority**: Trophy cards display the highest unlocked tier (`Gold > Silver > Bronze`) with a total award multiplier badge.
+  - **Center-Out Symmetrical Clustering**: Square cards (`330px × 330px`) that cluster symmetrically from the middle of the screen (1 card centered, 2 side-by-side, 3 in a 2+1 pyramid, 4 in a 2×2 box) and fill widescreen viewports without constraints.
+  - **Card MVP Showcase**: Each trophy card showcases the all-time MVP card with its **Scryfall art crop thumbnail** and full untruncated card name.
+  - **Interactive Drill-Down Modal**: Clicking any trophy opens an interactive roster showing all winning cards with individual multiplier counters and click-to-preview integration.
+  - **Enlarged Lore Quotes & Award Criteria**: Modal displays the precise objective criteria and immersive italic MTG lore quotes without distracting dividers or dark background boxes.
+  - **Universal Keyboard Dismissal**: Full <kbd>Escape</kbd> key listener to dismiss the modal instantly.
+  - **Deck Achievements Tab (Roadmap Feature)**: Dedicated switcher tab with active roadmap status for upcoming deck milestones and win-streak awards.
+
+- **All-Time Leaderboards & Hall of Fame (`Leaderboards` View)**:
+  - **6 Hall of Fame Categories**:
+    1. 🥊 **Highest Single-Hit Strike** (*Haymakers* — Most damage dealt in a single blow).
+    2. 🚂 **Total Match Damage** (*Juggernauts* — Cumulative match combat and spell damage).
+    3. 🌟 **Impactful Match MVPs** (*Key Game-Changers* — Most matches earning impactful status).
+    4. 🛡️ **Combat Heavyweights** (*Pure Attack Power* — Total damage dealt in combat phases).
+    5. 🔮 **Spell & Ability Nukes** (*Arcane Devastation* — Non-combat spell & trigger damage).
+    6. 👑 **Most Decorated Champions** (*Honor Titans* — Most lifetime achievement titles won).
+  - **Podium Styling & Crowns**: 🥇 Gold Crown (#1), 🥈 Silver Medal (#2), and 🥉 Bronze Medal (#3) podium styling.
+  - **Full-Spectrum Global Search**: Search any card in your match history across all 6 categories to reveal its global rank (e.g. `#75`).
+  - **Pinned Top 3 Benchmark**: Pinned Top 3 cards remain in view during search to provide an immediate podium reference.
+  - **Diff-to-Podium Indicator**: Displays the exact point differential between any searched card and the #3 podium threshold (e.g. `-18 to #3`).
+  - **Full-Height Vertical Scaling**: Dynamic vertical stretching across all 6 boxes so 10 cards fill the window without bottom gaps.
+
+- **Dedicated Sidebar Navigation & Navigation Router**:
+  - Dedicated **Achievements** (🏆 `Trophy`) and **Leaderboards** (🏛️ `Podium`) sidebar items with matching typography and hover styling.
+  - Added startup tab configuration in Settings for direct launch into Achievements or Leaderboards.
+
+- **macOS Platform Support & Universal Builds**:
+  - Native macOS log discovery (`~/Library/Logs/Wizards Of The Coast/MTGA/Player.log`) and raw card database discovery.
+  - Multi-platform GitHub Actions CI/CD release workflow compiling native Linux `x86_64` `.tar.gz` and macOS `.dmg` / `.app` bundles with automated SHA256 checksums.
+
+- **Mulligan Tracking & Timeline Replay**:
+  - Native GRE pre-game and prompt parsing (Prompt 36 for Mulligan, Prompt 37 for Kept hand).
+  - Opening hand state machine buffering Turn 0 instances to eliminate false Turn 1 draw spikes.
+  - Dedicated **"Opening Phase & Mulligans"** section in the Match Play Timeline displaying color-coded action badges (`MULLIGAN`, `BOTTOM`, `KEPT`), mana pips, and card type icons.
+
+---
+
+### ⚡ Fixed & Polished
+
+- **Strict Test Environment Isolation**: Dual-environment development pipeline (`./launch-test.sh` / `rhystic_dev.db`) protecting production databases during testing and feature development.
+- **Top Bar Text Cleanup**: Removed redundant labels from Achievements and Leaderboards top bars, standardizing on clean search inputs and category switchers.
+- **Card Achievements Criteria Integrity**: Verified card achievement eligibility to prevent non-qualifying cards (such as lands or non-mana enchantments) from receiving combat/mana triggers.
+- **Settings View Overflow Fix**: Fixed vertical scrollbar constraints on compact resolutions.
 
 ### ⚡ Fixed
 

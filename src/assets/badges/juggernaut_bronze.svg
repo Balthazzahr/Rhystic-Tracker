@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bronzeBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFEDD5" />
+      <stop offset="25%" stop-color="#FB923C" />
+      <stop offset="65%" stop-color="#C2410C" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <linearGradient id="bronzeRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#431407" />
+      <stop offset="50%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#FED7AA" />
+    </linearGradient>
+    <linearGradient id="bronzeInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FED7AA" />
+      <stop offset="50%" stop-color="#9A3412" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <radialGradient id="bronzeField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#431407" />
+      <stop offset="60%" stop-color="#1F0702" />
+      <stop offset="100%" stop-color="#080201" />
+    </radialGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+  <!-- Bronze Frame -->
+  <path d="M60 4 L102 20 C108 48 104 84 60 116 C16 84 12 48 18 20 Z" fill="url(#bronzeBevel)" filter="url(#badgeShadow)" />
+  <path d="M60 9 L97 23 C102 48 98 79 60 108 C22 79 18 48 23 23 Z" fill="url(#bronzeRim)" />
+  <path d="M60 13 L93 26 C97 48 94 76 60 103 C26 76 23 48 27 26 Z" fill="url(#bronzeInner)" />
+  <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#bronzeField)" />
+  <circle cx="60" cy="13" r="2" fill="#FFEDD5" />
+
+      <!-- Ram Head with Curled Horns (Enlarged & Centered) -->
+      <g transform="translate(60, 48) scale(1.22)">
+        <polygon points="0,-8 7,-4 5,10 0,16 -5,10 -7,-4" fill="#334155" stroke="#FFEDD5" stroke-width="1" />
+        <ellipse cx="0" cy="12" rx="3.5" ry="2" fill="#1E293B" />
+        <circle cx="-3" cy="-1" r="1.5" fill="#FFEDD5" />
+        <circle cx="3" cy="-1" r="1.5" fill="#FFEDD5" />
+        <polygon points="0,-12 6,-6 -6,-6" fill="#FFEDD5" />
+        <path d="M-4 -8 C-14 -16 -24 -6 -20 6 C-17 14 -8 14 -6 8 C-4 3 -8 0 -12 2 C-15 4 -16 0 -14 -4 C-12 -8 -6 -8 -4 -6" fill="#E2E8F0" stroke="#0F172A" stroke-width="0.8" />
+        <path d="M4 -8 C14 -16 24 -6 20 6 C17 14 8 14 6 8 C4 3 8 0 12 2 C15 4 16 0 14 -4 C12 -8 6 -8 4 -6" fill="#E2E8F0" stroke="#0F172A" stroke-width="0.8" />
+      </g>
+</svg>

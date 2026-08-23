@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="silverBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="25%" stop-color="#E2E8F0" />
+      <stop offset="65%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+    <linearGradient id="silverRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="50%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#F8FAFC" />
+    </linearGradient>
+    <linearGradient id="silverInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="50%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <radialGradient id="silverField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="60%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+  <!-- Silver Frame with Wing Flanges -->
+  <polygon points="12,42 24,32 24,62 12,72" fill="url(#silverBevel)" filter="url(#badgeShadow)" />
+  <polygon points="108,42 96,32 96,62 108,72" fill="url(#silverBevel)" filter="url(#badgeShadow)" />
+  <circle cx="18" cy="52" r="1.8" fill="#FFFFFF" stroke="#475569" stroke-width="0.6" />
+  <circle cx="102" cy="52" r="1.8" fill="#FFFFFF" stroke="#475569" stroke-width="0.6" />
+
+  <path d="M60 4 L102 20 C108 48 104 84 60 116 C16 84 12 48 18 20 Z" fill="url(#silverBevel)" filter="url(#badgeShadow)" />
+  <path d="M60 9 L97 23 C102 48 98 79 60 108 C22 79 18 48 23 23 Z" fill="url(#silverRim)" />
+  <path d="M60 13 L93 26 C97 48 94 76 60 103 C26 76 23 48 27 26 Z" fill="url(#silverInner)" />
+  <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#silverField)" />
+  <circle cx="60" cy="13" r="2" fill="#FFFFFF" stroke="#475569" stroke-width="0.6" />
+
+      <!-- Balance Scales with Coin (Centered) -->
+      <g transform="translate(60, 50)">
+        <line x1="0" y1="-18" x2="0" y2="15" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
+        <polygon points="-7,15 7,15 0,11" fill="#94A3B8" stroke="#FFFFFF" stroke-width="0.8" />
+        <circle cx="0" cy="-18" r="2.5" fill="#FFFFFF" />
+        <line x1="-15" y1="-12" x2="15" y2="-7" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
+        <line x1="-15" y1="-12" x2="-19" y2="0" stroke="#FFFFFF" stroke-width="0.7" />
+        <line x1="-15" y1="-12" x2="-11" y2="0" stroke="#FFFFFF" stroke-width="0.7" />
+        <path d="M-20 0 Q-15 5 -10 0 Z" fill="#94A3B8" stroke="#FFFFFF" stroke-width="0.8" />
+        <line x1="15" y1="-7" x2="11" y2="5" stroke="#FFFFFF" stroke-width="0.7" />
+        <line x1="15" y1="-7" x2="19" y2="5" stroke="#FFFFFF" stroke-width="0.7" />
+        <path d="M10 5 Q15 10 20 5 Z" fill="#94A3B8" stroke="#FFFFFF" stroke-width="0.8" />
+        <circle cx="15" cy="3.5" r="3" fill="#FBBF24" stroke="#78350F" stroke-width="0.6" />
+      </g>
+</svg>

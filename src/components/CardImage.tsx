@@ -293,6 +293,18 @@ export function CardImage({ name, version = 'art_crop', printing, className, sty
           className="w-full h-full object-cover"
           onError={retry}
         />
+      ) : failed ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-900 border border-slate-700/60 rounded-xl space-y-1.5 select-none">
+          <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+              <circle cx="9" cy="9" r="2"/>
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+            </svg>
+          </div>
+          <span className="text-[10px] font-bold text-slate-300 line-clamp-2 leading-tight">{name}</span>
+          <span className="text-[8px] font-mono uppercase tracking-wider text-slate-400 font-semibold bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">Card Art Missing</span>
+        </div>
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/70">
           {/* Loading spinner */}
@@ -302,8 +314,8 @@ export function CardImage({ name, version = 'art_crop', printing, className, sty
           />
           {/* Card name while loading */}
           <span
-            className="text-[9px] font-mono font-semibold px-1.5 text-center leading-tight"
-            style={{ color: failed ? '#F87171' : '#E2E8F0', maxWidth: '100%' }}
+            className="text-[9px] font-mono font-semibold px-1.5 text-center leading-tight text-slate-200"
+            style={{ maxWidth: '100%' }}
           >
             {name}
           </span>

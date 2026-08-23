@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bronzeBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFEDD5" />
+      <stop offset="25%" stop-color="#FB923C" />
+      <stop offset="65%" stop-color="#C2410C" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <linearGradient id="bronzeRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#431407" />
+      <stop offset="50%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#FED7AA" />
+    </linearGradient>
+    <linearGradient id="bronzeInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FED7AA" />
+      <stop offset="50%" stop-color="#9A3412" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <radialGradient id="bronzeField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#431407" />
+      <stop offset="60%" stop-color="#1F0702" />
+      <stop offset="100%" stop-color="#080201" />
+    </radialGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+  <!-- Bronze Frame -->
+  <path d="M60 4 L102 20 C108 48 104 84 60 116 C16 84 12 48 18 20 Z" fill="url(#bronzeBevel)" filter="url(#badgeShadow)" />
+  <path d="M60 9 L97 23 C102 48 98 79 60 108 C22 79 18 48 23 23 Z" fill="url(#bronzeRim)" />
+  <path d="M60 13 L93 26 C97 48 94 76 60 103 C26 76 23 48 27 26 Z" fill="url(#bronzeInner)" />
+  <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#bronzeField)" />
+  <circle cx="60" cy="13" r="2" fill="#FFEDD5" />
+
+      <!-- Kitchen Ice Cream Scoop (Centered) -->
+      <g transform="translate(60, 50) rotate(-35)">
+        <rect x="-3" y="2" width="6" height="24" rx="2.5" fill="#475569" stroke="#FFEDD5" stroke-width="0.8" />
+        <line x1="-1.5" y1="8" x2="1.5" y2="8" stroke="#94A3B8" stroke-width="0.8" />
+        <line x1="-1.5" y1="14" x2="1.5" y2="14" stroke="#94A3B8" stroke-width="0.8" />
+        <line x1="-1.5" y1="20" x2="1.5" y2="20" stroke="#94A3B8" stroke-width="0.8" />
+        <polygon points="-3,2 3,2 2,-4 -2,-4" fill="#94A3B8" />
+        <path d="M-12 -16 C-12 -28 12 -28 12 -16 C12 -6 6 -4 0 -4 C-6 -4 -12 -6 -12 -16 Z" fill="#E2E8F0" stroke="#FFFFFF" stroke-width="1" />
+        <ellipse cx="0" cy="-17" rx="9" ry="6" fill="#334155" />
+        <path d="M-8 -18 C-6 -13 6 -13 8 -18" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-linecap="round" />
+      </g>
+</svg>

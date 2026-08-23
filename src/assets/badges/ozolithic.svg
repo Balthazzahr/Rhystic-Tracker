@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 130" width="100%" height="100%">
+  <defs>
+    <!-- Neutral Metallic Silver / Platinum Gradients (Matching Frame) -->
+    <linearGradient id="neutralBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="30%" stop-color="#CBD5E1" />
+      <stop offset="70%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+    <linearGradient id="neutralRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="50%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+    <linearGradient id="neutralInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0" />
+      <stop offset="50%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <radialGradient id="neutralField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="60%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+    
+    <!-- Ozolith Dark Stone Gradients -->
+    <linearGradient id="stoneBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64748B" />
+      <stop offset="50%" stop-color="#334155" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <!-- Counter Token Gradient -->
+    <linearGradient id="tokenChip" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0369A1" />
+    </linearGradient>
+
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Clean, Uncluttered Game Shield Badge (Matching Geometry) -->
+  <!-- Outer Beveled Shield -->
+  <path d="M60 6 L104 22 C110 50 106 88 60 122 C14 88 10 50 16 22 Z" fill="url(#neutralBevel)" filter="url(#badgeShadow)" />
+  <!-- Mid Metal Ridge -->
+  <path d="M60 11 L99 26 C104 51 100 83 60 114 C20 83 16 51 21 26 Z" fill="url(#neutralRim)" />
+  <!-- Inner Border Frame -->
+  <path d="M60 15 L95 29 C99 51 96 80 60 108 C24 80 21 51 25 29 Z" fill="url(#neutralInner)" />
+  <!-- Dark Radial Inner Field -->
+  <path d="M60 18 L91 31 C95 51 92 76 60 103 C28 76 25 51 29 31 Z" fill="url(#neutralField)" />
+
+  <!-- Clean Top Stud -->
+  <circle cx="60" cy="15" r="2.5" fill="#FFFFFF" />
+
+  <!-- Central Visual Icon: Simplified Segmented The Ozolith Monolith -->
+  <!-- Floating Top Pyramid Cap -->
+  <polygon points="60,28 70,42 50,42" fill="url(#stoneBody)" stroke="#FFFFFF" stroke-width="0.8" />
+  <polygon points="60,28 60,42 50,42" fill="rgba(255,255,255,0.2)" />
+
+  <!-- Floating Middle Segment (Fractured Hexagonal Slab) -->
+  <polygon points="48,46 72,46 69,60 51,60" fill="url(#stoneBody)" stroke="#FFFFFF" stroke-width="0.8" />
+  <polygon points="48,46 60,46 58,60 51,60" fill="rgba(255,255,255,0.2)" />
+
+  <!-- Floating Lower Segment -->
+  <polygon points="50,64 70,64 66,78 54,78" fill="url(#stoneBody)" stroke="#FFFFFF" stroke-width="0.8" />
+  <polygon points="50,64 60,64 58,78 54,78" fill="rgba(255,255,255,0.2)" />
+
+  <!-- Pedestal Base (Inverted Point) -->
+  <polygon points="53,82 67,82 60,90" fill="url(#stoneBody)" stroke="#FFFFFF" stroke-width="0.8" />
+
+  <!-- Floating +1 Counter Tokens Orbiting Around -->
+  <!-- Token 1 (Top Left) -->
+  <g transform="translate(34, 40)">
+    <circle cx="0" cy="0" r="8" fill="url(#tokenChip)" stroke="#FFFFFF" stroke-width="0.8" />
+    <text x="0" y="3" font-family="'JetBrains Mono', monospace" font-size="7.5" font-weight="900" fill="#FFFFFF" text-anchor="middle">+1</text>
+  </g>
+
+  <!-- Token 2 (Top Right) -->
+  <g transform="translate(86, 40)">
+    <circle cx="0" cy="0" r="8" fill="url(#tokenChip)" stroke="#FFFFFF" stroke-width="0.8" />
+    <text x="0" y="3" font-family="'JetBrains Mono', monospace" font-size="7.5" font-weight="900" fill="#FFFFFF" text-anchor="middle">+1</text>
+  </g>
+
+  <!-- Token 3 (Bottom Left) -->
+  <g transform="translate(32, 70)">
+    <circle cx="0" cy="0" r="8.5" fill="url(#tokenChip)" stroke="#FFFFFF" stroke-width="0.8" />
+    <text x="0" y="3" font-family="'JetBrains Mono', monospace" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">+1</text>
+  </g>
+
+  <!-- Token 4 (Bottom Right) -->
+  <g transform="translate(88, 70)">
+    <circle cx="0" cy="0" r="8.5" fill="url(#tokenChip)" stroke="#FFFFFF" stroke-width="0.8" />
+    <text x="0" y="3" font-family="'JetBrains Mono', monospace" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">+1</text>
+  </g>
+</svg>

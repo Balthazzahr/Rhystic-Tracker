@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 130" width="100%" height="100%">
+  <defs>
+    <!-- Neutral Metallic Silver / Platinum Gradients -->
+    <linearGradient id="neutralBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="30%" stop-color="#CBD5E1" />
+      <stop offset="70%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+    <linearGradient id="neutralRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="50%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+    <linearGradient id="neutralInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0" />
+      <stop offset="50%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <radialGradient id="neutralField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#1E293B" />
+      <stop offset="60%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+    
+    <!-- Clean Icon Metallic Shading -->
+    <linearGradient id="iconShine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="50%" stop-color="#E2E8F0" />
+      <stop offset="100%" stop-color="#94A3B8" />
+    </linearGradient>
+    <linearGradient id="iconDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Clean, Uncluttered Game Shield Badge (Vecteezy Award Frame) -->
+  <!-- Outer Beveled Shield -->
+  <path d="M60 6 L104 22 C110 50 106 88 60 122 C14 88 10 50 16 22 Z" fill="url(#neutralBevel)" filter="url(#badgeShadow)" />
+  <!-- Mid Metal Ridge -->
+  <path d="M60 11 L99 26 C104 51 100 83 60 114 C20 83 16 51 21 26 Z" fill="url(#neutralRim)" />
+  <!-- Inner Border Frame -->
+  <path d="M60 15 L95 29 C99 51 96 80 60 108 C24 80 21 51 25 29 Z" fill="url(#neutralInner)" />
+  <!-- Dark Radial Inner Field -->
+  <path d="M60 18 L91 31 C95 51 92 76 60 103 C28 76 25 51 29 31 Z" fill="url(#neutralField)" />
+
+  <!-- Clean Top Stud -->
+  <circle cx="60" cy="15" r="2.5" fill="#FFFFFF" />
+
+  <!-- Simple Geometric Kitchen Scoop (Tilted at 45°) -->
+  <g transform="translate(60, 60) rotate(-40) translate(-60, -60)">
+    <!-- Cylindrical Straight Handle -->
+    <rect x="57" y="60" width="6" height="32" rx="3" fill="url(#iconDark)" stroke="#FFFFFF" stroke-width="0.8" />
+    
+    <!-- Scoop Neck Transition -->
+    <polygon points="56,60 64,60 63,52 57,52" fill="url(#iconShine)" />
+
+    <!-- Kitchen Scoop Hemispherical Metal Head (Clean Geometric Bowl) -->
+    <path d="M46 36 C46 22 74 22 74 36 C74 48 66 52 60 52 C54 52 46 48 46 36 Z" fill="url(#iconShine)" stroke="#FFFFFF" stroke-width="1.2" />
+    <!-- Bowl Depth / Inner Cavity -->
+    <ellipse cx="60" cy="34" rx="11" ry="8" fill="url(#iconDark)" />
+    <!-- Front Lip Highlight -->
+    <path d="M49 33 C52 39 68 39 71 33" fill="none" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" />
+  </g>
+</svg>

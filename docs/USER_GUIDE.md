@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.1.6**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
+Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.2.0**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux or macOS environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
 
 ---
 
@@ -8,9 +8,10 @@ Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v
 
 1. [How Rhystic Tracker Works](#1-how-rhystic-tracker-works)
 2. [MTG Arena Game Configuration](#2-mtg-arena-game-configuration)
-3. [Linux Setup & Dynamic Log Discovery](#3-linux-setup--dynamic-log-discovery)
-   - [Steam Proton (Native & Mounted Libraries)](#steam-proton-native--mounted-libraries)
-   - [Lutris, Bottles, and Heroic Games Launcher](#lutris-bottles-and-heroic-games-launcher)
+3. [Platform Setup & Dynamic Log Discovery](#3-platform-setup--dynamic-log-discovery)
+   - [Linux: Steam Proton (Native & Mounted Libraries)](#linux-steam-proton-native--mounted-libraries)
+   - [Linux: Lutris, Bottles, and Heroic Games Launcher](#linux-lutris-bottles-and-heroic-games-launcher)
+   - [macOS: Native Discovery & Wine Wrappers](#macos-native-discovery--wine-wrappers)
    - [Manual Path & Environment Overrides](#manual-path--environment-overrides)
 4. [First-Time Setup Wizard & Card DB Sync](#4-first-time-setup-wizard--card-db-sync)
    - [The 3-Step Onboarding Wizard](#the-3-step-onboarding-wizard)
@@ -21,8 +22,11 @@ Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v
    - [Wayland, XWayland, and Steam Deck Guidelines](#wayland-xwayland-and-steam-deck-guidelines)
    - [Dual-Environment Architecture (Test vs. Production)](#dual-environment-architecture-test-vs-production)
 6. [Feature Guide](#6-feature-guide)
+   - [Global Card Achievements & Trophy Case](#global-card-achievements--trophy-case)
+   - [All-Time Leaderboards & Hall of Fame](#all-time-leaderboards--hall-of-fame)
    - [Dashboard & Time-Series Win Rate Analytics](#dashboard--time-series-win-rate-analytics)
    - [Comprehensive MTGA Formats Coverage](#comprehensive-mtga-formats-coverage)
+   - [Mulligan Tracking & Opening Phase Replay](#mulligan-tracking--opening-phase-replay)
    - [Live Match HUD & Real-Time Combat Feed](#live-match-hud--real-time-combat-feed)
    - [Match History & Full Match Inspector](#match-history--full-match-inspector)
    - [Deck Library, 3-Column Inspector & True Decklists](#deck-library-3-column-inspector--true-decklists)
@@ -211,6 +215,47 @@ To safeguard your daily match history and collection, Rhystic Tracker uses stric
 ---
 
 ## 6. Feature Guide
+
+### Global Card Achievements & Trophy Case
+
+The **Achievements** view transforms your match history into an interactive trophy case, celebrating epic combat feats, lethal strikes, massive token swarms, and card draw milestones.
+
+#### 21 Custom Vector Badges Across 7 Categories
+Every achievement represents a distinct gameplay feat across 7 MTG disciplines:
+- 🥊 **Combat**: *Haymaker* (single-hit blow), *Juggernaut* (total match damage), *Royal Assassin* (creature destruction in combat).
+- 🛡️ **Defense**: *Ironclad* (blocking lethal attacks), *Stalwart* (damage absorbed across match).
+- 🔮 **Arcane Devastation / Spells**: *Cataclysm* (board wipe devastation), *Executioner* (lethal spell strikes), *Sweeper* (multi-target removal).
+- ⚔️ **Counters & P/T Growth**: *Hardened* (+1/+1 counter accumulation), *Ozolithic!* (massive single-turn counter surge).
+- 🌾 **Ramp & Mana**: *Mana Dynamo* (huge mana generation turns), *Blinkmaster* (flicker & enter-the-battlefield triggers).
+- 👥 **Tokens & Swarm**: *Swarmer* (creature tokens created), *Cat Burglar* (graveyard theft & reanimation).
+- 📜 **Card Advantage & Finishers**: *Rhystic Tracker* (cards drawn in single turn), *Scoop Inducer* (causing opponent concession), *Over-Killer* (massive overkill lethal damage).
+
+#### Dynamic Tier Thresholds & Highest-Tier Display
+- Each achievement features **Bronze**, **Silver**, and **Gold** progression tiers with objective, value-based $X+$ thresholds (e.g. `12+`, `18+`, `25+`).
+- Trophy cards display the **highest tier achieved** (`Gold > Silver > Bronze`) along with the total lifetime awards won across all your matches.
+- **Center-Out Symmetrical Clustering**: Square trophy cards (`330px × 330px`) cluster gracefully in the center of the screen, dynamically expanding to fill widescreen resolutions.
+- **All-Time MVP Card**: Each trophy highlights the all-time MVP card that earned the badge most frequently, complete with its **Scryfall art crop thumbnail** and full untruncated name.
+- **Drill-Down Inspection Modal**: Click any trophy to inspect every card that has earned it, view objective requirements, read flavor lore quotes, and click to inspect individual card stats. Press <kbd>Esc</kbd> or click the backdrop to close.
+
+---
+
+### All-Time Leaderboards & Hall of Fame
+
+The **Leaderboards** view showcases your MTG career's all-time greatest cards across 6 Hall of Fame categories:
+
+1. 🥊 **Highest Single-Hit Strike** (*Haymakers* — Most damage dealt in a single blow).
+2. 🚂 **Total Match Damage** (*Juggernauts* — Cumulative match combat and spell damage).
+3. 🌟 **Impactful Match MVPs** (*Key Game-Changers* — Most matches earning impactful status).
+4. 🛡️ **Combat Heavyweights** (*Pure Attack Power* — Total damage dealt in combat phases).
+5. 🔮 **Spell & Ability Nukes** (*Arcane Devastation* — Non-combat spell & trigger damage).
+6. 👑 **Most Decorated Champions** (*Honor Titans* — Most lifetime achievement titles won).
+
+#### Podium Benchmark & Full-Spectrum Search
+- **Top 3 Podium Styling**: Distinct visual treatment for 🥇 Gold Crown (#1), 🥈 Silver Medal (#2), and 🥉 Bronze Medal (#3).
+- **Full 10-Card Dynamic Vertical Scaling**: Category cards expand to fill vertical window height with zero bottom gaps.
+- **Global Search & Diff to Podium**: Search any card in your collection (e.g. *Craterhoof Behemoth*). If ranked outside the top 3, the card is displayed below the pinned Top 3 benchmark along with its true global rank (e.g. `#75`) and a dynamic **diff pill** indicating how far off it is from the #3 podium spot (e.g. `-18 to #3`).
+
+---
 
 ### Dashboard & Time-Series Win Rate Analytics
 The **Dashboard** serves as your mission control, synthesizing daily performance, active win streaks, multi-window win rate analytics, and match history.

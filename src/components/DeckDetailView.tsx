@@ -5,6 +5,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
 import DeckCardList from './DeckCardList';
 import TrueDeckListView from './TrueDeckListView';
+import { AchievementBadge } from './AchievementBadge';
+import { DeckAchievementsModal } from './DeckAchievementsModal';
 
 interface DeckDetailViewProps {
   isOpen: boolean;
@@ -180,6 +182,7 @@ export function DeckDetailView({
   const [exportMode, setExportMode] = useState<'true' | 'logged'>('true');
   const [exportText, setExportText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
 
   // Load the export text whenever the dialog opens or the mode changes.
   useEffect(() => {
@@ -249,7 +252,9 @@ export function DeckDetailView({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (exportOpen) {
+        if (achievementsModalOpen) {
+          setAchievementsModalOpen(false);
+        } else if (exportOpen) {
           setExportOpen(false);
         } else if (importOpen) {
           if (!importBusy) setImportOpen(false);
@@ -260,7 +265,7 @@ export function DeckDetailView({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, exportOpen, importOpen, importBusy, onBack]);
+  }, [isOpen, achievementsModalOpen, exportOpen, importOpen, importBusy, onBack]);
 
   if (!isOpen || !detail) return null;
 
@@ -422,6 +427,65 @@ export function DeckDetailView({
                     {winLossBar(detail.draw?.wins || 0, detail.draw?.losses || 0, drawWinPct)}
                   </div>
                 </div>
+
+                {/* Card Achievements Summary Card */}
+                <div className="rounded-2xl border p-3 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase font-semibold opacity-60">Card Achievements</p>
+                    {(detail.top_card_achievements || []).length > 0 && (
+                      <button
+                        onClick={() => setAchievementsModalOpen(true)}
+                        className="text-[10px] font-mono font-bold hover:underline opacity-80"
+                        style={{ color: palette?.accent || '#38BDF8' }}
+                      >
+                        View All
+                      </button>
+                    )}
+                  </div>
+
+                  {(detail.top_card_achievements || []).length === 0 ? (
+                    <p className="text-xs font-mono opacity-40 py-1">No achievements earned yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(detail.top_card_achievements || []).slice(0, 3).map((ach: any, idx: number) => (
+                        <div 
+                          key={`${ach.grp_id}-${ach.achievement}-${idx}`} 
+                          className="flex items-center justify-between gap-2.5 p-2 rounded-xl border bg-black/20"
+                          style={{ borderColor: `${palette?.border}55` }}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="shrink-0 flex items-center justify-center">
+                              <AchievementBadge
+                                title={ach.achievement}
+                                tier={ach.tier}
+                                count={ach.count}
+                                size="sm"
+                                showTitle={false}
+                                showCount={false}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <button
+                                onClick={() => onShowCard({ name: ach.card_name, grp_id: ach.grp_id }, false)}
+                                className="text-xs font-bold truncate block text-left w-full hover:underline leading-tight"
+                                style={{ color: palette?.text }}
+                                title={ach.card_name}
+                              >
+                                {ach.card_name}
+                              </button>
+                              <span className="text-[10px] font-mono opacity-60 block truncate leading-tight mt-0.5">
+                                {ach.achievement}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white/10 text-white border border-white/20">
+                            {ach.count > 1 ? `×${ach.count}` : '1×'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Recent matches (below stats, still in left sidebar) */}
@@ -482,6 +546,14 @@ export function DeckDetailView({
                   </button>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setAchievementsModalOpen(true)}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
+                    style={{ color: '#FACC15', borderColor: '#FACC1555' }}
+                    title="View all card achievements won by this deck"
+                  >
+                    <Trophy className="w-3.5 h-3.5" /> Card Achievements
+                  </button>
                   <button
                     onClick={openImport}
                     className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
@@ -701,6 +773,16 @@ export function DeckDetailView({
             {tip.text}
           </div>
         )}
+
+        {/* Deck Card Achievements Full Modal View */}
+        <DeckAchievementsModal
+          isOpen={achievementsModalOpen}
+          onClose={() => setAchievementsModalOpen(false)}
+          deckName={deckName}
+          groupedAchievements={detail?.card_achievements_grouped || []}
+          palette={palette}
+          onShowCard={onShowCard}
+        />
       </div>
     </div>
   );

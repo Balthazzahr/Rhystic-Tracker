@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, AlertCircle, Play, Sparkles } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardItem } from './CardBreakdown';
+import { AchievementBadge } from './AchievementBadge';
 import { RenderManaCost } from '../utils/manaUtils';
+import { TITLE_BADGES } from './FullMatchInfoModal';
 
 interface TurnEventItem {
   turn_number: number;
@@ -14,6 +16,7 @@ interface TurnEventItem {
   name: string;
   card_type?: string;
   mana_cost?: string;
+  titles?: string[];
 }
 
 interface MatchTimelineProps {
@@ -186,6 +189,18 @@ export function MatchTimeline({
             {displayName}
           </span>
           {!isHidden && getCardTypeBadge(ev.card_type)}
+          {!isHidden && ev.titles && ev.titles.length > 0 && (
+            <div className="flex items-center gap-1 shrink-0">
+              {ev.titles.map((t, ti) => (
+                <AchievementBadge
+                  key={ti}
+                  title={t}
+                  size="sm"
+                  showTooltip={true}
+                />
+              ))}
+            </div>
+          )}
         </div>
         {!isHidden && <RenderManaCost costStr={ev.mana_cost} size={12} />}
       </div>

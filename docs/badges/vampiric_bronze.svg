@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bronzeBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFEDD5" />
+      <stop offset="25%" stop-color="#FB923C" />
+      <stop offset="65%" stop-color="#C2410C" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <linearGradient id="bronzeRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#431407" />
+      <stop offset="50%" stop-color="#EA580C" />
+      <stop offset="100%" stop-color="#FED7AA" />
+    </linearGradient>
+    <linearGradient id="bronzeInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FED7AA" />
+      <stop offset="50%" stop-color="#9A3412" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <radialGradient id="bronzeField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#431407" />
+      <stop offset="60%" stop-color="#1F0702" />
+      <stop offset="100%" stop-color="#080201" />
+    </radialGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+  <!-- Bronze Frame -->
+  <path d="M60 4 L102 20 C108 48 104 84 60 116 C16 84 12 48 18 20 Z" fill="url(#bronzeBevel)" filter="url(#badgeShadow)" />
+  <path d="M60 9 L97 23 C102 48 98 79 60 108 C22 79 18 48 23 23 Z" fill="url(#bronzeRim)" />
+  <path d="M60 13 L93 26 C97 48 94 76 60 103 C26 76 23 48 27 26 Z" fill="url(#bronzeInner)" />
+  <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#bronzeField)" />
+  <circle cx="60" cy="13" r="2" fill="#FFEDD5" />
+
+      <!-- Dracula Enlarged & Lowered with Distinct Vampire Fangs -->
+      <g transform="translate(60, 52) scale(1.26)">
+        <polygon points="-16,-13 0,14 16,-13 10,-15 0,2 -10,-15" fill="#881337" stroke="#FFEDD5" stroke-width="0.8" />
+        <path d="M-8 -11 C-8 -19 8 -19 8 -11 C8 -3 0 5 0 5 C0 5 -8 -3 -8 -11 Z" fill="#F8FAFC" stroke="#FFEDD5" stroke-width="0.8" />
+        <path d="M-9 -11 C-9 -21 9 -21 9 -11 C5 -16 2 -11 0 -8 C-2 -11 -5 -16 -9 -11 Z" fill="#0F172A" />
+        <circle cx="-3" cy="-8" r="1.2" fill="#E11D48" />
+        <circle cx="3" cy="-8" r="1.2" fill="#E11D48" />
+        <line x1="-5" y1="-2" x2="5" y2="-2" stroke="#881337" stroke-width="1" stroke-linecap="round" />
+        <polygon points="-4,-2 -3,2 -2,-2" fill="#FFFFFF" stroke="#881337" stroke-width="0.4" />
+        <polygon points="2,-2 3,2 4,-2" fill="#FFFFFF" stroke="#881337" stroke-width="0.4" />
+        <path d="M0 9 C-1.5 9 -2.5 10.5 -2.5 12 C-2.5 13.5 -1.2 14.5 0 14.5 C1.2 14.5 2.5 13.5 2.5 12 C2.5 10.5 1.5 9 0 9 Z" fill="#E11D48" />
+      </g>
+</svg>

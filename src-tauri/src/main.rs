@@ -1145,6 +1145,131 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
     types_sorted.sort_by(|a, b| b.get("count").and_then(|v| v.as_i64()).unwrap_or(0)
         .cmp(&a.get("count").and_then(|v| v.as_i64()).unwrap_or(0)));
 
+    // Deck card achievements grouped by achievement type and top card achievements
+    let achievement_rows = sqlx::query_as::<_, (i64, Option<String>, String)>(
+        r#"
+        SELECT i.grp_id, c.name as card_name, i.titles
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE (m.hero_deck_name = ? OR m.id IN (SELECT match_id FROM match_decks WHERE deck_name = ?))
+          AND i.seat_id = m.hero_seat_id
+          AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        "#
+    )
+    .bind(&deck_name)
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .unwrap_or_default();
+
+    fn parse_title_and_tier(raw: &str) -> (String, String) {
+        let trimmed = raw.trim();
+        if trimmed.to_lowercase().contains("(gold)") {
+            (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
+        } else if trimmed.to_lowercase().contains("(silver)") {
+            (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
+        } else if trimmed.to_lowercase().contains("(bronze)") {
+            (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+        } else {
+            (trimmed.to_string(), "bronze".to_string())
+        }
+    }
+
+    fn tier_rank(tier: &str) -> i32 {
+        match tier.to_lowercase().as_str() {
+            "gold" => 3,
+            "silver" => 2,
+            _ => 1,
+        }
+    }
+
+    let mut card_ach_counts: std::collections::HashMap<(i64, String, String, String), i64> = std::collections::HashMap::new();
+    for (grp_id, card_name_opt, titles_json) in achievement_rows {
+        let card_name = card_name_opt.unwrap_or_else(|| format!("Card #{}", grp_id));
+        if let Ok(titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
+            for raw_title in titles {
+                if !raw_title.is_empty() {
+                    let (clean_title, tier) = parse_title_and_tier(&raw_title);
+                    *card_ach_counts.entry((grp_id, card_name.clone(), clean_title, tier)).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    let mut top_card_achievements: Vec<serde_json::Value> = card_ach_counts.iter()
+        .map(|((grp_id, card_name, title, tier), count)| {
+            serde_json::json!({
+                "grp_id": grp_id,
+                "card_name": card_name,
+                "achievement": title,
+                "tier": tier,
+                "count": count
+            })
+        })
+        .collect();
+
+    // Priority Sort: Gold > Silver > Bronze, then by count descending
+    top_card_achievements.sort_by(|a, b| {
+        let tier_a = a.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+        let tier_b = b.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+        let rank_a = tier_rank(tier_a);
+        let rank_b = tier_rank(tier_b);
+
+        rank_b.cmp(&rank_a).then_with(|| {
+            let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+            cnt_b.cmp(&cnt_a).then_with(|| {
+                let name_a = a.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
+                let name_b = b.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
+                name_a.cmp(name_b)
+            })
+        })
+    });
+
+    let mut ach_groups: std::collections::HashMap<String, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for ((grp_id, card_name, title, tier), count) in &card_ach_counts {
+        ach_groups.entry(title.clone()).or_default().push(serde_json::json!({
+            "grp_id": grp_id,
+            "card_name": card_name,
+            "tier": tier,
+            "count": count
+        }));
+    }
+
+    let mut grouped_by_achievement: Vec<serde_json::Value> = ach_groups.into_iter()
+        .map(|(title, mut cards)| {
+            cards.sort_by(|a, b| {
+                let tier_a = a.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+                let tier_b = b.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+                let rank_a = tier_rank(tier_a);
+                let rank_b = tier_rank(tier_b);
+
+                rank_b.cmp(&rank_a).then_with(|| {
+                    let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                    cnt_b.cmp(&cnt_a).then_with(|| {
+                        let name_a = a.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
+                        let name_b = b.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
+                        name_a.cmp(name_b)
+                    })
+                })
+            });
+            let total_awards: i64 = cards.iter().map(|c| c.get("count").and_then(|v| v.as_i64()).unwrap_or(0)).sum();
+            serde_json::json!({
+                "achievement": title,
+                "total_awards": total_awards,
+                "cards": cards
+            })
+        })
+        .collect();
+
+    grouped_by_achievement.sort_by(|a, b| {
+        let tot_b = b.get("total_awards").and_then(|v| v.as_i64()).unwrap_or(0);
+        let tot_a = a.get("total_awards").and_then(|v| v.as_i64()).unwrap_or(0);
+        tot_b.cmp(&tot_a)
+    });
+
     Ok(serde_json::json!({
         "deck_name": deck_name,
         "total": total,
@@ -1160,6 +1285,361 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         "mana_curve": curve,
         "card_types": types_sorted,
         "mana_distribution": color_dist,
+        "card_achievements_grouped": grouped_by_achievement,
+        "top_card_achievements": top_card_achievements,
+    }))
+}
+
+#[tauri::command]
+async fn get_global_achievements() -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let pool = db.pool();
+
+    let rows = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id
+          AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    fn parse_title_and_tier(raw: &str) -> (String, String) {
+        let trimmed = raw.trim();
+        if trimmed.to_lowercase().contains("(gold)") {
+            (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
+        } else if trimmed.to_lowercase().contains("(silver)") {
+            (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
+        } else if trimmed.to_lowercase().contains("(bronze)") {
+            (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+        } else {
+            (trimmed.to_string(), "bronze".to_string())
+        }
+    }
+
+    fn tier_rank(tier: &str) -> i32 {
+        match tier.to_lowercase().as_str() {
+            "gold" => 3,
+            "silver" => 2,
+            _ => 1,
+        }
+    }
+
+    struct CardStats {
+        grp_id: i64,
+        card_name: String,
+        mana_cost: Option<String>,
+        card_type: Option<String>,
+        rarity: Option<String>,
+        set_code: Option<String>,
+        count: i64,
+        highest_tier: String,
+    }
+
+    let mut ach_map: std::collections::HashMap<String, (i64, String, std::collections::HashMap<i64, CardStats>)> = std::collections::HashMap::new();
+
+    let mut total_honors_count = 0i64;
+    let mut gold_count = 0i64;
+    let mut silver_count = 0i64;
+    let mut bronze_count = 0i64;
+
+    for row in rows {
+        let grp_id: i64 = row.get("grp_id");
+        let card_name: String = row.try_get("card_name").unwrap_or_else(|_| format!("Card #{}", grp_id));
+        let mana_cost: Option<String> = row.try_get("mana_cost").ok();
+        let card_type: Option<String> = row.try_get("card_type").ok();
+        let rarity: Option<String> = row.try_get("rarity").ok();
+        let set_code: Option<String> = row.try_get("set_code").ok();
+        let titles_json: String = row.try_get("titles").unwrap_or_default();
+
+        if let Ok(titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
+            for raw in titles {
+                if raw.is_empty() { continue; }
+                let (clean_title, tier) = parse_title_and_tier(&raw);
+                total_honors_count += 1;
+                match tier.as_str() {
+                    "gold" => gold_count += 1,
+                    "silver" => silver_count += 1,
+                    _ => bronze_count += 1,
+                }
+
+                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, "bronze".to_string(), std::collections::HashMap::new()));
+                entry.0 += 1;
+                if tier_rank(&tier) > tier_rank(&entry.1) {
+                    entry.1 = tier.clone();
+                }
+
+                let card_entry = entry.2.entry(grp_id).or_insert_with(|| CardStats {
+                    grp_id,
+                    card_name: card_name.clone(),
+                    mana_cost: mana_cost.clone(),
+                    card_type: card_type.clone(),
+                    rarity: rarity.clone(),
+                    set_code: set_code.clone(),
+                    count: 0,
+                    highest_tier: "bronze".to_string(),
+                });
+                card_entry.count += 1;
+                if tier_rank(&tier) > tier_rank(&card_entry.highest_tier) {
+                    card_entry.highest_tier = tier.clone();
+                }
+            }
+        }
+    }
+
+    let mut achievements: Vec<serde_json::Value> = ach_map.into_iter().map(|(title, (total_awards, highest_tier, cards_map))| {
+        let mut cards: Vec<serde_json::Value> = cards_map.into_values().map(|c| {
+            serde_json::json!({
+                "grp_id": c.grp_id,
+                "card_name": c.card_name,
+                "mana_cost": c.mana_cost,
+                "card_type": c.card_type,
+                "rarity": c.rarity,
+                "set_code": c.set_code,
+                "count": c.count,
+                "highest_tier": c.highest_tier
+            })
+        }).collect();
+
+        cards.sort_by(|a, b| {
+            let t_a = a.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+            let t_b = b.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+            tier_rank(t_b).cmp(&tier_rank(t_a)).then_with(|| {
+                let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                cnt_b.cmp(&cnt_a).then_with(|| {
+                    let name_a = a.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
+                    let name_b = b.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
+                    name_a.cmp(name_b)
+                })
+            })
+        });
+
+        serde_json::json!({
+            "achievement": title,
+            "total_awards": total_awards,
+            "highest_tier": highest_tier,
+            "cards": cards
+        })
+    }).collect();
+
+    // Priority Sort: Gold > Silver > Bronze, then total_awards descending
+    achievements.sort_by(|a, b| {
+        let t_a = a.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+        let t_b = b.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
+        tier_rank(t_b).cmp(&tier_rank(t_a)).then_with(|| {
+            let tot_b = b.get("total_awards").and_then(|v| v.as_i64()).unwrap_or(0);
+            let tot_a = a.get("total_awards").and_then(|v| v.as_i64()).unwrap_or(0);
+            tot_b.cmp(&tot_a)
+        })
+    });
+
+    Ok(serde_json::json!({
+        "total_unlocked": achievements.len(),
+        "total_possible": 21,
+        "total_honors": total_honors_count,
+        "gold_count": gold_count,
+        "silver_count": silver_count,
+        "bronze_count": bronze_count,
+        "achievements": achievements
+    }))
+}
+
+#[tauri::command]
+async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let pool = db.pool();
+
+    // 1. Top 10 Single Hit Damage
+    let top_single_hit = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               MAX(i.max_hit) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id AND i.max_hit > 0
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2. Top Total Match Damage
+    let top_total_damage = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               SUM(i.total_damage) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id AND i.total_damage > 0
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3. Top Impactful Match Appearances
+    let top_impactful = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               COUNT(*) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4. Top Combat Damage
+    let top_combat = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               SUM(i.damage_combat) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id AND i.damage_combat > 0
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 5. Top Spell Damage
+    let top_spell = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               SUM(i.damage_spell) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id AND i.damage_spell > 0
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 6. Top Most Decorated Champions (Total Honors / Achievements Earned)
+    let rows_honors = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id
+          AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    struct HonorAgg {
+        grp_id: i64,
+        card_name: String,
+        mana_cost: Option<String>,
+        card_type: Option<String>,
+        rarity: Option<String>,
+        set_code: Option<String>,
+        count: i64,
+    }
+
+    let mut honors_map: std::collections::HashMap<String, HonorAgg> = std::collections::HashMap::new();
+    for r in rows_honors {
+        let grp_id: i64 = r.get("grp_id");
+        let card_name: String = r.try_get("card_name").unwrap_or_else(|_| format!("Card #{}", grp_id));
+        let mana_cost: Option<String> = r.try_get("mana_cost").ok();
+        let card_type: Option<String> = r.try_get("card_type").ok();
+        let rarity: Option<String> = r.try_get("rarity").ok();
+        let set_code: Option<String> = r.try_get("set_code").ok();
+        let titles_json: String = r.try_get("titles").unwrap_or_default();
+
+        if let Ok(titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
+            let valid_count = titles.iter().filter(|t| !t.is_empty()).count() as i64;
+            if valid_count > 0 {
+                let entry = honors_map.entry(card_name.clone()).or_insert_with(|| HonorAgg {
+                    grp_id,
+                    card_name,
+                    mana_cost,
+                    card_type,
+                    rarity,
+                    set_code,
+                    count: 0,
+                });
+                entry.count += valid_count;
+            }
+        }
+    }
+
+    let mut top_honors_vec: Vec<HonorAgg> = honors_map.into_values().collect();
+    top_honors_vec.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.card_name.cmp(&b.card_name)));
+
+    let top_honors_json: Vec<serde_json::Value> = top_honors_vec.into_iter().enumerate().map(|(idx, h)| {
+        serde_json::json!({
+            "rank": idx + 1,
+            "grp_id": h.grp_id,
+            "card_name": h.card_name,
+            "mana_cost": h.mana_cost,
+            "card_type": h.card_type,
+            "rarity": h.rarity,
+            "set_code": h.set_code,
+            "value": h.count,
+            "unit": "Honors Won"
+        })
+    }).collect();
+
+    fn map_leaderboard_rows(rows: Vec<sqlx::sqlite::SqliteRow>, unit: &str) -> Vec<serde_json::Value> {
+        rows.into_iter().enumerate().map(|(idx, r)| {
+            let grp_id: i64 = r.get("grp_id");
+            let card_name: String = r.try_get("card_name").unwrap_or_else(|_| format!("Card #{}", grp_id));
+            let mana_cost: Option<String> = r.try_get("mana_cost").ok();
+            let card_type: Option<String> = r.try_get("card_type").ok();
+            let rarity: Option<String> = r.try_get("rarity").ok();
+            let set_code: Option<String> = r.try_get("set_code").ok();
+            let record_value: i64 = r.get("record_value");
+
+            serde_json::json!({
+                "rank": idx + 1,
+                "grp_id": grp_id,
+                "card_name": card_name,
+                "mana_cost": mana_cost,
+                "card_type": card_type,
+                "rarity": rarity,
+                "set_code": set_code,
+                "value": record_value,
+                "unit": unit
+            })
+        }).collect()
+    }
+
+    Ok(serde_json::json!({
+        "single_hit": map_leaderboard_rows(top_single_hit, "DMG Max Hit"),
+        "total_damage": map_leaderboard_rows(top_total_damage, "Total DMG"),
+        "impactful": map_leaderboard_rows(top_impactful, "Matches"),
+        "combat_damage": map_leaderboard_rows(top_combat, "Combat DMG"),
+        "spell_damage": map_leaderboard_rows(top_spell, "Spell DMG"),
+        "most_honors": top_honors_json,
     }))
 }
 
@@ -1375,6 +1855,79 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
     let (total_owned,) = owned_q.fetch_one(pool).await.unwrap_or((0,));
     let owned_count = total_owned.min(4);
 
+    // Mulligan statistics (PLAYER ONLY)
+    let mulligan_stats_sql = format!(
+        r#"
+        SELECT
+            COALESCE(SUM(CASE WHEN e.event_type = 'draw' AND e.turn_number = 0 THEN 1 ELSE 0 END), 0) as times_kept,
+            COALESCE(SUM(CASE WHEN e.event_type = 'mulligan' THEN 1 ELSE 0 END), 0) as times_mulliganed,
+            COALESCE(SUM(CASE WHEN e.event_type = 'bottom' THEN 1 ELSE 0 END), 0) as times_bottomed
+        FROM match_turn_events e
+        JOIN matches m ON e.match_id = m.id
+        WHERE e.grp_id IN ({}) AND e.seat_id = m.hero_seat_id
+        "#,
+        placeholders
+    );
+    let mut mul_q = sqlx::query_as::<_, (i64, i64, i64)>(&mulligan_stats_sql);
+    for id in &grp_ids {
+        mul_q = mul_q.bind(*id);
+    }
+    let (times_kept, times_mulliganed, times_bottomed) = mul_q.fetch_one(pool).await.unwrap_or((0, 0, 0));
+
+    let total_seen_openers = times_kept + times_mulliganed;
+    let keep_rate = if total_seen_openers > 0 {
+        ((times_kept as f64 / total_seen_openers as f64) * 100.0).round() as i64
+    } else {
+        0
+    };
+
+    // Opening hand win rate (wins when card was kept in turn 0)
+    let opener_wr_sql = format!(
+        r#"
+        SELECT
+            COUNT(DISTINCT m.id) as opener_matches,
+            COALESCE(SUM(CASE WHEN m.result = 'win' THEN 1 ELSE 0 END), 0) as opener_wins
+        FROM matches m
+        JOIN match_turn_events e ON m.id = e.match_id
+        WHERE e.event_type = 'draw' AND e.turn_number = 0 AND e.grp_id IN ({}) AND e.seat_id = m.hero_seat_id
+        "#,
+        placeholders
+    );
+    let mut op_wr_q = sqlx::query_as::<_, (i64, i64)>(&opener_wr_sql);
+    for id in &grp_ids {
+        op_wr_q = op_wr_q.bind(*id);
+    }
+    let (opener_matches, opener_wins) = op_wr_q.fetch_one(pool).await.unwrap_or((0, 0));
+    let opener_win_rate = if opener_matches > 0 {
+        ((opener_wins as f64 / opener_matches as f64) * 100.0).round() as i64
+    } else {
+        0
+    };
+
+    // Lifetime achievement titles from match_impactful_cards
+    let titles_sql = format!(
+        r#"
+        SELECT i.titles
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        WHERE i.grp_id IN ({}) AND i.seat_id = m.hero_seat_id AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        "#,
+        placeholders
+    );
+    let mut titles_q = sqlx::query_as::<_, (String,)>(&titles_sql);
+    for id in &grp_ids {
+        titles_q = titles_q.bind(*id);
+    }
+    let title_rows = titles_q.fetch_all(pool).await.unwrap_or_default();
+    let mut lifetime_titles: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for (t_json,) in title_rows {
+        if let Ok(parsed) = serde_json::from_str::<Vec<String>>(&t_json) {
+            for title in parsed {
+                *lifetime_titles.entry(title).or_insert(0) += 1;
+            }
+        }
+    }
+
     Ok(serde_json::json!({
         "printings": printings,
         "stats": {
@@ -1395,6 +1948,16 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
             "turn_distribution": turn_distribution,
             "avg_cast_turn": avg_cast_turn,
             "best_deck": best_deck,
+            "mulligan_stats": {
+                "times_kept": times_kept,
+                "times_mulliganed": times_mulliganed,
+                "keep_rate": keep_rate,
+                "times_bottomed": times_bottomed,
+                "opener_matches": opener_matches,
+                "opener_wins": opener_wins,
+                "opener_win_rate": opener_win_rate,
+            },
+            "lifetime_titles": lifetime_titles,
         },
     }))
 }
@@ -3083,6 +3646,25 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
 
     let hero_seat_id: u32 = match_row.as_ref().and_then(|r| r.try_get::<i64, _>("hero_seat_id").ok()).map(|s| s as u32).unwrap_or(1);
 
+    // Fetch impactful card titles for this match to annotate timeline events
+    let imp_rows = sqlx::query("SELECT grp_id, titles FROM match_impactful_cards WHERE match_id = ?")
+        .bind(&match_id)
+        .fetch_all(db.pool())
+        .await
+        .unwrap_or_default();
+    let mut titles_map: std::collections::HashMap<i64, Vec<String>> = std::collections::HashMap::new();
+    for r in imp_rows {
+        let gid: i64 = r.get("grp_id");
+        let t_str: Option<String> = r.try_get("titles").ok();
+        if let Some(s) = t_str {
+            if let Ok(parsed) = serde_json::from_str::<Vec<String>>(&s) {
+                if !parsed.is_empty() {
+                    titles_map.insert(gid, parsed);
+                }
+            }
+        }
+    }
+
     let rows = sqlx::query(
         r#"
         SELECT e.turn_number, e.seat_id, e.event_type, e.grp_id, e.timestamp,
@@ -3108,6 +3690,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
         let name: Option<String> = r.get("name");
         let card_type: Option<String> = r.get("card_type");
         let mana_cost: Option<String> = r.get("mana_cost");
+        let titles = titles_map.get(&grp_id).cloned().unwrap_or_default();
 
         events.push(serde_json::json!({
             "turn_number": turn_number,
@@ -3119,6 +3702,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
             "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
             "card_type": card_type,
             "mana_cost": mana_cost,
+            "titles": titles,
         }));
     }
 
@@ -3139,11 +3723,12 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
         .map_err(|e| e.to_string())?;
     let hero_seat_id: i64 = hero_row.as_ref().and_then(|r| r.try_get("hero_seat_id").ok()).unwrap_or(1);
 
-    // 1. Damage-tracked impactful cards (dealt damage during the match).
+    // 1. Damage and achievement tracked impactful cards
     let rows = sqlx::query(
         r#"
         SELECT i.grp_id, i.seat_id, i.total_damage, i.max_hit,
                i.damage_to_player, i.damage_to_permanents, i.damage_combat, i.damage_spell,
+               i.titles,
                c.name, c.card_type, c.mana_cost, c.rarity
         FROM match_impactful_cards i
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
@@ -3155,24 +3740,6 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. High-mana cards that were actually PLAYED (cast) in the match, even if they
-    //    dealt no damage. MTGA does not emit damage annotations for non-damaging cards,
-    //    so we derive them from the play timeline + cards_cache mana cost.
-    let played_rows = sqlx::query(
-        r#"
-        SELECT DISTINCT e.grp_id, e.seat_id,
-               c.name, c.card_type, c.mana_cost, c.rarity
-        FROM match_turn_events e
-        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
-        WHERE e.match_id = ? AND e.event_type = 'play'
-        "#
-    )
-    .bind(&match_id)
-    .fetch_all(db.pool())
-    .await
-    .map_err(|e| e.to_string())?;
-
-    // Merge: keep damage cards as-is; add high-CMC played cards not already present.
     let mut result: Vec<serde_json::Value> = Vec::new();
     let mut seen_grp: std::collections::HashSet<i64> = std::collections::HashSet::new();
 
@@ -3185,18 +3752,21 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
         let damage_to_permanents: i64 = r.try_get("damage_to_permanents").unwrap_or(0);
         let damage_combat: i64 = r.try_get("damage_combat").unwrap_or(0);
         let damage_spell: i64 = r.try_get("damage_spell").unwrap_or(0);
+        let titles_str: Option<String> = r.try_get("titles").ok();
+        let titles: Vec<String> = titles_str
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
         let name: Option<String> = r.get("name");
         let card_type: Option<String> = r.get("card_type");
         let mana_cost: Option<String> = r.get("mana_cost");
         let rarity: Option<i64> = r.get("rarity");
 
-        // Resolve mana value via get_card_metadata which falls back to parsing
-        // the stored mana cost when cmc is 0 in the cache.
         let cmc = card_db::get_card_metadata(db.pool(), grp_id)
             .await.ok().flatten().map(|c| c.cmc).unwrap_or(0);
 
-        // Impactful threshold: at least 5 total damage dealt.
-        if total_damage < 5 {
+        // Impactful threshold: at least 5 total damage dealt OR earned achievement titles.
+        if total_damage < 5 && titles.is_empty() {
             continue;
         }
 
@@ -3211,6 +3781,7 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
             "damage_to_permanents": damage_to_permanents,
             "damage_combat": damage_combat,
             "damage_spell": damage_spell,
+            "titles": titles,
             "cmc": cmc,
             "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
             "card_type": card_type,
@@ -3219,8 +3790,13 @@ async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, Stri
         }));
     }
 
-    // Sort: damage cards first (by damage), then high-mana cards.
+    // Sort: cards with titles first, then by damage descending
     result.sort_by(|a, b| {
+        let t_a = a.get("titles").and_then(|v| v.as_array()).map(|arr| arr.len()).unwrap_or(0);
+        let t_b = b.get("titles").and_then(|v| v.as_array()).map(|arr| arr.len()).unwrap_or(0);
+        if t_a != t_b {
+            return t_b.cmp(&t_a);
+        }
         let da = a.get("total_damage").and_then(|v| v.as_i64()).unwrap_or(0);
         let db_ = b.get("total_damage").and_then(|v| v.as_i64()).unwrap_or(0);
         db_.cmp(&da)
@@ -3618,6 +4194,26 @@ async fn dispatch_parsed_event(
                     }
                 }
 
+                let mut validated_impactful = impactful.clone();
+                for imp in &mut validated_impactful {
+                    if imp.titles.contains(&"Scoop Inducer".to_string()) {
+                        let card_info = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
+                            "SELECT card_type, cmc FROM cards_cache WHERE grp_id = ?"
+                        ).bind(imp.grp_id as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
+
+                        let is_invalid = if let Some((card_type, cmc)) = card_info {
+                            let type_str = card_type.unwrap_or_default().to_lowercase();
+                            type_str.contains("land") || (cmc.unwrap_or(0) < 5 && imp.total_damage < 5)
+                        } else {
+                            false
+                        };
+
+                        if is_invalid {
+                            imp.titles.retain(|t| t != "Scoop Inducer");
+                        }
+                    }
+                }
+
                 println!(
                     "[EVENT 6: MATCH_COMPLETED] Match ID = \"{}\", Deck = \"{}\", Result = \"{}\", Reason = \"{}\", Player End Life = {:?}, Opp End Life = {:?}, Turn Events Recorded = {}, Impactful Cards = {}",
                     redact_str(&record.match_id),
@@ -3627,9 +4223,9 @@ async fn dispatch_parsed_event(
                     record.player_life_end,
                     record.opponent_life_end,
                     turn_events.len(),
-                    impactful.len()
+                    validated_impactful.len()
                 );
-                let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &impactful).await;
+                let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &validated_impactful).await;
                 record_match_deck_audit(db_manager, assembler, &record.match_id).await;
             }
         }
@@ -3933,7 +4529,9 @@ fn main() {
             reset_setup_wizard,
             sync_card_database,
             get_raw_card_db_status,
-            set_raw_path
+            set_raw_path,
+            get_global_achievements,
+            get_global_leaderboards
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

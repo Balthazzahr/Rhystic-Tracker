@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.1.6-38BDF8?style=flat-square&logo=git" alt="Version 1.1.6" /></a>
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.2.0-38BDF8?style=flat-square&logo=git" alt="Version 1.2.0" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux and macOS Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
@@ -34,14 +34,17 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## ✨ Features at a Glance
 
-- 🧙‍♂️ **First-Time Setup Wizard & Dynamic Discovery**: Guided 3-step setup with real-time log detection across Steam Proton, Lutris, Bottles, and Heroic prefixes, plus instant startup card indexing (26,000+ cards in ~150ms).
-- 🏆 **Comprehensive MTGA Formats Coverage**: Native categorization and distinct colored badges for all 13 formats (Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match with precon resolution, Direct Challenge, Midweek Magic, and Gladiator).
+- 🏆 **Global Card Achievements & Trophy Case**: 21 custom SVG achievement emblems spanning 7 categories with Bronze, Silver, and Gold tiers, objective value thresholds ($X+$), MVP showcase, center-out symmetrical square clustering, and interactive drill-down roster modal with MTG lore quotes.
+- 🏛️ **All-Time Leaderboards & Hall of Fame**: 6 Hall of Fame categories (Highest Single-Hit Strike, Total Match Damage, Impactful Match MVPs, Combat Heavyweights, Spell & Ability Nukes, Most Decorated Champions) with podium styling, full-spectrum global card search, pinned Top 3 benchmark, and diff-to-podium tracking.
+- 🍏 **Native macOS & Linux Platform Support**: Universal release packaging with native log and raw card database discovery across Linux (Proton, Lutris, Bottles, Heroic) and macOS.
+- 🃏 **Mulligan Tracking & Timeline Replay**: Full London mulligan detection, opening hand buffer state machine, and dedicated Opening Phase section in the Match Play Timeline.
+- 🧙‍♂️ **First-Time Setup Wizard & Dynamic Discovery**: Guided 3-step setup with real-time log detection across all prefixes, plus instant startup card indexing (26,000+ cards in ~150ms).
+- 🏅 **Comprehensive MTGA Formats Coverage**: Native categorization and distinct colored badges for all 13 formats (Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match with precon resolution, Direct Challenge, Midweek Magic, and Gladiator).
 - 📊 **Dashboard & Time-Series Win Rate Analytics**: Today's and all-time records, active streak counter, daily match grouping, and an overhauled time-series graph with 5 time windows (`Today`, `7 Days`, `30 Days`, `12 Months`, `All Time`), dual-colored 50% threshold trend line (green/red), and volume histograms.
 - ⚔️ **Live Match HUD**: Real-time game state tracker showing hero/opponent commanders, life swings, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with authentic MTG font icons.
 - 🔍 **Full Match Inspector & Turn Timeline**: Responsive viewport scaling ($80\text{vw} \times 90\text{vh}$), universal <kbd>Esc</kbd> / backdrop dismissal, play-by-play combat replay per turn, damage magnitude badges (`[4 DMG]`), card types, and victory/defeat causes.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
-- 🃏 **Deck Library & 3-Column Inspector**: True-decklist import/export (`.txt` / MTGA format), starter deck exclusions, responsive 3-column decklist expansion for widescreen displays, enlarged mana distribution pie chart, and centered `MANA VALUE` histogram pill overlay.
-  - _Note on Collection Tracking_: Because MTGA has removed raw collection dumps from client logs, Rhystic Tracker derives owned inventory strictly through verified True Decklists. This ensures temporary or in-game cards (from _heist, theft, copy, clone, or conjure_ mechanics) never pollute your genuine collection database.
+- 🎴 **Deck Library & 3-Column Inspector**: True-decklist import/export (`.txt` / MTGA format), starter deck exclusions, responsive 3-column decklist expansion for widescreen displays, enlarged mana distribution pie chart, and centered `MANA VALUE` histogram pill overlay.
 - 🖼️ **Card Library & Dual Art Mode Viewers**: Visual collection explorer with dual **Landscape Art Crop** (with top translucent mana cost bar) and **Portrait Full Card** modes, 4-diamond interactive ownership controls, and persistent alternate set printing selection.
 - ⚙️ **Settings & Storage Suite**: Dynamic 2-column control panel with local image cache manager (live disk usage, purge, pre-download), database storage inspector with 1-click native DB backup export, startup tab preferences, log auto-discovery, manual card re-syncing, and wizard re-run tools.
 - 🎨 **Five Color-Identity Mana Themes**: Dynamic White, Blue, Black, Red, and Green themes that meticulously tint the entire application.

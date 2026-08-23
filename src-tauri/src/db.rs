@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS match_impactful_cards (
     damage_to_permanents INTEGER NOT NULL DEFAULT 0,
     damage_combat INTEGER NOT NULL DEFAULT 0,
     damage_spell INTEGER NOT NULL DEFAULT 0,
+    titles TEXT DEFAULT '[]',
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
@@ -268,6 +269,18 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added damage target and type columns to match_impactful_cards table");
         }
 
+        // Migration: add titles column to match_impactful_cards
+        let titles_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('match_impactful_cards') WHERE name = 'titles'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if titles_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN titles TEXT DEFAULT '[]'").execute(&pool).await;
+            println!("[DB MIGRATION] Added titles column to match_impactful_cards table");
+        }
+
         // Migration: deduplicate any duplicate rows in match_cards, match_turn_events,
         // and match_impactful_cards caused by previous multi-instance or non-idempotent upserts.
         let _ = sqlx::query(
@@ -296,6 +309,36 @@ impl DatabaseManager {
             );
             "#
         ).execute(&pool).await;
+
+        // Migration: sanitize Scoop Inducer titles so lands and cheap non-bombs (< CMC 5) never retain Scoop Inducer
+        if let Ok(rows) = sqlx::query_as::<_, (i64, i64, String, i32)>(
+            "SELECT i.id, i.grp_id, i.titles, i.total_damage FROM match_impactful_cards i WHERE i.titles LIKE '%Scoop Inducer%'"
+        ).fetch_all(&pool).await {
+            for (row_id, grp_id, titles_json, total_dmg) in rows {
+                if let Ok(mut titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
+                    let card_info = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
+                        "SELECT card_type, cmc FROM cards_cache WHERE grp_id = ?"
+                    ).bind(grp_id).fetch_optional(&pool).await.unwrap_or(None);
+
+                    let is_invalid = if let Some((card_type, cmc)) = card_info {
+                        let type_str = card_type.unwrap_or_default().to_lowercase();
+                        type_str.contains("land") || (cmc.unwrap_or(0) < 5 && total_dmg < 5)
+                    } else {
+                        false
+                    };
+
+                    if is_invalid {
+                        titles.retain(|t| t != "Scoop Inducer");
+                        let new_json = serde_json::to_string(&titles).unwrap_or_else(|_| "[]".to_string());
+                        let _ = sqlx::query("UPDATE match_impactful_cards SET titles = ? WHERE id = ?")
+                            .bind(new_json)
+                            .bind(row_id)
+                            .execute(&pool)
+                            .await;
+                    }
+                }
+            }
+        }
 
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
@@ -420,7 +463,125 @@ impl DatabaseManager {
             }
         }
 
+        // Development mode: automatically seed test achievements for "Dying Lands" if running against rhystic_dev.db
+        if db_filename == "rhystic_dev.db" {
+            let existing_dl_achs: i64 = sqlx::query_scalar(
+                r#"
+                SELECT COUNT(*)
+                FROM match_impactful_cards i
+                JOIN matches m ON i.match_id = m.id
+                WHERE (m.hero_deck_name = 'Dying Lands' OR m.id IN (SELECT match_id FROM match_decks WHERE deck_name = 'Dying Lands'))
+                  AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+                "#
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap_or(0);
+
+            if existing_dl_achs < 10 {
+                let _ = Self::seed_test_dying_lands_achievements(&pool).await;
+            }
+        }
+
         Ok(Self { pool, db_filename })
+    }
+
+    async fn seed_test_dying_lands_achievements(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Fetch matches for Dying Lands
+        let matches: Vec<String> = sqlx::query_scalar(
+            "SELECT id FROM matches WHERE hero_deck_name = 'Dying Lands' OR id IN (SELECT match_id FROM match_decks WHERE deck_name = 'Dying Lands') ORDER BY timestamp DESC"
+        )
+        .fetch_all(pool)
+        .await?;
+
+        if matches.is_empty() {
+            return Ok(());
+        }
+
+        // Fetch decklist cards
+        let deck_json: Option<String> = sqlx::query_scalar(
+            "SELECT cards_json FROM deck_lists WHERE deck_name = 'Dying Lands'"
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        let Some(json_str) = deck_json else { return Ok(()); };
+        let Ok(deck_cards) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) else { return Ok(()); };
+
+        let grp_ids: Vec<i64> = deck_cards.iter().filter_map(|c| c.get("grp_id").and_then(|v| v.as_i64())).collect();
+        if grp_ids.is_empty() {
+            return Ok(());
+        }
+
+        let placeholders = grp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let query_str = format!("SELECT grp_id, name, card_type, cmc FROM cards_cache WHERE grp_id IN ({})", placeholders);
+        let mut query = sqlx::query(&query_str);
+        for gid in &grp_ids {
+            query = query.bind(gid);
+        }
+        let card_rows = query.fetch_all(pool).await?;
+
+        let strict_mappings: std::collections::HashMap<&'static str, Vec<&'static str>> = std::collections::HashMap::from([
+            ("Craterhoof Behemoth", vec!["Over-Killer (Gold)", "Haymaker (Gold)", "Executioner (Silver)"]),
+            ("Mossborn Hydra", vec!["Ozolithic! (Gold)", "Hardened (Silver)", "Haymaker (Silver)"]),
+            ("Lumra, Bellow of the Woods", vec!["Juggernaut (Gold)", "Scoop Inducer (Silver)"]),
+            ("Primeval Titan", vec!["Scoop Inducer (Silver)", "Haymaker (Bronze)"]),
+            ("Bristly Bill, Spine Sower", vec!["Ozolithic! (Gold)", "Hardened (Silver)"]),
+            ("Toph, Earthbending Master", vec!["Hardened (Silver)", "Ironclad (Bronze)"]),
+            ("Scythecat Cub", vec!["Hardened (Bronze)", "Haymaker (Bronze)"]),
+            ("Earthbender Ascension", vec!["Hardened (Bronze)"]),
+            ("Disciple of Freyalise", vec!["Rhystic Tracker (Bronze)"]),
+            ("Blast Zone", vec!["Sweeper (Bronze)"]),
+            ("Boseiju, Who Endures", vec!["Royal Assassin (Bronze)"]),
+            ("Bridgeworks Battle", vec!["Royal Assassin (Bronze)"]),
+            ("Insidious Fungus", vec!["Royal Assassin (Bronze)"]),
+            ("Arboreal Grazer", vec!["Ironclad (Bronze)"]),
+            ("Blossoming Tortoise", vec!["Ironclad (Bronze)"]),
+            ("Scute Swarm", vec!["Swarmer (Bronze)"]),
+            ("Rampaging Baloths", vec!["Swarmer (Bronze)"]),
+            ("Springheart Nantuko", vec!["Swarmer (Bronze)"]),
+            ("Sapling Nursery", vec!["Swarmer (Bronze)"]),
+            ("Lotus Cobra", vec!["Mana Dynamo (Bronze)"]),
+            ("Fanatic of Rhonas", vec!["Mana Dynamo (Bronze)"]),
+            ("Delighted Halfling", vec!["Mana Dynamo (Bronze)"]),
+            ("Birds of Paradise", vec!["Mana Dynamo (Bronze)"]),
+            ("Llanowar Elves", vec!["Mana Dynamo (Bronze)"]),
+            ("Elvish Mystic", vec!["Mana Dynamo (Bronze)"]),
+            ("Arcane Signet", vec!["Mana Dynamo (Bronze)"]),
+            ("Castle Garenbrig", vec!["Mana Dynamo (Bronze)"]),
+        ]);
+
+        let mut match_idx = 0usize;
+        for row in card_rows {
+            let gid: i64 = row.get("grp_id");
+            let name: String = row.get("name");
+
+            if let Some(achs) = strict_mappings.get(name.as_str()) {
+                for &ach in achs {
+                    let count = if ach == "Mana Dynamo" || ach == "Swarmer" || ach == "Haymaker" { 3 } else { 2 };
+                    for _ in 0..count {
+                        let m_id = &matches[match_idx % matches.len()];
+                        match_idx += 1;
+                        let titles_json = serde_json::json!([ach]).to_string();
+
+                        sqlx::query(
+                            r#"
+                            INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit, titles)
+                            VALUES (?, ?, 1, 10, 10, ?)
+                            "#
+                        )
+                        .bind(m_id)
+                        .bind(gid)
+                        .bind(&titles_json)
+                        .execute(pool)
+                        .await?;
+                    }
+                }
+            }
+        }
+
+        println!("[TEST SEEDER] Successfully populated strictly accurate card achievements for 'Dying Lands'");
+        Ok(())
     }
 
     /// Migration for the abandoned earlier Collection attempt that created
@@ -686,12 +847,15 @@ impl DatabaseManager {
             .await?;
         }
 
-        // Save impactful card records (damage/life swings attributed to specific cards)
+        // Save impactful card records (damage/life swings and achievement titles attributed to specific cards)
         for imp in impactful {
+            let titles_json = serde_json::to_string(&imp.titles).unwrap_or_else(|_| "[]".to_string());
             sqlx::query(
                 r#"
-                INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit, damage_to_player, damage_to_permanents, damage_combat, damage_spell)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO match_impactful_cards (
+                    match_id, grp_id, seat_id, total_damage, max_hit,
+                    damage_to_player, damage_to_permanents, damage_combat, damage_spell, titles
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#
             )
             .bind(&match_rec.match_id)
@@ -703,6 +867,7 @@ impl DatabaseManager {
             .bind(imp.damage_to_permanents as i64)
             .bind(imp.damage_combat as i64)
             .bind(imp.damage_spell as i64)
+            .bind(titles_json)
             .execute(&mut *tx)
             .await?;
         }
@@ -1252,7 +1417,7 @@ mod tests {
             MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "play".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:05Z".to_string() },
         ];
         let impactful = vec![
-            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0 },
+            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![] },
         ];
 
         // Call upsert_match once

@@ -1,10 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { AchievementBadge } from './AchievementBadge';
 import { X, CheckCircle2, XCircle, ListFilter, Clock } from 'lucide-react';
 import { ManaPip } from './ManaPip';
 import { CardBreakdown, CardItem } from './CardBreakdown';
 import { MatchTimeline } from './MatchTimeline';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
+
+export const TITLE_BADGES: Record<string, { icon: string; label: string; color: string; bg: string; border: string }> = {
+  'Scoop Inducer': { icon: '⚡', label: 'Scoop Inducer', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.15)', border: 'rgba(251, 191, 36, 0.4)' },
+  'Executioner': { icon: '🗡️', label: 'Executioner', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.15)', border: 'rgba(244, 63, 94, 0.4)' },
+  'Over-Killer': { icon: '⏱️', label: 'Over-Killer', color: '#E11D48', bg: 'rgba(225, 29, 72, 0.15)', border: 'rgba(225, 29, 72, 0.4)' },
+  'Haymaker': { icon: '🥊', label: 'Haymaker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.15)', border: 'rgba(251, 146, 60, 0.4)' },
+  'Juggernaut': { icon: '🚂', label: 'Juggernaut', color: '#A855F7', bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.4)' },
+  'Ironclad': { icon: '🛡️', label: 'Ironclad', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.4)' },
+  'Giant Grower': { icon: '🌱', label: 'Giant Grower', color: '#4ADE80', bg: 'rgba(74, 222, 128, 0.15)', border: 'rgba(74, 222, 128, 0.4)' },
+  'Cataclysm': { icon: '🌪️', label: 'Cataclysm', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.15)', border: 'rgba(192, 132, 252, 0.4)' },
+  'Sweeper': { icon: '🧹', label: 'Sweeper', color: '#FACC15', bg: 'rgba(250, 204, 21, 0.15)', border: 'rgba(250, 204, 21, 0.4)' },
+  'Royal Assassin': { icon: '👑', label: 'Royal Assassin', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.15)', border: 'rgba(236, 72, 153, 0.4)' },
+  'Clutch Denial': { icon: '🚫', label: 'Clutch Denial', color: '#60A5FA', bg: 'rgba(96, 165, 250, 0.15)', border: 'rgba(96, 165, 250, 0.4)' },
+  'Swarmer': { icon: '🌾', label: 'Swarmer', color: '#A3E635', bg: 'rgba(163, 230, 53, 0.15)', border: 'rgba(163, 230, 53, 0.4)' },
+  'Rhystic Tracker': { icon: '🪶', label: 'Rhystic Tracker', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.4)' },
+  'Mana Dynamo': { icon: '⚡', label: 'Mana Dynamo', color: '#34D399', bg: 'rgba(52, 211, 153, 0.15)', border: 'rgba(52, 211, 153, 0.4)' },
+};
 
 interface FullMatchInfoModalProps {
   isOpen: boolean;
@@ -251,6 +269,70 @@ export function FullMatchInfoModal({
 
           {/* Column 2: Full Width Center View Container (Col-Span 9) */}
           <div className="col-span-9 flex flex-col space-y-3 overflow-hidden">
+            {/* Match Honors & Impactful Cards Shelf */}
+            {impactfulCards && impactfulCards.length > 0 && (
+              <div
+                className="p-3 rounded-2xl border space-y-2 shrink-0 bg-black/40"
+                style={{ borderColor: palette?.border }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs">🏆</span>
+                    <span className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-75" style={{ color: palette?.text }}>
+                      Match Honors & MVPs
+                    </span>
+                  </div>
+                  <span className="text-[9px] font-mono opacity-50">
+                    {impactfulCards.length} {impactfulCards.length === 1 ? 'Card' : 'Cards'} Recognized
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
+                  {impactfulCards.map((c, i) => {
+                    const titles: string[] = c.titles || [];
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => onShowCard?.(c)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl border bg-black/50 hover:bg-white/10 transition-all cursor-pointer shrink-0 group min-w-[200px]"
+                        style={{ borderColor: `${palette?.border}88` }}
+                        title="Click to view card details"
+                      >
+                        <img
+                          src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(c.name)}&format=image&version=art_crop`}
+                          alt={c.name}
+                          className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-xs font-bold truncate group-hover:text-sky-300 transition-colors" style={{ color: palette?.text }}>
+                            {c.name}
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {titles.length > 0 ? (
+                              titles.map((t, ti) => (
+                                <AchievementBadge
+                                  key={ti}
+                                  title={t}
+                                  size="sm"
+                                  showTooltip={true}
+                                />
+                              ))
+                            ) : (
+                              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                {c.total_damage} Total DMG
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Main View Switcher */}
             <div className="flex items-center p-1 rounded-xl border bg-black/40 shrink-0" style={{ borderColor: palette?.border }}>
               <button

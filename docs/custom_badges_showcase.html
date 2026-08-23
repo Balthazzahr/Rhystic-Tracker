@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rhystic Tracker — Complete 21 Achievements Tier Catalog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: #0b0d13;
+      color: #f8fafc;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .badge-card {
+      background: rgba(18, 22, 30, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      transition: all 0.25s ease;
+    }
+    .badge-card:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+      transform: translateY(-2px);
+    }
+    .badge-hero:hover {
+      transform: scale(1.08);
+      filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.25));
+    }
+    /* Tooltip */
+    .tooltip-container {
+      position: relative;
+    }
+    .tooltip-popup {
+      visibility: hidden;
+      opacity: 0;
+      position: absolute;
+      bottom: calc(100% + 12px);
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 50;
+      pointer-events: none;
+      width: 290px;
+    }
+    .tooltip-container:hover .tooltip-popup {
+      visibility: visible;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body class="p-6 md:p-12 min-h-screen">
+  <div class="max-w-7xl mx-auto space-y-10">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-widest uppercase bg-sky-500/10 text-sky-400 border border-sky-500/30">Vector Studio V4</span>
+          <span class="text-xs font-mono opacity-40">• 21 Achievements × 3 Tiers (Consistent 120×120 Geometry)</span>
+        </div>
+        <h1 class="text-3xl font-black tracking-tight text-white font-outfit">Card Achievement Badges Studio</h1>
+        <p class="text-sm text-slate-400 mt-1 max-w-3xl">
+          Universal coordinate frame ensures <strong>100% identical icon size and alignment</strong> across Bronze, Silver, and Gold.
+        </p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="px-4 py-2.5 rounded-2xl border border-slate-800 bg-slate-900/80 text-xs font-mono space-y-1 text-right">
+          <div class="flex items-center justify-end gap-2 text-[10px] font-bold">
+            <span class="text-amber-500">🥉 1–2×</span>
+            <span class="text-slate-500">•</span>
+            <span class="text-slate-300">🥈 3–4×</span>
+            <span class="text-slate-500">•</span>
+            <span class="text-amber-400">🥇 5+× (Mastered)</span>
+          </div>
+          <p class="text-slate-400 text-[10px]">Pure Scalable Vector SVGs</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Global Tier Switcher -->
+    <div class="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/40 text-xs font-mono">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-400 font-bold uppercase text-[10px]">Global View Mode:</span>
+        <button id="btn-gold" onclick="setGlobalTier('gold')" class="px-3 py-1 rounded-lg border border-amber-400 bg-amber-500/20 text-amber-300 font-bold">🥇 Gold</button>
+        <button id="btn-silver" onclick="setGlobalTier('silver')" class="px-3 py-1 rounded-lg border border-slate-600 bg-slate-800/40 text-slate-200">🥈 Silver</button>
+        <button id="btn-bronze" onclick="setGlobalTier('bronze')" class="px-3 py-1 rounded-lg border border-amber-800 bg-amber-950/40 text-amber-400">🥉 Bronze</button>
+      </div>
+      <span class="text-slate-500 text-[11px]">Hover over any badge pill to inspect rich in-game tooltip</span>
+    </div>
+
+    <!-- Catalog Grid -->
+    <div id="achievements-catalog" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Injected by JS -->
+    </div>
+
+  </div>
+
+  <script>
+    const achievements = [{"id": "scoop_inducer", "title": "Scoop Inducer", "category": "Closer", "desc": "Awarded when resolving this card immediately compels the opponent to concede the match within the final 1\u20132 turns of a victory."}, {"id": "executioner", "title": "Executioner", "category": "Closer", "desc": "Awarded to the creature or direct spell that delivers the final lethal strike reducing the opponent's life total to zero or below."}, {"id": "over_killer", "title": "Over-Killer", "category": "Closer", "desc": "Awarded when landing a crushing finishing blow that exceeds the opponent's remaining life total by 8 or more overkill damage."}, {"id": "haymaker", "title": "Haymaker", "category": "Combat", "desc": "Awarded to any creature or spell that connects with a heavy single strike dealing 7 to 12 damage."}, {"id": "juggernaut", "title": "Juggernaut", "category": "Combat", "desc": "Awarded to an unstoppable creature dealing 20 or more cumulative combat damage across a single match."}, {"id": "hardened", "title": "Hardened", "category": "Counters", "desc": "Awarded to a resilient creature accumulating 5 or more power-boosting counters on itself in a single game."}, {"id": "ozolithic", "title": "Ozolithic!", "category": "Counters", "desc": "Awarded to a powerhouse permanent placing, moving, doubling, or hoarding 8 or more counters across the battlefield."}, {"id": "vampiric", "title": "Vampiric", "category": "Drain", "desc": "Awarded to a card that leeches 10 or more life directly from the opponent via non-combat aristocrat or drain triggers."}, {"id": "negator", "title": "Negator", "category": "Control", "desc": "Awarded for countering an opponent's high-impact spell (CMC 5+) or countering an opponent commander."}, {"id": "sweeper", "title": "Sweeper", "category": "Removal", "desc": "Awarded to a single spell that wipes out 4 or more opponent creatures simultaneously."}, {"id": "cataclysm", "title": "Cataclysm", "category": "Removal", "desc": "Awarded to a catastrophic spell destroying or exiling 8 or more permanents across all card types."}, {"id": "royal_assassin", "title": "Royal Assassin", "category": "Combat", "desc": "Awarded to an assassin creature destroying 4 or more opponent creatures across a single match."}, {"id": "ironclad", "title": "Ironclad", "category": "Defense", "desc": "Awarded to a high-toughness creature absorbing 8 or more combat damage in a turn and surviving."}, {"id": "tax_collector", "title": "Tax Collector", "category": "Stax", "desc": "Awarded to a taxing permanent whose taxation prompts (e.g. Rhystic Study, Esper Sentinel) trigger or extract toll payments 5 or more times."}, {"id": "cat_burglar", "title": "Cat Burglar", "category": "Theft", "desc": "Awarded to a card that steals or casts 2 or more cards directly from the opponent's library or hand."}, {"id": "grand_larceny", "title": "Grand Larceny", "category": "Theft", "desc": "Awarded to a master heist card that commandeers control of 2 or more opponent permanents from the battlefield."}, {"id": "blinkmaster", "title": "Blinkmaster", "category": "Engine", "desc": "Awarded to a flicker engine permanent entering the battlefield 6 or more times in a single game."}, {"id": "immortal", "title": "Immortal", "category": "Resilience", "desc": "Awarded to a creature or commander returning and re-entering the battlefield 4 or more times from the graveyard or command zone."}, {"id": "swarmer", "title": "Swarmer", "category": "Tokens", "desc": "Awarded to a token engine generating 10 or more creature tokens in a single match."}, {"id": "rhystic_tracker", "title": "Rhystic Tracker", "category": "Card Draw", "desc": "Awarded to a card drawing 5 or more extra cards across a match (adorned with the app quill pen badge)."}, {"id": "mana_dynamo", "title": "Mana Dynamo", "category": "Ramp", "desc": "Awarded to a single permanent producing 5 or more mana in a single turn."}];
+
+    let currentGlobalTier = 'gold';
+
+    function renderCatalog() {
+      const container = document.getElementById('achievements-catalog');
+      container.innerHTML = '';
+
+      achievements.forEach((ach) => {
+        const card = document.createElement('div');
+        card.className = 'badge-card rounded-3xl p-5 flex flex-col justify-between space-y-4 shadow-xl';
+
+        const tierView = currentGlobalTier;
+
+        card.innerHTML = `
+          <div class="space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono uppercase tracking-wider font-bold text-slate-400">${ach.category}</span>
+              </div>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300 font-bold">${ach.title}</span>
+            </div>
+
+            <!-- Emblem Showcase -->
+            <div class="py-2 flex items-center justify-center">
+              <div id="img-box-${ach.id}" class="w-28 h-28 badge-hero transition-all duration-300 flex items-center justify-center">
+                <img id="img-${ach.id}" src="./badges/${ach.id}_${tierView}.svg" alt="${ach.title}" class="w-full h-full object-contain" />
+              </div>
+            </div>
+
+            <!-- In-App Badge Simulation with Tooltip -->
+            <div class="flex items-center justify-center pt-1">
+              <div class="tooltip-container">
+                <div id="pill-${ach.id}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
+                  tierView === 'bronze' 
+                    ? 'bg-amber-950/30 border-amber-700/50 text-amber-200' 
+                    : (tierView === 'silver' ? 'bg-slate-800/80 border-slate-600 text-slate-100' : 'bg-amber-500/10 border-amber-500/50 text-amber-300')
+                }">
+                  <div class="w-5 h-5 shrink-0">
+                    <img id="pill-icon-${ach.id}" src="./badges/${ach.id}_${tierView}.svg" alt="${ach.title}" class="w-full h-full object-contain" />
+                  </div>
+                  <span class="text-xs font-bold font-outfit tracking-wide">${ach.title}</span>
+                  <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-black/60 border border-white/10 opacity-90">${
+                    tierView === 'bronze' ? '×1' : (tierView === 'silver' ? '×3' : '×6')
+                  }</span>
+                </div>
+                <!-- Tooltip -->
+                <div class="tooltip-popup p-3.5 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl space-y-1.5 text-left">
+                  <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span class="text-xs font-black font-outfit text-white flex items-center gap-1.5">
+                      <span class="w-4 h-4 inline-block"><img id="tip-icon-${ach.id}" src="./badges/${ach.id}_${tierView}.svg" class="w-full h-full object-contain" /></span>
+                      ${ach.title}
+                    </span>
+                    <span id="tip-tag-${ach.id}" class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                      tierView === 'bronze' ? 'bg-amber-900/40 text-amber-400 border border-amber-700/50' : (tierView === 'silver' ? 'bg-slate-800 text-slate-300 border border-slate-600' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40')
+                    }">${tierView.toUpperCase()} TIER</span>
+                  </div>
+                  <p class="text-xs leading-relaxed text-slate-300 font-sans pt-0.5">${ach.desc}</p>
+                  <div class="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[9px] font-mono opacity-60 text-slate-400">
+                    <span>Tracked in Matches</span>
+                    <span>Lifetime Stats</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tier Buttons -->
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-1.5 text-[10px] font-mono">
+            <button onclick="selectCardTier('${ach.id}', 'bronze')" class="flex-1 py-1 px-1.5 rounded-lg border text-center transition-all ${tierView === 'bronze' ? 'border-amber-500 bg-amber-500/20 text-amber-300 font-bold' : 'border-slate-800 bg-black/30 text-slate-400'}">🥉 Bronze</button>
+            <button onclick="selectCardTier('${ach.id}', 'silver')" class="flex-1 py-1 px-1.5 rounded-lg border text-center transition-all ${tierView === 'silver' ? 'border-slate-400 bg-slate-700/40 text-slate-200 font-bold' : 'border-slate-800 bg-black/30 text-slate-400'}">🥈 Silver</button>
+            <button onclick="selectCardTier('${ach.id}', 'gold')" class="flex-1 py-1 px-1.5 rounded-lg border text-center transition-all ${tierView === 'gold' ? 'border-amber-400 bg-amber-500/20 text-amber-300 font-bold' : 'border-slate-800 bg-black/30 text-slate-400'}">🥇 Gold</button>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function selectCardTier(id, tier) {
+      document.getElementById('img-' + id).src = `./badges/${id}_${tier}.svg`;
+      document.getElementById('pill-icon-' + id).src = `./badges/${id}_${tier}.svg`;
+      document.getElementById('tip-icon-' + id).src = `./badges/${id}_${tier}.svg`;
+      
+      const tag = document.getElementById('tip-tag-' + id);
+      tag.textContent = tier.toUpperCase() + ' TIER';
+      
+      const pill = document.getElementById('pill-' + id);
+      pill.className = `inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
+        tier === 'bronze' 
+          ? 'bg-amber-950/30 border-amber-700/50 text-amber-200' 
+          : (tier === 'silver' ? 'bg-slate-800/80 border-slate-600 text-slate-100' : 'bg-amber-500/10 border-amber-500/50 text-amber-300')
+      }`;
+    }
+
+    function setGlobalTier(tier) {
+      currentGlobalTier = tier;
+      renderCatalog();
+    }
+
+    renderCatalog();
+  </script>
+</body>
+</html>

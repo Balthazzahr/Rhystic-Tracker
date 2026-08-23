@@ -382,6 +382,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { value: 'matches', label: 'Match History' },
     { value: 'decks', label: 'Deck Library' },
     { value: 'collection', label: 'Card Library / Collection' },
+    { value: 'achievements', label: 'Achievements (Trophy Case)' },
+    { value: 'leaderboards', label: 'Leaderboards (Hall of Fame)' },
   ];
 
   const collectionSortOptions = [

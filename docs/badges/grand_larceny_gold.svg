@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <linearGradient id="goldBevel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFBEB" />
+      <stop offset="25%" stop-color="#FEF08A" />
+      <stop offset="65%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#451A03" />
+    </linearGradient>
+    <linearGradient id="goldRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#78350F" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#FEF08A" />
+    </linearGradient>
+    <linearGradient id="goldInner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="50%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#78350F" />
+    </linearGradient>
+    <radialGradient id="goldField" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#451A03" />
+      <stop offset="60%" stop-color="#1E0B02" />
+      <stop offset="100%" stop-color="#080200" />
+    </radialGradient>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+  <!-- Gold Frame with Laurels & Crown -->
+  <g filter="url(#badgeShadow)">
+    <polygon points="10,44 24,34 24,52 6,64" fill="url(#goldBevel)" />
+    <polygon points="8,64 24,54 24,72 12,82" fill="url(#goldBevel)" />
+    <polygon points="110,44 96,34 96,52 114,64" fill="url(#goldBevel)" />
+    <polygon points="112,64 96,54 96,72 108,82" fill="url(#goldBevel)" />
+  </g>
+  <polygon points="44,108 60,119 76,108 60,104" fill="url(#goldBevel)" filter="url(#badgeShadow)" />
+
+  <path d="M60 4 L102 20 C108 48 104 84 60 116 C16 84 12 48 18 20 Z" fill="url(#goldBevel)" filter="url(#badgeShadow)" />
+  <path d="M60 9 L97 23 C102 48 98 79 60 108 C22 79 18 48 23 23 Z" fill="url(#goldRim)" />
+  <path d="M60 13 L93 26 C97 48 94 76 60 103 C26 76 23 48 27 26 Z" fill="url(#goldInner)" />
+  <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#goldField)" />
+
+  <polygon points="60,0 66,8 54,8" fill="url(#goldBevel)" />
+  <polygon points="60,2 61.5,6 66,7 62,8.5 60,12 58,8.5 54,7 58.5,6" fill="#FFFBEB" />
+  <circle cx="24" cy="24" r="2" fill="#FFFBEB" stroke="#78350F" stroke-width="0.8" />
+  <circle cx="96" cy="24" r="2" fill="#FFFBEB" stroke="#78350F" stroke-width="0.8" />
+
+      <!-- Jail Cell Prison Bars with broken escape bar (Centered) -->
+      <g transform="translate(60, 50)">
+        <rect x="-18" y="-18" width="36" height="36" rx="3" fill="#0F172A" stroke="#FFFBEB" stroke-width="1.2" />
+        <line x1="-18" y1="-12" x2="18" y2="-12" stroke="#FFFBEB" stroke-width="1" />
+        <line x1="-18" y1="12" x2="18" y2="12" stroke="#FFFBEB" stroke-width="1" />
+        <line x1="-12" y1="-18" x2="-12" y2="18" stroke="#FFFBEB" stroke-width="1.8" />
+        <line x1="-4" y1="-18" x2="-4" y2="18" stroke="#FFFBEB" stroke-width="1.8" />
+        <line x1="12" y1="-18" x2="12" y2="18" stroke="#FFFBEB" stroke-width="1.8" />
+        <path d="M4 -18 L4 -6 L8 0 L4 6 L4 18" fill="none" stroke="#FFFBEB" stroke-width="1.8" stroke-linecap="round" />
+        <rect x="-2" y="10" width="5" height="4" rx="1" fill="#FBBF24" stroke="#78350F" stroke-width="0.6" />
+        <path d="M-0.5 10 L-0.5 8 Q0.5 7 1.5 8 L1.5 10" fill="none" stroke="#78350F" stroke-width="0.6" />
+      </g>
+</svg>
