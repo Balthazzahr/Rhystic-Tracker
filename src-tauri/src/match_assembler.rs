@@ -551,7 +551,7 @@ impl MatchAssembler {
         let magnitude = amount.abs();
 
         let is_to_player = target_instance_id == 1 || target_instance_id == 2;
-        let is_combat = damage_type == 1;
+        let is_combat = damage_type == 1 || damage_type == 3; // 1 = combat, 2 = direct/spell, 3 = fight
 
         let entry = self.impactful_cards.entry(grp_id).or_default();
         if entry.seat_id == 0 {

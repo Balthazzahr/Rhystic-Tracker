@@ -360,6 +360,16 @@ impl DatabaseManager {
         // Migration: Purge non-impactful zero-damage and non-titled records from match_impactful_cards
         let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND (titles IS NULL OR titles = '' OR titles = '[]')").execute(&pool).await;
 
+        // Migration: Reclassify creature fight damage from damage_spell to damage_combat
+        let _ = sqlx::query(
+            r#"
+            UPDATE match_impactful_cards
+            SET damage_combat = damage_combat + damage_spell,
+                damage_spell = 0
+            WHERE grp_id IN (94073, 90681, 66975) AND damage_spell > 0
+            "#
+        ).execute(&pool).await;
+
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
             r#"
