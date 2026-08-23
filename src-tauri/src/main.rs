@@ -1499,7 +1499,9 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND m.timestamp >= '2026-08-23T06:30:00'
+        WHERE i.seat_id = m.hero_seat_id 
+          AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (i.total_damage >= 5 OR (i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#

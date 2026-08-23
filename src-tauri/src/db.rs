@@ -357,6 +357,9 @@ impl DatabaseManager {
         let _ = sqlx::query("DELETE FROM match_decks WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
         let _ = sqlx::query("DELETE FROM matches WHERE id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
 
+        // Migration: Purge non-impactful zero-damage and non-titled records from match_impactful_cards
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND (titles IS NULL OR titles = '' OR titles = '[]')").execute(&pool).await;
+
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
             r#"

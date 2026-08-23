@@ -745,6 +745,7 @@ impl MatchAssembler {
             let turn_events = std::mem::take(&mut self.turn_events);
 
             let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.iter()
+                .filter(|(_, stats)| stats.total_damage > 0 || !stats.titles.is_empty())
                 .map(|(grp_id, stats)| MatchImpactfulRecord {
                     grp_id: *grp_id,
                     seat_id: stats.seat_id,
