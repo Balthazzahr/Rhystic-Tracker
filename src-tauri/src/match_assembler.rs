@@ -573,7 +573,7 @@ impl MatchAssembler {
         }
 
         // Award Heavy Hitter achievement titles with single-match magnitude tiering
-        if magnitude >= 15 {
+        if magnitude >= 10 {
             let hm_tier = if magnitude >= 30 {
                 "Gold"
             } else if magnitude >= 20 {

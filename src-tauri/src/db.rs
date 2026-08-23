@@ -378,6 +378,17 @@ impl DatabaseManager {
             "UPDATE match_impactful_cards SET titles = '[\"Scoop Inducer (Bronze)\"]' WHERE grp_id = 72447 AND titles = '[\"Scoop Inducer\"]'"
         ).execute(&pool).await;
 
+        // Migration: Award Haymaker (Bronze) to cards with 10+ max hit from v1.2.0 epoch
+        let _ = sqlx::query(
+            r#"
+            UPDATE match_impactful_cards
+            SET titles = '["Haymaker (Bronze)"]'
+            WHERE max_hit >= 10 AND max_hit < 20 
+              AND (titles IS NULL OR titles = '' OR titles = '[]')
+              AND match_id IN (SELECT id FROM matches WHERE timestamp >= '2026-08-23T06:30:00')
+            "#
+        ).execute(&pool).await;
+
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
             r#"

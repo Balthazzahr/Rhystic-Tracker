@@ -86,12 +86,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     category: 'Combat',
     description: 'Awarded to any creature or spell that connects with a massive single-hit strike to any target (player or permanent).',
     tierDescriptions: {
-      bronze: 'Awarded for dealing 15+ damage in a single hit to any target.',
+      bronze: 'Awarded for dealing 10+ damage in a single hit to any target.',
       silver: 'Awarded for dealing 20+ damage in a single hit to any target.',
       gold: 'Awarded for dealing 30+ damage in a single hit to any target.',
     },
     criteria: {
-      bronze: 'Dealt 15+ damage in a single hit.',
+      bronze: 'Dealt 10+ damage in a single hit.',
       silver: 'Dealt 20+ damage in a single hit.',
       gold: 'Dealt 30+ damage in a single hit.',
     },
@@ -438,7 +438,7 @@ const BADGE_ASSETS = import.meta.glob('../assets/badges/*.svg', {
  */
 export function normalizeAchievementId(titleOrId: string): string {
   if (!titleOrId) return 'unknown';
-  const clean = titleOrId
+  const clean = cleanAchievementTitle(titleOrId)
     .toLowerCase()
     .trim()
     .replace(/[!?,]/g, '')
