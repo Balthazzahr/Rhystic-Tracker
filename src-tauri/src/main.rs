@@ -1154,6 +1154,7 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE (m.hero_deck_name = ? OR m.id IN (SELECT match_id FROM match_decks WHERE deck_name = ?))
           AND i.seat_id = m.hero_seat_id
+          AND m.timestamp >= '2026-08-23T06:30:00'
           AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
         "#
     )
@@ -1302,6 +1303,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id
+          AND m.timestamp >= '2026-08-23T06:30:00'
           AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
         "#
     )
@@ -1455,7 +1457,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     let pool = db.pool();
 
-    // 1. Top 10 Single Hit Damage
+    // 1. Top Single Hit Damage (from v1.2.0 epoch)
     let top_single_hit = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
@@ -1463,7 +1465,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND i.max_hit > 0
+        WHERE i.seat_id = m.hero_seat_id AND i.max_hit > 0 AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1472,7 +1474,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. Top Total Match Damage
+    // 2. Top Total Match Damage (from v1.2.0 epoch)
     let top_total_damage = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
@@ -1480,7 +1482,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND i.total_damage > 0
+        WHERE i.seat_id = m.hero_seat_id AND i.total_damage > 0 AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1489,7 +1491,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 3. Top Impactful Match Appearances
+    // 3. Top Impactful Match Appearances (from v1.2.0 epoch)
     let top_impactful = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
@@ -1497,7 +1499,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id
+        WHERE i.seat_id = m.hero_seat_id AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1506,7 +1508,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 4. Top Combat Damage
+    // 4. Top Combat Damage (from v1.2.0 epoch)
     let top_combat = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
@@ -1514,7 +1516,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND i.damage_combat > 0
+        WHERE i.seat_id = m.hero_seat_id AND i.damage_combat > 0 AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1523,7 +1525,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 5. Top Spell Damage
+    // 5. Top Spell Damage (from v1.2.0 epoch)
     let top_spell = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
@@ -1531,7 +1533,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND i.damage_spell > 0
+        WHERE i.seat_id = m.hero_seat_id AND i.damage_spell > 0 AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1540,7 +1542,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 6. Top Most Decorated Champions (Total Honors / Achievements Earned)
+    // 6. Top Most Decorated Champions (Total Honors / Achievements Earned from v1.2.0 epoch)
     let rows_honors = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles
@@ -1548,6 +1550,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id
+          AND m.timestamp >= '2026-08-23T06:30:00'
           AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
         "#
     )
@@ -1910,7 +1913,7 @@ async fn get_card_printings(name: String) -> Result<serde_json::Value, String> {
         SELECT i.titles
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
-        WHERE i.grp_id IN ({}) AND i.seat_id = m.hero_seat_id AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        WHERE i.grp_id IN ({}) AND i.seat_id = m.hero_seat_id AND m.timestamp >= '2026-08-23T06:30:00' AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
         "#,
         placeholders
     );

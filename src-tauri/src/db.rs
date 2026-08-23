@@ -340,6 +340,11 @@ impl DatabaseManager {
             }
         }
 
+        // Migration: Reset achievements on pre-v1.2.0 matches so achievements & leaderboards begin fresh with v1.2.0
+        let _ = sqlx::query(
+            "UPDATE match_impactful_cards SET titles = '[]' WHERE match_id IN (SELECT id FROM matches WHERE timestamp < '2026-08-23T06:30:00')"
+        ).execute(&pool).await;
+
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
             r#"
