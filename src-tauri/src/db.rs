@@ -370,6 +370,14 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
+        // Migration: Update existing Scoop Inducer titles to tiered titles
+        let _ = sqlx::query(
+            "UPDATE match_impactful_cards SET titles = '[\"Scoop Inducer (Gold)\"]' WHERE grp_id = 91719 AND titles = '[\"Scoop Inducer\"]'"
+        ).execute(&pool).await;
+        let _ = sqlx::query(
+            "UPDATE match_impactful_cards SET titles = '[\"Scoop Inducer (Bronze)\"]' WHERE grp_id = 72447 AND titles = '[\"Scoop Inducer\"]'"
+        ).execute(&pool).await;
+
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
             r#"

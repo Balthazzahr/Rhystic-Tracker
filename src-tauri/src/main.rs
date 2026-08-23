@@ -4209,20 +4209,20 @@ async fn dispatch_parsed_event(
 
                 let mut validated_impactful = impactful.clone();
                 for imp in &mut validated_impactful {
-                    if imp.titles.contains(&"Scoop Inducer".to_string()) {
+                    if imp.titles.iter().any(|t| t.starts_with("Scoop Inducer")) {
                         let card_info = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
                             "SELECT card_type, cmc FROM cards_cache WHERE grp_id = ?"
                         ).bind(imp.grp_id as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
 
                         let is_invalid = if let Some((card_type, cmc)) = card_info {
                             let type_str = card_type.unwrap_or_default().to_lowercase();
-                            type_str.contains("land") || (cmc.unwrap_or(0) < 5 && imp.total_damage < 5)
+                            type_str.contains("land") || cmc.unwrap_or(0) < 5
                         } else {
-                            false
+                            true
                         };
 
                         if is_invalid {
-                            imp.titles.retain(|t| t != "Scoop Inducer");
+                            imp.titles.retain(|t| !t.starts_with("Scoop Inducer"));
                         }
                     }
                 }

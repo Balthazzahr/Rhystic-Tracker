@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getAchievementMeta, getBadgeSvgUrl, getTierFromCount, AchievementTier } from '../utils/achievementBadges';
+import { getAchievementMeta, getBadgeSvgUrl, getTierFromCount, extractTierFromTitle, cleanAchievementTitle, AchievementTier } from '../utils/achievementBadges';
 
 interface AchievementBadgeProps {
   title: string;
@@ -30,7 +30,9 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
   const badgeRef = useRef<HTMLDivElement>(null);
 
   const meta = getAchievementMeta(title);
-  const activeTier = overrideTier || getTierFromCount(count);
+  const explicitTier = extractTierFromTitle(title);
+  const activeTier = overrideTier || explicitTier || getTierFromCount(count);
+  const displayTitle = cleanAchievementTitle(title) || meta.title;
   const svgUrl = getBadgeSvgUrl(meta.id, activeTier);
 
   // Styling maps based on tier

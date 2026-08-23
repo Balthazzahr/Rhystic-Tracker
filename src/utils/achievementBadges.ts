@@ -30,16 +30,16 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     id: 'scoop_inducer',
     title: 'Scoop Inducer',
     category: 'Closer',
-    description: 'Awarded when resolving this card compels the opponent to concede the match within the same turn.',
+    description: 'Awarded when casting a 5+ mana card immediately compels the opponent to concede.',
     tierDescriptions: {
-      bronze: 'Awarded when an opponent concedes in the turn this was cast while at < 10 life after turn 7.',
-      silver: 'Awarded when an opponent concedes in the turn this was cast while at > 20 life before turn 6.',
-      gold: 'Awarded when an opponent concedes in the turn this was cast while at > 20 life or before turn 5.',
+      bronze: 'Awarded when opponent scoops Round 6 or earlier with 20+ life after casting a 5+ mana card.',
+      silver: 'Awarded when opponent scoops Round 5 or earlier with 25+ life after casting a 5+ mana card.',
+      gold: 'Awarded when opponent scoops Round 4 or earlier with 25+ life after casting a 5+ mana card.',
     },
     criteria: {
-      bronze: 'Opponent has < 10 life and game is > Round 7.',
-      silver: 'Opponent has > 20 life and game is < Round 6.',
-      gold: 'Opponent has > 20 life or game is < Round 5.',
+      bronze: 'Opponent scoops ≤ Round 6 with ≥ 20 life after a 5+ mana card is cast.',
+      silver: 'Opponent scoops ≤ Round 5 with ≥ 25 life after a 5+ mana card is cast.',
+      gold: 'Opponent scoops ≤ Round 4 with ≥ 25 life after a 5+ mana card is cast.',
     },
     flavorQuote: 'All your plans, all your spells, all your dreams—swept away in an instant.',
     flavorAttribution: 'Door to Nothingness',
@@ -456,8 +456,30 @@ export function getAchievementMeta(titleOrId: string): AchievementMeta {
   const key = normalizeAchievementId(titleOrId);
   return ACHIEVEMENTS_REGISTRY[key] || {
     ...DEFAULT_META,
-    title: titleOrId || 'Match Honor'
+    title: cleanAchievementTitle(titleOrId) || 'Match Honor'
   };
+}
+
+/**
+ * Extracts explicit tier from title string if present (e.g. "Scoop Inducer (Gold)" -> "gold")
+ */
+export function extractTierFromTitle(title: string): AchievementTier | null {
+  if (!title) return null;
+  const lower = title.toLowerCase();
+  if (lower.includes('(gold)') || lower.endsWith('gold')) return 'gold';
+  if (lower.includes('(silver)') || lower.endsWith('silver')) return 'silver';
+  if (lower.includes('(bronze)') || lower.endsWith('bronze')) return 'bronze';
+  return null;
+}
+
+/**
+ * Strips tier suffix from title string for clean display (e.g. "Scoop Inducer (Gold)" -> "Scoop Inducer")
+ */
+export function cleanAchievementTitle(title: string): string {
+  if (!title) return '';
+  return title
+    .replace(/\s*\((Gold|Silver|Bronze|gold|silver|bronze)\)/gi, '')
+    .trim();
 }
 
 /**

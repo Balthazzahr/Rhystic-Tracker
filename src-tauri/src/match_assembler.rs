@@ -572,15 +572,30 @@ impl MatchAssembler {
             entry.damage_spell += magnitude;
         }
 
-        // Award Heavy Hitter achievement titles
+        // Award Heavy Hitter achievement titles with single-match magnitude tiering
         if magnitude >= 15 {
-            if !entry.titles.contains(&"Juggernaut".to_string()) {
-                entry.titles.push("Juggernaut".to_string());
-            }
-        } else if magnitude >= 8 {
-            if !entry.titles.contains(&"Haymaker".to_string()) {
-                entry.titles.push("Haymaker".to_string());
-            }
+            let hm_tier = if magnitude >= 30 {
+                "Gold"
+            } else if magnitude >= 20 {
+                "Silver"
+            } else {
+                "Bronze"
+            };
+            let hm_title = format!("Haymaker ({})", hm_tier);
+            entry.titles.retain(|t| !t.starts_with("Haymaker"));
+            entry.titles.push(hm_title);
+        }
+        if entry.total_damage >= 25 {
+            let jg_tier = if entry.total_damage >= 60 {
+                "Gold"
+            } else if entry.total_damage >= 40 {
+                "Silver"
+            } else {
+                "Bronze"
+            };
+            let jg_title = format!("Juggernaut ({})", jg_tier);
+            entry.titles.retain(|t| !t.starts_with("Juggernaut"));
+            entry.titles.push(jg_title);
         }
 
         // Track hero damage hits against opponent for lethal Executioner/Over-Killer
@@ -715,28 +730,60 @@ impl MatchAssembler {
                 });
             }
 
-            // Evaluate Closer achievements
+            // Evaluate Closer achievements with single-match magnitude tiering
             if is_win {
                 if self.current_opp_life <= 0 {
                     if let Some((grp, amt, life_before)) = self.last_hero_damage_hit {
                         let entry = self.impactful_cards.entry(grp).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
-                        if !entry.titles.contains(&"Executioner".to_string()) {
-                            entry.titles.push("Executioner".to_string());
+                        let exec_tier = if life_before >= 15 {
+                            "Gold"
+                        } else if life_before >= 8 {
+                            "Silver"
+                        } else {
+                            "Bronze"
+                        };
+                        let exec_title = format!("Executioner ({})", exec_tier);
+                        if !entry.titles.iter().any(|t| t.starts_with("Executioner")) {
+                            entry.titles.push(exec_title);
                         }
-                        if amt - life_before >= 8 {
-                            if !entry.titles.contains(&"Over-Killer".to_string()) {
-                                entry.titles.push("Over-Killer".to_string());
+
+                        let overkill = amt - life_before;
+                        if overkill >= 5 {
+                            let ok_tier = if overkill >= 20 {
+                                "Gold"
+                            } else if overkill >= 10 {
+                                "Silver"
+                            } else {
+                                "Bronze"
+                            };
+                            let ok_title = format!("Over-Killer ({})", ok_tier);
+                            if !entry.titles.iter().any(|t| t.starts_with("Over-Killer")) {
+                                entry.titles.push(ok_title);
                             }
                         }
                     }
                 } else if reason.to_lowercase().contains("concede") {
-                    // Scoop Inducer: last resolved card played by hero in final turns
+                    // Scoop Inducer candidate: evaluated by round and opponent life
                     if let Some(last_play) = self.turn_events.iter().rev().find(|e| e.seat_id == self.player_seat_id && e.event_type == "play" && e.turn_number >= self.current_turn.saturating_sub(1)) {
                         let entry = self.impactful_cards.entry(last_play.grp_id).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
-                        if !entry.titles.contains(&"Scoop Inducer".to_string()) {
-                            entry.titles.push("Scoop Inducer".to_string());
+                        let round = (self.current_turn + 1) / 2;
+                        let opp_life = self.current_opp_life;
+                        let tier = if round <= 4 && opp_life >= 25 {
+                            Some("Gold")
+                        } else if round <= 5 && opp_life >= 25 {
+                            Some("Silver")
+                        } else if round <= 6 && opp_life >= 20 {
+                            Some("Bronze")
+                        } else {
+                            None
+                        };
+                        if let Some(t) = tier {
+                            let title = format!("Scoop Inducer ({})", t);
+                            if !entry.titles.iter().any(|t| t.starts_with("Scoop Inducer")) {
+                                entry.titles.push(title);
+                            }
                         }
                     }
                 }
@@ -1016,29 +1063,30 @@ mod tests {
 
         assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
 
-        // Instance 1 = Grp 101 (deals 8 dmg -> Haymaker)
-        // Instance 2 = Grp 102 (deals 16 dmg -> Juggernaut + Executioner + Over-Killer)
+        // Instance 1 = Grp 101 (deals 15 dmg -> Haymaker Bronze)
+        // Instance 2 = Grp 102 (deals 25 dmg -> Haymaker Silver + Juggernaut Bronze + Executioner + Over-Killer)
         assembler.process_game_object(1, Some(101), Some(1), 28);
         assembler.process_game_object(2, Some(102), Some(1), 28);
 
-        // Hit 1: 8 damage to opponent (Opp life 20 -> 12)
-        assembler.process_damage_event(1, 2, 8, 1);
-        assembler.update_game_state(Some(2), 1, &[(1, 20), (2, 12)], 1);
+        // Hit 1: 15 damage to opponent (Opp life 20 -> 5)
+        assembler.process_damage_event(1, 2, 15, 1);
+        assembler.update_game_state(Some(2), 1, &[(1, 20), (2, 5)], 1);
 
-        // Hit 2: 16 damage to opponent (Opp life 12 -> -4, killing blow with 4 overkill)
-        assembler.process_damage_event(2, 2, 16, 1);
-        assembler.update_game_state(Some(3), 1, &[(1, 20), (2, -4)], 1);
+        // Hit 2: 25 damage to opponent (Opp life 5 -> -20, killing blow with 20 overkill)
+        assembler.process_damage_event(2, 2, 25, 1);
+        assembler.update_game_state(Some(3), 1, &[(1, 20), (2, -20)], 1);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
 
         let imp_101 = impactful.iter().find(|i| i.grp_id == 101).expect("grp 101 should exist");
         let imp_102 = impactful.iter().find(|i| i.grp_id == 102).expect("grp 102 should exist");
 
-        assert!(imp_101.titles.contains(&"Haymaker".to_string()), "Card 101 should have Haymaker title");
-        assert!(!imp_101.titles.contains(&"Juggernaut".to_string()), "Card 101 should not have Juggernaut title");
+        assert!(imp_101.titles.iter().any(|t| t.starts_with("Haymaker")), "Card 101 should have Haymaker title");
+        assert!(!imp_101.titles.iter().any(|t| t.starts_with("Juggernaut")), "Card 101 should not have Juggernaut title");
 
-        assert!(imp_102.titles.contains(&"Juggernaut".to_string()), "Card 102 should have Juggernaut title");
-        assert!(imp_102.titles.contains(&"Executioner".to_string()), "Card 102 should have Executioner title");
+        assert!(imp_102.titles.iter().any(|t| t.starts_with("Juggernaut")), "Card 102 should have Juggernaut title");
+        assert!(imp_102.titles.iter().any(|t| t.starts_with("Executioner")), "Card 102 should have Executioner title");
+        assert!(imp_102.titles.iter().any(|t| t.starts_with("Over-Killer")), "Card 102 should have Over-Killer title");
     }
 
     #[test]
@@ -1051,7 +1099,7 @@ mod tests {
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
         ]));
 
-        assembler.update_game_state(Some(1), 4, &[(1, 20), (2, 20)], 1);
+        assembler.update_game_state(Some(1), 4, &[(1, 20), (2, 25)], 1);
 
         // Hero casts a big bomb (Instance 10 -> Grp 999)
         assembler.process_game_object(10, Some(999), Some(1), 28);
@@ -1060,6 +1108,6 @@ mod tests {
         let (_, _, _, impactful) = assembler.complete_match(1, "ResultReason_Concede").expect("match should complete");
 
         let imp_999 = impactful.iter().find(|i| i.grp_id == 999).expect("grp 999 should be in impactful cards");
-        assert!(imp_999.titles.contains(&"Scoop Inducer".to_string()), "Card 999 should have Scoop Inducer title");
+        assert!(imp_999.titles.iter().any(|t| t.starts_with("Scoop Inducer")), "Card 999 should have Scoop Inducer title");
     }
 }
