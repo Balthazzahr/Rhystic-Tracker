@@ -10,6 +10,10 @@ pub struct DatabaseManager {
 /// All CREATE TABLE / CREATE INDEX statements, shared between production init
 /// and test-only in-memory databases.
 const SCHEMA_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS deleted_matches (
+    match_id TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS matches (
     id TEXT PRIMARY KEY,
     timestamp TEXT NOT NULL,
@@ -344,6 +348,14 @@ impl DatabaseManager {
         let _ = sqlx::query(
             "UPDATE match_impactful_cards SET titles = '[]' WHERE match_id IN (SELECT id FROM matches WHERE timestamp < '2026-08-23T06:30:00')"
         ).execute(&pool).await;
+
+        // Migration: Record test match into deleted_matches and purge
+        let _ = sqlx::query("INSERT OR IGNORE INTO deleted_matches (match_id, deleted_at) VALUES ('02c2e7d6-40cd-412a-b587-3c0dcf97f5d1', '2026-08-23T06:50:00Z')").execute(&pool).await;
+        let _ = sqlx::query("DELETE FROM match_cards WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
+        let _ = sqlx::query("DELETE FROM match_turn_events WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
+        let _ = sqlx::query("DELETE FROM match_decks WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
+        let _ = sqlx::query("DELETE FROM matches WHERE id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
 
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
@@ -749,6 +761,15 @@ impl DatabaseManager {
     }
 
     pub async fn upsert_match(&self, match_rec: &MatchRecord, cards: &[MatchCardRecord], turn_events: &[MatchTurnEventRecord], impactful: &[MatchImpactfulRecord]) -> Result<(), Box<dyn std::error::Error>> {
+        let is_deleted: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_matches WHERE match_id = ?")
+            .bind(&match_rec.match_id)
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+        if is_deleted > 0 {
+            return Ok(());
+        }
+
         let mut resolved_deck_name = match_rec.player_deck_name.clone();
         if resolved_deck_name.is_empty() || resolved_deck_name == "Selected Deck" {
             let hero_gids: Vec<i64> = cards.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
@@ -895,6 +916,24 @@ impl DatabaseManager {
             .await?;
         let count: i64 = row.get("count");
         Ok(count)
+    }
+
+    pub async fn delete_match(&self, match_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = sqlx::query("INSERT OR IGNORE INTO deleted_matches (match_id, deleted_at) VALUES (?, ?)")
+            .bind(match_id)
+            .bind(now)
+            .execute(&self.pool)
+            .await;
+
+        let mut tx = self.pool.begin().await?;
+        let _ = sqlx::query("DELETE FROM match_cards WHERE match_id = ?").bind(match_id).execute(&mut *tx).await;
+        let _ = sqlx::query("DELETE FROM match_turn_events WHERE match_id = ?").bind(match_id).execute(&mut *tx).await;
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE match_id = ?").bind(match_id).execute(&mut *tx).await;
+        let _ = sqlx::query("DELETE FROM match_decks WHERE match_id = ?").bind(match_id).execute(&mut *tx).await;
+        let _ = sqlx::query("DELETE FROM matches WHERE id = ?").bind(match_id).execute(&mut *tx).await;
+        tx.commit().await?;
+        Ok(())
     }
 
     pub async fn get_recent_matches(&self, limit: i64) -> Result<Vec<MatchRecord>, Box<dyn std::error::Error>> {

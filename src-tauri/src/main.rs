@@ -3347,6 +3347,14 @@ async fn delete_deck(deck_name: String, delete_matches: bool) -> Result<serde_js
     }))
 }
 
+/// Permanently deletes a single match and blacklists its match_id from future log ingestion.
+#[tauri::command]
+async fn delete_match(match_id: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.delete_match(&match_id).await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "success": true, "match_id": match_id }))
+}
+
 /// Returns the stored True Decklist for a deck (resolved grp_ids), with card
 /// metadata joined in, or null if none has been imported.
 #[tauri::command]
@@ -4534,7 +4542,8 @@ fn main() {
             get_raw_card_db_status,
             set_raw_path,
             get_global_achievements,
-            get_global_leaderboards
+            get_global_leaderboards,
+            delete_match
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
