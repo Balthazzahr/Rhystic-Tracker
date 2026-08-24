@@ -55,8 +55,13 @@ This major milestone introduces the full **Global Achievements & Trophy Case** a
 ### ⚡ Fixed & Polished
 
 - **Strict Test Environment Isolation**: Dual-environment development pipeline (`./launch-test.sh` / `rhystic_dev.db`) protecting production databases during testing and feature development.
+- **Fight & Mutual Bite Damage Reclassification**: Corrected GRE damage routing so creature fight damage (`damage_type == 3`, e.g. Bushwhack, Tail Swipe, Kogla) is classified as creature attack power (`damage_combat`) rather than non-combat spell damage (`damage_spell`).
+- **Dynamic Single-Match Achievement Tiering**: Engineered full backend game-state and magnitude tier calculations (`Gold`, `Silver`, `Bronze`) for *Scoop Inducer*, *Executioner*, *Over-Killer*, *Haymaker*, and *Juggernaut*.
+- **Scoop Inducer Rules & Lore Tooltips**: Enforced strict $\text{CMC} \ge 5$ non-land requirement, dynamic round and opponent life thresholds (Gold: $\le$ Round 4 with $\ge 25$ life; Silver: $\le$ Round 5 with $\ge 25$ life; Bronze: $\le$ Round 6 with $\ge 20$ life), and resolved registry metadata lookup so custom flavor quotes and objectives render accurately in match tooltips.
+- **Haymaker Strike Thresholds**: Tuned single-hit strike thresholds to 10+ Bronze, 20+ Silver, 30+ Gold for 1v1 formats.
+- **Impactful Match MVPs Filter**: Enforced threshold requirement of $\ge 5$ damage or an earned achievement title to eliminate zero-damage non-titled entries from the Hall of Fame.
+- **Deleted Matches Blacklist Table**: Added `deleted_matches` schema and `delete_match` IPC command preventing log re-scans from re-ingesting manually purged matches.
 - **Top Bar Text Cleanup**: Removed redundant labels from Achievements and Leaderboards top bars, standardizing on clean search inputs and category switchers.
-- **Card Achievements Criteria Integrity**: Verified card achievement eligibility to prevent non-qualifying cards (such as lands or non-mana enchantments) from receiving combat/mana triggers.
 - **Settings View Overflow Fix**: Fixed vertical scrollbar constraints on compact resolutions.
 
 ### ⚡ Fixed
