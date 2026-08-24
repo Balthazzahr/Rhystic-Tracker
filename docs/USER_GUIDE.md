@@ -352,14 +352,20 @@ Clicking any match in the Dashboard, Match History, Deck detail, or Head-to-Head
 ---
 
 ### Deck Library, 3-Column Inspector & True Decklists
-The **Deck Library** tracks performance per deck, format legitimacy, and MTGA-standard decklist import/export.
+The **Deck Library** tracks performance per deck, format legitimacy, automatic and manual True Decklist management, and real-time MTGA client synchronization.
 
 <p align="center">
   <img src="docs/screenshots/deck_library.png" alt="Deck Library" width="900" />
 </p>
 
-- **True Decklists**: Import your exact 60-card or 100-card decklists directly using standard MTGA clipboard format.
-- **Legitimacy Verification**: Rhystic Tracker filters out preset and starter decks to prevent skewed collection analytics.
+- **Automatic True Decklist Capture**:
+  - **No Manual Import Required**: Whenever you start a match or view decks in MTGA, Rhystic Tracker automatically streams and stores the full, genuine decklist directly from the game's network payload into your local database (`source = 'auto'`).
+  - **Full Commander Integration**: Brawl and Commander decks automatically synthesize the Commander card into the canonical 100-card decklist, rendering a dedicated top-left `COMMANDER (1)` header block above Creatures in the Deck Inspector.
+  - **Manual Import / Export Still Available**: You can still import or export `.txt` decklists via clipboard anytime for offline deck planning.
+- **Persistent MTGA UUID Synchronization & Auto-Rename**:
+  - **Card Modifications**: Changing cards in MTGA immediately updates the stored True Decklist without disturbing historical match records.
+  - **Deck Renaming**: Renaming a deck inside MTGA (e.g., from *"A Wizard Is Never Late"* to *"Fireworks in the Shire"*) automatically updates the deck's name in Rhystic Tracker and **seamlessly migrates all past matches, win rates, and game stats** over to the new name without creating duplicate entries.
+- **Legitimacy Verification**: Rhystic Tracker automatically filters out preset and starter decks to prevent skewed collection and win-rate analytics.
 - **Responsive 3-Column Decklist Expansion**:
   - Automatically organizes card types (*Creatures, Instants, Sorceries, Lands, Artifacts, Enchantments, Planeswalkers*) into **3 height-balanced columns** (`colA`, `colB`, `colC`) on wide screens.
   - Eliminates excessive scrolling for 60-card and 100-card Commander lists.
@@ -374,7 +380,7 @@ The **Deck Library** tracks performance per deck, format legitimacy, and MTGA-st
 
 ---
 
-### Card Library, Dual Art Modes & Diamond Ownership
+### Card Library, Dual Art Modes & Real-Time Ownership Sync
 The **Card Library** provides an interactive visual explorer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics.
 
 <p align="center">
@@ -383,7 +389,7 @@ The **Card Library** provides an interactive visual explorer paired with a 3-pan
 
 #### How Collection Ownership Works
 Because MTGA no longer dumps complete raw collections into `Player.log`, Rhystic Tracker maintains data integrity through:
-1. **True Decklist Import**: Ingests genuine decklists exported from MTGA, registering exact owned counts (1–4).
+1. **Automatic Deck Capture & True Decklists**: Genuine decklists played or imported in MTGA automatically register verified owned counts (up to playset cap 4) in your collection.
 2. **Theft & Copy Protection**: Cards generated in-game via *tokens, copies, clones (e.g. Spark Double), conjure, heist, or theft effects (e.g. Gonti, Ragavan)* never falsely inflate your owned collection.
 3. **Interactive 4-Diamond Ownership Selector**: Adjust owned copies directly in the card detail modal with instant persistence and real-time cross-view synchronization.
 

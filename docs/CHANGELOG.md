@@ -2,6 +2,38 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.2.2] - 2026-08-24
+
+### 🔄 Automatic True Decklist Capture, UUID Synchronization & Collection Sync
+
+This release fundamentally modernizes Rhystic Tracker's deck and collection ingestion systems. True Decklists are now generated automatically in real time directly from the MTGA client stream without requiring manual clipboard imports. Persistent MTGA deck UUID tracking seamlessly handles in-game deck modifications and renames, instantly synchronizing deck records and migrating historical match statistics.
+
+---
+
+### 🌟 Added & Enhanced
+
+- **Automatic True Decklist Capture**:
+  - Automatically captures the 100% complete, genuine decklist when a match begins or when navigating decks in MTGA.
+  - Automatically includes the **Commander** card in the canonical decklist (e.g. 99 maindeck cards + 1 Commander in Brawl = full 100-card decklist), rendering the dedicated top-left `COMMANDER (1)` header block in the Deck Inspector.
+  - Automatically updates and verified-caps your **Collection Library** (up to playset cap 4) for every card contained in the submitted deck.
+
+- **Persistent MTGA UUID Synchronization & Auto-Rename**:
+  - Tracks MTGA's persistent `DeckId` UUID across deck submissions and catalog broadcasts.
+  - Modifying cards in MTGA updates the existing True Decklist in place without losing match history.
+  - Renaming a deck inside MTGA automatically renames the deck in your **Deck Library** and seamlessly migrates all past matches, win rates, and game stats to the new name without creating duplicate entries.
+  - Startup migration automatically backfills UUIDs and consolidates any legacy renamed decks.
+
+- **Real-Time Deck Library Invalidation**:
+  - Live frontend reactivity triggers instant `loadDeckOverview()` queries upon match completion and whenever switching to the **Deck Library** tab, eliminating the need for app restarts.
+
+- **Action Feed Mulligan & Bottom Badges**:
+  - Added dedicated styling and badge chips in the Match Play Timeline for `mulligan` (amber badge) and `bottom` (orange badge) actions, ensuring opening hand mulligan actions are distinct from standard in-game card plays.
+
+- **Card Draw Engine Leaderboard Fix**:
+  - Resolved ability object resolution in the database to map source card GrpIds (`objectSourceGrpId`) rather than internal trigger ability IDs, ensuring all card draw engines and battlefield stalwarts accurately display their authentic card names on the leaderboard.
+
+---
+
 ## [1.2.1] - 2026-08-24
 
 ### 🎯 Leaderboard Expansions & Hall of Fame Refinements
