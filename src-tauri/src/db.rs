@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS match_decks (
     submitted_at TEXT,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_match_decks_deck_id ON match_decks(deck_id);
 -- Set display metadata (name + release date + icon) fetched from Scryfall. Used
 -- by the Collection view for set-name labels, release-date sorting, and the set
 -- filter list (icon + name). Refreshed on demand via the Settings "Update Set
@@ -260,53 +261,56 @@ impl DatabaseManager {
             let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_deck_lists_deck_id ON deck_lists(deck_id)")
                 .execute(&pool)
                 .await;
-            println!("[DB MIGRATION] Added deck_id column to deck_lists table");
-        }
+            let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_decks_deck_id ON match_decks(deck_id)")
+                .execute(&pool)
+                .await;
+            println!("[DB MIGRATION] Added deck_id column and indexes to deck_lists and match_decks");
 
-        // Migration: Backfill deck_lists.deck_id from match_decks
-        let _ = sqlx::query(
-            r#"
-            UPDATE deck_lists
-            SET deck_id = (
-                SELECT m.deck_id
-                FROM match_decks m
-                WHERE m.deck_name = deck_lists.deck_name AND m.deck_id IS NOT NULL AND m.deck_id != ''
-                ORDER BY m.submitted_at DESC
-                LIMIT 1
+            // Migration: Backfill deck_lists.deck_id from match_decks
+            let _ = sqlx::query(
+                r#"
+                UPDATE deck_lists
+                SET deck_id = (
+                    SELECT m.deck_id
+                    FROM match_decks m
+                    WHERE m.deck_name = deck_lists.deck_name AND m.deck_id IS NOT NULL AND m.deck_id != ''
+                    ORDER BY m.submitted_at DESC
+                    LIMIT 1
+                )
+                WHERE deck_id IS NULL;
+                "#
             )
-            WHERE deck_id IS NULL;
-            "#
-        )
-        .execute(&pool)
-        .await;
+            .execute(&pool)
+            .await;
 
-        // Auto-merge duplicate deck names sharing the same deck_id (keeping latest name)
-        let dupes: Vec<(String, String)> = sqlx::query_as(
-            r#"
-            SELECT m1.deck_name as old_name, m2.deck_name as new_name
-            FROM match_decks m1
-            JOIN match_decks m2 ON m1.deck_id = m2.deck_id AND m1.deck_name != m2.deck_name
-            WHERE m1.deck_id IS NOT NULL AND m1.deck_id != ''
-              AND m1.submitted_at <= m2.submitted_at
-            GROUP BY m1.deck_name, m2.deck_name
-            "#
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap_or_default();
+            // Auto-merge duplicate deck names sharing the same deck_id (keeping latest name)
+            let dupes: Vec<(String, String)> = sqlx::query_as(
+                r#"
+                SELECT m1.deck_name as old_name, m2.deck_name as new_name
+                FROM match_decks m1
+                JOIN match_decks m2 ON m1.deck_id = m2.deck_id AND m1.deck_name != m2.deck_name
+                WHERE m1.deck_id IS NOT NULL AND m1.deck_id != ''
+                  AND m1.submitted_at <= m2.submitted_at
+                GROUP BY m1.deck_name, m2.deck_name
+                "#
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap_or_default();
 
-        for (old_name, new_name) in dupes {
-            if old_name != new_name {
-                println!("[DB MIGRATION] Merging historical renamed deck \"{}\" -> \"{}\"", old_name, new_name);
-                let _ = sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE hero_deck_name = ?")
-                    .bind(&new_name)
-                    .bind(&old_name)
-                    .execute(&pool)
-                    .await;
-                let _ = sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?")
-                    .bind(&old_name)
-                    .execute(&pool)
-                    .await;
+            for (old_name, new_name) in dupes {
+                if old_name != new_name {
+                    println!("[DB MIGRATION] Merging historical renamed deck \"{}\" -> \"{}\"", old_name, new_name);
+                    let _ = sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE hero_deck_name = ?")
+                        .bind(&new_name)
+                        .bind(&old_name)
+                        .execute(&pool)
+                        .await;
+                    let _ = sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?")
+                        .bind(&old_name)
+                        .execute(&pool)
+                        .await;
+                }
             }
         }
 
