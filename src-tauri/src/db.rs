@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS match_impactful_cards (
     seat_id INTEGER NOT NULL,
     total_damage INTEGER NOT NULL DEFAULT 0,
     max_hit INTEGER NOT NULL DEFAULT 0,
+    max_hit_combat INTEGER NOT NULL DEFAULT 0,
+    max_hit_spell INTEGER NOT NULL DEFAULT 0,
     damage_to_player INTEGER NOT NULL DEFAULT 0,
     damage_to_permanents INTEGER NOT NULL DEFAULT 0,
     damage_combat INTEGER NOT NULL DEFAULT 0,
@@ -271,6 +273,22 @@ impl DatabaseManager {
             let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN damage_combat INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
             let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN damage_spell INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
             println!("[DB MIGRATION] Added damage target and type columns to match_impactful_cards table");
+        }
+
+        // Migration: add max_hit_combat and max_hit_spell columns to match_impactful_cards
+        let max_hit_combat_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('match_impactful_cards') WHERE name = 'max_hit_combat'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if max_hit_combat_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN max_hit_combat INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN max_hit_spell INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            let _ = sqlx::query("UPDATE match_impactful_cards SET max_hit_combat = max_hit WHERE damage_combat > 0 AND damage_spell = 0").execute(&pool).await;
+            let _ = sqlx::query("UPDATE match_impactful_cards SET max_hit_spell = max_hit WHERE damage_spell > 0 AND damage_combat = 0").execute(&pool).await;
+            let _ = sqlx::query("UPDATE match_impactful_cards SET max_hit_combat = max_hit WHERE damage_combat > 0 AND max_hit_combat = 0").execute(&pool).await;
+            println!("[DB MIGRATION] Added max_hit_combat and max_hit_spell columns to match_impactful_cards table");
         }
 
         // Migration: add titles column to match_impactful_cards
@@ -512,125 +530,7 @@ impl DatabaseManager {
             }
         }
 
-        // Development mode: automatically seed test achievements for "Dying Lands" if running against rhystic_dev.db
-        if db_filename == "rhystic_dev.db" {
-            let existing_dl_achs: i64 = sqlx::query_scalar(
-                r#"
-                SELECT COUNT(*)
-                FROM match_impactful_cards i
-                JOIN matches m ON i.match_id = m.id
-                WHERE (m.hero_deck_name = 'Dying Lands' OR m.id IN (SELECT match_id FROM match_decks WHERE deck_name = 'Dying Lands'))
-                  AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
-                "#
-            )
-            .fetch_one(&pool)
-            .await
-            .unwrap_or(0);
-
-            if existing_dl_achs < 10 {
-                let _ = Self::seed_test_dying_lands_achievements(&pool).await;
-            }
-        }
-
         Ok(Self { pool, db_filename })
-    }
-
-    async fn seed_test_dying_lands_achievements(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Fetch matches for Dying Lands
-        let matches: Vec<String> = sqlx::query_scalar(
-            "SELECT id FROM matches WHERE hero_deck_name = 'Dying Lands' OR id IN (SELECT match_id FROM match_decks WHERE deck_name = 'Dying Lands') ORDER BY timestamp DESC"
-        )
-        .fetch_all(pool)
-        .await?;
-
-        if matches.is_empty() {
-            return Ok(());
-        }
-
-        // Fetch decklist cards
-        let deck_json: Option<String> = sqlx::query_scalar(
-            "SELECT cards_json FROM deck_lists WHERE deck_name = 'Dying Lands'"
-        )
-        .fetch_optional(pool)
-        .await?;
-
-        let Some(json_str) = deck_json else { return Ok(()); };
-        let Ok(deck_cards) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) else { return Ok(()); };
-
-        let grp_ids: Vec<i64> = deck_cards.iter().filter_map(|c| c.get("grp_id").and_then(|v| v.as_i64())).collect();
-        if grp_ids.is_empty() {
-            return Ok(());
-        }
-
-        let placeholders = grp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let query_str = format!("SELECT grp_id, name, card_type, cmc FROM cards_cache WHERE grp_id IN ({})", placeholders);
-        let mut query = sqlx::query(&query_str);
-        for gid in &grp_ids {
-            query = query.bind(gid);
-        }
-        let card_rows = query.fetch_all(pool).await?;
-
-        let strict_mappings: std::collections::HashMap<&'static str, Vec<&'static str>> = std::collections::HashMap::from([
-            ("Craterhoof Behemoth", vec!["Over-Killer (Gold)", "Haymaker (Gold)", "Executioner (Silver)"]),
-            ("Mossborn Hydra", vec!["Ozolithic! (Gold)", "Hardened (Silver)", "Haymaker (Silver)"]),
-            ("Lumra, Bellow of the Woods", vec!["Juggernaut (Gold)", "Scoop Inducer (Silver)"]),
-            ("Primeval Titan", vec!["Scoop Inducer (Silver)", "Haymaker (Bronze)"]),
-            ("Bristly Bill, Spine Sower", vec!["Ozolithic! (Gold)", "Hardened (Silver)"]),
-            ("Toph, Earthbending Master", vec!["Hardened (Silver)", "Ironclad (Bronze)"]),
-            ("Scythecat Cub", vec!["Hardened (Bronze)", "Haymaker (Bronze)"]),
-            ("Earthbender Ascension", vec!["Hardened (Bronze)"]),
-            ("Disciple of Freyalise", vec!["Rhystic Tracker (Bronze)"]),
-            ("Blast Zone", vec!["Sweeper (Bronze)"]),
-            ("Boseiju, Who Endures", vec!["Royal Assassin (Bronze)"]),
-            ("Bridgeworks Battle", vec!["Royal Assassin (Bronze)"]),
-            ("Insidious Fungus", vec!["Royal Assassin (Bronze)"]),
-            ("Arboreal Grazer", vec!["Ironclad (Bronze)"]),
-            ("Blossoming Tortoise", vec!["Ironclad (Bronze)"]),
-            ("Scute Swarm", vec!["Swarmer (Bronze)"]),
-            ("Rampaging Baloths", vec!["Swarmer (Bronze)"]),
-            ("Springheart Nantuko", vec!["Swarmer (Bronze)"]),
-            ("Sapling Nursery", vec!["Swarmer (Bronze)"]),
-            ("Lotus Cobra", vec!["Mana Dynamo (Bronze)"]),
-            ("Fanatic of Rhonas", vec!["Mana Dynamo (Bronze)"]),
-            ("Delighted Halfling", vec!["Mana Dynamo (Bronze)"]),
-            ("Birds of Paradise", vec!["Mana Dynamo (Bronze)"]),
-            ("Llanowar Elves", vec!["Mana Dynamo (Bronze)"]),
-            ("Elvish Mystic", vec!["Mana Dynamo (Bronze)"]),
-            ("Arcane Signet", vec!["Mana Dynamo (Bronze)"]),
-            ("Castle Garenbrig", vec!["Mana Dynamo (Bronze)"]),
-        ]);
-
-        let mut match_idx = 0usize;
-        for row in card_rows {
-            let gid: i64 = row.get("grp_id");
-            let name: String = row.get("name");
-
-            if let Some(achs) = strict_mappings.get(name.as_str()) {
-                for &ach in achs {
-                    let count = if ach == "Mana Dynamo" || ach == "Swarmer" || ach == "Haymaker" { 3 } else { 2 };
-                    for _ in 0..count {
-                        let m_id = &matches[match_idx % matches.len()];
-                        match_idx += 1;
-                        let titles_json = serde_json::json!([ach]).to_string();
-
-                        sqlx::query(
-                            r#"
-                            INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit, titles)
-                            VALUES (?, ?, 1, 10, 10, ?)
-                            "#
-                        )
-                        .bind(m_id)
-                        .bind(gid)
-                        .bind(&titles_json)
-                        .execute(pool)
-                        .await?;
-                    }
-                }
-            }
-        }
-
-        println!("[TEST SEEDER] Successfully populated strictly accurate card achievements for 'Dying Lands'");
-        Ok(())
     }
 
     /// Migration for the abandoned earlier Collection attempt that created
@@ -911,9 +811,9 @@ impl DatabaseManager {
             sqlx::query(
                 r#"
                 INSERT INTO match_impactful_cards (
-                    match_id, grp_id, seat_id, total_damage, max_hit,
+                    match_id, grp_id, seat_id, total_damage, max_hit, max_hit_combat, max_hit_spell,
                     damage_to_player, damage_to_permanents, damage_combat, damage_spell, titles
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#
             )
             .bind(&match_rec.match_id)
@@ -921,6 +821,8 @@ impl DatabaseManager {
             .bind(imp.seat_id as i64)
             .bind(imp.total_damage as i64)
             .bind(imp.max_hit as i64)
+            .bind(imp.max_hit_combat as i64)
+            .bind(imp.max_hit_spell as i64)
             .bind(imp.damage_to_player as i64)
             .bind(imp.damage_to_permanents as i64)
             .bind(imp.damage_combat as i64)
@@ -1493,7 +1395,7 @@ mod tests {
             MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "play".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:05Z".to_string() },
         ];
         let impactful = vec![
-            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![] },
+            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, max_hit_combat: 5, max_hit_spell: 0, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![] },
         ];
 
         // Call upsert_match once

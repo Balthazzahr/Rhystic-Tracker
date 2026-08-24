@@ -134,3 +134,4 @@ jobs:
             rhystic-tracker-macos-universal-app.tar.gz
             SHA256SUMS.txt
           generate_release_notes: true
+          make_latest: "true"

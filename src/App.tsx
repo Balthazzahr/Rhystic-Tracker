@@ -25,6 +25,7 @@ import {
   ZoomOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Award,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
@@ -621,6 +622,7 @@ export default function App() {
     turns?: number;
     timestamp?: string;
     impactful_cards?: { grp_id: number; name: string; total_damage: number; max_hit: number; damage_combat: number; damage_spell: number }[];
+    earned_achievements?: { grp_id: number; card_name: string; title: string; raw_title: string; tier: string }[];
     just_completed?: boolean;
     result?: string;
     result_reason?: string;
@@ -676,7 +678,8 @@ export default function App() {
             duration_seconds: liveState.duration_seconds,
             turns: liveState.turns,
             timestamp: liveState.timestamp,
-            impactful_cards: liveState.impactful_cards || [],
+            impactful_cards: (liveState.impactful_cards || []).filter((c: any) => c.max_hit > 8 || c.total_damage > 12),
+            earned_achievements: liveState.earned_achievements || [],
             just_completed: true,
             result: liveState.result,
             result_reason: liveState.result_reason,
@@ -1625,6 +1628,48 @@ export default function App() {
                                 </div>
                                 <div className="text-xs font-mono text-amber-300 font-bold mt-0.5">
                                   {card.total_damage} DMG {card.max_hit > 0 && <span className="opacity-70 text-[11px] font-normal">(Max {card.max_hit})</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Achievements Earned in this match */}
+                    {liveMatchState.earned_achievements && liveMatchState.earned_achievements.length > 0 && (
+                      <div className="w-full max-w-2xl flex flex-col items-center space-y-2.5 pt-2">
+                        <div className="text-xs font-mono font-bold uppercase tracking-wider opacity-80 flex items-center gap-2 text-amber-300">
+                          <Award className="w-4 h-4 text-amber-400" /> Achievements Earned
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-3.5 w-full">
+                          {liveMatchState.earned_achievements.map((ach: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-black/75 flex items-center p-3 gap-3.5 shadow-xl min-w-[240px] max-w-[300px]"
+                            >
+                              {/* Scryfall Art Thumbnail */}
+                              <div className="w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-white/25 bg-slate-900 shadow">
+                                <img
+                                  src={`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(ach.card_name)}&format=image&version=art_crop`}
+                                  alt={ach.card_name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1 flex flex-col items-start gap-1">
+                                <div className="text-sm font-bold truncate text-white w-full" title={ach.card_name}>
+                                  {ach.card_name}
+                                </div>
+                                <div className="flex items-center">
+                                  <AchievementBadge
+                                    title={ach.raw_title || ach.title}
+                                    tier={ach.tier}
+                                    size="sm"
+                                    showCount={false}
+                                    showTooltip={true}
+                                  />
                                 </div>
                               </div>
                             </div>

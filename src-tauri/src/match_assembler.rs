@@ -48,6 +48,8 @@ pub struct MatchImpactfulRecord {
     pub seat_id: u32,
     pub total_damage: i32,
     pub max_hit: i32,
+    pub max_hit_combat: i32,
+    pub max_hit_spell: i32,
     pub damage_to_player: i32,
     pub damage_to_permanents: i32,
     pub damage_combat: i32,
@@ -60,6 +62,8 @@ pub struct CardDamageStats {
     pub seat_id: u32,
     pub total_damage: i32,
     pub max_hit: i32,
+    pub max_hit_combat: i32,
+    pub max_hit_spell: i32,
     pub damage_to_player: i32,
     pub damage_to_permanents: i32,
     pub damage_combat: i32,
@@ -568,8 +572,14 @@ impl MatchAssembler {
         }
         if is_combat {
             entry.damage_combat += magnitude;
+            if magnitude > entry.max_hit_combat {
+                entry.max_hit_combat = magnitude;
+            }
         } else {
             entry.damage_spell += magnitude;
+            if magnitude > entry.max_hit_spell {
+                entry.max_hit_spell = magnitude;
+            }
         }
 
         // Award Heavy Hitter achievement titles with single-match magnitude tiering
@@ -798,6 +808,8 @@ impl MatchAssembler {
                     seat_id: stats.seat_id,
                     total_damage: stats.total_damage,
                     max_hit: stats.max_hit,
+                    max_hit_combat: stats.max_hit_combat,
+                    max_hit_spell: stats.max_hit_spell,
                     damage_to_player: stats.damage_to_player,
                     damage_to_permanents: stats.damage_to_permanents,
                     damage_combat: stats.damage_combat,

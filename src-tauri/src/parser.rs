@@ -353,10 +353,10 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                         if affector_id == 0 {
                                             continue;
                                         }
-                                        let target_id = a.get("affectedIds").and_then(|arr| arr.as_array())
-                                            .and_then(|arr| arr.first())
-                                            .and_then(|x| x.as_u64())
-                                            .unwrap_or(0) as u32;
+                                        let affected_ids: Vec<u32> = a.get("affectedIds")
+                                            .and_then(|arr| arr.as_array())
+                                            .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
+                                            .unwrap_or_default();
 
                                         let mut amount = 0i32;
                                         let mut dtype = 1u32; // Default to combat (1)
@@ -379,7 +379,13 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                         }
 
                                         if amount != 0 {
-                                            damage_events.push((affector_id, target_id, amount, dtype));
+                                            if affected_ids.is_empty() {
+                                                damage_events.push((affector_id, 0, amount, dtype));
+                                            } else {
+                                                for target_id in affected_ids {
+                                                    damage_events.push((affector_id, target_id, amount, dtype));
+                                                }
+                                            }
                                         }
                                     }
                                 }

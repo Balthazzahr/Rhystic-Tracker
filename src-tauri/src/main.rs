@@ -1298,7 +1298,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
 
     let rows = sqlx::query(
         r#"
-        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles, m.timestamp as match_timestamp
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
@@ -1314,13 +1314,13 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
     fn parse_title_and_tier(raw: &str) -> (String, String) {
         let trimmed = raw.trim();
         if trimmed.to_lowercase().contains("(gold)") {
-            (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
+          (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
         } else if trimmed.to_lowercase().contains("(silver)") {
-            (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
+          (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
         } else if trimmed.to_lowercase().contains("(bronze)") {
-            (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+          (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
         } else {
-            (trimmed.to_string(), "bronze".to_string())
+          (trimmed.to_string(), "bronze".to_string())
         }
     }
 
@@ -1341,6 +1341,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         set_code: Option<String>,
         count: i64,
         highest_tier: String,
+        last_earned_at: Option<String>,
     }
 
     let mut ach_map: std::collections::HashMap<String, (i64, String, std::collections::HashMap<i64, CardStats>)> = std::collections::HashMap::new();
@@ -1358,6 +1359,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         let rarity: Option<String> = row.try_get("rarity").ok();
         let set_code: Option<String> = row.try_get("set_code").ok();
         let titles_json: String = row.try_get("titles").unwrap_or_default();
+        let match_timestamp: Option<String> = row.try_get("match_timestamp").ok();
 
         if let Ok(titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
             for raw in titles {
@@ -1385,8 +1387,14 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     set_code: set_code.clone(),
                     count: 0,
                     highest_tier: "bronze".to_string(),
+                    last_earned_at: match_timestamp.clone(),
                 });
                 card_entry.count += 1;
+                if let Some(ts) = &match_timestamp {
+                    if card_entry.last_earned_at.as_ref().map_or(true, |prev| ts > prev) {
+                        card_entry.last_earned_at = Some(ts.clone());
+                    }
+                }
                 if tier_rank(&tier) > tier_rank(&card_entry.highest_tier) {
                     card_entry.highest_tier = tier.clone();
                 }
@@ -1404,7 +1412,8 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                 "rarity": c.rarity,
                 "set_code": c.set_code,
                 "count": c.count,
-                "highest_tier": c.highest_tier
+                "highest_tier": c.highest_tier,
+                "earned_at": c.last_earned_at
             })
         }).collect();
 
@@ -1457,51 +1466,39 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     let pool = db.pool();
 
-    // 1. Top Single Hit Damage (from v1.2.0 epoch)
-    let top_single_hit = sqlx::query(
-        r#"
-        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
-               MAX(i.max_hit) as record_value
-        FROM match_impactful_cards i
-        JOIN matches m ON i.match_id = m.id
-        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND i.max_hit > 0 AND m.timestamp >= '2026-08-23T06:30:00'
-        GROUP BY c.name
-        ORDER BY record_value DESC, card_name ASC
-        "#
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    // ==========================================
+    // ROW 1: COMBAT DAMAGE
+    // ==========================================
 
-    // 2. Top Total Match Damage (from v1.2.0 epoch)
-    let top_total_damage = sqlx::query(
+    // 1.1 Highest Combat Damage in a Single Hit
+    let combat_single_hit = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
-               SUM(i.total_damage) as record_value
-        FROM match_impactful_cards i
-        JOIN matches m ON i.match_id = m.id
-        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
-        WHERE i.seat_id = m.hero_seat_id AND i.total_damage > 0 AND m.timestamp >= '2026-08-23T06:30:00'
-        GROUP BY c.name
-        ORDER BY record_value DESC, card_name ASC
-        "#
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    // 3. Top Impactful Match Appearances (from v1.2.0 epoch)
-    let top_impactful = sqlx::query(
-        r#"
-        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
-               COUNT(*) as record_value
+               MAX(CASE WHEN i.max_hit_combat > 0 THEN i.max_hit_combat ELSE (CASE WHEN i.damage_combat > 0 THEN i.max_hit ELSE 0 END) END) as record_value
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id 
+          AND (i.max_hit_combat > 0 OR i.damage_combat > 0)
           AND m.timestamp >= '2026-08-23T06:30:00'
-          AND (i.total_damage >= 5 OR (i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'))
+        GROUP BY c.name
+        HAVING record_value > 0
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 1.2 Highest Combat Damage over an entire match (single game record)
+    let combat_match_damage = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               MAX(i.damage_combat) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id AND i.damage_combat > 0 AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1510,8 +1507,8 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 4. Top Combat Damage (from v1.2.0 epoch)
-    let top_combat = sqlx::query(
+    // 1.3 Total Highest Combat Damage over all logged matches
+    let combat_lifetime_damage = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
                SUM(i.damage_combat) as record_value
@@ -1527,8 +1524,49 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 5. Top Spell Damage (from v1.2.0 epoch)
-    let top_spell = sqlx::query(
+    // ==========================================
+    // ROW 2: NON-COMBAT (SPELLS & ABILITIES) DAMAGE
+    // ==========================================
+
+    // 2.1 Highest Non-Combat Damage in a Single Hit / Spell Cast (AoE aggregated)
+    let spell_single_hit = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               MAX(CASE WHEN i.max_hit_spell > 0 THEN i.max_hit_spell ELSE (CASE WHEN i.damage_spell > 0 THEN i.max_hit ELSE 0 END) END) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id 
+          AND (i.max_hit_spell > 0 OR i.damage_spell > 0)
+          AND m.timestamp >= '2026-08-23T06:30:00'
+        GROUP BY c.name
+        HAVING record_value > 0
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2.2 Highest Non-Combat Damage over an entire match (single game record)
+    let spell_match_damage = sqlx::query(
+        r#"
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               MAX(i.damage_spell) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id AND i.damage_spell > 0 AND m.timestamp >= '2026-08-23T06:30:00'
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 2.3 Total Highest Non-Combat Damage over all logged matches
+    let spell_lifetime_damage = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
                SUM(i.damage_spell) as record_value
@@ -1544,7 +1582,11 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 6. Top Most Decorated Champions (Total Honors / Achievements Earned from v1.2.0 epoch)
+    // ==========================================
+    // ROW 3: HONORS & MASTERY (NON-DAMAGE)
+    // ==========================================
+
+    // 3.1 Most Decorated Cards (Total Lifetime Achievements / Honors Awarded)
     let rows_honors = sqlx::query(
         r#"
         SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles
@@ -1600,7 +1642,7 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     let mut top_honors_vec: Vec<HonorAgg> = honors_map.into_values().collect();
     top_honors_vec.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.card_name.cmp(&b.card_name)));
 
-    let top_honors_json: Vec<serde_json::Value> = top_honors_vec.into_iter().enumerate().map(|(idx, h)| {
+    let most_decorated_json: Vec<serde_json::Value> = top_honors_vec.into_iter().enumerate().map(|(idx, h)| {
         serde_json::json!({
             "rank": idx + 1,
             "grp_id": h.grp_id,
@@ -1613,6 +1655,44 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
             "unit": "Honors Won"
         })
     }).collect();
+
+    // 3.2 Card Draw Engines (Non-land cards drawn into hand from library across matches)
+    let top_draw_engines = sqlx::query(
+        r#"
+        SELECT e.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               COUNT(*) as record_value
+        FROM match_turn_events e
+        JOIN matches m ON e.match_id = m.id
+        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
+        WHERE e.seat_id = m.hero_seat_id
+          AND e.event_type = 'draw'
+          AND (c.card_type IS NULL OR c.card_type NOT LIKE '%Land%')
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 3.3 Battlefield Stalwarts (Non-land cards cast/played the most times)
+    let top_stalwarts = sqlx::query(
+        r#"
+        SELECT e.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               COUNT(*) as record_value
+        FROM match_turn_events e
+        JOIN matches m ON e.match_id = m.id
+        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
+        WHERE e.seat_id = m.hero_seat_id
+          AND e.event_type = 'play'
+          AND (c.card_type IS NULL OR c.card_type NOT LIKE '%Land%')
+        GROUP BY c.name
+        ORDER BY record_value DESC, card_name ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     fn map_leaderboard_rows(rows: Vec<sqlx::sqlite::SqliteRow>, unit: &str) -> Vec<serde_json::Value> {
         rows.into_iter().enumerate().map(|(idx, r)| {
@@ -1639,12 +1719,18 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
     }
 
     Ok(serde_json::json!({
-        "single_hit": map_leaderboard_rows(top_single_hit, "DMG Max Hit"),
-        "total_damage": map_leaderboard_rows(top_total_damage, "Total DMG"),
-        "impactful": map_leaderboard_rows(top_impactful, "Matches"),
-        "combat_damage": map_leaderboard_rows(top_combat, "Combat DMG"),
-        "spell_damage": map_leaderboard_rows(top_spell, "Spell DMG"),
-        "most_honors": top_honors_json,
+        // Row 1: Combat
+        "combat_single_hit": map_leaderboard_rows(combat_single_hit, "Dmg Single Hit"),
+        "combat_match_damage": map_leaderboard_rows(combat_match_damage, "Combat Dmg / Match"),
+        "combat_lifetime_damage": map_leaderboard_rows(combat_lifetime_damage, "Lifetime Combat Dmg"),
+        // Row 2: Spell & Abilities
+        "spell_single_hit": map_leaderboard_rows(spell_single_hit, "Dmg Single Cast"),
+        "spell_match_damage": map_leaderboard_rows(spell_match_damage, "Spell Dmg / Match"),
+        "spell_lifetime_damage": map_leaderboard_rows(spell_lifetime_damage, "Lifetime Spell Dmg"),
+        // Row 3: Honors & Mastery
+        "most_decorated": most_decorated_json,
+        "card_draw_engines": map_leaderboard_rows(top_draw_engines, "Cards Drawn"),
+        "battlefield_stalwarts": map_leaderboard_rows(top_stalwarts, "Times Cast"),
     }))
 }
 
@@ -4011,6 +4097,21 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
 
                 let db = DatabaseManager::init().await.ok();
                 let mut impactful_cards_arr = Vec::new();
+                let mut earned_achievements_arr = Vec::new();
+
+                fn parse_title_and_tier(raw: &str) -> (String, String) {
+                    let trimmed = raw.trim();
+                    if trimmed.to_lowercase().contains("(gold)") {
+                        (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
+                    } else if trimmed.to_lowercase().contains("(silver)") {
+                        (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
+                    } else if trimmed.to_lowercase().contains("(bronze)") {
+                        (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+                    } else {
+                        (trimmed.to_string(), "bronze".to_string())
+                    }
+                }
+
                 if let Some(db_mgr) = &db {
                     let pool = db_mgr.pool();
                     let rows = sqlx::query(
@@ -4020,8 +4121,9 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                         FROM match_impactful_cards i
                         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
                         WHERE i.match_id = ? AND i.seat_id = ?
+                          AND (i.max_hit > 8 OR i.total_damage > 12)
                         ORDER BY i.total_damage DESC, i.max_hit DESC
-                        LIMIT 3
+                        LIMIT 4
                         "#
                     )
                     .bind(&record.match_id)
@@ -4047,6 +4149,42 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                             "damage_spell": dmg_spell,
                         }));
                     }
+
+                    let ach_rows = sqlx::query(
+                        r#"
+                        SELECT i.grp_id, COALESCE(c.name, 'Unknown') as card_name, i.titles
+                        FROM match_impactful_cards i
+                        LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
+                        WHERE i.match_id = ? AND i.seat_id = ?
+                          AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+                        ORDER BY i.total_damage DESC
+                        "#
+                    )
+                    .bind(&record.match_id)
+                    .bind(record.hero_seat_id as i64)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
+
+                    for r in ach_rows {
+                        let gid: i64 = r.get("grp_id");
+                        let name: String = r.get("card_name");
+                        let titles_json: String = r.get("titles");
+                        if let Ok(titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
+                            for raw_title in titles {
+                                if !raw_title.is_empty() {
+                                    let (clean_title, tier) = parse_title_and_tier(&raw_title);
+                                    earned_achievements_arr.push(serde_json::json!({
+                                        "grp_id": gid,
+                                        "card_name": name,
+                                        "title": clean_title,
+                                        "raw_title": raw_title,
+                                        "tier": tier,
+                                    }));
+                                }
+                            }
+                        }
+                    }
                 }
 
                 return Ok(serde_json::json!({
@@ -4065,6 +4203,7 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "turns": record.turns,
                     "timestamp": record.date_str,
                     "impactful_cards": impactful_cards_arr,
+                    "earned_achievements": earned_achievements_arr,
                 }));
             }
         }

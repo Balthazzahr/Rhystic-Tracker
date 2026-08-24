@@ -2,6 +2,12 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.2.1] - 2026-08-24
+
+### 🎯 Leaderboard Expansions & Hall of Fame Refinements
+
+This release expands the Leaderboards view into a comprehensive 3×3 grid across Combat Damage, Non-Combat Damage, and Honors & Mastery with the addition of Card Draw Engines and Battlefield Stalwarts. It introduces a full-height centered pop-out modal displaying up to 25 cards with live search filtering, enlarged top-3 card typography with relocated mana costs and gold styling on rank 1, electric blue and yellow search highlights, and achievement earned dates across decorated card rosters.
+
 ## [1.2.0] - 2026-08-23
 
 ### 🏆 Major Milestone: Global Card Achievements, Trophy Case & Leaderboards Hall of Fame

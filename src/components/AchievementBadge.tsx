@@ -125,14 +125,14 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
           onClick={onClick}
           className={
             isStandaloneLarge
-              ? `inline-flex items-center justify-center transition-transform duration-200 cursor-pointer select-none hover:scale-105 ${onClick ? 'active:scale-95' : ''}`
-              : `inline-flex items-center border transition-all duration-200 cursor-pointer shadow-sm select-none ${(!showTitle && !showCount) ? 'p-1 rounded-lg' : sizeMap.pill} ${tierStyles.pillBg} ${onClick ? 'active:scale-95' : ''}`
+              ? `inline-flex items-center justify-center cursor-pointer select-none ${onClick ? 'active:scale-95' : ''}`
+              : `inline-flex items-center border transition-colors duration-150 cursor-pointer shadow-sm select-none ${(!showTitle && !showCount) ? 'p-1 rounded-lg' : sizeMap.pill} ${tierStyles.pillBg} ${onClick ? 'active:scale-95' : ''}`
           }
         >
           {/* SVG Emblem */}
           {svgUrl && (
             <div className={`shrink-0 flex items-center justify-center ${sizeMap.icon}`}>
-              <img src={svgUrl} alt={meta.title} className="w-full h-full object-contain drop-shadow-md" />
+              <img src={svgUrl} alt={meta.title} className="w-full h-full object-contain" />
             </div>
           )}
 
