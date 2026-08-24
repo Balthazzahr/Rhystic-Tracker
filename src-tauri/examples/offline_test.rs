@@ -40,18 +40,21 @@ fn main() {
                 ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, .. } => {
                     assembler.set_deck(deck_name, None, commander_id, main_deck);
                 }
-                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, diff_deleted_ids, mulligan_events } => {
+                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, draw_events, diff_deleted_ids, mulligan_events } => {
                     for (m_seat, is_mul, num_cards) in mulligan_events {
                         assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
                     }
                     if !diff_deleted_ids.is_empty() {
                         assembler.handle_deleted_instances(&diff_deleted_ids);
                     }
-                    for (instance_id, grp_id, owner_seat, zone_id) in objects {
-                        assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
+                    for (instance_id, grp_id, owner_seat, zone_id, is_card) in objects {
+                        assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card);
                     }
                     for (instance_id, target_id, amount, dtype) in damage_events {
                         assembler.process_damage_event(instance_id, target_id, amount, dtype);
+                    }
+                    for (affector_id, count) in draw_events {
+                        assembler.process_draw_event(affector_id, count);
                     }
                     assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                 }

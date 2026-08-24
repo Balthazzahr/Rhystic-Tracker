@@ -1656,17 +1656,19 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         })
     }).collect();
 
-    // 3.2 Card Draw Engines (Non-land cards drawn into hand from library across matches)
+    // 3.2 Card Draw Engines (Cards causing extra card draws across matches)
     let top_draw_engines = sqlx::query(
         r#"
-        SELECT e.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
-               COUNT(*) as record_value
-        FROM match_turn_events e
-        JOIN matches m ON e.match_id = m.id
-        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
-        WHERE e.seat_id = m.hero_seat_id
-          AND e.event_type = 'draw'
-          AND (c.card_type IS NULL OR c.card_type NOT LIKE '%Land%')
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code,
+               SUM(i.cards_drawn) as record_value
+        FROM match_impactful_cards i
+        JOIN matches m ON i.match_id = m.id
+        JOIN cards_cache c ON i.grp_id = c.grp_id
+        WHERE i.seat_id = m.hero_seat_id
+          AND i.cards_drawn > 0
+          AND c.name IS NOT NULL
+          AND c.name != ''
+          AND m.timestamp >= '2026-08-23T06:30:00'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1682,10 +1684,12 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
                COUNT(*) as record_value
         FROM match_turn_events e
         JOIN matches m ON e.match_id = m.id
-        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
+        JOIN cards_cache c ON e.grp_id = c.grp_id
         WHERE e.seat_id = m.hero_seat_id
           AND e.event_type = 'play'
-          AND (c.card_type IS NULL OR c.card_type NOT LIKE '%Land%')
+          AND c.name IS NOT NULL
+          AND c.name != ''
+          AND c.card_type NOT LIKE '%Land%'
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -3497,6 +3501,32 @@ async fn get_deck_list(deck_name: String) -> Result<serde_json::Value, String> {
         }));
     }
 
+    // Ensure commander card is in cards list if commander_grp_id is set
+    if let Some(cid) = commander_grp_id {
+        if cid > 0 && !cards.iter().any(|c| c.get("grp_id").and_then(|v| v.as_i64()) == Some(cid)) {
+            let meta = card_db::get_card_metadata(db.pool(), cid).await
+                .map_err(|e| e.to_string())?
+                .unwrap_or(card_db::CardMetadata {
+                    grp_id: cid,
+                    name: format!("Unknown Card (#{})", cid),
+                    mana_cost: None, cmc: 0, colors: None, color_identity: None,
+                    set_code: None, rarity: 0, collector_number: None, card_type: None,
+                });
+            cards.push(serde_json::json!({
+                "grp_id": cid,
+                "count": 1,
+                "name": meta.name,
+                "mana_cost": meta.mana_cost,
+                "card_type": meta.card_type,
+                "colors": meta.colors,
+                "color_identity": meta.color_identity,
+                "cmc": meta.cmc,
+                "rarity": meta.rarity,
+                "set_code": meta.set_code,
+            }));
+        }
+    }
+
     let sideboard: Vec<serde_json::Value> = match sideboard_json {
         Some(sj) => {
             let entries: Vec<serde_json::Value> = serde_json::from_str(&sj).unwrap_or_default();
@@ -4304,24 +4334,35 @@ async fn dispatch_parsed_event(
                 total_cards,
                 assembler.match_legitimate
             );
+            if assembler.match_legitimate && !main_deck.is_empty() {
+                let _ = db_manager.save_auto_deck_list(&deck_name, deck_id.as_deref(), commander_id, &main_deck).await;
+            }
         }
         ParsedEvent::DeckCatalogBatch { decks } => {
             let count = decks.len();
+            for (did, dname, cmd_id, main_deck) in &decks {
+                if !main_deck.is_empty() && !dname.is_empty() {
+                    let _ = db_manager.save_auto_deck_list(dname, Some(did.as_str()), *cmd_id, main_deck).await;
+                }
+            }
             assembler.register_deck_catalog(decks);
-            println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
+            println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog & saved decklists", count);
         }
-        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, diff_deleted_ids, mulligan_events } => {
+        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, draw_events, diff_deleted_ids, mulligan_events } => {
             for (m_seat, is_mul, num_cards) in mulligan_events {
                 assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
             }
             if !diff_deleted_ids.is_empty() {
                 assembler.handle_deleted_instances(&diff_deleted_ids);
             }
-            for (instance_id, grp_id, owner_seat, zone_id) in objects {
-                assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id);
+            for (instance_id, grp_id, owner_seat, zone_id, is_card) in objects {
+                assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card);
             }
             for (instance_id, target_id, amount, dtype) in damage_events {
                 assembler.process_damage_event(instance_id, target_id, amount, dtype);
+            }
+            for (affector_id, count) in draw_events {
+                assembler.process_draw_event(affector_id, count);
             }
             assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
             let draws = assembler.drain_collection_draws();

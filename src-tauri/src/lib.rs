@@ -6,3 +6,4 @@ pub mod theme;
 pub mod card_db;
 pub mod deck_legitimacy;
 pub mod settings;
+pub mod deck_list;

@@ -55,6 +55,7 @@ pub struct MatchImpactfulRecord {
     pub damage_combat: i32,
     pub damage_spell: i32,
     pub titles: Vec<String>,
+    pub cards_drawn: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -69,6 +70,7 @@ pub struct CardDamageStats {
     pub damage_combat: i32,
     pub damage_spell: i32,
     pub titles: Vec<String>,
+    pub cards_drawn: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -431,7 +433,7 @@ impl MatchAssembler {
         }
     }
 
-    pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32) -> Option<(u32, u32, String)> {
+    pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32, is_card: bool) -> Option<(u32, u32, String)> {
         let mut learning_grp_now = false;
         if let Some(gid) = grp_id {
             if gid > 0 {
@@ -446,7 +448,7 @@ impl MatchAssembler {
                 }
 
                 // Command Zone (ZoneId 26) Commander Detection Fallback
-                if zone_id == 26 {
+                if is_card && zone_id == 26 {
                     let seat = owner_seat.unwrap_or(0);
                     if let Some(m) = &mut self.active_match {
                         if seat == self.player_seat_id && m.player_commander_id.is_none() {
@@ -457,6 +459,10 @@ impl MatchAssembler {
                     }
                 }
             }
+        }
+
+        if !is_card {
+            return None;
         }
 
         let resolved_grp_id = grp_id.or_else(|| self.instance_map.get(&instance_id).copied())?;
@@ -642,6 +648,39 @@ impl MatchAssembler {
         self.feed_seq += 1;
     }
 
+    /// Record extra card draws caused by a spell/ability/card instance.
+    /// Aggregates lifetime draw engine metrics and awards Rhystic Tracker honors.
+    pub fn process_draw_event(&mut self, affector_instance_id: u32, count: u32) {
+        if affector_instance_id == 0 || count == 0 {
+            return;
+        }
+        let grp_id = self.instance_map.get(&affector_instance_id).copied().unwrap_or(0);
+        if grp_id == 0 {
+            return;
+        }
+        let seat_id = self.instance_owner_map.get(&affector_instance_id).copied().unwrap_or(self.player_seat_id);
+
+        let entry = self.impactful_cards.entry(grp_id).or_default();
+        if entry.seat_id == 0 {
+            entry.seat_id = seat_id;
+        }
+        entry.cards_drawn += count as i64;
+
+        // Award Rhystic Tracker achievement if hero card draws 5 or more extra cards in match
+        if seat_id == self.player_seat_id && entry.cards_drawn >= 5 {
+            let rt_tier = if entry.cards_drawn >= 12 {
+                "Gold"
+            } else if entry.cards_drawn >= 8 {
+                "Silver"
+            } else {
+                "Bronze"
+            };
+            let rt_title = format!("Rhystic Tracker ({})", rt_tier);
+            entry.titles.retain(|t| !t.starts_with("Rhystic Tracker"));
+            entry.titles.push(rt_title);
+        }
+    }
+
     pub fn update_game_state(&mut self, msg_id: Option<u64>, turn: u32, life_by_seat: &[(u32, i32)], active_seat: u32) {
         if let Some(mid) = msg_id {
             if self.processed_msg_ids.contains(&mid) {
@@ -802,7 +841,7 @@ impl MatchAssembler {
             let turn_events = std::mem::take(&mut self.turn_events);
 
             let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.iter()
-                .filter(|(_, stats)| stats.total_damage > 0 || !stats.titles.is_empty())
+                .filter(|(_, stats)| stats.total_damage > 0 || stats.cards_drawn > 0 || !stats.titles.is_empty())
                 .map(|(grp_id, stats)| MatchImpactfulRecord {
                     grp_id: *grp_id,
                     seat_id: stats.seat_id,
@@ -815,6 +854,7 @@ impl MatchAssembler {
                     damage_combat: stats.damage_combat,
                     damage_spell: stats.damage_spell,
                     titles: stats.titles.clone(),
+                    cards_drawn: stats.cards_drawn,
                 })
                 .collect();
 
@@ -992,14 +1032,14 @@ mod tests {
 
         // 7 opening hand cards arrive at turn 0
         for i in 1..=7 {
-            assembler.process_game_object(i, Some(100 + i), Some(1), 31); // Hand zone
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true); // Hand zone
         }
 
         // Turn 1 starts, active player seat 1
         assembler.update_game_state(Some(10), 1, &[(1, 20), (2, 20)], 1);
 
         // Turn 1 play: player casts card 1
-        assembler.process_game_object(1, Some(101), Some(1), 28); // Battlefield
+        assembler.process_game_object(1, Some(101), Some(1), 28, true); // Battlefield
 
         let (rec, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match should complete");
         assert_eq!(rec.player_mulligans, Some(0));
@@ -1020,7 +1060,7 @@ mod tests {
 
         // 1. Initial 7 cards dealt to Hero (inst 1..=7)
         for i in 1..=7 {
-            assembler.process_game_object(i, Some(100 + i), Some(1), 31);
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true);
         }
 
         // 2. Opponent takes a mulligan (Prompt 36 for seat 2)
@@ -1031,7 +1071,7 @@ mod tests {
 
         // 4. Hero gets 7 new cards (inst 11..=17)
         for i in 11..=17 {
-            assembler.process_game_object(i, Some(200 + i), Some(1), 31);
+            assembler.process_game_object(i, Some(200 + i), Some(1), 31, true);
         }
 
         // 5. London mulligan bottoming: 1 card (inst 17) bottomed
@@ -1077,8 +1117,8 @@ mod tests {
 
         // Instance 1 = Grp 101 (deals 15 dmg -> Haymaker Bronze)
         // Instance 2 = Grp 102 (deals 25 dmg -> Haymaker Silver + Juggernaut Bronze + Executioner + Over-Killer)
-        assembler.process_game_object(1, Some(101), Some(1), 28);
-        assembler.process_game_object(2, Some(102), Some(1), 28);
+        assembler.process_game_object(1, Some(101), Some(1), 28, true);
+        assembler.process_game_object(2, Some(102), Some(1), 28, true);
 
         // Hit 1: 15 damage to opponent (Opp life 20 -> 5)
         assembler.process_damage_event(1, 2, 15, 1);
@@ -1114,12 +1154,60 @@ mod tests {
         assembler.update_game_state(Some(1), 4, &[(1, 20), (2, 25)], 1);
 
         // Hero casts a big bomb (Instance 10 -> Grp 999)
-        assembler.process_game_object(10, Some(999), Some(1), 28);
+        assembler.process_game_object(10, Some(999), Some(1), 28, true);
 
         // Opponent immediately concedes
         let (_, _, _, impactful) = assembler.complete_match(1, "ResultReason_Concede").expect("match should complete");
 
         let imp_999 = impactful.iter().find(|i| i.grp_id == 999).expect("grp 999 should be in impactful cards");
         assert!(imp_999.titles.iter().any(|t| t.starts_with("Scoop Inducer")), "Card 999 should have Scoop Inducer title");
+    }
+
+    #[test]
+    fn test_card_draw_engine_and_rhystic_tracker_achievement() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-draw-engine".to_string(), "Commander".to_string());
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 40), (2, 40)], 1);
+
+        // Instance 50 = Rhystic Study (Grp 12345)
+        assembler.process_game_object(50, Some(12345), Some(1), 28, true);
+
+        // Trigger draw 3 cards
+        assembler.process_draw_event(50, 3);
+        // Trigger draw 3 more cards (total 6 -> Rhystic Tracker Bronze)
+        assembler.process_draw_event(50, 3);
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
+        let rhystic_entry = impactful.iter().find(|i| i.grp_id == 12345).expect("Rhystic Study should be impactful");
+
+        assert_eq!(rhystic_entry.cards_drawn, 6, "Rhystic Study should have 6 cards drawn");
+        assert!(rhystic_entry.titles.iter().any(|t| t == "Rhystic Tracker (Bronze)"), "Should award Rhystic Tracker (Bronze) badge");
+    }
+
+    #[test]
+    fn test_abilities_do_not_generate_play_events() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-abilities".to_string(), "Standard".to_string());
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        // Ability instance 999 (e.g. Equip ability id 1319) is placed on stack (zone 27) with is_card = false
+        assembler.process_game_object(999, Some(1319), Some(1), 27, false);
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match should complete");
+        let play_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "play").collect();
+
+        assert_eq!(play_events.len(), 0, "Abilities must not generate 'play' turn events");
     }
 }

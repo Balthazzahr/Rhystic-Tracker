@@ -411,6 +411,7 @@ export default function App() {
       if (recentMatches.length > 0 && (!selectedMatchId || autoSelectLatest)) {
         setSelectedMatchId(recentMatches[0].match_id);
       }
+      loadDeckOverview();
     } catch (e) {
       console.error('Failed to load SQLite match data:', e);
     }
@@ -706,6 +707,12 @@ export default function App() {
       clearInterval(pollInterval);
     };
   }, [activeThemeId]);
+
+  useEffect(() => {
+    if (activeTab === 'decks') {
+      loadDeckOverview();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -1301,7 +1308,13 @@ export default function App() {
     }
     let badgeText = 'PLAY';
     let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-    if (e.type === 'draw') {
+    if (e.type === 'mulligan') {
+      badgeText = 'MULLIGAN';
+      badgeStyle = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+    } else if (e.type === 'bottom') {
+      badgeText = 'BOTTOM';
+      badgeStyle = 'bg-orange-500/15 text-orange-400 border-orange-500/30';
+    } else if (e.type === 'draw') {
       badgeText = 'DRAW';
       badgeStyle = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
     } else if (e.type === 'token') {

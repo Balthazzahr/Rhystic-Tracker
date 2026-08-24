@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS match_impactful_cards (
     damage_combat INTEGER NOT NULL DEFAULT 0,
     damage_spell INTEGER NOT NULL DEFAULT 0,
     titles TEXT DEFAULT '[]',
+    cards_drawn INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
@@ -91,7 +92,8 @@ CREATE TABLE IF NOT EXISTS deck_lists (
     commander_grp_id INTEGER,
     source TEXT DEFAULT 'export',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    deck_id TEXT
 );
 -- Collection (draw-based, log-only). owned_count is monotonic
 -- non-decreasing, hard-capped at 4 (a playset). Only ever raised by
@@ -244,6 +246,70 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added hero_mulligans column to matches table");
         }
 
+        // Migration: add deck_id column to deck_lists for MTGA UUID synchronization & auto-renaming
+        let deck_id_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('deck_lists') WHERE name = 'deck_id'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if deck_id_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE deck_lists ADD COLUMN deck_id TEXT")
+                .execute(&pool)
+                .await;
+            let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_deck_lists_deck_id ON deck_lists(deck_id)")
+                .execute(&pool)
+                .await;
+            println!("[DB MIGRATION] Added deck_id column to deck_lists table");
+        }
+
+        // Migration: Backfill deck_lists.deck_id from match_decks
+        let _ = sqlx::query(
+            r#"
+            UPDATE deck_lists
+            SET deck_id = (
+                SELECT m.deck_id
+                FROM match_decks m
+                WHERE m.deck_name = deck_lists.deck_name AND m.deck_id IS NOT NULL AND m.deck_id != ''
+                ORDER BY m.submitted_at DESC
+                LIMIT 1
+            )
+            WHERE deck_id IS NULL;
+            "#
+        )
+        .execute(&pool)
+        .await;
+
+        // Auto-merge duplicate deck names sharing the same deck_id (keeping latest name)
+        let dupes: Vec<(String, String)> = sqlx::query_as(
+            r#"
+            SELECT m1.deck_name as old_name, m2.deck_name as new_name
+            FROM match_decks m1
+            JOIN match_decks m2 ON m1.deck_id = m2.deck_id AND m1.deck_name != m2.deck_name
+            WHERE m1.deck_id IS NOT NULL AND m1.deck_id != ''
+              AND m1.submitted_at <= m2.submitted_at
+            GROUP BY m1.deck_name, m2.deck_name
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+        for (old_name, new_name) in dupes {
+            if old_name != new_name {
+                println!("[DB MIGRATION] Merging historical renamed deck \"{}\" -> \"{}\"", old_name, new_name);
+                let _ = sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE hero_deck_name = ?")
+                    .bind(&new_name)
+                    .bind(&old_name)
+                    .execute(&pool)
+                    .await;
+                let _ = sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?")
+                    .bind(&old_name)
+                    .execute(&pool)
+                    .await;
+            }
+        }
+
         // Migration: add icon_svg_uri column to sets_metadata for databases created
         // before the set-icon feature. CREATE TABLE IF NOT EXISTS won't add columns
         // to an existing table, so the Collection set filter would fail otherwise.
@@ -303,6 +369,18 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added titles column to match_impactful_cards table");
         }
 
+        // Migration: add cards_drawn column to match_impactful_cards
+        let cards_drawn_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('match_impactful_cards') WHERE name = 'cards_drawn'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if cards_drawn_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN cards_drawn INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            println!("[DB MIGRATION] Added cards_drawn column to match_impactful_cards table");
+        }
+
         // Migration: deduplicate any duplicate rows in match_cards, match_turn_events,
         // and match_impactful_cards caused by previous multi-instance or non-idempotent upserts.
         let _ = sqlx::query(
@@ -329,6 +407,16 @@ impl DatabaseManager {
             WHERE id NOT IN (
                 SELECT MIN(id) FROM match_impactful_cards GROUP BY match_id, grp_id, seat_id
             );
+            "#
+        ).execute(&pool).await;
+
+        // Migration: purge ability IDs and non-card grp_ids from match_turn_events
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM match_turn_events
+            WHERE event_type IN ('play', 'draw')
+              AND grp_id > 0
+              AND grp_id NOT IN (SELECT grp_id FROM cards_cache);
             "#
         ).execute(&pool).await;
 
@@ -530,7 +618,167 @@ impl DatabaseManager {
             }
         }
 
+        Self::backfill_draw_records_from_logs(&pool).await;
+
         Ok(Self { pool, db_filename })
+    }
+
+    async fn backfill_draw_records_from_logs(pool: &Pool<Sqlite>) {
+        // Purge non-card records and reset cards_drawn for re-attribution from logs
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE grp_id NOT IN (SELECT grp_id FROM cards_cache)").execute(pool).await;
+        let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = 0").execute(pool).await;
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND max_hit = 0 AND titles = '[]' AND cards_drawn = 0").execute(pool).await;
+
+        let log_path = match crate::tailer::discover_log_path() {
+            Some(p) => p,
+            None => return,
+        };
+
+        if !log_path.exists() {
+            return;
+        }
+
+        let file = match std::fs::File::open(&log_path) {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+        let reader = std::io::BufReader::new(file);
+
+        use std::io::BufRead;
+        let mut current_match_id: Option<String> = None;
+        let mut inst_map: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        let mut inst_owner: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        let mut hero_seat: u32 = 1;
+
+        for line in reader.lines().flatten() {
+            if line.contains("matchGameRoomStateChangedEvent") || line.contains("Connecting to matchId") {
+                if let Some(start) = line.find('{') {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line[start..]) {
+                        if let Some(r) = v.get("matchGameRoomStateChangedEvent").and_then(|e| e.get("gameRoomInfo")) {
+                            if let Some(mid) = r.get("gameRoomConfig").and_then(|c| c.get("matchId")).and_then(|m| m.as_str()) {
+                                current_match_id = Some(mid.to_string());
+                                inst_map.clear();
+                                inst_owner.clear();
+                                hero_seat = 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if line.contains("GREMessageType_GameStateMessage") {
+                if let (Some(ref mid), Some(start)) = (&current_match_id, line.find('{')) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line[start..]) {
+                        if let Some(msgs) = v.get("greToClientEvent").and_then(|e| e.get("greToClientMessages")).and_then(|m| m.as_array()) {
+                            for msg in msgs {
+                                if msg.get("type").and_then(|t| t.as_str()) == Some("GREMessageType_GameStateMessage") {
+                                    if let Some(gsm) = msg.get("gameStateMessage") {
+                                        if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
+                                            for obj in objs {
+                                                if let Some(iid) = obj.get("instanceId").and_then(|i| i.as_u64()).map(|i| i as u32) {
+                                                    let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                                                    let is_ability = obj_type.contains("Ability") || obj_type.contains("Trigger") || obj.get("objectSourceGrpId").is_some();
+                                                    let gid = if is_ability {
+                                                        obj.get("objectSourceGrpId")
+                                                            .or_else(|| obj.get("overlayGrpId"))
+                                                            .and_then(|g| g.as_u64())
+                                                            .map(|g| g as u32)
+                                                    } else {
+                                                        obj.get("grpId")
+                                                            .or_else(|| obj.get("overlayGrpId"))
+                                                            .or_else(|| obj.get("objectSourceGrpId"))
+                                                            .and_then(|g| g.as_u64())
+                                                            .map(|g| g as u32)
+                                                    };
+                                                    let owner = obj.get("ownerSeatId")
+                                                        .or_else(|| obj.get("controllerSeatId"))
+                                                        .and_then(|s| s.as_u64())
+                                                        .map(|s| s as u32);
+                                                    if let Some(g) = gid {
+                                                        inst_map.insert(iid, g);
+                                                    }
+                                                    if let Some(o) = owner {
+                                                        inst_owner.insert(iid, o);
+                                                    }
+                                                    if let Some(pid) = obj.get("parentId").and_then(|p| p.as_u64()).map(|p| p as u32) {
+                                                        if let Some(pgid) = inst_map.get(&pid).copied() {
+                                                            inst_map.entry(iid).or_insert(pgid);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
+                                            for a in anns {
+                                                let ann_types = a.get("type").and_then(|t| t.as_array());
+                                                let is_zone_transfer = ann_types.map(|arr| arr.iter().any(|s| s.as_str() == Some("AnnotationType_ZoneTransfer"))).unwrap_or(false);
+                                                if is_zone_transfer {
+                                                    let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                                    if affector_id > 0 {
+                                                        let is_draw = a.get("details").and_then(|d| d.as_array()).map(|details| {
+                                                            details.iter().any(|d| {
+                                                                d.get("key").and_then(|k| k.as_str()) == Some("category")
+                                                                    && d.get("valueString").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|s| s.as_str()).map(|s| s.eq_ignore_ascii_case("Draw")).unwrap_or(false)
+                                                            })
+                                                        }).unwrap_or(false);
+
+                                                        if is_draw {
+                                                            let affected_count = a.get("affectedIds").and_then(|arr| arr.as_array()).map(|arr| arr.len()).unwrap_or(1).max(1) as i64;
+                                                            if let Some(src_grp) = inst_map.get(&affector_id).copied() {
+                                                                let seat = inst_owner.get(&affector_id).copied().unwrap_or(hero_seat);
+                                                                
+                                                                let match_exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM matches WHERE id = ?")
+                                                                    .bind(mid)
+                                                                    .fetch_optional(pool)
+                                                                    .await
+                                                                    .unwrap_or(None);
+
+                                                                if match_exists.is_some() {
+                                                                    let existing_id: Option<i64> = sqlx::query_scalar("SELECT id FROM match_impactful_cards WHERE match_id = ? AND grp_id = ?")
+                                                                        .bind(mid)
+                                                                        .bind(src_grp as i64)
+                                                                        .fetch_optional(pool)
+                                                                        .await
+                                                                        .unwrap_or(None);
+
+                                                                    if let Some(row_id) = existing_id {
+                                                                        let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = cards_drawn + ? WHERE id = ?")
+                                                                            .bind(affected_count)
+                                                                            .bind(row_id)
+                                                                            .execute(pool)
+                                                                            .await;
+                                                                    } else {
+                                                                        let _ = sqlx::query(
+                                                                            r#"
+                                                                            INSERT INTO match_impactful_cards (
+                                                                                match_id, grp_id, seat_id, total_damage, max_hit, max_hit_combat, max_hit_spell,
+                                                                                damage_to_player, damage_to_permanents, damage_combat, damage_spell, titles, cards_drawn
+                                                                            ) VALUES (?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, '[]', ?)
+                                                                            "#
+                                                                        )
+                                                                        .bind(mid)
+                                                                        .bind(src_grp as i64)
+                                                                        .bind(seat as i64)
+                                                                        .bind(affected_count)
+                                                                        .execute(pool)
+                                                                        .await;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Migration for the abandoned earlier Collection attempt that created
@@ -812,8 +1060,8 @@ impl DatabaseManager {
                 r#"
                 INSERT INTO match_impactful_cards (
                     match_id, grp_id, seat_id, total_damage, max_hit, max_hit_combat, max_hit_spell,
-                    damage_to_player, damage_to_permanents, damage_combat, damage_spell, titles
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    damage_to_player, damage_to_permanents, damage_combat, damage_spell, titles, cards_drawn
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#
             )
             .bind(&match_rec.match_id)
@@ -828,6 +1076,7 @@ impl DatabaseManager {
             .bind(imp.damage_combat as i64)
             .bind(imp.damage_spell as i64)
             .bind(titles_json)
+            .bind(imp.cards_drawn)
             .execute(&mut *tx)
             .await?;
         }
@@ -1046,6 +1295,128 @@ impl DatabaseManager {
         .bind(&now)
         .execute(&self.pool)
         .await?;
+        Ok(())
+    }
+
+    /// Automatically save a True Decklist and update collection cards from a submitted deck in a match.
+    /// If deck_id is recognized under an older name, renames the deck and migrates past matches.
+    /// Skips preset/tutorial decks, empty decks, or "Selected Deck".
+    pub async fn save_auto_deck_list(
+        &self,
+        deck_name: &str,
+        deck_id: Option<&str>,
+        commander_grp_id: Option<u32>,
+        main_deck: &[u32],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let trimmed = deck_name.trim();
+        if trimmed.is_empty() || trimmed == "Selected Deck" || main_deck.is_empty() {
+            return Ok(());
+        }
+        if crate::deck_legitimacy::preset_deck_reason(trimmed).is_some() {
+            return Ok(());
+        }
+
+        // If a deck_id is present, check if this deck was previously stored under a different name
+        if let Some(did) = deck_id {
+            if !did.is_empty() {
+                let existing_from_lists: Option<(String,)> = sqlx::query_as(
+                    "SELECT deck_name FROM deck_lists WHERE deck_id = ? AND deck_name != ?"
+                )
+                .bind(did)
+                .bind(trimmed)
+                .fetch_optional(&self.pool)
+                .await
+                .unwrap_or(None);
+
+                let existing_from_matches: Option<(String,)> = if existing_from_lists.is_none() {
+                    sqlx::query_as(
+                        "SELECT deck_name FROM match_decks WHERE deck_id = ? AND deck_name IS NOT NULL AND deck_name != '' AND deck_name != ? ORDER BY submitted_at DESC LIMIT 1"
+                    )
+                    .bind(did)
+                    .bind(trimmed)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .unwrap_or(None)
+                } else {
+                    None
+                };
+
+                let old_name_opt = existing_from_lists.or(existing_from_matches).map(|(n,)| n);
+
+                if let Some(old_name) = old_name_opt {
+                    println!("[DECK RENAMED] Auto-renaming deck from \"{}\" -> \"{}\" (UUID: {}) and migrating matches", old_name, trimmed, did);
+                    // Remove old name if a conflict row for trimmed already exists
+                    let _ = sqlx::query("DELETE FROM deck_lists WHERE deck_name = ?")
+                        .bind(trimmed)
+                        .execute(&self.pool)
+                        .await;
+                    let _ = sqlx::query("UPDATE deck_lists SET deck_name = ?, updated_at = datetime('now') WHERE deck_name = ?")
+                        .bind(trimmed)
+                        .bind(&old_name)
+                        .execute(&self.pool)
+                        .await;
+                    // Migrate match history and audit records seamlessly
+                    let _ = sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE hero_deck_name = ?")
+                        .bind(trimmed)
+                        .bind(&old_name)
+                        .execute(&self.pool)
+                        .await;
+                    let _ = sqlx::query("UPDATE match_decks SET deck_name = ? WHERE deck_name = ?")
+                        .bind(trimmed)
+                        .bind(&old_name)
+                        .execute(&self.pool)
+                        .await;
+                }
+            }
+        }
+
+        use std::collections::BTreeMap;
+        let mut card_counts: BTreeMap<i64, i64> = BTreeMap::new();
+        for grp in main_deck {
+            if *grp > 0 {
+                *card_counts.entry(*grp as i64).or_insert(0) += 1;
+            }
+        }
+        // Include commander in the card list if present (e.g. Brawl 99 main + 1 commander = 100 cards)
+        if let Some(cmdr) = commander_grp_id {
+            if cmdr > 0 {
+                card_counts.entry(cmdr as i64).or_insert(1);
+            }
+        }
+        if card_counts.is_empty() {
+            return Ok(());
+        }
+
+        let cards_vec: Vec<(i64, i64)> = card_counts.into_iter().collect();
+        let cards_json = crate::deck_list::cards_to_json(&cards_vec);
+        let now = chrono::Utc::now().to_rfc3339();
+        let cmdr_id = commander_grp_id.map(|c| c as i64);
+
+        sqlx::query(
+            r#"
+            INSERT INTO deck_lists (deck_name, cards_json, sideboard_json, commander_grp_id, source, created_at, updated_at, deck_id)
+            VALUES (?, ?, '[]', ?, 'auto', ?, ?, ?)
+            ON CONFLICT(deck_name) DO UPDATE SET
+                cards_json = excluded.cards_json,
+                commander_grp_id = COALESCE(excluded.commander_grp_id, deck_lists.commander_grp_id),
+                updated_at = excluded.updated_at,
+                deck_id = COALESCE(excluded.deck_id, deck_lists.deck_id)
+            "#
+        )
+        .bind(trimmed)
+        .bind(&cards_json)
+        .bind(cmdr_id)
+        .bind(&now)
+        .bind(&now)
+        .bind(deck_id)
+        .execute(&self.pool)
+        .await?;
+
+        for (grp_id, count) in &cards_vec {
+            let _ = self.upsert_collection_from_decklist(*grp_id, *count).await;
+        }
+
+        println!("[AUTO DECKLIST] Saved True Decklist & Collection for \"{}\" ({} unique cards, ID: {:?})", trimmed, cards_vec.len(), deck_id);
         Ok(())
     }
 
@@ -1395,7 +1766,7 @@ mod tests {
             MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "play".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:05Z".to_string() },
         ];
         let impactful = vec![
-            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, max_hit_combat: 5, max_hit_spell: 0, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![] },
+            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, max_hit_combat: 5, max_hit_spell: 0, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![], cards_drawn: 0 },
         ];
 
         // Call upsert_match once
@@ -1457,4 +1828,78 @@ mod tests {
         let resolved = db.resolve_deck_for_cards(&hero_gids, None).await.unwrap();
         assert_eq!(resolved, Some("MonoWhite - Auras (Standard)".to_string()));
     }
+
+    #[tokio::test]
+    async fn test_save_auto_deck_list() {
+        let db = in_memory_db().await;
+
+        let main_deck = vec![86715, 86715, 86715, 86715, 97964, 83677];
+        db.save_auto_deck_list("Custom Test Deck", Some("uuid-deck-1"), Some(86715), &main_deck).await.unwrap();
+
+        let row: Option<(String, Option<i64>, Option<String>)> = sqlx::query_as(
+            "SELECT cards_json, commander_grp_id, deck_id FROM deck_lists WHERE deck_name = 'Custom Test Deck'"
+        )
+        .fetch_optional(db.pool())
+        .await
+        .unwrap();
+
+        assert!(row.is_some(), "deck_lists should have Custom Test Deck row");
+        let (cards_json, cmdr, did) = row.unwrap();
+        assert_eq!(cmdr, Some(86715));
+        assert_eq!(did, Some("uuid-deck-1".to_string()));
+        assert!(cards_json.contains(r#"{"count":4,"grp_id":86715}"#));
+        assert!(cards_json.contains(r#"{"count":1,"grp_id":97964}"#));
+
+        // Insert a dummy match with the original name
+        let match_rec = MatchRecord {
+            match_id: "m-rename-test".to_string(),
+            timestamp: Utc::now(),
+            date_str: "2026-08-19 12:00:00".to_string(),
+            format_name: "Brawl".to_string(),
+            result: "win".to_string(),
+            duration_seconds: 120,
+            turns: 5,
+            going_first: true,
+            hero_seat_id: 1,
+            player_deck_name: "Custom Test Deck".to_string(),
+            player_commander_id: None,
+            player_commander_name: None,
+            player_life_end: Some(25),
+            player_mulligans: Some(0),
+            opponent_name: Some("Opponent".to_string()),
+            opponent_commander_id: None,
+            opponent_commander_name: None,
+            opponent_mulligans: Some(0),
+            opponent_life_end: Some(0),
+            result_reason: Some("Conceded".to_string()),
+        };
+        db.upsert_match(&match_rec, &[], &[], &[]).await.unwrap();
+
+        // Now simulate renaming the deck to "Renamed Test Deck" with the same UUID
+        db.save_auto_deck_list("Renamed Test Deck", Some("uuid-deck-1"), Some(86715), &main_deck).await.unwrap();
+
+        // Check that deck_lists row was renamed
+        let old_row: Option<(String,)> = sqlx::query_as("SELECT deck_name FROM deck_lists WHERE deck_name = 'Custom Test Deck'")
+            .fetch_optional(db.pool()).await.unwrap();
+        assert!(old_row.is_none(), "Old deck name should be replaced");
+
+        let new_row: Option<(String, Option<String>)> = sqlx::query_as("SELECT deck_name, deck_id FROM deck_lists WHERE deck_name = 'Renamed Test Deck'")
+            .fetch_optional(db.pool()).await.unwrap();
+        assert!(new_row.is_some(), "New deck name should exist");
+        assert_eq!(new_row.unwrap().1, Some("uuid-deck-1".to_string()));
+
+        // Check that match history was migrated to the new name
+        let match_deck: String = sqlx::query_scalar("SELECT hero_deck_name FROM matches WHERE id = 'm-rename-test'")
+            .fetch_one(db.pool()).await.unwrap();
+        assert_eq!(match_deck, "Renamed Test Deck");
+
+        // Verify collection_cards was also populated
+        let owned_86715: i64 = sqlx::query_scalar("SELECT owned_count FROM collection_cards WHERE grp_id = 86715")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(owned_86715, 4);
+    }
 }
+
+

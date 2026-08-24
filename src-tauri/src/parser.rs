@@ -16,11 +16,12 @@ pub enum ParsedEvent {
     DeckCatalogBatch { decks: Vec<(String, String, Option<u32>, Vec<u32>)> },
     GameStateUpdateCombined {
         msg_id: Option<u64>,
-        objects: Vec<(u32, Option<u32>, Option<u32>, u32)>,
+        objects: Vec<(u32, Option<u32>, Option<u32>, u32, bool)>, // (inst_id, grp_id, owner_seat, zone_id, is_card)
         turn_number: u32,
         life_by_seat: Vec<(u32, i32)>,
         active_seat: u32,
         damage_events: Vec<(u32, u32, i32, u32)>,
+        draw_events: Vec<(u32, u32)>,
         diff_deleted_ids: Vec<u32>,
         mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
     },
@@ -99,11 +100,9 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                         }
                     }
 
-                    let format_name = normalize_format(&raw_format);
-
                     return ParsedEvent::MatchCreated {
                         match_id: mid,
-                        format_name,
+                        format_name: normalize_format(&raw_format),
                         reserved_players,
                     };
                 }
@@ -111,54 +110,27 @@ pub fn parse_line(line: &str) -> ParsedEvent {
         }
     }
 
-    // 3. Deck Catalog Ingestion (StartHook / DeckSummaries / EventGetCourses / Courses)
-    if line.contains("DeckSummaries") || line.contains("Courses") || line.contains("EventGetCourses") {
+    // 3. Deck Catalog Broadcast / Course Summary (EventGetCourses / DeckCatalogBatch)
+    if line.contains("EventGetCourses") || line.contains("CourseDeckSummary") {
         if let Some(start) = line.find('{') {
             let json_str = &line[start..];
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
                 let mut catalog = Vec::new();
 
-                // Check DeckSummaries (e.g. from StartHook or DeckGetSummaries)
-                if let Some(summaries) = v.get("DeckSummaries").and_then(|s| s.as_array()) {
-                    let decks_map = v.get("Decks");
-                    for sum in summaries {
-                        let did = sum.get("DeckId").and_then(|d| d.as_str()).unwrap_or("").to_string();
-                        let dname = sum.get("Name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                        if !did.is_empty() || !dname.is_empty() {
-                            let mut main_deck = Vec::new();
-                            let mut cmd_id = None;
-                            if let Some(dobj) = decks_map.and_then(|m| m.get(&did)) {
-                                if let Some(main) = dobj.get("MainDeck").and_then(|m| m.as_array()) {
-                                    for c in main {
-                                        if let Some(cid) = c.get("cardId").and_then(|x| x.as_u64()) {
-                                            let qty = c.get("quantity").and_then(|q| q.as_u64()).unwrap_or(1);
-                                            for _ in 0..qty {
-                                                main_deck.push(cid as u32);
-                                            }
-                                        }
-                                    }
-                                }
-                                if let Some(cmd) = dobj.get("CommandZone").and_then(|c| c.as_array()) {
-                                    if let Some(first) = cmd.first() {
-                                        cmd_id = first.get("cardId").and_then(|c| c.as_u64()).map(|c| c as u32);
-                                    }
-                                }
-                            }
-                            catalog.push((did, dname, cmd_id, main_deck));
-                        }
-                    }
-                }
+                // Check payload / Payload nesting
+                let target = v.get("payload")
+                    .or_else(|| v.get("Payload"))
+                    .unwrap_or(&v);
 
-                // Check Courses array (e.g. from EventGetCourses / EventGetCoursesV2)
-                if let Some(courses) = v.get("Courses").and_then(|c| c.as_array()) {
+                if let Some(courses) = target.get("courses").or_else(|| target.get("Courses")).and_then(|c| c.as_array()) {
                     for course in courses {
-                        if let Some(sum) = course.get("CourseDeckSummary") {
-                            let did = sum.get("DeckId").and_then(|d| d.as_str()).unwrap_or("").to_string();
-                            let dname = sum.get("Name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                        if let Some(sum) = course.get("CourseDeckSummary").or_else(|| course.get("courseDeckSummary")) {
+                            let did = sum.get("DeckId").or_else(|| sum.get("deckId")).and_then(|d| d.as_str()).unwrap_or("").to_string();
+                            let dname = sum.get("Name").or_else(|| sum.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
                             let mut main_deck = Vec::new();
                             let mut cmd_id = None;
-                            if let Some(deck) = course.get("CourseDeck") {
-                                if let Some(main) = deck.get("MainDeck").and_then(|m| m.as_array()) {
+                            if let Some(deck) = course.get("CourseDeck").or_else(|| course.get("courseDeck")) {
+                                if let Some(main) = deck.get("MainDeck").or_else(|| deck.get("mainDeck")).and_then(|m| m.as_array()) {
                                     for c in main {
                                         if let Some(cid) = c.get("cardId").and_then(|x| x.as_u64()) {
                                             let qty = c.get("quantity").and_then(|q| q.as_u64()).unwrap_or(1);
@@ -168,7 +140,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                         }
                                     }
                                 }
-                                if let Some(cmd) = deck.get("CommandZone").and_then(|c| c.as_array()) {
+                                if let Some(cmd) = deck.get("CommandZone").or_else(|| deck.get("commandZone")).and_then(|c| c.as_array()) {
                                     if let Some(first) = cmd.first() {
                                         cmd_id = first.get("cardId").and_then(|c| c.as_u64()).map(|c| c as u32);
                                     }
@@ -260,8 +232,8 @@ pub fn parse_line(line: &str) -> ParsedEvent {
         }
     }
 
-    // 4. Game State & In-Game Prompt Messages
-    if line.contains("GREMessageType_GameStateMessage") || line.contains("GREMessageType_PromptReq") || line.contains("GREMessageType_MulliganReq") {
+    // Ingress and process real-time GameStateMessages (zone transitions, board states, turn changes)
+    if line.contains("GREMessageType_GameStateMessage") || line.contains("GREMessageType_PromptReq") {
         if let Some(start) = line.find('{') {
             let json_str = &line[start..];
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
@@ -270,11 +242,12 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     .and_then(|m| m.as_array());
 
                 if let Some(msgs) = messages {
-                    let mut batch: Vec<(u32, Option<u32>, Option<u32>, u32)> = Vec::new();
+                    let mut batch: Vec<(u32, Option<u32>, Option<u32>, u32, bool)> = Vec::new();
                     let mut last_turn: u32 = 0;
                     let mut life_by_seat: Vec<(u32, i32)> = Vec::new();
                     let mut last_active: u32 = 1;
                     let mut damage_events: Vec<(u32, u32, i32, u32)> = Vec::new();
+                    let mut draw_events: Vec<(u32, u32)> = Vec::new();
                     let mut diff_deleted_ids: Vec<u32> = Vec::new();
                     let mut mulligan_events: Vec<(u32, bool, Option<u32>)> = Vec::new();
                     let mut any_content = false;
@@ -287,20 +260,28 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                 if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
                                     for obj in objs {
                                         let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                                        // Only extract card objects (ignore raw abilities)
-                                        if obj_type.contains("Card") || obj_type.is_empty() {
-                                            if let (Some(inst_id), Some(zone_id)) = (
-                                                obj.get("instanceId").and_then(|i| i.as_u64()),
-                                                obj.get("zoneId").and_then(|z| z.as_u64())
-                                            ) {
-                                                let grp_id = obj.get("grpId")
+                                        let is_ability = obj_type.contains("Ability") || obj_type.contains("Trigger");
+                                        let is_card = !is_ability;
+
+                                        if let (Some(inst_id), Some(zone_id)) = (
+                                            obj.get("instanceId").and_then(|i| i.as_u64()),
+                                            obj.get("zoneId").and_then(|z| z.as_u64())
+                                        ) {
+                                            let grp_id = if is_ability {
+                                                obj.get("objectSourceGrpId")
+                                                    .or_else(|| obj.get("overlayGrpId"))
+                                                    .or_else(|| obj.get("grpId"))
+                                                    .and_then(|g| g.as_u64())
+                                                    .map(|g| g as u32)
+                                            } else {
+                                                obj.get("grpId")
                                                     .or_else(|| obj.get("overlayGrpId"))
                                                     .or_else(|| obj.get("objectSourceGrpId"))
                                                     .and_then(|g| g.as_u64())
-                                                    .map(|g| g as u32);
-                                                let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
-                                                batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32));
-                                            }
+                                                    .map(|g| g as u32)
+                                            };
+                                            let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
+                                            batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32, is_card));
                                         }
                                     }
                                 }
@@ -339,58 +320,88 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                     }
                                 }
 
-                                // Extract impactful-play annotations for damage attribution.
+                                // Extract annotations for damage attribution and extra card draw tracking.
                                 if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
                                     for a in anns {
                                         let ann_type = a.get("type").and_then(|t| t.as_array())
                                             .and_then(|arr| arr.first())
                                             .and_then(|t| t.as_str())
                                             .unwrap_or("");
-                                        if !ann_type.contains("DamageDealt") {
-                                            continue;
-                                        }
-                                        let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-                                        if affector_id == 0 {
-                                            continue;
-                                        }
-                                        let affected_ids: Vec<u32> = a.get("affectedIds")
-                                            .and_then(|arr| arr.as_array())
-                                            .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
-                                            .unwrap_or_default();
 
-                                        let mut amount = 0i32;
-                                        let mut dtype = 1u32; // Default to combat (1)
+                                        if ann_type.contains("DamageDealt") {
+                                            let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                            if affector_id == 0 {
+                                                continue;
+                                            }
+                                            let affected_ids: Vec<u32> = a.get("affectedIds")
+                                                .and_then(|arr| arr.as_array())
+                                                .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
+                                                .unwrap_or_default();
 
-                                        if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
-                                            for d in details {
-                                                let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
-                                                if key == "damage" {
-                                                    amount = d.get("valueInt32").and_then(|v| v.as_array())
-                                                        .and_then(|arr| arr.first())
-                                                        .and_then(|x| x.as_i64())
-                                                        .unwrap_or(0) as i32;
-                                                } else if key == "type" {
-                                                    dtype = d.get("valueInt32").and_then(|v| v.as_array())
-                                                        .and_then(|arr| arr.first())
-                                                        .and_then(|x| x.as_u64())
-                                                        .unwrap_or(1) as u32;
+                                            let mut amount = 0i32;
+                                            let mut dtype = 1u32; // Default to combat (1)
+
+                                            if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                                for d in details {
+                                                    let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                    if key == "damage" {
+                                                        amount = d.get("valueInt32").and_then(|v| v.as_array())
+                                                            .and_then(|arr| arr.first())
+                                                            .and_then(|x| x.as_i64())
+                                                            .unwrap_or(0) as i32;
+                                                    } else if key == "type" {
+                                                        dtype = d.get("valueInt32").and_then(|v| v.as_array())
+                                                            .and_then(|arr| arr.first())
+                                                            .and_then(|x| x.as_u64())
+                                                            .unwrap_or(1) as u32;
+                                                    }
                                                 }
                                             }
-                                        }
 
-                                        if amount != 0 {
-                                            if affected_ids.is_empty() {
-                                                damage_events.push((affector_id, 0, amount, dtype));
-                                            } else {
-                                                for target_id in affected_ids {
-                                                    damage_events.push((affector_id, target_id, amount, dtype));
+                                            if amount != 0 {
+                                                if affected_ids.is_empty() {
+                                                    damage_events.push((affector_id, 0, amount, dtype));
+                                                } else {
+                                                    for target_id in affected_ids {
+                                                        damage_events.push((affector_id, target_id, amount, dtype));
+                                                    }
+                                                }
+                                            }
+                                        } else if ann_type.contains("ZoneTransfer") {
+                                            let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                            if affector_id > 0 {
+                                                let affected_ids: Vec<u32> = a.get("affectedIds")
+                                                    .and_then(|arr| arr.as_array())
+                                                    .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
+                                                    .unwrap_or_default();
+
+                                                let mut is_draw = false;
+                                                if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                                    for d in details {
+                                                        let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                        if key == "category" {
+                                                            let cat_str = d.get("valueString").and_then(|v| v.as_array())
+                                                                .and_then(|arr| arr.first())
+                                                                .and_then(|s| s.as_str())
+                                                                .unwrap_or("");
+                                                            if cat_str.eq_ignore_ascii_case("Draw") {
+                                                                is_draw = true;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                if is_draw {
+                                                    let count = if affected_ids.is_empty() { 1 } else { affected_ids.len() as u32 };
+                                                    draw_events.push((affector_id, count));
                                                 }
                                             }
                                         }
                                     }
                                 }
 
-                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() || !diff_deleted_ids.is_empty() {
+                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() || !draw_events.is_empty() || !diff_deleted_ids.is_empty() {
                                     any_content = true;
                                 }
                                 let _ = msg_id;
@@ -431,6 +442,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                             life_by_seat,
                             active_seat: last_active,
                             damage_events,
+                            draw_events,
                             diff_deleted_ids,
                             mulligan_events,
                         };
@@ -573,8 +585,8 @@ mod tests {
             ParsedEvent::GameStateUpdateCombined { objects, turn_number, .. } => {
                 assert_eq!(objects.len(), 2, "should accumulate objects from both messages");
                 assert_eq!(turn_number, 3, "should use the turn from the latest message");
-                assert!(objects.iter().any(|(inst, _, _, _)| *inst == 200));
-                assert!(objects.iter().any(|(inst, _, _, _)| *inst == 100));
+                assert!(objects.iter().any(|(inst, _, _, _, _)| *inst == 200));
+                assert!(objects.iter().any(|(inst, _, _, _, _)| *inst == 100));
             }
             other => panic!("expected GameStateUpdateCombined, got {:?}", other),
         }
@@ -625,15 +637,21 @@ mod tests {
     }
 
     #[test]
-    fn test_headless_course_summary_parsing() {
-        let line = r#"{"CourseDeckSummary":{"DeckId":"d2","Name":"MonoWhite - Auras (Standard)"}}"#;
+    fn test_zone_transfer_draw_annotation_parsing() {
+        let line = r#"{"greToClientEvent":{"greToClientMessages":[
+            {"type":"GREMessageType_GameStateMessage","msgId":10,"gameStateMessage":{"type":"GameStateType_Diff","gameObjects":[{"instanceId":870,"grpId":90869,"type":"GameObjectType_Ability","zoneId":27,"ownerSeatId":1}],"annotations":[
+                {"id":489,"affectorId":870,"affectedIds":[874,875],"type":["AnnotationType_ZoneTransfer"],"details":[{"key":"zone_src","type":"KeyValuePairValueType_int32","valueInt32":[32]},{"key":"zone_dest","type":"KeyValuePairValueType_int32","valueInt32":[31]},{"key":"category","type":"KeyValuePairValueType_string","valueString":["Draw"]}]}
+            ]}}
+        ]}}"#;
+
         match parse_line(line) {
-            ParsedEvent::DeckSubmitted { deck_name, deck_id, total_cards, .. } => {
-                assert_eq!(deck_name, "MonoWhite - Auras (Standard)");
-                assert_eq!(deck_id.as_deref(), Some("d2"));
-                assert_eq!(total_cards, 0);
+            ParsedEvent::GameStateUpdateCombined { draw_events, objects, .. } => {
+                assert_eq!(objects.len(), 1);
+                assert_eq!(draw_events.len(), 1);
+                assert_eq!(draw_events[0].0, 870, "affectorId should match");
+                assert_eq!(draw_events[0].1, 2, "affectedIds count should match");
             }
-            other => panic!("expected DeckSubmitted, got {:?}", other),
+            other => panic!("expected GameStateUpdateCombined, got {:?}", other),
         }
     }
 }
