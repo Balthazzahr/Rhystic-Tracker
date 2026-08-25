@@ -314,6 +314,19 @@ impl DatabaseManager {
             }
         }
 
+        // Migration: Clean up invalid hero_commander_id on non-Brawl matches
+        let _ = sqlx::query(
+            r#"
+            UPDATE matches 
+            SET hero_commander_id = NULL 
+            WHERE hero_commander_id IS NOT NULL 
+              AND LOWER(format) NOT LIKE '%brawl%' 
+              AND LOWER(format) NOT LIKE '%commander%';
+            "#
+        )
+        .execute(&pool)
+        .await;
+
         // Migration: add icon_svg_uri column to sets_metadata for databases created
         // before the set-icon feature. CREATE TABLE IF NOT EXISTS won't add columns
         // to an existing table, so the Collection set filter would fail otherwise.

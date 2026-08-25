@@ -117,6 +117,8 @@ pub struct MatchAssembler {
     pub match_start_time: Option<chrono::DateTime<Utc>>,
     pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
     pub last_hero_damage_hit: Option<(u32, i32, i32)>, // (grp_id, amount, opp_life_before)
+    pub current_turn_hero_hits: Vec<(u32, i32, i32)>, // (grp_id, magnitude, opp_life_before) dealt to opponent in current turn
+    pub opp_life_before_combat: i32,
     pub processed_msg_ids: HashSet<u64>,
     pub last_completed: Option<(MatchRecord, chrono::DateTime<Utc>)>,
     pub is_live: bool,
@@ -156,6 +158,8 @@ impl MatchAssembler {
             match_start_time: None,
             impactful_cards: HashMap::new(),
             last_hero_damage_hit: None,
+            current_turn_hero_hits: Vec::new(),
+            opp_life_before_combat: 20,
             processed_msg_ids: HashSet::new(),
             last_completed: None,
             is_live: false,
@@ -187,10 +191,17 @@ impl MatchAssembler {
 
     pub fn start_match(&mut self, match_id: String, format_name: String) {
         let now = Utc::now();
-        let default_life = if format_name.to_lowercase().contains("brawl") { 25 } else { 20 };
+        let is_brawl = format_name.to_lowercase().contains("brawl") || format_name.to_lowercase().contains("commander");
+        if !is_brawl {
+            self.cached_commander_id = None;
+        }
+
+        let default_life = if is_brawl { 25 } else { 20 };
 
         self.current_player_life = default_life;
         self.current_opp_life = default_life;
+        self.opp_life_before_combat = default_life;
+        self.current_turn_hero_hits.clear();
         self.player_mulligans = 0;
         self.opponent_mulligans = 0;
         self.player_opening_hand.clear();
@@ -216,7 +227,7 @@ impl MatchAssembler {
 
         // Resolve deck name from cached deck or catalog lookup by cached_deck_id
         let mut deck_name = self.cached_deck_name.clone().unwrap_or_default();
-        let mut commander_id = self.cached_commander_id;
+        let mut commander_id = if is_brawl { self.cached_commander_id } else { None };
 
         if deck_name.is_empty() || deck_name == "Selected Deck" {
             if let Some(did) = &self.cached_deck_id {
@@ -225,7 +236,7 @@ impl MatchAssembler {
                         deck_name = name.clone();
                         self.cached_deck_name = Some(name.clone());
                     }
-                    if commander_id.is_none() && cmd.is_some() {
+                    if is_brawl && commander_id.is_none() && cmd.is_some() {
                         commander_id = *cmd;
                         self.cached_commander_id = *cmd;
                     }
@@ -244,50 +255,41 @@ impl MatchAssembler {
             timestamp: now,
             date_str: now.format("%Y-%m-%d %H:%M:%S").to_string(),
             format_name,
-            result: "unknown".to_string(),
-            duration_seconds: 0,
-            turns: 0,
-            going_first: true, // Will be resolved dynamically when turn 1 active seat is processed
-            hero_seat_id: self.player_seat_id,
             player_deck_name: deck_name,
             player_commander_id: commander_id,
             player_commander_name: None,
-            player_life_end: Some(default_life),
-            player_mulligans: Some(0),
             opponent_name: None,
             opponent_commander_id: None,
             opponent_commander_name: None,
-            opponent_mulligans: Some(0),
-            opponent_life_end: Some(default_life),
+            result: "in_progress".to_string(),
+            turns: 0,
+            player_life_end: None,
+            opponent_life_end: None,
+            going_first: false,
+            player_mulligans: None,
+            opponent_mulligans: None,
+            duration_seconds: 0,
             result_reason: None,
+            hero_seat_id: self.player_seat_id,
         });
     }
 
-    pub fn update_reserved_players(&mut self, reserved_players: &serde_json::Value) {
-        if let Some(players) = reserved_players.as_array() {
-            for p in players {
-                let pid = p.get("userId").and_then(|u| u.as_str()).unwrap_or("");
-                let system_seat = p.get("systemSeatId").and_then(|s| s.as_u64()).unwrap_or(0) as u32;
+    pub fn update_reserved_players(&mut self, players: &serde_json::Value) {
+        if let Some(arr) = players.as_array() {
+            for p in arr {
+                let uid = p.get("userId").and_then(|v| v.as_str()).unwrap_or("");
+                let name = p.get("playerName").and_then(|v| v.as_str()).unwrap_or("");
+                let team_id = p.get("teamId").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let seat_id = p.get("systemSeatId").and_then(|v| v.as_u64()).unwrap_or(team_id as u64) as u32;
 
-                let is_me = self.player_user_id.as_ref().map_or(false, |uid| uid == pid);
-
-                if is_me {
-                    if system_seat > 0 {
-                        self.player_seat_id = system_seat;
-                        if let Some(m) = &mut self.active_match {
-                            m.hero_seat_id = system_seat;
-                            if let Some(t1_seat) = self.turn_1_active_seat {
-                                m.going_first = t1_seat == system_seat;
-                            }
-                        }
+                if Some(uid) == self.player_user_id.as_deref() {
+                    self.player_seat_id = seat_id;
+                    if let Some(m) = &mut self.active_match {
+                        m.hero_seat_id = seat_id;
                     }
-                } else {
-                    if let Some(opp_name) = p.get("playerName").and_then(|n| n.as_str()) {
-                        if !opp_name.is_empty() {
-                            if let Some(m) = &mut self.active_match {
-                                m.opponent_name = Some(opp_name.to_string());
-                            }
-                        }
+                } else if !name.is_empty() {
+                    if let Some(m) = &mut self.active_match {
+                        m.opponent_name = Some(name.to_string());
                     }
                 }
             }
@@ -319,16 +321,12 @@ impl MatchAssembler {
                 self.known_decks.insert(did.clone(), (deck_name.clone(), commander_id, main_deck.clone()));
             }
         }
-        if commander_id.is_some() {
-            self.cached_commander_id = commander_id;
-        }
+        self.cached_commander_id = commander_id;
         if let Some(m) = &mut self.active_match {
             if !deck_name.is_empty() {
                 m.player_deck_name = deck_name;
             }
-            if commander_id.is_some() {
-                m.player_commander_id = commander_id;
-            }
+            m.player_commander_id = commander_id;
         }
         for grp_id in main_deck {
             *self.player_cards_seen.entry(grp_id).or_insert(0) += 1;
@@ -617,6 +615,7 @@ impl MatchAssembler {
         // Track hero damage hits against opponent for lethal Executioner/Over-Killer
         let opp_seat = if self.player_seat_id == 1 { 2 } else { 1 };
         if seat_id == self.player_seat_id && target_instance_id == opp_seat {
+            self.current_turn_hero_hits.push((grp_id, magnitude, self.current_opp_life));
             self.last_hero_damage_hit = Some((grp_id, magnitude, self.current_opp_life));
         }
 
@@ -690,6 +689,10 @@ impl MatchAssembler {
         }
 
         if turn > 0 {
+            if turn > self.current_turn {
+                self.current_turn_hero_hits.clear();
+                self.opp_life_before_combat = self.current_opp_life;
+            }
             self.finalize_opening_hand();
             self.current_turn = turn;
         }
@@ -779,35 +782,67 @@ impl MatchAssembler {
                 });
             }
 
-            // Evaluate Closer achievements with single-match magnitude tiering
+            // Evaluate Closer achievements with individual damage magnitude tiering
             if is_win {
                 if self.current_opp_life <= 0 {
-                    if let Some((grp, amt, life_before)) = self.last_hero_damage_hit {
-                        let entry = self.impactful_cards.entry(grp).or_default();
-                        if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
-                        let exec_tier = if life_before >= 15 {
-                            "Gold"
-                        } else if life_before >= 8 {
-                            "Silver"
-                        } else {
-                            "Bronze"
-                        };
-                        let exec_title = format!("Executioner ({})", exec_tier);
-                        if !entry.titles.iter().any(|t| t.starts_with("Executioner")) {
-                            entry.titles.push(exec_title);
+                    let mut lethal_hits = self.current_turn_hero_hits.clone();
+                    if lethal_hits.is_empty() {
+                        if let Some((grp, amt, life_before)) = self.last_hero_damage_hit {
+                            lethal_hits.push((grp, amt, life_before));
                         }
+                    }
 
-                        let overkill = amt - life_before;
-                        if overkill >= 5 {
-                            let ok_tier = if overkill >= 20 {
+                    for (grp, amt, _) in &lethal_hits {
+                        let entry = self.impactful_cards.entry(*grp).or_default();
+                        if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                        let exec_tier = if *amt >= 15 {
+                            "Gold"
+                        } else if *amt >= 8 {
+                            "Silver"
+                        } else if *amt >= 1 {
+                            "Bronze"
+                        } else {
+                            ""
+                        };
+                        if !exec_tier.is_empty() {
+                            let exec_title = format!("Executioner ({})", exec_tier);
+                            // Avoid overwriting a higher tier if already present
+                            let already_has_higher = entry.titles.iter().any(|t| {
+                                if !t.starts_with("Executioner") { return false; }
+                                if exec_tier == "Bronze" { return t.contains("Silver") || t.contains("Gold"); }
+                                if exec_tier == "Silver" { return t.contains("Gold"); }
+                                false
+                            });
+                            if !already_has_higher {
+                                entry.titles.retain(|t| !t.starts_with("Executioner"));
+                                entry.titles.push(exec_title);
+                            }
+                        }
+                    }
+
+                    // Overkill calculation: individual creature must single-handedly account for the excess overkill threshold beyond pre-combat life
+                    for (grp, amt, life_before) in &lethal_hits {
+                        let pre_life = (*life_before).max(0);
+                        let ind_overkill = *amt - pre_life;
+                        if ind_overkill >= 7 {
+                            let ok_tier = if ind_overkill >= 15 {
                                 "Gold"
-                            } else if overkill >= 10 {
+                            } else if ind_overkill >= 10 {
                                 "Silver"
                             } else {
                                 "Bronze"
                             };
                             let ok_title = format!("Over-Killer ({})", ok_tier);
-                            if !entry.titles.iter().any(|t| t.starts_with("Over-Killer")) {
+                            let entry = self.impactful_cards.entry(*grp).or_default();
+                            if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                            let already_has_higher = entry.titles.iter().any(|t| {
+                                if !t.starts_with("Over-Killer") { return false; }
+                                if ok_tier == "Bronze" { return t.contains("Silver") || t.contains("Gold"); }
+                                if ok_tier == "Silver" { return t.contains("Gold"); }
+                                false
+                            });
+                            if !already_has_higher {
+                                entry.titles.retain(|t| !t.starts_with("Over-Killer"));
                                 entry.titles.push(ok_title);
                             }
                         }
@@ -1209,5 +1244,92 @@ mod tests {
         let play_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "play").collect();
 
         assert_eq!(play_events.len(), 0, "Abilities must not generate 'play' turn events");
+    }
+
+    #[test]
+    fn test_non_brawl_deck_clears_commander_id() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+
+        // Match 1: Brawl deck with Commander (grp 91719)
+        assembler.set_deck("Hobbits Brawl".to_string(), Some("deck-brawl".to_string()), Some(91719), vec![101, 102]);
+        assembler.start_match("m1".to_string(), "Brawl".to_string());
+        let (m1, _, _, _) = assembler.complete_match(1, "Loss_Life").expect("m1 complete");
+        assert_eq!(m1.player_commander_id, Some(91719), "Brawl match should have commander");
+
+        // Match 2: Standard deck without Commander
+        assembler.set_deck("Aura Farming (STD)".to_string(), Some("deck-std".to_string()), None, vec![201, 202]);
+        assembler.start_match("m2".to_string(), "Standard".to_string());
+        let (m2, _, _, _) = assembler.complete_match(1, "Loss_Life").expect("m2 complete");
+        assert_eq!(m2.player_commander_id, None, "Standard match must NOT inherit commander from previous Brawl match");
+    }
+
+    #[test]
+    fn test_executioner_multi_attacker_individual_thresholds() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("m-exec-multi".to_string(), "Standard".to_string());
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 5, &[(1, 20), (2, 17)], 1);
+
+        // Instance 10 = Optimistic Scavenger (Grp 501, 9 DMG)
+        // Instance 11 = Spellbook Vendor (Grp 502, 8 DMG)
+        assembler.process_game_object(10, Some(501), Some(1), 28, true);
+        assembler.process_game_object(11, Some(502), Some(1), 28, true);
+
+        // Both swing in for 9 DMG and 8 DMG (total 17 DMG vs 17 Life)
+        assembler.process_damage_event(10, 2, 9, 1);
+        assembler.process_damage_event(11, 2, 8, 1);
+        assembler.update_game_state(Some(2), 5, &[(1, 20), (2, 0)], 1);
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match complete");
+
+        let imp_scavenger = impactful.iter().find(|i| i.grp_id == 501).expect("scavenger exists");
+        let imp_vendor = impactful.iter().find(|i| i.grp_id == 502).expect("vendor exists");
+
+        // Both individually dealt 8-14 damage, so both should be Silver Executioner (NOT Gold)
+        assert!(imp_scavenger.titles.iter().any(|t| t == "Executioner (Silver)"), "Scavenger dealt 9 DMG -> Executioner (Silver)");
+        assert!(imp_vendor.titles.iter().any(|t| t == "Executioner (Silver)"), "Spellbook Vendor dealt 8 DMG -> Executioner (Silver)");
+        assert!(!imp_vendor.titles.iter().any(|t| t.contains("Gold")), "Spellbook Vendor must NOT receive Gold Executioner");
+    }
+
+    #[test]
+    fn test_overkiller_individual_thresholds() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("m-overkiller".to_string(), "Standard".to_string());
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Opponent at 2 life before combat
+        assembler.update_game_state(Some(1), 6, &[(1, 20), (2, 2)], 1);
+
+        // Instance 20 = Big Creature (Grp 601, 18 DMG -> 18 - 2 = 16 excess -> Gold Over-Killer)
+        // Instance 21 = Med Creature (Grp 602, 9 DMG -> 9 - 2 = 7 excess -> Bronze Over-Killer)
+        // Instance 22 = Small Chump (Grp 603, 3 DMG -> 3 - 2 = 1 excess -> No Over-Killer)
+        assembler.process_game_object(20, Some(601), Some(1), 28, true);
+        assembler.process_game_object(21, Some(602), Some(1), 28, true);
+        assembler.process_game_object(22, Some(603), Some(1), 28, true);
+
+        assembler.process_damage_event(20, 2, 18, 1);
+        assembler.process_damage_event(21, 2, 9, 1);
+        assembler.process_damage_event(22, 2, 3, 1);
+        assembler.update_game_state(Some(2), 6, &[(1, 20), (2, -28)], 1);
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match complete");
+
+        let imp_big = impactful.iter().find(|i| i.grp_id == 601).expect("big exists");
+        let imp_med = impactful.iter().find(|i| i.grp_id == 602).expect("med exists");
+        let imp_small = impactful.iter().find(|i| i.grp_id == 603).expect("small exists");
+
+        assert!(imp_big.titles.iter().any(|t| t == "Over-Killer (Gold)"), "Big creature 18-2=16 excess -> Over-Killer (Gold)");
+        assert!(imp_med.titles.iter().any(|t| t == "Over-Killer (Bronze)"), "Med creature 9-2=7 excess -> Over-Killer (Bronze)");
+        assert!(!imp_small.titles.iter().any(|t| t.starts_with("Over-Killer")), "Small creature 3-2=1 excess must NOT receive Over-Killer");
     }
 }

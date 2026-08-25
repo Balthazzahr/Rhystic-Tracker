@@ -866,26 +866,88 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         obj["losses"] = serde_json::json!(l);
     }
 
-    // Dominant commander (top by count, printings merged), with a grp_id for art.
-    let commander_row = sqlx::query(
-        r#"
-        SELECT commander_name, grp_id FROM (
-            SELECT c.name as commander_name, MIN(m.hero_commander_id) as grp_id, COUNT(*) as n,
-                   ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, c.name ASC) as rn
-            FROM matches m
-            JOIN cards_cache c ON m.hero_commander_id = c.grp_id
-            WHERE m.hero_deck_name = ?
-              AND m.hero_commander_id IS NOT NULL
-            GROUP BY c.name
-        ) WHERE rn = 1
-        "#
+    // Dominant commander (from deck_lists if defined, or from Brawl matches), with a grp_id for art.
+    let deck_list_cmd = sqlx::query(
+        "SELECT commander_grp_id FROM deck_lists WHERE deck_name = ?"
     )
     .bind(&deck_name)
     .fetch_optional(db.pool())
     .await
     .map_err(|e| e.to_string())?;
-    let commander_name: Option<String> = commander_row.as_ref().map(|r| r.get("commander_name"));
-    let commander_grp_id: Option<i64> = commander_row.as_ref().map(|r| r.get("grp_id"));
+
+    let (commander_name, commander_grp_id) = if let Some(dl_row) = deck_list_cmd {
+        let cmd_grp: Option<i64> = dl_row.get("commander_grp_id");
+        if let Some(cgid) = cmd_grp {
+            if cgid > 0 {
+                let name_row = sqlx::query_scalar::<_, String>(
+                    "SELECT name FROM cards_cache WHERE grp_id = ?"
+                )
+                .bind(cgid)
+                .fetch_optional(db.pool())
+                .await
+                .map_err(|e| e.to_string())?;
+                (name_row, Some(cgid))
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        }
+    } else {
+        // Fallback: check matches ONLY if played in a Brawl/Commander format
+        let has_brawl = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM matches WHERE hero_deck_name = ? AND (LOWER(format) LIKE '%brawl%' OR LOWER(format) LIKE '%commander%')"
+        )
+        .bind(&deck_name)
+        .fetch_one(db.pool())
+        .await
+        .map_err(|e| e.to_string())? > 0;
+
+        if has_brawl {
+            let commander_row = sqlx::query(
+                r#"
+                SELECT commander_name, grp_id FROM (
+                    SELECT c.name as commander_name, MIN(m.hero_commander_id) as grp_id, COUNT(*) as n,
+                           ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, c.name ASC) as rn
+                    FROM matches m
+                    JOIN cards_cache c ON m.hero_commander_id = c.grp_id
+                    WHERE m.hero_deck_name = ?
+                      AND m.hero_commander_id IS NOT NULL
+                      AND (LOWER(m.format) LIKE '%brawl%' OR LOWER(m.format) LIKE '%commander%')
+                    GROUP BY c.name
+                ) WHERE rn = 1
+                "#
+            )
+            .bind(&deck_name)
+            .fetch_optional(db.pool())
+            .await
+            .map_err(|e| e.to_string())?;
+            let cname: Option<String> = commander_row.as_ref().map(|r| r.get("commander_name"));
+            let cgrp: Option<i64> = commander_row.as_ref().map(|r| r.get("grp_id"));
+            (cname, cgrp)
+        } else {
+            (None, None)
+        }
+    };
+
+    // Distinct formats played by this deck (ordered by frequency)
+    let format_rows = sqlx::query(
+        r#"
+        SELECT format, COUNT(*) as n
+        FROM matches
+        WHERE hero_deck_name = ? AND format IS NOT NULL AND format != ''
+        GROUP BY format
+        ORDER BY n DESC
+        "#
+    )
+    .bind(&deck_name)
+    .fetch_all(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let formats: Vec<String> = format_rows.into_iter()
+        .filter_map(|r| r.get::<Option<String>, _>("format"))
+        .collect();
 
     // Deck colors using the 20% relative-frequency threshold (same as overview).
     let deck_total: i64 = total;
@@ -979,78 +1041,57 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         let grp_ids: Vec<i64> = entries.iter()
             .filter_map(|e| e.get("grp_id").and_then(|v| v.as_i64()))
             .collect();
-
         if grp_ids.is_empty() {
             Vec::new()
         } else {
-            // Query card metadata for the stored grp_ids (deck composition).
             let placeholders = grp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            let q = format!(
-                r#"
-                SELECT c.card_type, c.mana_cost, c.color_identity, c.colors
-                FROM cards_cache c
-                WHERE c.grp_id IN ({})
-                "#
-            , placeholders);
-            let mut q = sqlx::query(&q);
-            for id in &grp_ids {
-                q = q.bind(*id);
-            }
-            q.fetch_all(db.pool()).await.map_err(|e| e.to_string())?
+            let sql = format!(
+                "SELECT grp_id, cmc, card_type, mana_cost, color_identity, colors \
+                 FROM cards_cache WHERE grp_id IN ({})",
+                placeholders
+            );
+            let mut q = sqlx::query(&sql);
+            for g in grp_ids { q = q.bind(g); }
+            q.fetch_all(db.pool()).await.unwrap_or_default()
         }
     } else {
         sqlx::query(
             r#"
-            SELECT c.card_type, c.mana_cost, c.color_identity, c.colors
-            FROM match_cards mc
-            JOIN matches m ON mc.match_id = m.id
-            JOIN cards_cache c ON mc.grp_id = c.grp_id
-            WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
-            GROUP BY c.grp_id
+            SELECT c.grp_id, c.cmc, c.card_type, c.mana_cost, c.color_identity, c.colors
+            FROM cards_cache c
+            JOIN (
+                SELECT DISTINCT mc.grp_id
+                FROM match_cards mc
+                JOIN matches m ON mc.match_id = m.id
+                WHERE m.hero_deck_name = ? AND mc.is_opponent = 0
+            ) mc ON c.grp_id = mc.grp_id
             "#
         )
         .bind(&deck_name)
         .fetch_all(db.pool())
         .await
-        .map_err(|e| e.to_string())?
+        .unwrap_or_default()
     };
 
-    // For Brawl decks, the mana-color distribution must stay within the
-    // commander's color identity (cards outside it are legacy leaks). Detect
+    // In Brawl/Commander decks, cards outside the commander's color identity are illegal.
+    // However, some cards like Evolving Wilds have colorless identity `[]` but contain
+    // mana symbols in oracle text, which isn't the card's color. Filter by
     // the format + dominant commander identity so off-identity cards are
     // excluded from the color counts.
-    let format_row = sqlx::query(
-        "SELECT format FROM matches WHERE hero_deck_name = ? LIMIT 1"
-    )
-    .bind(&deck_name)
-    .fetch_optional(db.pool())
-    .await
-    .map_err(|e| e.to_string())?;
-    let is_brawl = format_row.as_ref()
-        .and_then(|r| r.get::<Option<String>,_>("format"))
-        .map(|f| f.eq_ignore_ascii_case("brawl"))
-        .unwrap_or(false);
+    let is_brawl = formats.iter().any(|f| f.to_lowercase().contains("brawl") || f.to_lowercase().contains("commander"));
 
     let mut commander_identity: Vec<String> = Vec::new();
     if is_brawl {
-        let cmd_row = sqlx::query(
-            r#"
-            SELECT c.color_identity FROM (
-                SELECT m.hero_commander_id, COUNT(*) as n
-                FROM matches m
-                WHERE m.hero_deck_name = ? AND m.hero_commander_id IS NOT NULL
-                GROUP BY m.hero_commander_id
-                ORDER BY n DESC LIMIT 1
-            ) top
-            JOIN cards_cache c ON top.hero_commander_id = c.grp_id
-            "#
-        )
-        .bind(&deck_name)
-        .fetch_optional(db.pool())
-        .await
-        .map_err(|e| e.to_string())?;
-        if let Some(r) = cmd_row {
-            if let Some(ci) = r.get::<Option<String>,_>("color_identity") {
+        if let Some(cgid) = commander_grp_id {
+            let cmd_ci = sqlx::query_scalar::<_, Option<String>>(
+                "SELECT color_identity FROM cards_cache WHERE grp_id = ?"
+            )
+            .bind(cgid)
+            .fetch_optional(db.pool())
+            .await
+            .map_err(|e| e.to_string())?
+            .flatten();
+            if let Some(ci) = cmd_ci {
                 commander_identity = parse_identity(ci);
             }
         }
@@ -1281,6 +1322,7 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         "draw": draw,
         "commander_name": commander_name,
         "commander_grp_id": commander_grp_id,
+        "formats": formats,
         "colors": colors_arr,
         "recent_matches": recent,
         "mana_curve": curve,

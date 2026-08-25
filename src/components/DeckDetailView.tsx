@@ -326,19 +326,39 @@ export function DeckDetailView({
                   (capped at 60% width) and the commander name wraps too, so the
                   mana pips are never pushed off-screen. */}
               <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2 min-w-0 max-w-[60%]">
-                  <h2 className="text-5xl font-black font-outfit uppercase tracking-wide break-words leading-tight min-w-0" style={{ color: palette?.text }}>
-                    {detail.deck_name}
-                  </h2>
-                  {/* Delete deck — shows on hover, red trash icon */}
-                  <button
-                    onClick={() => onDeleteDeck(detail.deck_name)}
-                    className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20 shrink-0"
-                    style={{ color: '#F87171' }}
-                    title="Delete deck"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                <div className="flex flex-col min-w-0 max-w-[60%]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="text-5xl font-black font-outfit uppercase tracking-wide break-words leading-tight min-w-0" style={{ color: palette?.text }}>
+                      {detail.deck_name}
+                    </h2>
+                    {/* Delete deck — shows on hover, red trash icon */}
+                    <button
+                      onClick={() => onDeleteDeck(detail.deck_name)}
+                      className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20 shrink-0"
+                      style={{ color: '#F87171' }}
+                      title="Delete deck"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Formats row directly underneath deck name */}
+                  {detail.formats && detail.formats.length > 0 && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {detail.formats.map((fmt: string, idx: number) => (
+                        <span
+                          key={fmt}
+                          className={`text-[11px] font-mono font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-md border ${
+                            idx === 0
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm'
+                              : 'bg-white/5 text-slate-300 border-white/10'
+                          }`}
+                        >
+                          {fmt}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Commander: clickable name opens the card viewer */}
