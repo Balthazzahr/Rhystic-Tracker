@@ -21,6 +21,11 @@
       <stop offset="60%" stop-color="#0F172A" />
       <stop offset="100%" stop-color="#020617" />
     </radialGradient>
+    <linearGradient id="graveStoneSilver" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0" />
+      <stop offset="50%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#475569" />
+    </linearGradient>
     <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5" />
     </filter>
@@ -37,19 +42,40 @@
   <path d="M60 16 L89 28 C93 48 90 72 60 98 C30 72 27 48 31 28 Z" fill="url(#silverField)" />
   <circle cx="60" cy="13" r="2" fill="#FFFFFF" stroke="#475569" stroke-width="0.6" />
 
-      <!-- Round Bomb with Lit Fuse & White Skull (Centered) -->
-      <g transform="translate(60, 52)">
-        <path d="M0 -14 C4 -20 12 -22 13 -26" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" />
-        <polygon points="13,-29 14.5,-26 17,-26 15,-24.5 16.5,-22 13,-24 9.5,-22 11,-24.5 9,-26 11.5,-26" fill="#FDE047" />
-        <rect x="-4" y="-16" width="8" height="4" rx="1" fill="#94A3B8" stroke="#FFFFFF" stroke-width="0.6" />
-        <circle cx="0" cy="0" r="15" fill="#0F172A" stroke="#FFFFFF" stroke-width="1.2" />
-        <ellipse cx="-4" cy="-5" rx="4" ry="2.5" fill="#FFFFFF" opacity="0.35" transform="rotate(-30 -4 -5)" />
-        <circle cx="0" cy="-2" r="5" fill="#FFFFFF" />
-        <rect x="-2.5" y="1.5" width="5" height="3" fill="#FFFFFF" rx="0.5" />
-        <circle cx="-1.8" cy="-2.5" r="1.2" fill="#0F172A" />
-        <circle cx="1.8" cy="-2.5" r="1.2" fill="#0F172A" />
-        <line x1="-1.5" y1="4" x2="-1.5" y2="2.5" stroke="#0F172A" stroke-width="0.6" />
-        <line x1="0" y1="4" x2="0" y2="2.5" stroke="#0F172A" stroke-width="0.6" />
-        <line x1="1.5" y1="4" x2="1.5" y2="2.5" stroke="#0F172A" stroke-width="0.6" />
-      </g>
+  <!-- Tombstone with XXXX, Dirt Mound & Grass -->
+  <g transform="translate(60, 57)">
+    <!-- Dirt mound base -->
+    <ellipse cx="0" cy="14" rx="20" ry="5.5" fill="#0F172A" opacity="0.9" />
+    <ellipse cx="0" cy="13" rx="17" ry="4" fill="#1E293B" />
+    
+    <!-- Tombstone Shadow -->
+    <path d="M -13 11 L -13 -8 C -13 -21, 15 -21, 15 -8 L 15 11 Z" fill="#020617" opacity="0.7" />
+
+    <!-- Tombstone Body -->
+    <path d="M -13 10 L -13 -9 C -13 -22, 13 -22, 13 -9 L 13 10 Z" fill="url(#graveStoneSilver)" stroke="#FFFFFF" stroke-width="0.8" />
+    
+    <!-- Stone Bevel Highlight -->
+    <path d="M -11 9 L -11 -9 C -11 -19, 11 -19, 11 -9 L 11 9" fill="none" stroke="#FFFFFF" stroke-width="0.6" opacity="0.5" />
+    
+    <!-- Stone Crack -->
+    <path d="M 5 -17 L 2 -12 L 6 -8" stroke="#1E293B" stroke-width="0.8" fill="none" stroke-linecap="round" opacity="0.7" />
+
+    <!-- Engraved XXXX Text -->
+    <text x="0" y="-2.5" font-family="monospace" font-weight="900" font-size="7.5" fill="#0F172A" text-anchor="middle" letter-spacing="1.2">XXXX</text>
+    <text x="0" y="-2" font-family="monospace" font-weight="900" font-size="7.5" fill="#FFFFFF" text-anchor="middle" letter-spacing="1.2" opacity="0.4">XXXX</text>
+
+    <!-- Dirt overlay around base -->
+    <path d="M -15 13 Q 0 8 15 13 Q 0 16 -15 13 Z" fill="#334155" />
+    <circle cx="-6" cy="12" r="1.2" fill="#475569" />
+    <circle cx="5" cy="13" r="1" fill="#475569" />
+    <circle cx="10" cy="12.5" r="0.8" fill="#475569" />
+
+    <!-- Grass Tufts -->
+    <!-- Left tuft -->
+    <path d="M -14 12 C -17 8 -18 4 -19 1 C -17 5 -15 9 -13 12 Z" fill="#10B981" />
+    <path d="M -12 13 C -14 8 -13 4 -12 2 C -12 7 -11 10 -10 13 Z" fill="#34D399" />
+    <!-- Right tuft -->
+    <path d="M 12 12 C 14 8 17 5 18 2 C 16 7 14 10 11 13 Z" fill="#10B981" />
+    <path d="M 10 13 C 11 9 13 5 14 3 C 12 8 11 10 9 13 Z" fill="#34D399" />
+  </g>
 </svg>

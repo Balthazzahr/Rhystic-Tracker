@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Trophy, X, Award } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
+import { CardImage } from './CardImage';
 import { getAchievementMeta } from '../utils/achievementBadges';
 
 interface DeckAchievementsModalProps {
@@ -10,7 +11,7 @@ interface DeckAchievementsModalProps {
   groupedAchievements?: Array<{
     achievement: string;
     total_awards: number;
-    cards: Array<{ grp_id: number; card_name: string; count: number }>;
+    cards: Array<{ grp_id: number; card_name: string; count: number; tier?: string }>;
   }>;
   palette: any;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
@@ -135,17 +136,24 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
                     </div>
 
                     {/* Right: Grid of cards that earned this achievement */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 w-full min-w-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 flex-1 w-full min-w-0">
                       {group.cards.map((card: any) => (
                         <button
                           key={`${card.grp_id}-${card.card_name}`}
                           onClick={() => onShowCard && onShowCard({ name: card.card_name, grp_id: card.grp_id }, false)}
-                          className="flex items-center justify-between p-2.5 rounded-xl border bg-black/20 hover:bg-white/5 transition-all text-left group"
+                          className="flex items-center gap-3 p-2 rounded-xl border bg-black/25 hover:bg-white/5 transition-all text-left group overflow-hidden"
                           style={{ borderColor: `${palette?.border}66` }}
                           title="Click to view card details"
                         >
+                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-slate-900">
+                            <CardImage
+                              name={card.card_name}
+                              version="art_crop"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
                           <span
-                            className="font-bold text-xs truncate mr-2 transition-colors group-hover:underline"
+                            className="font-bold text-xs truncate flex-1 min-w-0 transition-colors group-hover:underline"
                             style={{ color: palette?.text }}
                           >
                             {card.card_name}
