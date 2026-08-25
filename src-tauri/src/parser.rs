@@ -493,31 +493,41 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         "Gladiator".to_string()
     } else if s.contains("brawl") || s.contains("commander") {
         if s.contains("standard") {
-            "Standard Brawl".to_string()
+            "Brawl - Standard".to_string()
+        } else if s.contains("ranked") || s.contains("competitive") || s.contains("ladder") {
+            "Brawl - Competitive".to_string()
         } else {
             "Brawl".to_string()
         }
+    } else if s.contains("competitive_brawl") || s.contains("competitivebrawl") {
+        "Brawl - Competitive".to_string()
     } else if s.contains("timeless") {
-        if s.contains("ranked") {
-            "Timeless (Ranked)".to_string()
+        if s.contains("ranked") || s.contains("ladder") {
+            "Timeless Ranked".to_string()
         } else {
             "Timeless".to_string()
         }
     } else if s.contains("historic") {
-        if s.contains("ranked") {
-            "Historic (Ranked)".to_string()
+        if s.contains("ranked") || s.contains("ladder") {
+            "Historic Ranked".to_string()
         } else {
             "Historic".to_string()
         }
     } else if s.contains("alchemy") {
-        if s.contains("ranked") {
-            "Alchemy (Ranked)".to_string()
+        if s.contains("ranked") || s.contains("ladder") {
+            "Alchemy Ranked".to_string()
         } else {
             "Alchemy".to_string()
         }
-    } else if s.contains("explorer") || s.contains("pioneer") {
-        if s.contains("ranked") {
-            "Explorer (Ranked)".to_string()
+    } else if s.contains("pioneer") {
+        if s.contains("ranked") || s.contains("ladder") {
+            "Pioneer Ranked".to_string()
+        } else {
+            "Pioneer".to_string()
+        }
+    } else if s.contains("explorer") {
+        if s.contains("ranked") || s.contains("ladder") {
+            "Explorer Ranked".to_string()
         } else {
             "Explorer".to_string()
         }
@@ -527,9 +537,9 @@ pub fn normalize_format(raw_event_id: &str) -> String {
         "Sealed".to_string()
     } else if s.contains("limited") {
         "Limited".to_string()
-    } else if s == "play" || s.contains("standard") {
-        if s.contains("ranked") {
-            "Standard (Ranked)".to_string()
+    } else if s == "play" || s.contains("standard") || s.contains("ladder") || s.contains("ranked") {
+        if s.contains("ranked") || s.contains("ladder") {
+            "Standard Ranked".to_string()
         } else {
             "Standard".to_string()
         }
@@ -544,18 +554,44 @@ mod tests {
 
     #[test]
     fn test_format_normalization() {
+        // Standard & Ranked Standard (including generic Ladder)
         assert_eq!(normalize_format("Play"), "Standard");
-        assert_eq!(normalize_format("Standard_Ranked"), "Standard (Ranked)");
-        assert_eq!(normalize_format("Historic_Play"), "Historic");
-        assert_eq!(normalize_format("Historic_Ranked"), "Historic (Ranked)");
-        assert_eq!(normalize_format("Timeless_Play"), "Timeless");
-        assert_eq!(normalize_format("Timeless_Ranked"), "Timeless (Ranked)");
-        assert_eq!(normalize_format("Alchemy_Play"), "Alchemy");
-        assert_eq!(normalize_format("Explorer_Ranked"), "Explorer (Ranked)");
+        assert_eq!(normalize_format("Standard_Play"), "Standard");
+        assert_eq!(normalize_format("Ladder"), "Standard Ranked");
+        assert_eq!(normalize_format("Traditional_Ladder"), "Standard Ranked");
+        assert_eq!(normalize_format("Standard_Ranked"), "Standard Ranked");
+        assert_eq!(normalize_format("Standard_Ladder"), "Standard Ranked");
 
-        // Brawl vs Standard Brawl Distinction Tests
+        // Historic
+        assert_eq!(normalize_format("Historic_Play"), "Historic");
+        assert_eq!(normalize_format("Historic_Ranked"), "Historic Ranked");
+        assert_eq!(normalize_format("Historic_Ladder"), "Historic Ranked");
+        assert_eq!(normalize_format("Traditional_Historic_Ladder"), "Historic Ranked");
+
+        // Timeless
+        assert_eq!(normalize_format("Timeless_Play"), "Timeless");
+        assert_eq!(normalize_format("Timeless_Ranked"), "Timeless Ranked");
+        assert_eq!(normalize_format("Timeless_Ladder"), "Timeless Ranked");
+
+        // Alchemy
+        assert_eq!(normalize_format("Alchemy_Play"), "Alchemy");
+        assert_eq!(normalize_format("Alchemy_Ranked"), "Alchemy Ranked");
+        assert_eq!(normalize_format("Alchemy_Ladder"), "Alchemy Ranked");
+
+        // Explorer & Pioneer
+        assert_eq!(normalize_format("Explorer_Play"), "Explorer");
+        assert_eq!(normalize_format("Explorer_Ranked"), "Explorer Ranked");
+        assert_eq!(normalize_format("Explorer_Ladder"), "Explorer Ranked");
+        assert_eq!(normalize_format("Pioneer_Play"), "Pioneer");
+        assert_eq!(normalize_format("Pioneer_Ranked"), "Pioneer Ranked");
+        assert_eq!(normalize_format("Pioneer_Ladder"), "Pioneer Ranked");
+
+        // Brawl variants
         assert_eq!(normalize_format("Brawl_Play"), "Brawl");
-        assert_eq!(normalize_format("Standard_Brawl_Play"), "Standard Brawl");
+        assert_eq!(normalize_format("Standard_Brawl_Play"), "Brawl - Standard");
+        assert_eq!(normalize_format("Competitive_Brawl"), "Brawl - Competitive");
+        assert_eq!(normalize_format("Brawl_Ranked"), "Brawl - Competitive");
+        assert_eq!(normalize_format("Brawl_Ladder"), "Brawl - Competitive");
 
         // Midweek Magic Tests (regardless of underlying format e.g. Historic Pauper, Brawl, Standard)
         assert_eq!(normalize_format("MWM_HistoricPauper_20260818"), "Midweek Magic");

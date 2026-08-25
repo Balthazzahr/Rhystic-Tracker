@@ -327,6 +327,22 @@ impl DatabaseManager {
         .execute(&pool)
         .await;
 
+        // Migration: Reconcile historical ranked / ladder format names to clean format titles
+        let _ = sqlx::query(
+            r#"
+            UPDATE matches SET format = 'Standard Ranked' WHERE format IN ('Ladder', 'Traditional Ladder', 'Standard (Ranked)', 'Standard_Ladder', 'Ladder_Play');
+            UPDATE matches SET format = 'Historic Ranked' WHERE format IN ('Historic (Ranked)', 'Historic_Ladder');
+            UPDATE matches SET format = 'Alchemy Ranked' WHERE format IN ('Alchemy (Ranked)', 'Alchemy_Ladder');
+            UPDATE matches SET format = 'Timeless Ranked' WHERE format IN ('Timeless (Ranked)', 'Timeless_Ladder');
+            UPDATE matches SET format = 'Explorer Ranked' WHERE format IN ('Explorer (Ranked)', 'Explorer_Ladder');
+            UPDATE matches SET format = 'Pioneer Ranked' WHERE format IN ('Pioneer (Ranked)', 'Pioneer_Ladder');
+            UPDATE matches SET format = 'Brawl - Standard' WHERE format IN ('Standard Brawl', 'Standard_Brawl', 'Brawl_Standard');
+            UPDATE matches SET format = 'Brawl - Competitive' WHERE format IN ('Competitive Brawl', 'Competitive_Brawl', 'Brawl (Ranked)', 'Brawl Ranked', 'Brawl_Ladder');
+            "#
+        )
+        .execute(&pool)
+        .await;
+
         // Migration: add icon_svg_uri column to sets_metadata for databases created
         // before the set-icon feature. CREATE TABLE IF NOT EXISTS won't add columns
         // to an existing table, so the Collection set filter would fail otherwise.

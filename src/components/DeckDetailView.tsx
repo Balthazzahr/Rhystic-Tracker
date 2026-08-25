@@ -342,10 +342,10 @@ export function DeckDetailView({
                     </button>
                   </div>
 
-                  {/* Formats row directly underneath deck name */}
-                  {detail.formats && detail.formats.length > 0 && (
+                  {/* Formats row directly underneath deck name (excluding Bot Match) */}
+                  {detail.formats && detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).length > 0 && (
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {detail.formats.map((fmt: string, idx: number) => (
+                      {detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).map((fmt: string, idx: number) => (
                         <span
                           key={fmt}
                           className={`text-[11px] font-mono font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-md border ${

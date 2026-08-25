@@ -124,9 +124,11 @@ const dayLabel = (key: string, todayKey: string): string => {
   const y = new Date();
   y.setDate(y.getDate() - 1);
   if (key === localDateKey(y)) return 'Yesterday';
-  const [yr, mo, dy] = key.split('-');
+  const parts = key.split('-');
+  if (parts.length !== 3) return key;
+  const [, mo, dy] = parts;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${dy} ${months[parseInt(mo, 10) - 1]} ${yr}`;
+  return `${parseInt(dy, 10)} ${months[parseInt(mo, 10) - 1]}`;
 };
 
 const formatTimeOnly = (ts: string): string => {
@@ -162,7 +164,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   isTestEnv = false,
 }) => {
   const [chartFormat, setChartFormat] = useState('ALL');
-  const [chartTime, setChartTime] = useState('7D');
+  const [chartTime, setChartTime] = useState('14D');
 
   // ---- Deck Spotlight fixed-design-size scaled unit ----
   // The marquee card + 6 key cards are designed once at a fixed reference size,
@@ -223,6 +225,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const start7D = new Date(now.getTime() - 7 * 86400000);
+    const start14D = new Date(now.getTime() - 14 * 86400000);
     const start30D = new Date(now.getTime() - 30 * 86400000);
     const start12M = new Date(now.getTime() - 365 * 86400000);
 
@@ -297,17 +300,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const total = wins + losses;
         const winrate = total > 0 ? (wins / total) * 100 : 0;
         const windowStart = Math.max(0, idx - 3);
-        let sum = 0;
-        let n = 0;
+        let windowWins = 0;
+        let windowTotal = 0;
         for (let j = windowStart; j <= idx; j++) {
           const e = weeks[j][1];
-          const t = e.wins + e.losses;
-          if (t > 0) {
-            sum += (e.wins / t) * 100;
-            n++;
-          }
+          windowWins += e.wins;
+          windowTotal += (e.wins + e.losses);
         }
-        const trend = n > 0 ? sum / n : 0;
+        const trend = windowTotal > 0 ? (windowWins / windowTotal) * 100 : 0;
         return {
           date,
           label,
@@ -340,17 +340,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const total = wins + losses;
         const winrate = total > 0 ? (wins / total) * 100 : 0;
         const windowStart = Math.max(0, idx - 2);
-        let sum = 0;
-        let n = 0;
+        let windowWins = 0;
+        let windowTotal = 0;
         for (let j = windowStart; j <= idx; j++) {
           const e = monthsArr[j][1];
-          const t = e.wins + e.losses;
-          if (t > 0) {
-            sum += (e.wins / t) * 100;
-            n++;
-          }
+          windowWins += e.wins;
+          windowTotal += (e.wins + e.losses);
         }
-        const trend = n > 0 ? sum / n : 0;
+        const trend = windowTotal > 0 ? (windowWins / windowTotal) * 100 : 0;
         return {
           date,
           label,
@@ -362,47 +359,59 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
     }
 
-    // Default daily bucketing for '7D' and '30D'
+    // Continuous daily bucketing for '7D', '14D' and '30D'
+    const numDays = chartTime === '7D' ? 7 : chartTime === '14D' ? 14 : 30;
     const daily = new Map<string, { wins: number; losses: number }>();
-    const cutoff = chartTime === '7D' ? start7D : start30D;
+    for (let i = numDays - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const key = localDateKey(d);
+      daily.set(key, { wins: 0, losses: 0 });
+    }
 
     for (const m of winLossMatches) {
       if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
-      const d = new Date(m.timestamp);
-      if (d < cutoff) continue;
-
       const key = matchDayKey(m);
-      if (!key) continue;
-      const e = daily.get(key) || { wins: 0, losses: 0 };
+      if (!key || !daily.has(key)) continue;
+      const e = daily.get(key)!;
       if (m.result === 'win') e.wins++;
       else e.losses++;
-      daily.set(key, e);
     }
 
     const days = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    // 5-day rolling average of the daily win rate (includes the current day).
+    let lastKnownTrend = 50.0;
+    // Pre-seed lastKnownTrend from earlier matches if available
+    const priorMatches = winLossMatches.filter((m) => {
+      if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) return false;
+      const d = new Date(m.timestamp);
+      return d < (chartTime === '7D' ? start7D : chartTime === '14D' ? start14D : start30D);
+    });
+    if (priorMatches.length > 0) {
+      const pWins = priorMatches.filter(m => m.result === 'win').length;
+      lastKnownTrend = (pWins / priorMatches.length) * 100;
+    }
+
+    // Weighted rolling average across continuous days
     const rows = days.map(([date, { wins, losses }], idx) => {
       const total = wins + losses;
       const winrate = total > 0 ? (wins / total) * 100 : 0;
       const windowStart = Math.max(0, idx - 4);
-      let sum = 0;
-      let n = 0;
+      let windowWins = 0;
+      let windowTotal = 0;
       for (let j = windowStart; j <= idx; j++) {
         const e = days[j][1];
-        const t = e.wins + e.losses;
-        if (t > 0) {
-          sum += (e.wins / t) * 100;
-          n++;
-        }
+        windowWins += e.wins;
+        windowTotal += (e.wins + e.losses);
       }
-      const trend = n > 0 ? sum / n : 0;
+      if (windowTotal > 0) {
+        lastKnownTrend = (windowWins / windowTotal) * 100;
+      }
       return {
         date,
         label: dayLabel(date, todayKey),
         wins,
         losses,
-        winrate: Math.round(winrate * 10) / 10,
-        trend: Math.round(trend * 10) / 10,
+        winrate: total > 0 ? Math.round(winrate * 10) / 10 : null,
+        trend: Math.round(lastKnownTrend * 10) / 10,
       };
     });
     return rows;
@@ -875,8 +884,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   tick={{ fontSize: 10, fill: subtext, fontFamily: 'monospace' }}
                   stroke={border}
                   tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={28}
+                  interval={chartTime === '7D' || chartTime === '14D' ? 0 : 'preserveStartEnd'}
+                  minTickGap={6}
                   padding={{ left: 0, right: 0 }}
                 />
                 <YAxis
@@ -901,21 +910,72 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   label={{ value: 'Win Rate', angle: 90, position: 'insideRight', style: { fill: subtext, fontSize: 10, fontFamily: 'monospace' } }}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: palette?.mantle || '#12141A',
-                    border: `1px solid ${border}`,
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: text }}
-                  filterNull={true}
-                  formatter={(value: any, name: any, item: any) => {
-                    if (item?.payload?.isPad) return [null, null];
-                    const dk = item?.dataKey ?? name;
-                    if (dk === 'trend') return [`${value}%`, 'Trending Win Rate'];
-                    if (dk === 'winrate') return [`${value}%`, 'Win Rate'];
-                    if (dk === 'wins') return [value, 'Wins'];
-                    return [value, 'Losses'];
+                  content={({ active, payload }: any) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const data = payload[0]?.payload;
+                    if (!data || data.isPad) return null;
+
+                    const total = (data.wins || 0) + (data.losses || 0);
+                    const winRate = data.winrate !== null && data.winrate !== undefined ? data.winrate : (total > 0 ? Math.round((data.wins / total) * 1000) / 10 : null);
+                    const isWinning = (winRate ?? 0) >= 50;
+
+                    return (
+                      <div
+                        className="p-3 rounded-xl border shadow-2xl backdrop-blur-md flex flex-col gap-2 min-w-[190px]"
+                        style={{
+                          backgroundColor: `${palette?.mantle || '#12141A'}FA`,
+                          borderColor: border || '#2A2F3D',
+                          color: text || '#FFFFFF',
+                        }}
+                      >
+                        <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: `${border || '#2A2F3D'}60` }}>
+                          <span className="text-xs font-bold font-outfit text-white">{data.label}</span>
+                          <span className="text-[10px] font-mono opacity-50">{data.date.startsWith('hour-') ? '' : data.date}</span>
+                        </div>
+
+                        {total > 0 ? (
+                          <>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[11px] font-mono" style={{ color: subtext }}>Day Win Rate:</span>
+                              <span
+                                className="text-xs font-bold font-mono px-1.5 py-0.5 rounded border"
+                                style={{
+                                  backgroundColor: isWinning ? `${green}20` : `${red}20`,
+                                  color: isWinning ? green : red,
+                                  borderColor: isWinning ? `${green}40` : `${red}40`,
+                                }}
+                              >
+                                {winRate}%
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[11px] font-mono" style={{ color: subtext }}>Matches:</span>
+                              <span className="text-xs font-mono font-bold">
+                                <span style={{ color: green }}>{data.wins}W</span>
+                                <span className="opacity-40 mx-1">-</span>
+                                <span style={{ color: red }}>{data.losses}L</span>
+                                <span className="text-[10px] opacity-50 ml-1.5">({total} played)</span>
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center justify-between gap-3 py-0.5">
+                            <span className="text-[11px] font-mono opacity-60">Activity:</span>
+                            <span className="text-xs font-mono opacity-80 italic">0 games played</span>
+                          </div>
+                        )}
+
+                        {chartTime !== 'TODAY' && data.trend !== undefined && (
+                          <div className="flex items-center justify-between gap-3 pt-1.5 border-t" style={{ borderColor: `${border || '#2A2F3D'}40` }}>
+                            <span className="text-[11px] font-mono" style={{ color: subtext }}>Trending Avg:</span>
+                            <span className="text-xs font-mono font-bold" style={{ color: data.trend >= 50 ? green : red }}>
+                              {data.trend}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11, color: subtext }} />

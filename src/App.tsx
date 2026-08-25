@@ -776,12 +776,14 @@ export default function App() {
       let matchesTime = true;
       if (timeFilter === 'TODAY') {
         matchesTime = matchDate >= startOfToday;
-      } else if (timeFilter === 'WEEK') {
-        matchesTime = matchDate >= startOfWeek;
-      } else if (timeFilter === 'MONTH') {
-        matchesTime = matchDate >= startOfMonth;
-      } else if (timeFilter === 'YEAR') {
-        matchesTime = matchDate >= startOfYear;
+      } else if (timeFilter === '7D' || timeFilter === 'WEEK') {
+        matchesTime = matchDate.getTime() >= now.getTime() - 7 * 86400000;
+      } else if (timeFilter === '14D') {
+        matchesTime = matchDate.getTime() >= now.getTime() - 14 * 86400000;
+      } else if (timeFilter === '30D' || timeFilter === 'MONTH') {
+        matchesTime = matchDate.getTime() >= now.getTime() - 30 * 86400000;
+      } else if (timeFilter === '12M' || timeFilter === 'YEAR') {
+        matchesTime = matchDate.getTime() >= now.getTime() - 365 * 86400000;
       }
 
       return matchesSearch && matchesFormat && matchesResult && matchesTime;
@@ -988,45 +990,60 @@ export default function App() {
 
   const formatOptions = useMemo(() => {
     const baseFormats = [
-      'Brawl',
-      'Standard Brawl',
-      'Standard',
-      'Historic',
-      'Timeless',
       'Alchemy',
-      'Explorer',
-      'Draft',
-      'Sealed',
+      'Alchemy Ranked',
       'Bot Match',
+      'Brawl',
+      'Brawl - Competitive',
+      'Brawl - Standard',
       'Direct Challenge',
-      'Midweek Magic',
+      'Draft',
+      'Explorer',
+      'Explorer Ranked',
       'Gladiator',
+      'Historic',
+      'Historic Ranked',
+      'Midweek Magic',
+      'Pioneer',
+      'Pioneer Ranked',
+      'Sealed',
+      'Standard',
+      'Standard Ranked',
+      'Timeless',
+      'Timeless Ranked',
     ];
     const seen = new Set<string>();
-    const options = [{ value: 'ALL', label: 'All Formats' }];
+    const formatList: string[] = [];
 
-    // 1. Prioritize formats actually present in the user's match history
+    // 1. Gather formats present in match history
     for (const m of matches) {
       if (m.format_name && !seen.has(m.format_name.toUpperCase())) {
         seen.add(m.format_name.toUpperCase());
-        options.push({ value: m.format_name.toUpperCase(), label: m.format_name });
+        formatList.push(m.format_name);
       }
     }
 
-    // 2. Append standard curated formats not yet encountered
+    // 2. Append base curated formats
     for (const bf of baseFormats) {
       if (!seen.has(bf.toUpperCase())) {
         seen.add(bf.toUpperCase());
-        options.push({ value: bf.toUpperCase(), label: bf });
+        formatList.push(bf);
       }
     }
 
-    return options;
+    // 3. Sort alphabetically (case-insensitive)
+    formatList.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    return [
+      { value: 'ALL', label: 'All Formats' },
+      ...formatList.map(fmt => ({ value: fmt.toUpperCase(), label: fmt }))
+    ];
   }, [matches]);
 
   const timeOptions = [
     { value: 'TODAY', label: 'Today' },
     { value: '7D', label: 'Past 7 Days' },
+    { value: '14D', label: 'Past 14 Days' },
     { value: '30D', label: 'Past 30 Days' },
     { value: '12M', label: 'Past 12 Months' },
     { value: 'ALL', label: 'All Time' },
@@ -1036,19 +1053,22 @@ export default function App() {
     const bins = curve || [0, 0, 0, 0, 0, 0, 0, 0, 0];
     const startIdx = (bins[0] || 0) > 0 ? 0 : 1;
     const visible = bins.slice(startIdx);
-    const labels = ['0','1','2','3','4','5','6','7','8+'].slice(startIdx);
     const maxVal = Math.max(...visible, 1);
+
     return (
-      <div className="flex items-end gap-1 h-[45px] w-[136px] px-1 py-0.5 rounded bg-black/40 border border-white/5" title={`Mana Curve Bins (0-8+): ${bins.join(', ')}`}>
+      <div 
+        className="flex items-end gap-1 h-[32px] w-[136px] px-1.5 py-1 rounded bg-black/40 border border-white/5 mx-auto" 
+        title={`Mana Curve (${startIdx === 0 ? '0-8+' : '1-8+'}): ${visible.join(', ')}`}
+      >
         {visible.map((val, idx) => {
-          const heightPct = Math.max((val / maxVal) * 100, 15);
+          const heightPct = val > 0 ? Math.max((val / maxVal) * 100, 15) : 0;
           return (
             <div 
               key={idx} 
-              className="flex-1 rounded-t-sm"
+              className="flex-1 rounded-t-sm transition-all duration-200"
               style={{ 
                 height: `${heightPct}%`, 
-                backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.1)'
+                backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.06)'
               }}
             />
           );
@@ -1094,12 +1114,15 @@ export default function App() {
     };
     return colors[r] ?? '#9CA3AF';
   };
+  const getRarityColor = cardRarityColor;
 
   // Muted format-chip colors, inspired by the mana pip palette but toned down.
   const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
     const f = (format || '').toLowerCase();
-    if (f.includes('standard brawl')) {
+    if (f.includes('brawl - standard') || f.includes('standard brawl')) {
       return { bg: '#0284C715', fg: '#38BDF8', border: '#0284C735' };
+    } else if (f.includes('brawl - competitive') || f.includes('competitive brawl')) {
+      return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
     } else if (f.includes('brawl')) {
       return { bg: '#38BDF815', fg: '#7DD3FC', border: '#38BDF830' };
     } else if (f.includes('standard')) {
@@ -2290,13 +2313,13 @@ export default function App() {
             <div className="flex-1 rounded-2xl border overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}>
               {/* Sticky Table Header with Rebalanced Column Layout */}
               <div className="sticky top-0 z-10 border-b backdrop-blur-md" style={{ backgroundColor: `${palette?.mantle || '#12141A'}EE`, borderColor: palette?.border || '#2A2F3D' }}>
-                <div className="flex items-center uppercase text-sm font-semibold py-3 px-4 gap-2" style={{ color: palette?.subtext }}>
-                  <div className="flex-[1.3] shrink-0 truncate">Date</div>
-                  <div className="flex-[0.6] shrink-0 text-center">Result</div>
-                  <div className="flex-[1] shrink-0 text-center">Format</div>
-                  {showColorsCol && <div className="w-[120px] shrink-0 text-center">Colors</div>}
-                  <div className="flex-[3] min-w-0 truncate">Deck Name</div>
-                  <div className="flex-[2] min-w-0 truncate">Opponent</div>
+                <div className="flex items-center uppercase text-sm font-semibold py-3 px-4 gap-3" style={{ color: palette?.subtext }}>
+                  <div className="flex-[1.2] min-w-[120px] shrink-0 truncate">Date</div>
+                  <div className="w-[75px] shrink-0 text-center">Result</div>
+                  <div className="w-[185px] shrink-0 text-center">Format</div>
+                  {showColorsCol && <div className="w-[110px] shrink-0 text-center">Colors</div>}
+                  <div className="flex-[3] min-w-[160px] truncate">Deck Name</div>
+                  <div className="flex-[2] min-w-[120px] truncate">Opponent</div>
                   {showCurveCol && <div className="w-[148px] shrink-0 text-center">Mana Curve</div>}
                 </div>
               </div>
@@ -2312,6 +2335,7 @@ export default function App() {
                 >
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const m = filteredMatches[virtualRow.index];
+                    const chip = formatChipColor(m.format_name);
                     return (
                       <div
                         key={m.match_id}
@@ -2319,7 +2343,7 @@ export default function App() {
                           setSelectedMatchId(m.match_id);
                           setIsFullInfoOpen(true);
                         }}
-                        className={`absolute top-0 left-0 w-full flex items-center text-base py-2 px-4 gap-2 border-b transition-colors cursor-pointer hover:bg-white/5 ${
+                        className={`absolute top-0 left-0 w-full flex items-center text-base py-2 px-4 gap-3 border-b transition-colors cursor-pointer hover:bg-white/5 ${
                           selectedMatchId === m.match_id ? 'bg-white/10' : ''
                         }`}
                         style={{
@@ -2329,12 +2353,12 @@ export default function App() {
                         }}
                       >
                         {/* 1. Date */}
-                        <div className="flex-[1.3] shrink-0 opacity-60 font-mono text-sm truncate">
+                        <div className="flex-[1.2] min-w-[120px] shrink-0 opacity-60 font-mono text-sm truncate">
                           {formatDateShort(m.timestamp)}
                         </div>
 
                         {/* 2. Result */}
-                        <div className="flex-[0.6] shrink-0 text-center">
+                        <div className="w-[75px] shrink-0 text-center">
                           {m.result === 'win' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                               <CheckCircle2 className="w-3 h-3" /> WIN
@@ -2347,26 +2371,29 @@ export default function App() {
                         </div>
 
                         {/* 3. Format */}
-                        <div className="flex-[1] shrink-0 font-semibold truncate text-center">
-                          <span className="px-2 py-0.5 rounded text-sm font-mono border bg-black/40" style={{ borderColor: palette?.border }}>
+                        <div className="w-[185px] shrink-0 font-semibold text-center flex items-center justify-center">
+                          <span
+                            className="px-2.5 py-0.5 rounded text-xs font-mono border whitespace-nowrap"
+                            style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
+                          >
                             {m.format_name}
                           </span>
                         </div>
 
                         {/* 4. Colors */}
                         {showColorsCol && (
-                          <div className="w-[120px] shrink-0 text-center overflow-hidden">
+                          <div className="w-[110px] shrink-0 text-center overflow-hidden">
                             {renderDeckColorIdentity(m.deck_colors)}
                           </div>
                         )}
 
                         {/* 5. Deck Name (highest priority) */}
-                        <div className="flex-[3] min-w-0 font-bold text-lg truncate" style={{ color: palette?.accent || '#38BDF8' }}>
+                        <div className="flex-[3] min-w-[160px] font-bold text-lg truncate" style={{ color: palette?.accent || '#38BDF8' }}>
                           {m.player_deck_name}
                         </div>
 
                         {/* 6. Opponent Name */}
-                        <div className="flex-[2] min-w-0 font-medium opacity-80 truncate">
+                        <div className="flex-[2] min-w-[120px] font-medium opacity-80 truncate">
                           {m.opponent_name || 'Opponent'}
                         </div>
 

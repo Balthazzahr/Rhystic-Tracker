@@ -300,12 +300,13 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    // 2. Format breakdown per deck.
+    // 2. Format breakdown per deck (excluding Bot Match).
     let format_rows = sqlx::query(
         r#"
         SELECT hero_deck_name as deck_name, format, COUNT(*) as n
         FROM matches
         WHERE hero_deck_name IS NOT NULL AND hero_deck_name != ''
+          AND format IS NOT NULL AND format != '' AND LOWER(format) NOT LIKE '%bot%'
         GROUP BY hero_deck_name, format
         "#
     )
@@ -930,12 +931,12 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         }
     };
 
-    // Distinct formats played by this deck (ordered by frequency)
+    // Distinct formats played by this deck (ordered by frequency, excluding Bot Match)
     let format_rows = sqlx::query(
         r#"
         SELECT format, COUNT(*) as n
         FROM matches
-        WHERE hero_deck_name = ? AND format IS NOT NULL AND format != ''
+        WHERE hero_deck_name = ? AND format IS NOT NULL AND format != '' AND LOWER(format) NOT LIKE '%bot%'
         GROUP BY format
         ORDER BY n DESC
         "#
