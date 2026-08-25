@@ -2,6 +2,37 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.2.3] - 2026-08-25
+
+### 🏆 Deck Format Badges, Non-Commander Fix, Executioner & Over-Killer Tombstone Redesign
+
+This release addresses live playtesting enhancements across the Deck Viewer and Achievement engines:
+
+---
+
+### 🌟 Added & Enhanced
+
+- **Deck Viewer Non-Commander Cleanup**:
+  - Fixed an issue where non-Brawl/Standard 60-card decks would retain and display cached commander artwork and header widgets from previous Brawl matches.
+  - Automatically nullified `hero_commander_id` for historical non-Brawl match records.
+
+- **Verified Format Badges**:
+  - Dynamically renders verified format badges (primary format highlighted in amber, secondary formats in subtle pills) directly underneath the deck title in the Deck Inspector based on actual match history.
+
+- **Executioner Individual Strike Calculation**:
+  - Fixed multi-attacker combat evaluation so that lethal hits are evaluated based on each creature's individual damage output ($M \ge 15 \to \text{Gold}$, $8 \le M < 15 \to \text{Silver}$, $1 \le M < 8 \to \text{Bronze}$) rather than opponent pre-combat health.
+
+- **Redesigned Over-Killer SVG Badges (Tombstone Grave)**:
+  - Redesigned the Over-Killer emblem across all shield tiers (Bronze, Silver, Gold) with an engraved `XXXX` stone headstone, earthen mound, and sprouting grass blades.
+
+- **Over-Killer Excess Overkill Math**:
+  - Updated Over-Killer achievement criteria to evaluate individual excess overkill thresholds ($M - L_{\text{before}} \ge 7 \to \text{Bronze}$, $\ge 10 \to \text{Silver}$, $\ge 15 \to \text{Gold}$), ensuring the winning creature single-handedly accounts for the excess negative life.
+
+- **Card Art in Achievements Modal**:
+  - Integrated local-cached art-crop thumbnails directly to the left of each card name in the Deck Card Achievements drill-down modal.
+
+---
+
 ## [1.2.2] - 2026-08-24
 
 ### 🔄 Automatic True Decklist Capture, UUID Synchronization & Collection Sync
