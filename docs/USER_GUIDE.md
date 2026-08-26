@@ -220,6 +220,10 @@ To safeguard your daily match history and collection, Rhystic Tracker uses stric
 
 The **Achievements** view transforms your match history into an interactive trophy case, celebrating epic combat feats, lethal strikes, massive token swarms, and card draw milestones.
 
+<p align="center">
+  <img src="screenshots/v13%20Achievments.png" alt="Achievements Trophy Case" width="900" />
+</p>
+
 #### 21 Custom Vector Badges Across 7 Categories
 Every achievement represents a distinct gameplay feat across 7 MTG disciplines:
 - 🥊 **Combat**: *Haymaker* (single-hit blow), *Juggernaut* (total match damage), *Royal Assassin* (creature destruction in combat).
@@ -237,11 +241,19 @@ Every achievement represents a distinct gameplay feat across 7 MTG disciplines:
 - **All-Time MVP Card**: Each trophy highlights the all-time MVP card that earned the badge most frequently, complete with its **Scryfall art crop thumbnail** and full untruncated name.
 - **Drill-Down Inspection Modal**: Click any trophy to inspect every card that has earned it, view objective requirements, read flavor lore quotes, and click to inspect individual card stats. Press <kbd>Esc</kbd> or click the backdrop to close.
 
+<p align="center">
+  <img src="screenshots/v13%20AchievementsInspector.png" alt="Achievements Drill-Down Modal" width="900" />
+</p>
+
 ---
 
 ### All-Time Leaderboards & Hall of Fame
 
-The **Leaderboards** view showcases your MTG career's all-time greatest cards across 6 Hall of Fame categories:
+The **Leaderboards** view showcases your MTG career's all-time greatest cards across a 3×3 matrix of Hall of Fame categories:
+
+<p align="center">
+  <img src="screenshots/v13%20Leaderboards.png" alt="All-Time Leaderboards" width="900" />
+</p>
 
 1. 🥊 **Highest Single-Hit Strike** (*Haymakers* — Most damage dealt in a single blow).
 2. 🚂 **Total Match Damage** (*Juggernauts* — Cumulative match combat and spell damage).
@@ -249,11 +261,15 @@ The **Leaderboards** view showcases your MTG career's all-time greatest cards ac
 4. 🛡️ **Combat Heavyweights** (*Pure Attack Power* — Total damage dealt in combat phases).
 5. 🔮 **Spell & Ability Nukes** (*Arcane Devastation* — Non-combat spell & trigger damage).
 6. 👑 **Most Decorated Champions** (*Honor Titans* — Most lifetime achievement titles won).
+7. 📜 **Card Draw Engines** (*Rhystic Masterminds* — Most cards drawn in a single turn).
+8. 🏰 **Battlefield Stalwarts** (*Damage Absorbed* — Highest single-match damage survived).
+9. 🩸 **Executioner Strikes** (*Lethal Precision* — Highest single lethal spell/ability strikes).
 
 #### Podium Benchmark & Full-Spectrum Search
 - **Top 3 Podium Styling**: Distinct visual treatment for 🥇 Gold Crown (#1), 🥈 Silver Medal (#2), and 🥉 Bronze Medal (#3).
 - **Full 10-Card Dynamic Vertical Scaling**: Category cards expand to fill vertical window height with zero bottom gaps.
 - **Global Search & Diff to Podium**: Search any card in your collection (e.g. *Craterhoof Behemoth*). If ranked outside the top 3, the card is displayed below the pinned Top 3 benchmark along with its true global rank (e.g. `#75`) and a dynamic **diff pill** indicating how far off it is from the #3 podium spot (e.g. `-18 to #3`).
+- **Expanded Top 25 Dialog**: Maximize any category into a full-height pop-out showing up to 25 ranked cards with live in-category search.
 
 ---
 
@@ -261,7 +277,7 @@ The **Leaderboards** view showcases your MTG career's all-time greatest cards ac
 The **Dashboard** serves as your mission control, synthesizing daily performance, active win streaks, multi-window win rate analytics, and match history.
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="900" />
+  <img src="screenshots/v13%20Dashboard.png" alt="Dashboard" width="900" />
 </p>
 
 #### Key Metrics & Streak Tracking
@@ -282,7 +298,7 @@ The overhauled trend graph combines volume histogram bars with rolling win rate 
   - Transitions cleanly across the exact $50\%$ midline with a subtle blend.
 - **Background Area Wash**: Subtle horizontal time-series shading beneath the curve matching the win status.
 - **Outlined Histogram Bars**: Thin white borders around win and loss bars for clear visual separation.
-- **Edge-to-Edge Boundaries**: Trend curve and shading span cleanly across the full width of the card.
+- **Format Breakdown Matrix**: Clean 3-column × 2-row summary at the base of the dashboard displaying games played and individual format win rates.
 
 ---
 
@@ -315,7 +331,7 @@ Rhystic Tracker provides native GRE parser categorization and database normaliza
 While in an active match, click **Live Match HUD** in the left navigation sidebar (the sword icon pulses bright orange when a game is live).
 
 <p align="center">
-  <img src="docs/screenshots/live_hud.png" alt="Live Match HUD" width="900" />
+  <img src="screenshots/live_hud.png" alt="Live Match HUD" width="900" />
 </p>
 
 - **Commander & Color Identity**: Displays both players' commanders (for Brawl variants) and active color identities.
@@ -334,20 +350,20 @@ While in an active match, click **Live Match HUD** in the left navigation sideba
 Clicking any match in the Dashboard, Match History, Deck detail, or Head-to-Head modal opens the **Full Match Inspector**.
 
 <p align="center">
-  <img src="docs/screenshots/match_history.png" alt="Match History Table" width="900" />
+  <img src="screenshots/v13%20MatchHistory.png" alt="Match History Table" width="900" />
 </p>
 
 #### Inspector Ergonomics
-- **Dynamic Viewport Scaling**: Modals scale to **80% window width** ($80\text{vw}$) and **90% window height** ($90\text{vh}$) with symmetric buffers.
+- **Dynamic Viewport Scaling**: Modals scale to **95% window width** ($95\text{vw}$) and **97% window height** ($97\text{vh}$) with symmetric buffers.
 - **Universal Escape Key & Backdrop Dismissal**: Press <kbd>Esc</kbd> or click the darkened backdrop to immediately dismiss any open modal.
+
+<p align="center">
+  <img src="screenshots/v13%20MatchInspector.png" alt="Full Match Inspector Workspace" width="900" />
+</p>
 
 #### Inspector Views
 1. **Cards Logged View**: Complete inventory of cards played or seen during the match, partitioned by hero vs opponent with damage contributions.
-2. **Match Play Timeline**: Turn-by-turn combat replay showing every draw, play, attack, block, damage event, and removal.
-
-| Cards Logged View | Match Play Timeline |
-| :---: | :---: |
-| ![Cards Logged](docs/screenshots/match_inspector_cards.png) | ![Match Timeline](docs/screenshots/match_inspector_timeline.png) |
+2. **Match Play Timeline**: Turn-by-turn combat replay showing every draw, play, attack, block, damage event, and removal with London mulligan tracking.
 
 ---
 
@@ -355,7 +371,11 @@ Clicking any match in the Dashboard, Match History, Deck detail, or Head-to-Head
 The **Deck Library** tracks performance per deck, format legitimacy, automatic and manual True Decklist management, and real-time MTGA client synchronization.
 
 <p align="center">
-  <img src="docs/screenshots/deck_library.png" alt="Deck Library" width="900" />
+  <img src="screenshots/v13%20DeckLibrary.png" alt="Deck Library Grid View" width="900" />
+</p>
+
+<p align="center">
+  <img src="screenshots/v13%20DeckLibraryTable.png" alt="Deck Library Table View" width="900" />
 </p>
 
 - **Automatic True Decklist Capture**:
@@ -369,13 +389,13 @@ The **Deck Library** tracks performance per deck, format legitimacy, automatic a
 - **Responsive 3-Column Decklist Expansion**:
   - Automatically organizes card types (*Creatures, Instants, Sorceries, Lands, Artifacts, Enchantments, Planeswalkers*) into **3 height-balanced columns** (`colA`, `colB`, `colC`) on wide screens.
   - Eliminates excessive scrolling for 60-card and 100-card Commander lists.
-- **Header Analytics**:
-  - **Enlarged Mana Distribution Pie Chart**: Distinct colored slices with enlarged mana pips.
+- **Floating Header Analytics**:
+  - **Mana Distribution Pie Chart**: Distinct colored slices precisely matching authentic MTG mana pips without dark enclosures.
   - **Mana Value Curve Histogram**: Full-height histogram with centered translucent floating title badge (`MANA VALUE`).
   - **Card Types Breakdown Bars**: Visual proportional representation of deck makeup.
 
 <p align="center">
-  <img src="docs/screenshots/deck_inspector.png" alt="Deck Inspector" width="900" />
+  <img src="screenshots/v13%20DeckInspector.png" alt="Deck Inspector" width="900" />
 </p>
 
 ---
@@ -384,7 +404,7 @@ The **Deck Library** tracks performance per deck, format legitimacy, automatic a
 The **Card Library** provides an interactive visual explorer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics.
 
 <p align="center">
-  <img src="docs/screenshots/card_library.png" alt="Card Library" width="900" />
+  <img src="screenshots/v13%20CardLibrary.png" alt="Card Library 4x3 Grid" width="900" />
 </p>
 
 #### How Collection Ownership Works
@@ -393,10 +413,14 @@ Because MTGA no longer dumps complete raw collections into `Player.log`, Rhystic
 2. **Theft & Copy Protection**: Cards generated in-game via *tokens, copies, clones (e.g. Spark Double), conjure, heist, or theft effects (e.g. Gonti, Ragavan)* never falsely inflate your owned collection.
 3. **Interactive 4-Diamond Ownership Selector**: Adjust owned copies directly in the card detail modal with instant persistence and real-time cross-view synchronization.
 
+<p align="center">
+  <img src="screenshots/v13%20CardInspector.png" alt="3-Panel Card Inspector" width="900" />
+</p>
+
 #### Dual Art Mode Viewers
 Switch between two visual styles in the top toolbar:
 - 🖼️ **Landscape Art Crop Mode (`<Image />`)**: Displays uncropped card illustrations in native widescreen aspect ratio with a top semi-transparent title and `<ManaPip />` mana cost bar.
-- 🎴 **Portrait Full Card Mode (`<RectangleVertical />`)**: Displays classic complete card frames with oracle rules text.
+- 🎴 **Portrait Full Card Mode (`<RectangleVertical />`)**: Displays classic complete card frames with oracle rules text in a calibrated 4×3 grid.
 
 #### Persistent Alternate Set Printings
 When inspecting any card, selecting an alternate set printing from the **Card Style / Set** dropdown immediately updates the main grid with the selected artwork and persists across sessions.
@@ -404,24 +428,31 @@ When inspecting any card, selecting an alternate set printing from the **Card St
 ---
 
 ### Settings & Configuration Control Panel
-The **Settings and Configuration** view is organized in a responsive 2-column control panel:
+The **Settings and Configuration** view is organized into 5 dedicated categorized tabs:
 
-- **MTGA Log Path Configuration**: Live discovery and validation of `Player.log` with support for Steam Proton, Lutris, Bottles, and custom directory browsers.
-- **Desktop & Background Behavior**:
-  - *Minimize to System Tray on Close*: Keep match tailing running silently in the background.
-  - *Auto-Switch to Live Match HUD*: Automatically jump to the real-time match tracker when game start signals are detected.
-- **Application & Collection Preferences**:
-  - *Default Startup Tab*: Choose which view opens on launch (Dashboard, Live Match HUD, Match History, Deck Library, Card Library).
-  - *Default Collection Sort Order*: Choose default card sorting (Release Date, Mana Value, Rarity, Alphabetical, Ownership Count).
-- **Local Card Image Cache Manager**:
-  - Displays real-time disk storage size (`MB`) and cached card image count.
-  - **Clear Image Cache**: Purges stored Scryfall card images to free disk space.
-  - **Pre-download Collection Art**: Downloads high-resolution artwork for every card in your collection for instant offline browsing.
-- **Database & Storage Management**:
-  - Displays active database filename (`rhystic.db` / `rhystic_dev.db`), absolute file path, disk size, and total recorded match count.
-  - **Backup / Export Database**: 1-Click native Save File dialog to export an exact SQLite snapshot of your match history and collection.
-- **Card Database Diagnostics**: Live indexed card count (e.g. `26,572 cards ready`), 1-click **Re-sync Cards** button, and **Re-run Setup Wizard…** action with safety confirmation.
-- **Mana Theme Customization**: Switch between 5 color identity theme presets (White, Blue, Black, Red, Green).
+<p align="center">
+  <img src="screenshots/v13%20Settings.png" alt="Tabbed Settings Control Panel" width="900" />
+</p>
+
+1. **General & Behavior**:
+   - *Minimize to System Tray on Close*: Keep match tailing running silently in the background.
+   - *Auto-Switch to Live Match HUD*: Automatically jump to the real-time match tracker when game start signals are detected.
+   - *Confirm Before Deleting Decks*: Safety prompt prevention against accidental deck deletion.
+   - *Default Startup Tab*: Choose which view opens on launch (Dashboard, Live Match HUD, Match History, Deck Library, Card Library, Achievements, Leaderboards).
+   - *Setup Assistant*: Re-launch First-Time Setup Wizard.
+2. **Appearance & Themes**:
+   - *5-Color Mana Theme Selector*: Switch between White, Blue, Black, Red, and Green themes with live previews.
+   - *Default Collection Sort Order*: Choose default card sorting (Release Date, Mana Value, Rarity, Alphabetical, Ownership Count).
+   - *Compact Card Preview*: Toggle dense match breakdown cards.
+3. **MTGA Connection**:
+   - *MTGA Log Path Configuration*: Live discovery, direct manual path entry, file browsing, and validation of `Player.log`.
+   - *Engine Status*: Real-time tailer activity indicator badge.
+4. **Storage & Database**:
+   - *Local Card Image Cache*: Real-time disk storage footprint, cached illustration count, Cache Clear, and Pre-download Collection Art tools.
+   - *SQLite Database Diagnostics*: Total recorded matches, database file size, local file path, and 1-click **Backup / Export Database** snapshot action.
+   - *MTGA Card Universe*: Indexed card counts, card database re-synchronization, and Scryfall set metadata catalog updater.
+5. **About & Legal**:
+   - Application versioning, engine stack specifications, Wizards of the Coast Fan Content Policy disclosures, and Scryfall attributions.
 
 ---
 

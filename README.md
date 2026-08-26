@@ -55,17 +55,29 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## 📸 Screenshots Showcase
 
-|                  Dashboard                   |                  Live Match HUD                  |
+|                  Dashboard                   |                  Match History                   |
 | :------------------------------------------: | :----------------------------------------------: |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Live Match HUD](docs/screenshots/live_hud.png) |
+| ![Dashboard](docs/screenshots/v13%20Dashboard.png) | ![Match History](docs/screenshots/v13%20MatchHistory.png) |
 
-|           Match History & Match Inspector            |                      Turn Playback & Combat Timeline                       |
-| :--------------------------------------------------: | :------------------------------------------------------------------------: |
-| ![Match History](docs/screenshots/match_history.png) | ![Match Inspector Timeline](docs/screenshots/match_inspector_timeline.png) |
+|             Deck Library (Grid View)              |             Deck Library (Table View)             |
+| :-----------------------------------------------: | :-----------------------------------------------: |
+| ![Deck Library](docs/screenshots/v13%20DeckLibrary.png) | ![Deck Library Table](docs/screenshots/v13%20DeckLibraryTable.png) |
 
-|       Deck Library & True Decklist Inspector       |            Card Library & Combat Analytics             |
-| :------------------------------------------------: | :----------------------------------------------------: |
-| ![Deck Library](docs/screenshots/deck_library.png) | ![Card Inspector](docs/screenshots/card_inspector.png) |
+|            Expanded Deck Inspector                |             Full Match Inspector                 |
+| :-----------------------------------------------: | :----------------------------------------------: |
+| ![Deck Inspector](docs/screenshots/v13%20DeckInspector.png) | ![Match Inspector](docs/screenshots/v13%20MatchInspector.png) |
+
+|             Card Library (4×3 Grid)               |             3-Panel Card Inspector               |
+| :-----------------------------------------------: | :----------------------------------------------: |
+| ![Card Library](docs/screenshots/v13%20CardLibrary.png) | ![Card Inspector](docs/screenshots/v13%20CardInspector.png) |
+
+|           Global Achievements & Trophy Case       |             Achievement Details Roster           |
+| :-----------------------------------------------: | :----------------------------------------------: |
+| ![Achievements](docs/screenshots/v13%20Achievments.png) | ![Achievement Details](docs/screenshots/v13%20AchievementsInspector.png) |
+
+|            All-Time Leaderboards (3×3)            |             Modernized Tabbed Settings           |
+| :-----------------------------------------------: | :----------------------------------------------: |
+| ![Leaderboards](docs/screenshots/v13%20Leaderboards.png) | ![Settings](docs/screenshots/v13%20Settings.png) |
 
 ---
 
