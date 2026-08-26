@@ -1,12 +1,19 @@
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getAchievementMeta, getBadgeSvgUrl, getTierFromCount, extractTierFromTitle, cleanAchievementTitle, AchievementTier } from '../utils/achievementBadges';
+import {
+  getAchievementMeta,
+  getBadgeSvgUrl,
+  getTierFromCount,
+  extractTierFromTitle,
+  cleanAchievementTitle,
+  AchievementTier,
+} from '../utils/achievementBadges';
 
 interface AchievementBadgeProps {
   title: string;
   count?: number;
   tier?: AchievementTier;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'hero';
   showTitle?: boolean;
   showCount?: boolean;
   showTooltip?: boolean;
@@ -23,7 +30,7 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
   showCount = true,
   showTooltip = true,
   className = '',
-  onClick
+  onClick,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number; placeBelow: boolean } | null>(null);
@@ -35,63 +42,88 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
   const displayTitle = cleanAchievementTitle(title) || meta.title;
   const svgUrl = getBadgeSvgUrl(meta.id, activeTier);
 
-  // Styling maps based on tier
-  const tierStyles = {
+  // Tier styling parameters & gradients for MTG Legendary frame
+  const tierConfig = {
     bronze: {
-      pillBg: 'bg-amber-950/30 hover:bg-amber-950/50 border-amber-800/50 text-amber-200',
-      tagBg: 'bg-amber-900/40 text-amber-400 border-amber-700/50',
-      countBg: 'bg-black/60 border-amber-700/40 text-amber-300',
+      outerBorder: '#B45309',
+      innerBg: 'from-amber-950/80 via-[#1c1208]/90 to-amber-950/80',
+      crownGradient: 'from-amber-700 via-amber-500 to-amber-800',
+      textGlow: 'text-amber-200',
+      countBg: 'bg-black/70 border-amber-600/50 text-amber-300',
       label: 'Bronze Tier',
-      nextGoal: count < 3 ? `Next Tier: 3× (Silver)` : 'Max Tier'
+      tagBg: 'bg-amber-900/40 text-amber-400 border-amber-700/50',
     },
     silver: {
-      pillBg: 'bg-slate-800/70 hover:bg-slate-800 border-slate-600 text-slate-100',
-      tagBg: 'bg-slate-800 text-slate-200 border-slate-600',
-      countBg: 'bg-black/60 border-slate-500/40 text-slate-200',
+      outerBorder: '#94A3B8',
+      innerBg: 'from-slate-900/90 via-[#0f172a]/95 to-slate-900/90',
+      crownGradient: 'from-slate-400 via-slate-200 to-slate-500',
+      textGlow: 'text-slate-100',
+      countBg: 'bg-black/70 border-slate-400/50 text-slate-200',
       label: 'Silver Tier',
-      nextGoal: count < 5 ? `Next Tier: 5× (Gold)` : 'Max Tier'
+      tagBg: 'bg-slate-800 text-slate-200 border-slate-600',
     },
     gold: {
-      pillBg: 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/40 text-amber-300',
-      tagBg: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
-      countBg: 'bg-black/60 border-amber-400/40 text-amber-300',
+      outerBorder: '#F59E0B',
+      innerBg: 'from-[#2e1d05]/95 via-[#1a1103]/95 to-[#2e1d05]/95',
+      crownGradient: 'from-yellow-400 via-amber-300 to-yellow-600',
+      textGlow: 'text-amber-300',
+      countBg: 'bg-black/70 border-amber-400/60 text-amber-300',
       label: 'Gold Tier (Mastered)',
-      nextGoal: 'Mastered Tier'
-    }
+      tagBg: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+    },
   }[activeTier];
 
   // Sizing definitions
   const sizeMap = {
     sm: {
-      pill: 'px-2 py-0.5 text-[11px] gap-1.5 rounded-lg',
       icon: 'w-4 h-4',
+      text: 'text-[11px] font-display font-bold tracking-wider',
       count: 'text-[9px] px-1 py-0.1',
-      title: 'text-[11px] font-bold font-outfit'
+      padding: 'px-2.5 py-1',
+      crownHeight: 4,
     },
     md: {
-      pill: 'px-2.5 py-1 text-xs gap-2 rounded-xl',
       icon: 'w-5 h-5',
+      text: 'text-xs font-display font-bold tracking-wider',
       count: 'text-[10px] font-mono px-1.5 py-0.2',
-      title: 'text-xs font-bold font-outfit tracking-wide'
+      padding: 'px-3 py-1.5',
+      crownHeight: 5,
     },
     lg: {
-      pill: 'px-3.5 py-1.5 text-sm gap-2.5 rounded-xl',
-      icon: 'w-8 h-8',
+      icon: 'w-7 h-7',
+      text: 'text-sm font-display font-bold tracking-wider',
       count: 'text-xs font-mono px-2 py-0.5',
-      title: 'text-sm font-extrabold font-outfit tracking-wide'
+      padding: 'px-4 py-2',
+      crownHeight: 6,
     },
     xl: {
-      pill: 'p-2 text-base gap-3 rounded-2xl',
-      icon: 'w-16 h-16',
+      icon: 'w-14 h-14',
+      text: 'text-base font-display font-bold tracking-wider',
       count: 'text-xs font-mono px-2.5 py-1',
-      title: 'text-base font-extrabold font-outfit tracking-wide'
+      padding: 'px-5 py-2.5',
+      crownHeight: 8,
     },
     '2xl': {
-      pill: 'p-3 text-lg gap-3.5 rounded-3xl',
-      icon: 'w-24 h-24',
+      icon: 'w-20 h-20',
+      text: 'text-lg font-display font-bold tracking-wider',
       count: 'text-sm font-mono px-3 py-1',
-      title: 'text-lg font-black font-outfit tracking-wide'
-    }
+      padding: 'px-6 py-3',
+      crownHeight: 10,
+    },
+    '3xl': {
+      icon: 'w-28 h-28',
+      text: 'text-xl font-display font-bold tracking-wider',
+      count: 'text-base font-mono px-3.5 py-1',
+      padding: 'px-7 py-3.5',
+      crownHeight: 12,
+    },
+    hero: {
+      icon: 'w-36 h-36',
+      text: 'text-2xl font-display font-bold tracking-wider',
+      count: 'text-lg font-mono px-4 py-1.5',
+      padding: 'px-8 py-4',
+      crownHeight: 14,
+    },
   }[size];
 
   const handleMouseEnter = () => {
@@ -101,7 +133,7 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
       setTooltipPos({
         top: placeBelow ? rect.bottom + 8 : rect.top - 8,
         left: Math.max(160, Math.min(window.innerWidth - 160, rect.left + rect.width / 2)),
-        placeBelow
+        placeBelow,
       });
     }
     setIsHovered(true);
@@ -111,48 +143,74 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
     setIsHovered(false);
   };
 
-  const isStandaloneLarge = !showTitle && !showCount && (size === 'xl' || size === '2xl' || size === 'lg');
+  const isStandaloneLarge = !showTitle && !showCount;
 
   return (
     <>
-      <div 
+      <div
         ref={badgeRef}
         className={`relative inline-block ${className}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onClick={onClick}
       >
-        <div
-          onClick={onClick}
-          className={
-            isStandaloneLarge
-              ? `inline-flex items-center justify-center cursor-pointer select-none ${onClick ? 'active:scale-95' : ''}`
-              : `inline-flex items-center border transition-colors duration-150 cursor-pointer shadow-sm select-none ${(!showTitle && !showCount) ? 'p-1 rounded-lg' : sizeMap.pill} ${tierStyles.pillBg} ${onClick ? 'active:scale-95' : ''}`
-          }
-        >
-          {/* SVG Emblem */}
-          {svgUrl && (
-            <div className={`shrink-0 flex items-center justify-center ${sizeMap.icon}`}>
-              <img src={svgUrl} alt={meta.title} className="w-full h-full object-contain" />
+        {isStandaloneLarge ? (
+          <div className={`flex items-center justify-center transition-all ${className}`}>
+            {svgUrl && (
+              <div className={`shrink-0 flex items-center justify-center ${sizeMap.icon}`}>
+                <img src={svgUrl} alt={displayTitle} className="w-full h-full object-contain drop-shadow-md" />
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Sharp MTG Card Title Bar Frame */
+          <div
+            className={`relative inline-flex items-center select-none transition-all group ${
+              onClick ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default'
+            }`}
+          >
+            <div
+              className={`relative inline-flex items-center gap-2 border bg-gradient-to-r ${tierConfig.innerBg} ${sizeMap.padding} shadow-md rounded-none`}
+              style={{
+                borderColor: tierConfig.outerBorder,
+              }}
+            >
+              {/* SVG Badge Emblem */}
+              {svgUrl && (
+                <div className={`shrink-0 flex items-center justify-center ${sizeMap.icon}`}>
+                  <img
+                    src={svgUrl}
+                    alt={displayTitle}
+                    className="w-full h-full object-contain drop-shadow"
+                  />
+                </div>
+              )}
+
+              {/* Title */}
+              {showTitle && (
+                <span
+                  className={`${sizeMap.text} ${tierConfig.textGlow} drop-shadow-sm uppercase truncate font-semibold`}
+                >
+                  {displayTitle}
+                </span>
+              )}
+
+              {/* Multiplier Sub-Pill */}
+              {showCount && count > 1 && (
+                <span
+                  className={`rounded-none border font-bold font-mono ${sizeMap.count} ${tierConfig.countBg}`}
+                >
+                  ×{count}
+                </span>
+              )}
             </div>
-          )}
-
-          {/* Title */}
-          {showTitle && (
-            <span className={`${sizeMap.title} truncate`}>{meta.title}</span>
-          )}
-
-          {/* Multiplier Sub-Pill */}
-          {showCount && count > 1 && (
-            <span className={`rounded-full border font-bold font-mono opacity-95 ${sizeMap.count} ${tierStyles.countBg}`}>
-              ×{count}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Top-Layer Portaled Tooltip (Eliminates all modal / scroll container overflow clipping) */}
+      {/* Top-Layer Portaled Tooltip */}
       {showTooltip && isHovered && tooltipPos && createPortal(
-        <div 
+        <div
           className="fixed z-[99999] pointer-events-none w-72 p-3.5 rounded-xl bg-[#0b0f17]/95 border border-slate-700/90 shadow-2xl space-y-2 text-left animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl"
           style={{
             top: tooltipPos.placeBelow ? `${tooltipPos.top}px` : undefined,
@@ -169,24 +227,24 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
                   <img src={svgUrl} alt={meta.title} className="w-full h-full object-contain" />
                 </div>
               )}
-              <span className="text-xs font-black font-outfit text-white tracking-wide">
+              <span className="text-sm font-bold font-display text-white tracking-wide">
                 {meta.title}
               </span>
             </div>
-            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${tierStyles.tagBg}`}>
-              {tierStyles.label}
+            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${tierConfig.tagBg}`}>
+              {tierConfig.label}
             </span>
           </div>
 
-          {/* Description Body - Dynamic Objective Description */}
-          <p className="text-xs leading-relaxed text-slate-300 font-sans">
+          {/* Description Body */}
+          <p className="rt-narrative-sm text-slate-300">
             {meta.tierDescriptions?.[activeTier] || meta.description}
           </p>
 
-          {/* Flavor Text Quote (Enlarged and refined) */}
+          {/* Flavor Text Quote */}
           {meta.flavorQuote && (
             <div className="pt-2.5 border-t border-slate-800/80 space-y-1">
-              <p className="text-[13px] italic text-slate-200 font-serif leading-relaxed">
+              <p className="text-[13px] font-plantin italic text-slate-200 leading-relaxed">
                 "{meta.flavorQuote}"
               </p>
               {meta.flavorAttribution && (
@@ -202,7 +260,7 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
             <span className="font-semibold text-slate-300">
               {count === 1 ? '1 Match Honor' : `${count} Match Honors`}
             </span>
-            <span className="text-[9px] opacity-75 uppercase">{tierStyles.label}</span>
+            <span className="text-[9px] opacity-75 uppercase">{tierConfig.label}</span>
           </div>
         </div>,
         document.body

@@ -7,6 +7,7 @@ import DeckCardList from './DeckCardList';
 import TrueDeckListView from './TrueDeckListView';
 import { AchievementBadge } from './AchievementBadge';
 import { DeckAchievementsModal } from './DeckAchievementsModal';
+import CardImage from './CardImage';
 
 interface DeckDetailViewProps {
   isOpen: boolean;
@@ -22,45 +23,30 @@ interface DeckDetailViewProps {
   onDeleteDeck: (deckName: string) => void;
 }
 
-// Scryfall art crop for the commander header image.
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
-
-// Mana value histogram (bins 0, 1, 2, 3, 4, 5, 6, 7, 8+). Bars fill the full
-// cell height; each bar shows its mana value label underneath, hover shows count.
 type Tip = { text: string; x: number; y: number };
+
 function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette: any; onTip: (t: Tip | null) => void }) {
   const labels = ['0', '1', '2', '3', '4', '5', '6', '7', '8+'];
-  // Hide the 0-CMC column if the deck has no 0-cost spells.
   const startIdx = (bins[0] || 0) > 0 ? 0 : 1;
   const visible = bins.slice(startIdx);
   const visibleLabels = labels.slice(startIdx);
   const max = Math.max(...visible, 1);
   return (
     <div className="relative flex-1 flex flex-col min-h-0 w-full h-full justify-end">
-      {/* Centered floating pill overlay inside top of histogram */}
       <div className="absolute top-0 inset-x-0 flex justify-center z-10 pointer-events-none">
-        <span 
-          className="px-2.5 py-0.5 rounded-full text-[9px] font-mono uppercase tracking-wider font-bold shadow-md border"
-          style={{ 
-            backgroundColor: 'rgba(0, 0, 0, 0.65)', 
-            borderColor: 'rgba(255, 255, 255, 0.15)',
-            color: '#FFFFFF'
-          }}
-        >
-          Mana Value
+        <span className="px-2 py-0.2 border border-white/10 bg-black/60 text-[9px] font-mono uppercase tracking-wider font-bold text-neutral-400">
+          Mana Curve
         </span>
       </div>
 
-      {/* Bars taking full height */}
       <div className="flex-1 flex items-end gap-1.5 min-h-0 pt-6">
         {visible.map((val, i) => (
           <div key={i} className="flex-1 h-full flex flex-col justify-end">
             <div
-              className="w-full rounded-t-sm transition-all hover:opacity-80"
+              className="w-full transition-colors hover:opacity-80"
               style={{
                 height: `${Math.max((val / max) * 100, 4)}%`,
-                backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.08)',
+                backgroundColor: val > 0 ? (palette?.accent || '#8a719d') : 'rgba(255,255,255,0.05)',
               }}
               onMouseEnter={(e) => onTip({ text: `${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
               onMouseMove={(e) => onTip({ text: `${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
@@ -71,16 +57,15 @@ function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette:
       </div>
       <div className="flex gap-1.5 mt-1.5 shrink-0">
         {visibleLabels.map((l, idx) => (
-          <span key={idx} className="flex-1 text-center text-[10px] font-mono opacity-60 leading-none">{l}</span>
+          <span key={idx} className="flex-1 text-center text-[10px] font-mono text-neutral-500 leading-none">{l}</span>
         ))}
       </div>
     </div>
   );
 }
 
-// Card type distribution: horizontal bars, instant hover tooltip shows count.
 function CardTypeBars({ data, palette, onTip }: { data: { type: string; count: number }[]; palette: any; onTip: (t: Tip | null) => void }) {
-  if (!data || data.length === 0) return <div className="text-xs font-mono opacity-40">No card type data</div>;
+  if (!data || data.length === 0) return <div className="text-xs font-mono text-neutral-500">No card type data</div>;
   const max = Math.max(...data.map(d => d.count), 1);
   return (
     <div className="flex-1 space-y-1.5 flex flex-col justify-center min-h-0">
@@ -92,26 +77,32 @@ function CardTypeBars({ data, palette, onTip }: { data: { type: string; count: n
           onMouseMove={(e) => onTip({ text: `${d.type}: ${d.count}`, x: e.clientX, y: e.clientY })}
           onMouseLeave={() => onTip(null)}
         >
-          <span className="w-24 shrink-0 text-[11px] font-semibold truncate" style={{ color: palette?.text }}>{d.type}</span>
-          <div className="flex-1 h-2 rounded bg-white/5 overflow-hidden">
-            <div className="h-full rounded" style={{ width: `${(d.count / max) * 100}%`, backgroundColor: palette?.accent || '#38BDF8' }} />
+          <span className="w-24 shrink-0 text-xs font-mono font-bold uppercase truncate text-neutral-400">{d.type}</span>
+          <div className="flex-1 h-2 bg-neutral-900/80 border border-white/5 overflow-hidden">
+            <div className="h-full" style={{ width: `${(d.count / max) * 100}%`, backgroundColor: palette?.accent || '#8a719d' }} />
           </div>
+          <span className="text-[10px] font-mono text-neutral-400 tabular-nums w-5 text-right">{d.count}</span>
         </div>
       ))}
     </div>
   );
 }
 
-// Mana distribution pie: full pie, no tooltip — each slice renders the mana pip
-// symbol shrunk to fit inside the slice.
+// Exactly mirror the ManaPip default palette colors
 const MANA_COLORS: Record<string, string> = {
-  W: '#F8F6D8', U: '#38BDF8', B: '#A855F7', R: '#F87171', G: '#34D399', C: '#94A3B8',
+  W: '#E8E2CC', // Warm Ivory / Parchment
+  U: '#4A7FA3', // Steel Sapphire Blue
+  B: '#8a719d', // Obsidian / Deep Violet
+  R: '#B8503A', // Brick / Ember Red
+  G: '#4A7856', // Forest Moss Green
+  C: '#94A3B8', // Colorless Slate
 };
+
 const RADIAN = Math.PI / 180;
 function ManaPie({ data }: { data: { color: string; count: number }[] }) {
-  if (!data || data.length === 0) return <div className="text-xs font-mono opacity-40">No mana distribution data</div>;
+  if (!data || data.length === 0) return <div className="text-xs font-mono text-neutral-500">No mana data</div>;
   return (
-    <PieChart width={175} height={160}>
+    <PieChart width={185} height={170}>
       <Pie
         data={data}
         dataKey="count"
@@ -128,7 +119,7 @@ function ManaPie({ data }: { data: { color: string; count: number }[] }) {
           const r = outerRadius * 0.62;
           const x = cx + r * Math.cos(-midAngle * RADIAN);
           const y = cy + r * Math.sin(-midAngle * RADIAN);
-          const size = Math.max(14, Math.min(30, outerRadius * 0.95 * Math.sqrt(percent)));
+          const size = Math.max(14, Math.min(26, outerRadius * 0.95 * Math.sqrt(percent)));
           return (
             <foreignObject x={x - size / 2} y={y - size / 2} width={size} height={size}>
               <div className="w-full h-full flex items-center justify-center">
@@ -164,8 +155,6 @@ export function DeckDetailView({
   const [importResult, setImportResult] = useState<any>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
-  // Opening the import dialog resets the previous result/error so a fresh
-  // import never shows a stale confirmation from an earlier deck.
   const openImport = () => {
     setImportResult(null);
     setImportError(null);
@@ -184,7 +173,6 @@ export function DeckDetailView({
   const [copied, setCopied] = useState(false);
   const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
 
-  // Load the export text whenever the dialog opens or the mode changes.
   useEffect(() => {
     if (!exportOpen || !deckName) return;
     let cancelled = false;
@@ -203,7 +191,6 @@ export function DeckDetailView({
     return () => { cancelled = true; };
   }, [exportOpen, exportMode, deckName, importResult]);
 
-  // Load the stored True Decklist + status whenever the deck or import changes.
   useEffect(() => {
     if (!isOpen || !deckName) { setDeckListData(null); setDeckListStatus(null); return; }
     let cancelled = false;
@@ -216,7 +203,6 @@ export function DeckDetailView({
         if (cancelled) return;
         setDeckListData(list);
         setDeckListStatus(status);
-        // Default to True Decklist if one exists, else All Logged Cards.
         setListMode(prev => {
           if (prev === 'logged') return list ? 'true' : 'logged';
           return prev;
@@ -234,12 +220,9 @@ export function DeckDetailView({
 
   useEffect(() => {
     if (!isOpen || !deckName) return;
-    // Browser-style back navigation: push history so the mouse back button works.
     try {
       window.history.pushState({ deckDetail: deckName }, '');
-    } catch (e) {
-      // Ignore pushState rate-limit errors if any
-    }
+    } catch (e) {}
     const onPop = () => onBackRef.current();
     window.addEventListener('popstate', onPop);
     return () => {
@@ -247,7 +230,6 @@ export function DeckDetailView({
     };
   }, [isOpen, deckName]);
 
-  // Escape key handler to close modal or sub-modals
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -270,25 +252,22 @@ export function DeckDetailView({
   if (!isOpen || !detail) return null;
 
   const winrateNum = parseFloat(detail.winrate) || 0;
-  const playTotal = (detail.play?.wins || 0) + (detail.play?.losses || 0);
   const playWinPct = detail.play?.total ? (detail.play.wins / detail.play.total) * 100 : 0;
   const drawWinPct = detail.draw?.total ? (detail.draw.wins / detail.draw.total) * 100 : 0;
 
-  // Win/loss bar continuum: green fills left-to-right for wins, red fills
-  // right-to-left for losses, with win% shown above.
   const winLossBar = (wins: number, losses: number, winPct: number) => {
     const total = wins + losses;
     const winShare = total > 0 ? (wins / total) * 100 : 50;
     return (
       <div className="space-y-1">
-        <div className="flex items-center justify-between text-[11px] font-mono font-bold">
-          <span className="text-emerald-400">{wins}W</span>
-          <span className="opacity-90" style={{ color: palette?.text }}>{winPct.toFixed(1)}%</span>
-          <span className="text-rose-400">{losses}L</span>
+        <div className="flex items-center justify-between text-[11px] font-mono font-bold tabular-nums">
+          <span className="text-emerald-400/90">{wins}W</span>
+          <span className="text-neutral-200">{winPct.toFixed(1)}%</span>
+          <span className="text-rose-400/90">{losses}L</span>
         </div>
-        <div className="h-2.5 rounded-full overflow-hidden bg-white/10 relative">
-          <div className="h-full bg-emerald-400" style={{ width: `${winShare}%` }} />
-          <div className="h-full bg-rose-400 absolute inset-y-0 right-0" style={{ width: `${100 - winShare}%` }} />
+        <div className="h-1.5 w-full flex border border-white/10 overflow-hidden bg-neutral-900">
+          <div className="h-full bg-emerald-500/80" style={{ width: `${winShare}%` }} />
+          <div className="h-full bg-rose-500/80" style={{ width: `${100 - winShare}%` }} />
         </div>
       </div>
     );
@@ -297,166 +276,157 @@ export function DeckDetailView({
   return (
     <div 
       onClick={onBack}
-      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xl animate-fade-in select-none"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[80vw] h-[90vh] max-w-[80vw] max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative"
-        style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
+        className="w-[95vw] max-w-[1520px] h-[97vh] max-h-[1150px] border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden relative"
       >
         {/* Header bar */}
-        <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
+        <div className="p-3.5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs font-bold opacity-70 hover:opacity-100 transition-opacity"
-            style={{ color: palette?.text }}
+            className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
           >
-            <ChevronLeft className="w-4 h-4" /> Deck Library
+            <ChevronLeft className="w-4 h-4" /> Back to Deck Library
           </button>
-          <button onClick={onBack} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }} title="Close (Esc)">
+          <button
+            onClick={onBack}
+            className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+            title="Close (Esc)"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Title card (full width) */}
-          <div className="px-5 pt-4 shrink-0">
-            <div className="p-5 rounded-2xl border space-y-4 group/title" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-              {/* Row 1: deck name + commander + mana pips. The deck name wraps
-                  (capped at 60% width) and the commander name wraps too, so the
-                  mana pips are never pushed off-screen. */}
-              <div className="flex items-center gap-6">
-                <div className="flex flex-col min-w-0 max-w-[60%]">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="text-5xl font-black font-outfit uppercase tracking-wide break-words leading-tight min-w-0" style={{ color: palette?.text }}>
-                      {detail.deck_name}
-                    </h2>
-                    {/* Delete deck — shows on hover, red trash icon */}
-                    <button
-                      onClick={() => onDeleteDeck(detail.deck_name)}
-                      className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/20 shrink-0"
-                      style={{ color: '#F87171' }}
-                      title="Delete deck"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  {/* Formats row directly underneath deck name (excluding Bot Match) */}
-                  {detail.formats && detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).length > 0 && (
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).map((fmt: string, idx: number) => (
-                        <span
-                          key={fmt}
-                          className={`text-[11px] font-mono font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-md border ${
-                            idx === 0
-                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm'
-                              : 'bg-white/5 text-slate-300 border-white/10'
-                          }`}
-                        >
-                          {fmt}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+          {/* Top Title & Floating Analytics Header */}
+          <div className="p-5 border-b border-white/10 bg-neutral-900/30 shrink-0 space-y-4">
+            <div className="flex items-center justify-between gap-6 flex-wrap">
+              <div className="flex flex-col min-w-0 max-w-[60%] space-y-1.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <h2 className="text-2xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white truncate">
+                    {detail.deck_name}
+                  </h2>
+                  <button
+                    onClick={() => onDeleteDeck(detail.deck_name)}
+                    className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors cursor-pointer shrink-0"
+                    title="Delete deck"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
 
-                {/* Commander: clickable name opens the card viewer */}
-                {detail.commander_name && (
-                  <div className="flex items-center gap-4 ml-auto min-w-0">
-                    <div className="text-right min-w-0">
-                      <p className="text-[10px] font-mono uppercase opacity-50">Commander</p>
-                      <button
-                        onClick={() => onShowCard({ name: detail.commander_name }, true)}
-                        className="text-xl font-bold break-words whitespace-normal leading-tight transition-colors hover:underline"
-                        style={{ color: palette?.accent || '#38BDF8' }}
-                        title="View card"
+                {detail.formats && detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).map((fmt: string, idx: number) => (
+                      <span
+                        key={fmt}
+                        className="text-[10.5px] font-mono font-bold tracking-wider uppercase px-2.5 py-0.5 border border-white/15 bg-black/40 text-neutral-300"
                       >
-                        {detail.commander_name}
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => onShowCard({ name: detail.commander_name }, true)}
-                      className="shrink-0"
-                      title="View card"
-                    >
-                      <img
-                        src={scryfallArtUrl(detail.commander_name)}
-                        alt={detail.commander_name}
-                        className="w-20 h-20 rounded-xl object-cover border transition-opacity hover:opacity-80"
-                        style={{ borderColor: `${palette?.border}66` }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-                      />
-                    </button>
+                        {fmt}
+                      </span>
+                    ))}
                   </div>
                 )}
-
-                {/* Mana pips, far right */}
-                <div className={`flex gap-1 shrink-0 ${detail.commander_name ? '' : 'ml-auto'}`}>
-                  {(detail.colors || []).map((c: string) => <ManaPip key={c} symbol={c} size={34} />)}
-                  {(detail.colors || []).length === 0 && <ManaPip symbol="C" size={34} />}
-                </div>
               </div>
 
-              {/* Row 2: mana distribution pie + mana value histogram + card types */}
-              <div className="grid grid-cols-[230px_1fr_1fr] gap-4 pt-4 border-t h-[180px]" style={{ borderColor: `${palette?.border}66` }}>
-                <div className="rounded-xl border p-2 flex items-center justify-center h-full min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
-                  <ManaPie data={detail.mana_distribution || []} />
+              {/* Commander Preview */}
+              {detail.commander_name && (
+                <div className="flex items-center gap-3 ml-auto min-w-0">
+                  <div className="text-right min-w-0">
+                    <p className="text-[9.5px] font-mono uppercase text-neutral-500">Commander</p>
+                    <button
+                      onClick={() => onShowCard({ name: detail.commander_name }, true)}
+                      className="text-sm sm:text-base font-bold font-display uppercase tracking-wide text-white hover:underline truncate block"
+                      title="View card"
+                    >
+                      {detail.commander_name}
+                    </button>
+                  </div>
+                  <div
+                    onClick={() => onShowCard({ name: detail.commander_name }, true)}
+                    className="w-14 h-14 border border-white/15 overflow-hidden bg-neutral-900 shrink-0 cursor-pointer shadow"
+                  >
+                    <CardImage
+                      name={detail.commander_name}
+                      version="art_crop"
+                      alt={detail.commander_name}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform"
+                    />
+                  </div>
                 </div>
-                <div className="rounded-xl border p-3 flex flex-col h-full min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
-                  <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
-                </div>
-                <div className="rounded-xl border px-4 py-3 flex flex-col h-full min-h-0" style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}66` }}>
-                  <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
-                </div>
+              )}
+
+              {/* Mana pips */}
+              <div className={`flex gap-1.5 shrink-0 ${detail.commander_name ? '' : 'ml-auto'}`}>
+                {(detail.colors || []).map((c: string) => <ManaPip key={c} symbol={c} size={32} />)}
+                {(detail.colors || []).length === 0 && <ManaPip symbol="C" size={32} />}
+              </div>
+            </div>
+
+            {/* Row 2: Floating Analytics (No inner bounding boxes / darker backgrounds) */}
+            <div className="grid grid-cols-1 md:grid-cols-[220px_1fr_1fr] gap-6 pt-3 border-t border-white/10 h-[175px] items-center">
+              <div className="flex items-center justify-center h-full min-h-0">
+                <ManaPie data={detail.mana_distribution || []} />
+              </div>
+              <div className="flex flex-col h-full min-h-0">
+                <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
+              </div>
+              <div className="flex flex-col h-full min-h-0 pr-2">
+                <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
               </div>
             </div>
           </div>
 
+          {/* Bottom Body Grid */}
           <div className="flex-1 flex overflow-hidden min-h-0">
-            {/* Left sidebar: stats + recent matches */}
-            <div className="w-[300px] shrink-0 border-r flex flex-col" style={{ borderColor: palette?.border }}>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-4">
+            {/* Left sidebar: Floating stats + recent matches */}
+            <div className="w-[320px] shrink-0 border-r border-white/10 flex flex-col min-h-0 bg-neutral-950/60 p-4 space-y-4">
+              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
                 {/* Winrate */}
-                <div className="rounded-2xl border p-3 flex items-center justify-between" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <div className="border-b border-white/10 pb-3 flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] uppercase font-semibold opacity-60">Winrate</p>
-                    <h3 className="text-3xl font-extrabold font-outfit mt-0.5" style={{ color: winrateNum >= 50 ? '#34D399' : '#F87171' }}>{detail.winrate}</h3>
+                    <p className="text-[10px] font-mono uppercase text-neutral-500">Winrate</p>
+                    <h3 className="text-2xl font-mono font-bold mt-0.5 tabular-nums" style={{ color: winrateNum >= 50 ? '#34D399' : '#F87171' }}>
+                      {detail.winrate}
+                    </h3>
                   </div>
-                  <Trophy className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
+                  <span className="ms ms-ability-duels-renowned text-2xl text-amber-400/70" />
                 </div>
 
                 {/* W/L record */}
-                <div className="rounded-2xl border p-3 flex items-center justify-between" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+                <div className="border-b border-white/10 pb-3 flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] uppercase font-semibold opacity-60">W / L Record</p>
-                    <h3 className="text-3xl font-extrabold font-outfit mt-0.5">{detail.wins} - {detail.losses}</h3>
+                    <p className="text-[10px] font-mono uppercase text-neutral-500">W / L Record</p>
+                    <h3 className="text-2xl font-mono font-bold mt-0.5 text-white tabular-nums">
+                      {detail.wins} - {detail.losses}
+                    </h3>
                   </div>
-                  <Layers className="w-6 h-6 opacity-40" style={{ color: palette?.accent }} />
+                  <span className="ms ms-battle text-2xl text-neutral-500" />
                 </div>
 
                 {/* Win rate by position */}
-                <div className="rounded-2xl border p-3 space-y-3" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">Win Rate by Position</p>
+                <div className="border-b border-white/10 pb-3 space-y-2.5">
+                  <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Win Rate by Position</p>
                   <div>
-                    <p className="text-[11px] font-mono font-bold uppercase opacity-60 mb-1">On the Play</p>
+                    <p className="text-[10px] font-mono font-bold uppercase text-neutral-500 mb-1">On the Play</p>
                     {winLossBar(detail.play?.wins || 0, detail.play?.losses || 0, playWinPct)}
                   </div>
                   <div>
-                    <p className="text-[11px] font-mono font-bold uppercase opacity-60 mb-1">On the Draw</p>
+                    <p className="text-[10px] font-mono font-bold uppercase text-neutral-500 mb-1">On the Draw</p>
                     {winLossBar(detail.draw?.wins || 0, detail.draw?.losses || 0, drawWinPct)}
                   </div>
                 </div>
 
-                {/* Card Achievements Summary Card */}
-                <div className="rounded-2xl border p-3 space-y-2.5" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] uppercase font-semibold opacity-60">Card Achievements</p>
+                {/* Card Achievements Summary */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                    <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Card Achievements</p>
                     {(detail.top_card_achievements || []).length > 0 && (
                       <button
                         onClick={() => setAchievementsModalOpen(true)}
-                        className="text-[10px] font-mono font-bold hover:underline opacity-80"
-                        style={{ color: palette?.accent || '#38BDF8' }}
+                        className="text-[10px] font-mono font-bold text-sky-400 hover:underline cursor-pointer"
                       >
                         View All
                       </button>
@@ -464,41 +434,37 @@ export function DeckDetailView({
                   </div>
 
                   {(detail.top_card_achievements || []).length === 0 ? (
-                    <p className="text-xs font-mono opacity-40 py-1">No achievements earned yet</p>
+                    <p className="text-xs font-sans italic text-neutral-500 py-1">No achievements earned yet</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {(detail.top_card_achievements || []).slice(0, 3).map((ach: any, idx: number) => (
                         <div 
                           key={`${ach.grp_id}-${ach.achievement}-${idx}`} 
-                          className="flex items-center justify-between gap-2.5 p-2 rounded-xl border bg-black/20"
-                          style={{ borderColor: `${palette?.border}55` }}
+                          className="flex items-center justify-between gap-2 p-1.5 border border-white/5 bg-white/[0.015]"
                         >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div className="shrink-0 flex items-center justify-center">
-                              <AchievementBadge
-                                title={ach.achievement}
-                                tier={ach.tier}
-                                count={ach.count}
-                                size="sm"
-                                showTitle={false}
-                                showCount={false}
-                              />
-                            </div>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <AchievementBadge
+                              title={ach.achievement}
+                              tier={ach.tier}
+                              count={ach.count}
+                              size="sm"
+                              showTitle={false}
+                              showCount={false}
+                            />
                             <div className="min-w-0 flex-1">
                               <button
                                 onClick={() => onShowCard({ name: ach.card_name, grp_id: ach.grp_id }, false)}
-                                className="text-xs font-bold truncate block text-left w-full hover:underline leading-tight"
-                                style={{ color: palette?.text }}
+                                className="text-xs font-bold font-display uppercase tracking-wide truncate block text-left w-full hover:underline leading-tight text-white"
                                 title={ach.card_name}
                               >
                                 {ach.card_name}
                               </button>
-                              <span className="text-[10px] font-mono opacity-60 block truncate leading-tight mt-0.5">
+                              <span className="text-[10px] font-sans text-neutral-400 block truncate mt-0.5">
                                 {ach.achievement}
                               </span>
                             </div>
                           </div>
-                          <span className="shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white/10 text-white border border-white/20">
+                          <span className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.2 border border-white/10 bg-black/40 text-neutral-300">
                             {ach.count > 1 ? `×${ach.count}` : '1×'}
                           </span>
                         </div>
@@ -508,84 +474,86 @@ export function DeckDetailView({
                 </div>
               </div>
 
-              {/* Recent matches (below stats, still in left sidebar) */}
-              <div className="p-3 shrink-0 flex flex-col max-h-[40%]">
-                <div className="rounded-2xl border flex flex-col overflow-hidden min-h-0" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-                  <div className="px-3 py-2.5 border-b" style={{ borderColor: `${palette?.border}66` }}>
-                    <p className="text-[10px] font-mono uppercase tracking-wider font-bold" style={{ color: palette?.accent }}>Recent Matches</p>
-                  </div>
-                  <div className="overflow-y-auto custom-scrollbar divide-y divide-white/5">
+              {/* Recent matches sidebar section */}
+              <div className="shrink-0 flex flex-col max-h-[35%] border-t border-white/10 pt-3">
+                <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-white/10">
+                  <p className="text-[10px] font-mono font-bold uppercase text-neutral-400">Recent Matches</p>
+                  <button
+                    onClick={onViewAll}
+                    className="text-[10px] font-mono font-bold text-sky-400 hover:underline uppercase cursor-pointer"
+                  >
+                    View All →
+                  </button>
+                </div>
+                <div className="overflow-y-auto custom-scrollbar space-y-1">
                   {(detail.recent_matches || []).map((m: any) => (
                     <button
                       key={m.match_id}
                       onClick={() => onSelectMatch(m.match_id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors"
+                      className="w-full flex items-center gap-2 p-1.5 border border-white/5 bg-black/40 hover:bg-white/5 transition-colors text-left cursor-pointer"
                     >
                       {m.result === 'win' ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400/90 shrink-0" />
                       ) : (
-                        <XCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                        <XCircle className="w-3 h-3 text-rose-400/90 shrink-0" />
                       )}
-                      <span className="flex-1 font-semibold text-xs truncate" style={{ color: palette?.text }}>
+                      <span className="flex-1 font-bold font-display uppercase tracking-wide text-xs text-white truncate">
                         {m.opponent_name || 'Opponent'}
                       </span>
-                      <span className="text-[10px] font-mono opacity-50 shrink-0">{formatDateShort(m.timestamp)}</span>
+                      <span className="text-[10px] font-mono tabular-nums text-neutral-500 shrink-0">
+                        {formatDateShort(m.timestamp)}
+                      </span>
                     </button>
                   ))}
-                  {/* View All as a continuation row */}
-                  <button
-                    onClick={onViewAll}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/10 transition-colors"
-                    style={{ color: palette?.accent || '#38BDF8' }}
-                  >
-                    <span className="text-xs font-bold font-mono uppercase tracking-wide">View All →</span>
-                  </button>
-                  </div>
                 </div>
               </div>
             </div>
 
             {/* Main content area: decklist (True Decklist / All Logged Cards) */}
             <div className="flex-1 p-5 overflow-hidden min-h-0 flex flex-col">
-              {/* Source toggle + import */}
-              <div className="flex items-center justify-between mb-3 shrink-0">
-                <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: palette?.border }}>
+              {/* Source toggle + actions */}
+              <div className="flex items-center justify-between mb-3.5 shrink-0 flex-wrap gap-2">
+                <div className="flex border border-white/10 bg-black/40">
                   <button
                     onClick={() => setListMode('true')}
-                    className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors ${listMode === 'true' ? '' : 'opacity-50 hover:opacity-80'}`}
-                    style={{ color: listMode === 'true' ? palette?.accent : palette?.text, backgroundColor: listMode === 'true' ? `${palette?.accent}1a` : 'transparent' }}
+                    className={`px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      listMode === 'true'
+                        ? 'border border-white/20 bg-white/10 text-white'
+                        : 'text-neutral-400 hover:text-white border border-transparent'
+                    }`}
                   >
                     True Decklist
                   </button>
                   <button
                     onClick={() => setListMode('logged')}
-                    className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors border-l ${listMode === 'logged' ? '' : 'opacity-50 hover:opacity-80'}`}
-                    style={{ color: listMode === 'logged' ? palette?.accent : palette?.text, backgroundColor: listMode === 'logged' ? `${palette?.accent}1a` : 'transparent', borderColor: palette?.border }}
+                    className={`px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border-l border-white/10 ${
+                      listMode === 'logged'
+                        ? 'border border-white/20 bg-white/10 text-white'
+                        : 'text-neutral-400 hover:text-white border border-transparent'
+                    }`}
                   >
                     All Logged Cards
                   </button>
                 </div>
+
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => setAchievementsModalOpen(true)}
-                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
-                    style={{ color: '#FACC15', borderColor: '#FACC1555' }}
+                    className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-3 py-1.5 border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors cursor-pointer"
                     title="View all card achievements won by this deck"
                   >
-                    <Trophy className="w-3.5 h-3.5" /> Card Achievements
+                    <Trophy className="w-3.5 h-3.5" /> Achievements
                   </button>
                   <button
                     onClick={openImport}
-                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
-                    style={{ color: '#34D399', borderColor: '#34D39955' }}
+                    className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-3 py-1.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors cursor-pointer"
                     title="Import a decklist from MTGA"
                   >
                     <Download className="w-3.5 h-3.5" /> Import
                   </button>
                   <button
                     onClick={() => setExportOpen(true)}
-                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border hover:bg-white/5 transition-colors"
-                    style={{ color: '#F97316', borderColor: '#F9731655' }}
+                    className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-3 py-1.5 border border-orange-500/20 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20 transition-colors cursor-pointer"
                     title="Export this deck in MTGA format"
                   >
                     <Upload className="w-3.5 h-3.5" /> Export
@@ -594,189 +562,110 @@ export function DeckDetailView({
               </div>
 
               {/* Mode content */}
-              {listMode === 'true' && deckListData ? (
-                <TrueDeckListView
-                  data={deckListData}
-                  totalMatches={detail?.total || 0}
-                  status={deckListStatus}
-                  palette={palette}
-                  onShowCard={onShowCard}
-                />
-              ) : listMode === 'true' ? (
-                /* True Decklist selected but none imported yet — show an empty prompt. */
-                <div className="flex-1 flex flex-col items-center justify-center min-h-0">
-                  <div
-                    className="flex flex-col items-center gap-2 text-center cursor-pointer select-none"
-                    onClick={openImport}
-                  >
-                    <p className="text-sm font-mono text-center opacity-40" style={{ color: palette?.text }}>
-                      Click Import Decklist
-                    </p>
-                    <p className="text-[11px] font-mono text-center opacity-25" style={{ color: palette?.text }}>
-                      to upload the actual cards in this deck
-                    </p>
+              <div className="flex-1 overflow-hidden min-h-0 border border-white/10 bg-neutral-950 p-2">
+                {listMode === 'true' && deckListData ? (
+                  <TrueDeckListView
+                    data={deckListData}
+                    totalMatches={detail?.total || 0}
+                    status={deckListStatus}
+                    palette={palette}
+                    onShowCard={onShowCard}
+                  />
+                ) : listMode === 'true' ? (
+                  <div className="flex-1 flex flex-col items-center justify-center min-h-0 h-full">
+                    <div
+                      className="flex flex-col items-center gap-2 text-center cursor-pointer select-none p-6 border border-dashed border-white/15 hover:border-white/30 transition-colors"
+                      onClick={openImport}
+                    >
+                      <p className="text-base font-display uppercase tracking-wider text-white">
+                        Click to Import Decklist
+                      </p>
+                      <p className="text-xs font-mono text-neutral-400">
+                        Upload the full list of cards in this deck from MTG Arena
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <DeckCardList deckName={deckName} palette={palette} onShowCard={onShowCard} />
-              )}
+                ) : (
+                  <DeckCardList deckName={deckName} palette={palette} onShowCard={onShowCard} />
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Import Decklist dialog */}
+        {/* Import Decklist Modal */}
         {importOpen && (
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-text"
+            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-fade-in select-text"
             onClick={closeImport}
           >
             <div
-              className="w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden"
-              style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+              className="w-full max-w-2xl border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
+              <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
                 <div>
-                  <p className="text-sm font-bold font-outfit" style={{ color: palette?.text }}>Import Decklist</p>
-                  <p className="text-[10px] font-mono opacity-50">Paste the deck export from MTGA (Ctrl+V)</p>
+                  <p className="text-base font-bold font-display uppercase tracking-wide text-white">Import Decklist</p>
+                  <p className="text-xs font-mono text-neutral-400">Paste the deck export from MTG Arena (Ctrl+V)</p>
                 </div>
-                <button onClick={closeImport} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-                <textarea
-                  value={importText}
-                  onChange={(e) => setImportText(e.target.value)}
-                  placeholder=""
-                  autoFocus
-                  className="w-full h-56 rounded-xl border p-3 font-mono text-xs leading-relaxed focus:outline-none resize-none custom-scrollbar select-text"
-                  style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
-                />
-
-                {importError && (
-                  <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-rose-400">
-                    <AlertTriangle className="w-3.5 h-3.5" /> {importError}
-                  </div>
-                )}
-
-                {importResult && (
-                  <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-emerald-400">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Imported {importResult.card_count} cards
-                    {importResult.sideboard_count ? ` + ${importResult.sideboard_count} sideboard` : ''}
-                    {importResult.unresolved?.length ? `; ${importResult.unresolved.length} unresolved: ${importResult.unresolved.join(', ')}` : ''}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 border-t flex items-center justify-end gap-2 shrink-0" style={{ borderColor: palette?.border }}>
                 <button
                   onClick={closeImport}
-                  disabled={importBusy}
-                  className="px-4 py-1.5 rounded-lg border text-xs font-bold opacity-70 hover:opacity-100 transition-opacity disabled:opacity-40"
-                  style={{ borderColor: palette?.border, color: palette?.text }}
+                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    setImportBusy(true); setImportError(null); setImportResult(null);
-                    try {
-                      const res = await invoke<any>('save_deck_list', { deckName, exportText: importText });
-                      setImportResult(res);
-                      setListMode('true');
-                      setImportText('');
-                      onDeckListImported?.();
-                    } catch (e: any) {
-                      setImportError(String(e));
-                    } finally {
-                      setImportBusy(false);
-                    }
-                  }}
-                  disabled={importBusy || !importText.trim()}
-                  className="px-4 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-40"
-                  style={{ color: palette?.accent, borderColor: `${palette?.accent}66`, backgroundColor: `${palette?.accent}1a` }}
-                >
-                  {importBusy ? 'Importing…' : 'Import'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Export Decklist dialog */}
-        {exportOpen && (
-          <div
-            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in select-text"
-            onClick={() => setExportOpen(false)}
-          >
-            <div
-              className="w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden"
-              style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
-                <div>
-                  <p className="text-sm font-bold font-outfit" style={{ color: palette?.text }}>Export Decklist</p>
-                  <p className="text-[10px] font-mono opacity-50">MTGA-compatible format — select and copy, or use the button below</p>
-                </div>
-                <button onClick={() => setExportOpen(false)} className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5" style={{ borderColor: palette?.border }}>
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="p-4 space-y-3">
-                {/* Source toggle */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono uppercase tracking-wider opacity-50" style={{ color: palette?.text }}>Export</span>
-                  <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: palette?.border }}>
-                    <button
-                      onClick={() => { setExportMode('true'); setCopied(false); }}
-                      className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors ${exportMode === 'true' ? '' : 'opacity-50 hover:opacity-80'}`}
-                      style={{ color: exportMode === 'true' ? palette?.accent : palette?.text, backgroundColor: exportMode === 'true' ? `${palette?.accent}1a` : 'transparent' }}
-                    >
-                      True Decklist
-                    </button>
-                    <button
-                      onClick={() => { setExportMode('logged'); setCopied(false); }}
-                      className={`px-3 py-1 text-[11px] font-mono font-bold transition-colors border-l ${exportMode === 'logged' ? '' : 'opacity-50 hover:opacity-80'}`}
-                      style={{ color: exportMode === 'logged' ? palette?.accent : palette?.text, backgroundColor: exportMode === 'logged' ? `${palette?.accent}1a` : 'transparent', borderColor: palette?.border }}
-                    >
-                      All Logged Cards
-                    </button>
-                  </div>
-                </div>
-
                 <textarea
-                  value={exportText}
-                  readOnly
-                  onFocus={(e) => e.target.select()}
-                  className="w-full h-64 rounded-xl border p-3 font-mono text-xs leading-relaxed focus:outline-none resize-none custom-scrollbar select-text"
-                  style={{ backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder="Deck&#10;4 Llanowar Elves&#10;4 Lightning Bolt&#10;..."
+                  className="w-full h-48 border border-white/10 bg-black/60 p-3 font-mono text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/30 resize-none"
                 />
 
-                <div className="flex items-center justify-end gap-2">
-                  {copied && (
-                    <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5" /> Copied
-                    </span>
-                  )}
+                {importError && (
+                  <div className="p-2.5 border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs font-mono flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{importError}</span>
+                  </div>
+                )}
+
+                {importResult && (
+                  <div className="p-2.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-mono flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>Imported {importResult.mainboard_count} mainboard cards successfully!</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
                   <button
+                    onClick={closeImport}
+                    className="px-4 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={importBusy || !importText.trim()}
                     onClick={async () => {
-                      setCopied(false);
-                      const res = await invoke<any>('export_decklist', { deckName, source: exportMode });
-                      if (res && res.text) {
-                        setExportText(res.text);
-                        await navigator.clipboard.writeText(res.text);
-                        setCopied(true);
+                      setImportBusy(true);
+                      setImportError(null);
+                      try {
+                        const res = await invoke<any>('import_deck_list', {
+                          deckName,
+                          importText: importText.trim(),
+                        });
+                        setImportResult(res);
+                        onDeckListImported?.();
+                      } catch (err: any) {
+                        setImportError(String(err));
+                      } finally {
+                        setImportBusy(false);
                       }
                     }}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-colors"
-                    style={{ color: '#F97316', borderColor: '#F9731666', backgroundColor: '#F973161a' }}
+                    className="px-4 py-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors disabled:opacity-50 cursor-pointer"
                   >
-                    <Copy className="w-3.5 h-3.5" /> Copy to Clipboard
+                    {importBusy ? 'Importing…' : 'Import Decklist'}
                   </button>
                 </div>
               </div>
@@ -784,22 +673,77 @@ export function DeckDetailView({
           </div>
         )}
 
-        {/* Instant hover tooltip (charts) */}
-        {tip && (
+        {/* Export Decklist Modal */}
+        {exportOpen && (
           <div
-            className="fixed z-[70] pointer-events-none px-2 py-1 rounded-md border text-[11px] font-mono font-bold shadow-xl"
-            style={{ left: tip.x + 14, top: tip.y + 14, backgroundColor: palette?.mantle, borderColor: palette?.border, color: palette?.text }}
+            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-fade-in select-text"
+            onClick={() => setExportOpen(false)}
           >
-            {tip.text}
+            <div
+              className="w-full max-w-2xl border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+                <div>
+                  <p className="text-base font-bold font-display uppercase tracking-wide text-white">Export Decklist</p>
+                  <p className="text-xs font-mono text-neutral-400">Copy to clipboard for MTG Arena import</p>
+                </div>
+                <button
+                  onClick={setExportOpen.bind(null, false)}
+                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <textarea
+                  readOnly
+                  value={exportText}
+                  className="w-full h-48 border border-white/10 bg-black/60 p-3 font-mono text-xs text-white resize-none focus:outline-none"
+                />
+                <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                  <div className="flex border border-white/10 bg-black/40">
+                    <button
+                      onClick={() => setExportMode('true')}
+                      className={`px-3 py-1 text-xs font-mono font-bold uppercase ${
+                        exportMode === 'true' ? 'bg-white/15 text-white' : 'text-neutral-500'
+                      }`}
+                    >
+                      True Decklist
+                    </button>
+                    <button
+                      onClick={() => setExportMode('logged')}
+                      className={`px-3 py-1 text-xs font-mono font-bold uppercase border-l border-white/10 ${
+                        exportMode === 'logged' ? 'bg-white/15 text-white' : 'text-neutral-500'
+                      }`}
+                    >
+                      Logged Cards
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(exportText);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copied ? 'Copied!' : 'Copy to Clipboard'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Deck Card Achievements Full Modal View */}
+        {/* Deck Achievements Modal */}
         <DeckAchievementsModal
           isOpen={achievementsModalOpen}
           onClose={() => setAchievementsModalOpen(false)}
           deckName={deckName}
-          groupedAchievements={detail?.card_achievements_grouped || []}
+          achievements={detail?.all_card_achievements || detail?.top_card_achievements || []}
           palette={palette}
           onShowCard={onShowCard}
         />
@@ -807,3 +751,5 @@ export function DeckDetailView({
     </div>
   );
 }
+
+export default DeckDetailView;

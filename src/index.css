@@ -3,22 +3,141 @@
 @tailwind utilities;
 
 :root {
-  --bg-dark: #0B0C10;
-  --bg-card: #1F2833;
-  --accent-cyan: #66FCF1;
-  --accent-teal: #45A29E;
-  --text-muted: #C5C6C7;
+  --rt-base: #0E0E10;
+  --rt-mantle: #151518;
+  --rt-surface: #1D1D22;
+  --rt-border: #2A2A32;
+  --rt-text: #F4F4F6;
+  --rt-subtext: #92929D;
+  --rt-accent: #4A7FA3;
+  --rt-accent-hover: #6097BC;
+  --rt-green: #3FA66C;
+  --rt-red: #C24E42;
+  --rt-yellow: #D4A237;
+  --rt-blue: #4A7FA3;
+  --rt-track: #1D1D22;
 }
 
 body {
   margin: 0;
-  background-color: var(--rt-base, #0B0C10);
-  color: #C5C6C7;
+  background-color: var(--rt-base);
+  color: var(--rt-text);
   font-family: 'Inter', sans-serif;
+}
+
+/* --- MTG Authentic Font Declarations -------------------------------------- */
+@font-face {
+  font-family: 'Beleren';
+  src: url('./assets/fonts/beleren-bold.woff') format('woff'),
+       url('./assets/fonts/beleren-bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MPlantin';
+  src: url('./assets/fonts/mplantin.woff') format('woff'),
+       url('./assets/fonts/mplantin.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-display, .font-beleren {
+  font-family: 'Beleren', serif;
+  font-weight: 700;
+}
+
+.font-plantin {
+  font-family: 'MPlantin', serif;
+  font-weight: 400;
 }
 
 .font-outfit {
   font-family: 'Outfit', sans-serif;
+}
+
+/* --- MTG Mana Ability Icon Definitions ----------------------------------- */
+.ms-ability-duels-renowned::before {
+  content: "\ea87";
+}
+.ms-ability-party::before {
+  content: "\e987";
+}
+.ms-ability-adventure::before {
+  content: "\e948";
+}
+.ms-ability-kicker::before {
+  content: "\e989";
+}
+.ms-ability-prototype::before {
+  content: "\e9be";
+}
+
+/* --- Semantic Typography Suite (Consolidated Scale) ----------------------- */
+.rt-hero-stat {
+  font-family: 'Beleren', serif;
+  font-weight: 700;
+  font-size: 34px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.rt-hero-title {
+  font-family: 'Beleren', serif;
+  font-weight: 700;
+  font-size: 38px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.rt-section-header {
+  font-family: 'Beleren', serif;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.rt-card-title {
+  font-family: 'Beleren', serif;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.rt-label {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rt-body-data {
+  font-family: 'Inter', sans-serif;
+  font-size: 14.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.rt-narrative {
+  font-family: 'MPlantin', serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.rt-narrative-sm {
+  font-family: 'MPlantin', serif;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+/* Tabular numerals for stats, counts, percentages, and data tables */
+.tabular-nums, table, [data-tabular-nums] {
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* Custom Scrollbar (theme-driven via --rt-* vars set on the app root) */

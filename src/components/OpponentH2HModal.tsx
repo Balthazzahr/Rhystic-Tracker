@@ -75,10 +75,10 @@ export function OpponentH2HModal({
         {/* Header Bar */}
         <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
           <div className="flex items-center gap-3">
-            <Swords className="w-5 h-5" style={{ color: palette?.accent || '#38BDF8' }} />
+            <Swords className="w-5 h-5" style={{ color: palette?.accent || '#8a719d' }} />
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-60">Head-to-Head Opponent Record</p>
-              <h2 className="text-xl font-extrabold font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+              <p className="rt-label opacity-60">Head-to-Head Opponent Record</p>
+              <h2 className="rt-card-title tracking-wide" style={{ color: palette?.text }}>
                 vs {opponentName}
               </h2>
             </div>
@@ -100,16 +100,16 @@ export function OpponentH2HModal({
           <div className="grid grid-cols-4 gap-4 shrink-0">
             <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               <div>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Total Played</p>
-                <h3 className="text-2xl font-extrabold font-outfit mt-0.5">{stats?.total_matches ?? 0}</h3>
+                <p className="rt-label opacity-60">Total Played</p>
+                <h3 className="rt-hero-stat mt-0.5">{stats?.total_matches ?? 0}</h3>
               </div>
               <BarChart3 className="w-5 h-5 opacity-40" style={{ color: palette?.accent }} />
             </div>
 
             <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               <div>
-                <p className="text-[10px] uppercase font-semibold opacity-60">H2H Winrate</p>
-                <h3 className="text-2xl font-extrabold font-outfit mt-0.5" style={{ color: palette?.accent || '#38BDF8' }}>
+                <p className="rt-label opacity-60">H2H Winrate</p>
+                <h3 className="rt-hero-stat mt-0.5" style={{ color: palette?.accent || '#8a719d' }}>
                   {stats?.winrate ?? '0.0'}%
                 </h3>
               </div>
@@ -118,16 +118,16 @@ export function OpponentH2HModal({
 
             <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               <div>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Your Wins</p>
-                <h3 className="text-2xl font-extrabold font-outfit mt-0.5 text-emerald-400">{stats?.wins ?? 0}</h3>
+                <p className="rt-label opacity-60">Your Wins</p>
+                <h3 className="rt-hero-stat mt-0.5 text-emerald-400">{stats?.wins ?? 0}</h3>
               </div>
               <CheckCircle2 className="w-5 h-5 text-emerald-400/40" />
             </div>
 
             <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               <div>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Opponent Wins</p>
-                <h3 className="text-2xl font-extrabold font-outfit mt-0.5 text-rose-400">{stats?.losses ?? 0}</h3>
+                <p className="rt-label opacity-60">Opponent Wins</p>
+                <h3 className="rt-hero-stat mt-0.5 text-rose-400">{stats?.losses ?? 0}</h3>
               </div>
               <XCircle className="w-5 h-5 text-rose-400/40" />
             </div>

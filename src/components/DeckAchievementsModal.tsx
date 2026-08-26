@@ -64,10 +64,10 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                <h3 className="rt-card-title leading-tight" style={{ color: palette?.text }}>
                   Card Achievements
                 </h3>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 tabular-nums">
                   {totalHonors} Total
                 </span>
               </div>
@@ -94,10 +94,10 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
               <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500">
                 <Award className="w-8 h-8 opacity-40" />
               </div>
-              <p className="text-base font-bold font-outfit" style={{ color: palette?.text }}>
+              <p className="rt-section-header" style={{ color: palette?.text }}>
                 No Card Achievements Earned Yet
               </p>
-              <p className="text-xs font-mono opacity-50 max-w-sm">
+              <p className="rt-narrative-sm opacity-50 max-w-sm">
                 Play matches with this deck on MTGA to earn combat badges, lethal strikes, and lifetime card honors!
               </p>
             </div>
@@ -113,10 +113,10 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
                 >
                   {/* Achievement Group Header */}
                   <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: `${palette?.border}55` }}>
-                    <h4 className="text-base font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+                    <h4 className="rt-section-header leading-tight" style={{ color: palette?.text }}>
                       {meta.title}
                     </h4>
-                    <span className="text-[11px] font-mono font-bold opacity-60">
+                    <span className="text-[11px] font-mono font-bold opacity-60 tabular-nums">
                       {group.total_awards === 1 ? '1 Card Award' : `${group.total_awards} Card Awards`}
                     </span>
                   </div>

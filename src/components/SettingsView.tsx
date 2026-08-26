@@ -5,17 +5,24 @@ import {
   Database, 
   ShieldCheck, 
   Check, 
-  FileText,
+  Search, 
+  RefreshCw, 
+  Sliders, 
+  Download, 
+  Trash2, 
+  HardDrive, 
+  Compass, 
+  Radio, 
+  Image as ImageIcon,
+  ExternalLink,
+  Layers,
+  Sparkles,
+  Info,
+  CheckCircle2,
   AlertCircle,
-  Search,
-  RefreshCw,
-  Sliders,
-  Download,
-  Trash2,
-  HardDrive,
-  Compass,
-  Radio,
-  Image as ImageIcon
+  Clock,
+  Terminal,
+  Monitor
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -31,6 +38,8 @@ interface SettingsViewProps {
   isTestEnv?: boolean;
 }
 
+type SettingsTab = 'general' | 'appearance' | 'connection' | 'storage' | 'about';
+
 export const SettingsView: React.FC<SettingsViewProps> = ({ 
   palette, 
   activeThemeId, 
@@ -38,6 +47,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   version = APP_VERSION,
   isTestEnv = false,
 }) => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+
   // Log path state
   const [logPath, setLogPath] = useState("");
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -63,6 +74,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [defaultCollectionSort, setDefaultCollectionSort] = useState(() => {
     return localStorage.getItem('defaultCollectionSort') || 'released';
   });
+  const [confirmDeckDelete, setConfirmDeckDelete] = useState(() => {
+    return localStorage.getItem('confirmDeckDelete') !== 'false';
+  });
+  const [compactCardsMode, setCompactCardsMode] = useState(() => {
+    return localStorage.getItem('compactCardsMode') === 'true';
+  });
 
   // Cache stats & actions
   const [cacheStats, setCacheStats] = useState<{ size_bytes: number; file_count: number } | null>(null);
@@ -82,7 +99,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [cardDbSyncResult, setCardDbSyncResult] = useState<{ success: boolean; count: number; elapsedMs: number; error?: string } | null>(null);
   const [showResetWizardModal, setShowResetWizardModal] = useState(false);
 
-  // Helper to format bytes
   const formatBytes = (bytes: number) => {
     if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
@@ -91,7 +107,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Load Minimize to Tray setting on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -129,7 +144,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     localStorage.setItem('defaultCollectionSort', val);
   };
 
-  // Load cache stats
+  const handleToggleConfirmDeckDelete = (val: boolean) => {
+    setConfirmDeckDelete(val);
+    localStorage.setItem('confirmDeckDelete', String(val));
+  };
+
+  const handleToggleCompactCardsMode = (val: boolean) => {
+    setCompactCardsMode(val);
+    localStorage.setItem('compactCardsMode', String(val));
+  };
+
   const loadCacheStats = async () => {
     try {
       const res = await invoke<any>('get_cache_stats');
@@ -139,7 +163,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // Load database stats
   const loadDbStats = async () => {
     try {
       const res = await invoke<any>('get_database_stats');
@@ -149,7 +172,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // Load card database status
   const loadCardDbStatus = async () => {
     try {
       const res = await invoke<any>('get_raw_card_db_status');
@@ -279,7 +301,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // Load set metadata status on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -295,7 +316,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch Scryfall set list and persist names + release dates locally.
   const handleRefreshSets = async () => {
     setSetMetaBusy(true);
     setSetMetaResult(null);
@@ -321,7 +341,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // Load the currently active log path (stored override or auto-detected).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -349,7 +368,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // Open a native file picker; auto-applies the selection immediately.
   const handleBrowse = async () => {
     try {
       const selected = await open({
@@ -369,11 +387,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const manaThemeOptions = [
-    { id: 'white', label: 'White (Order)', symbol: 'W', color: '#F8F6D8' },
-    { id: 'blue', label: 'Blue (Progress)', symbol: 'U', color: '#38BDF8' },
-    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#8E59C1' },
-    { id: 'red', label: 'Red (Chaos)', symbol: 'R', color: '#F87171' },
-    { id: 'green', label: 'Green (Nature)', symbol: 'G', color: '#34D399' },
+    { id: 'white', label: 'White (Order)', symbol: 'W', color: '#E8E2CC', desc: 'Ivory & parchment highlights' },
+    { id: 'blue', label: 'Blue (Progress)', symbol: 'U', color: '#4A7FA3', desc: 'Steel sapphire & intellect' },
+    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#8a719d', desc: 'Deep obsidian & violet glow' },
+    { id: 'red', label: 'Red (Chaos)', symbol: 'R', color: '#B8503A', desc: 'Warm ember & brick passion' },
+    { id: 'green', label: 'Green (Nature)', symbol: 'G', color: '#4A7856', desc: 'Forest moss & primeval vigor' },
   ];
 
   const startupTabOptions = [
@@ -394,510 +412,643 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { value: 'count', label: 'Ownership Count (4 to 0)' },
   ];
 
+  const tabs: { id: SettingsTab; label: string; icon: string }[] = [
+    { id: 'general', label: 'General & Behavior', icon: 'ms-ability-prototype' },
+    { id: 'appearance', label: 'Appearance & Themes', icon: 'ms-ability-party' },
+    { id: 'connection', label: 'MTGA Connection', icon: 'ms-ability-adventure' },
+    { id: 'storage', label: 'Storage & Database', icon: 'ms-library' },
+    { id: 'about', label: 'About & Legal', icon: 'ms-battle' },
+  ];
+
   return (
-    <div className="flex-1 min-h-0 w-full max-w-7xl mx-auto overflow-y-auto custom-scrollbar space-y-6 pb-6">
-      {/* Header Row: Title on Left, Version Badge on Right */}
-      <div className="flex items-center justify-between gap-4 pb-2 border-b" style={{ borderColor: `${palette?.border || '#2A2F3D'}66` }}>
-        <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-          SETTINGS AND CONFIGURATION
-        </h1>
+    <div className="flex-1 flex flex-col h-full overflow-hidden min-h-0">
+      {/* Top Header Bar */}
+      <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/40">
+        <div className="flex items-center gap-3">
+          <span className="ms ms-ability-prototype text-2xl text-amber-400" />
+          <h1 className="text-xl sm:text-2xl font-bold font-display uppercase tracking-wide text-white">
+            Settings & Configuration
+          </h1>
+        </div>
+
         <div className="flex items-center gap-2">
-          <div 
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border bg-black/40 shadow-sm"
-            style={{ borderColor: palette?.border }}
-          >
-            <span className="text-xs font-mono font-bold tracking-wider" style={{ color: palette?.accent || '#38BDF8' }}>
+          <div className="flex items-center gap-2 px-3 py-1 border border-white/15 bg-black/40">
+            <span className="text-xs font-mono font-bold tracking-wider text-white">
               v{version}
             </span>
             {isTestEnv && (
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                🧙 TEST ENV
+              <span className="text-[9.5px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.2 border border-purple-500/30 bg-purple-500/10 text-purple-300">
+                Test Environment
               </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Dynamic 2-Column Grid Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-        {/* ========================================================================= */}
-        {/* LEFT COLUMN: Log Configuration, Background Behavior, Preferences        */}
-        {/* ========================================================================= */}
-        <div className="space-y-6">
-          {/* Section 1: MTG Arena Log Path Discovery */}
-          <div 
-            className="p-6 rounded-2xl border space-y-4 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-5 h-5" style={{ color: palette?.accent }} />
-              <h3 className="text-base font-bold">MTGA Log Path Configuration</h3>
-            </div>
-            <p className="text-xs opacity-70 leading-relaxed">
-              MTG Arena's active <code className="px-1.5 py-0.5 rounded bg-black/40 font-mono text-emerald-400">Player.log</code> is auto-detected on launch from standard Steam and Wine/Proton locations. If it can't be found, use <strong>Browse</strong> to select it manually.
-            </p>
-
-            {/* Where to find Player.log — common install scenarios */}
-            <div className="rounded-xl border p-3.5 space-y-2.5" style={{ borderColor: `${palette?.border || '#2A2F3D'}88`, backgroundColor: 'rgba(0,0,0,0.2)' }}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: palette?.accent }}>
-                Where to find Player.log
-              </p>
-              <div className="text-[11px] font-mono space-y-1.5 leading-relaxed">
-                <div>
-                  <span className="opacity-60">Steam (Proton):</span>{' '}
-                  <span className="break-all" style={{ color: palette?.text }}>
-                    &lt;SteamLibrary&gt;/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log
-                  </span>
-                </div>
-                <div>
-                  <span className="opacity-60">Steam (native Linux):</span>{' '}
-                  <span className="break-all" style={{ color: palette?.text }}>
-                    &lt;SteamLibrary&gt;/steamapps/common/MTGA/MTGA_Data/Downloads/Player.log
-                  </span>
-                </div>
-                <div>
-                  <span className="opacity-60">Without Steam (Wine):</span>{' '}
-                  <span className="break-all" style={{ color: palette?.text }}>
-                    &lt;wine-prefix&gt;/drive_c/users/&lt;user&gt;/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log
-                  </span>
-                </div>
-              </div>
-              <p className="text-[10px] font-mono opacity-50">
-                Tip: <code className="opacity-80">SteamLibrary</code> is wherever your Steam games folder lives (e.g. <code className="opacity-80">~/Steam</code>, <code className="opacity-80">~/.local/share/Steam</code>, or a mounted drive).
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase opacity-60">Active Player.log Path</label>
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
-                  <input
-                    type="text"
-                    value={logPath}
-                    onChange={(e) => setLogPath(e.target.value)}
-                    placeholder={loadingPath ? 'Loading…' : 'No log detected — use Browse to select'}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs font-mono bg-black/30 focus:outline-none"
-                    style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
-                  />
-                </div>
-                <button
-                  onClick={handleBrowse}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 shrink-0"
-                  style={{ backgroundColor: palette?.accent, color: '#0B0C10' }}
-                >
-                  {browseSuccess ? <Check className="w-4 h-4" /> : <FolderOpen className="w-4 h-4" />}
-                  {browseSuccess ? 'Applied' : 'Browse…'}
-                </button>
-                <button
-                  onClick={handleSaveConfig}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 border shrink-0"
-                  style={{ backgroundColor: `${palette?.surface || '#1A1D24'}99`, borderColor: palette?.border, color: palette?.text }}
-                >
-                  {savedSuccess ? <Check className="w-4 h-4" /> : null}
-                  {savedSuccess ? 'Saved' : 'Save Config'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Desktop & Background Behavior */}
-          <div 
-            className="p-6 rounded-2xl border space-y-4 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5" style={{ color: palette?.accent }} />
-              <h3 className="text-base font-bold">Desktop & Background Behavior</h3>
-            </div>
-
-            {/* Minimize to Tray */}
-            <div className="flex items-center justify-between pt-1">
-              <div className="space-y-0.5 pr-4">
-                <p className="text-xs font-bold" style={{ color: palette?.text }}>Minimize to System Tray on Close</p>
-                <p className="text-[11px] opacity-60">Keep Rhystic Tracker actively tracking matches in the background when the main window is closed.</p>
-              </div>
+      {/* Settings Navigation Tabs */}
+      <div className="px-4 pt-3 shrink-0 bg-neutral-900/20 border-b border-white/10">
+        <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
               <button
-                type="button"
-                role="switch"
-                aria-checked={minimizeToTray}
-                onClick={() => handleToggleMinimizeToTray(!minimizeToTray)}
-                className="relative inline-flex items-center h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none"
-                style={{
-                  backgroundColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#181B22',
-                  borderColor: minimizeToTray ? (palette?.accent || '#38BDF8') : '#2E3545',
-                }}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border-t border-l border-r ${
+                  isActive
+                    ? 'border-white/20 bg-neutral-950 text-white -mb-px relative z-10'
+                    : 'border-transparent text-neutral-400 hover:text-white hover:bg-white/5'
+                }`}
               >
-                <span
-                  className="pointer-events-none inline-block h-5 w-5 rounded-full shadow-md transition-all duration-200 ease-in-out"
-                  style={{
-                    transform: minimizeToTray ? 'translateX(22px)' : 'translateX(2px)',
-                    backgroundColor: minimizeToTray ? '#000000' : '#94A3B8',
-                  }}
-                />
+                <span className={`ms ${tab.icon} text-sm`} />
+                <span>{tab.label}</span>
               </button>
-            </div>
-
-            {/* Auto-switch to Live HUD */}
-            <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: `${palette?.border}66` }}>
-              <div className="space-y-0.5 pr-4">
-                <p className="text-xs font-bold" style={{ color: palette?.text }}>Auto-Switch to Live Match HUD on Game Start</p>
-                <p className="text-[11px] opacity-60">Automatically switch view to the Live Match HUD tab whenever a new match begins in MTGA.</p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={autoSwitchLiveHud}
-                onClick={() => handleToggleAutoSwitchLiveHud(!autoSwitchLiveHud)}
-                className="relative inline-flex items-center h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none"
-                style={{
-                  backgroundColor: autoSwitchLiveHud ? (palette?.accent || '#38BDF8') : '#181B22',
-                  borderColor: autoSwitchLiveHud ? (palette?.accent || '#38BDF8') : '#2E3545',
-                }}
-              >
-                <span
-                  className="pointer-events-none inline-block h-5 w-5 rounded-full shadow-md transition-all duration-200 ease-in-out"
-                  style={{
-                    transform: autoSwitchLiveHud ? 'translateX(22px)' : 'translateX(2px)',
-                    backgroundColor: autoSwitchLiveHud ? '#000000' : '#94A3B8',
-                  }}
-                />
-              </button>
-            </div>
-          </div>
-
-          {/* Section 3: Navigation & Collection Preferences */}
-          <div 
-            className="p-6 rounded-2xl border space-y-4 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center gap-2">
-              <Compass className="w-5 h-5" style={{ color: palette?.accent }} />
-              <h3 className="text-base font-bold">Application & Collection Preferences</h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              {/* Default Startup Tab */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold uppercase opacity-60">Default Startup Tab</label>
-                <CustomDropdown
-                  options={startupTabOptions}
-                  value={defaultStartupTab}
-                  onChange={handleChangeDefaultStartupTab}
-                  palette={palette}
-                />
-                <p className="text-[10px] opacity-50">Select which tab opens automatically when Rhystic Tracker launches.</p>
-              </div>
-
-              {/* Default Collection Sort */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold uppercase opacity-60">Default Collection Sort</label>
-                <CustomDropdown
-                  options={collectionSortOptions}
-                  value={defaultCollectionSort}
-                  onChange={handleChangeDefaultCollectionSort}
-                  palette={palette}
-                />
-                <p className="text-[10px] opacity-50">Initial card sort order applied when opening the Card Library view.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: 5-Mana Color Theme Picker */}
-          <div 
-            className="p-6 rounded-2xl border space-y-4 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Palette className="w-5 h-5" style={{ color: palette?.accent }} />
-                <h3 className="text-base font-bold">Mana Theme Customization</h3>
-              </div>
-              <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full border bg-black/30" style={{ borderColor: palette?.border, color: palette?.accent }}>
-                Active: {palette?.name}
-              </span>
-            </div>
-            <p className="text-xs opacity-70">
-              Select one of the 5 Magic color identity presets. All themes maintain the dark base UI while switching accent highlights.
-            </p>
-
-            <div className="grid grid-cols-5 gap-3 pt-1">
-              {manaThemeOptions.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveThemeId(t.id)}
-                  className={`p-3.5 rounded-xl border flex flex-col items-center gap-2.5 transition-all ${
-                    activeThemeId === t.id ? 'ring-2 ring-white/60 scale-105 shadow-lg' : 'opacity-75 hover:opacity-100'
-                  }`}
-                  style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border }}
-                >
-                  <ManaPip symbol={t.symbol} size={26} colorOverride={t.color} />
-                  <span className="text-[11px] font-bold">{t.label.split(' ')[0]}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+            );
+          })}
         </div>
+      </div>
 
-        {/* ========================================================================= */}
-        {/* RIGHT COLUMN: Image Cache, Database Storage, Metadata, Legal Notices     */}
-        {/* ========================================================================= */}
-        <div className="space-y-6">
-          {/* Section 5: Local Card Image Cache Manager */}
-          <div 
-            className="p-6 rounded-2xl border space-y-4 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-5 h-5" style={{ color: palette?.accent }} />
-                <h3 className="text-base font-bold">Local Card Image Cache</h3>
+      {/* Main Settings Tab Content Body */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar min-h-0 bg-neutral-950">
+        <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* ========================================================================= */}
+          {/* TAB 1: GENERAL & BEHAVIOR                                                */}
+          {/* ========================================================================= */}
+          {activeTab === 'general' && (
+            <div className="space-y-5 animate-fade-in">
+              {/* Application Behavior */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    Application Behavior
+                  </h3>
+                  <span className="text-[10px] font-mono text-neutral-500">Desktop Lifecycle</span>
+                </div>
+
+                {/* Minimize to Tray */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="space-y-0.5 pr-4">
+                    <p className="text-xs font-bold text-white uppercase font-display tracking-wide">
+                      Minimize to System Tray on Close
+                    </p>
+                    <p className="text-xs font-sans text-neutral-400">
+                      Keep Rhystic Tracker actively tracking matches in the background when the main window is closed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={minimizeToTray}
+                    onClick={() => handleToggleMinimizeToTray(!minimizeToTray)}
+                    className={`relative inline-flex items-center h-6 w-11 shrink-0 cursor-pointer border transition-colors ${
+                      minimizeToTray ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-black/60 border-white/15'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform transition-transform ${
+                        minimizeToTray ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Auto Switch Live HUD */}
+                <div className="flex items-center justify-between py-1 border-t border-white/10 pt-3">
+                  <div className="space-y-0.5 pr-4">
+                    <p className="text-xs font-bold text-white uppercase font-display tracking-wide">
+                      Auto-Switch to Live Match HUD on Game Start
+                    </p>
+                    <p className="text-xs font-sans text-neutral-400">
+                      Automatically switch to the Live Match HUD tab whenever a new match begins in MTGA.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoSwitchLiveHud}
+                    onClick={() => handleToggleAutoSwitchLiveHud(!autoSwitchLiveHud)}
+                    className={`relative inline-flex items-center h-6 w-11 shrink-0 cursor-pointer border transition-colors ${
+                      autoSwitchLiveHud ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-black/60 border-white/15'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform transition-transform ${
+                        autoSwitchLiveHud ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Confirm Deck Delete */}
+                <div className="flex items-center justify-between py-1 border-t border-white/10 pt-3">
+                  <div className="space-y-0.5 pr-4">
+                    <p className="text-xs font-bold text-white uppercase font-display tracking-wide">
+                      Confirm Before Deleting Decks
+                    </p>
+                    <p className="text-xs font-sans text-neutral-400">
+                      Prompt with a confirmation dialog when deleting a deck from the Deck Library.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={confirmDeckDelete}
+                    onClick={() => handleToggleConfirmDeckDelete(!confirmDeckDelete)}
+                    className={`relative inline-flex items-center h-6 w-11 shrink-0 cursor-pointer border transition-colors ${
+                      confirmDeckDelete ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-black/60 border-white/15'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform transition-transform ${
+                        confirmDeckDelete ? 'translate-x-6 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
-              <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded border bg-black/30 opacity-75" style={{ borderColor: palette?.border }}>
-                {formatBytes(cacheStats?.size_bytes ?? 0)}
-              </span>
+
+              {/* Startup & Navigation */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    Startup & Default View
+                  </h3>
+                  <span className="text-[10px] font-mono text-neutral-500">Navigation</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                      Default Startup Tab
+                    </label>
+                    <CustomDropdown
+                      options={startupTabOptions}
+                      value={defaultStartupTab}
+                      onChange={handleChangeDefaultStartupTab}
+                      palette={palette}
+                    />
+                    <p className="text-[11px] font-sans text-neutral-500">
+                      View loaded automatically when Rhystic Tracker starts.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                      First-Time Setup Assistant
+                    </label>
+                    <div>
+                      <button
+                        onClick={() => setShowResetWizardModal(true)}
+                        className="w-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 hover:text-white transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Sliders className="w-3.5 h-3.5" /> Re-run Setup Wizard
+                      </button>
+                    </div>
+                    <p className="text-[11px] font-sans text-neutral-500">
+                      Re-opens the wizard to re-scan log paths and card databases.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p className="text-xs opacity-70 leading-relaxed">
-              Scryfall card illustrations are cached locally on disk so card lists render instantly with zero network lag and full offline capability.
-            </p>
+          )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Cached Images</p>
-                <p className="text-lg font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
-                  {cacheStats?.file_count?.toLocaleString() ?? 0} files
-                </p>
+          {/* ========================================================================= */}
+          {/* TAB 2: APPEARANCE & THEMES                                               */}
+          {/* ========================================================================= */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-5 animate-fade-in">
+              {/* Mana Color Themes */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                      5-Color Mana Theme Presets
+                    </h3>
+                    <p className="text-xs font-sans text-neutral-400 mt-0.5">
+                      Select your Magic color identity. All themes use a master dark obsidian base with custom mana accents.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 border border-white/15 bg-black/40 text-neutral-300">
+                    Active: {palette?.name || activeThemeId}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 pt-1">
+                  {manaThemeOptions.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setActiveThemeId(t.id)}
+                      className={`p-3 border flex flex-col items-center gap-2 transition-all cursor-pointer ${
+                        activeThemeId === t.id
+                          ? 'border-white/40 bg-white/10 shadow-lg'
+                          : 'border-white/10 bg-black/40 hover:border-white/20 hover:bg-white/5 opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <ManaPip symbol={t.symbol} size={28} colorOverride={t.color} />
+                      <span className="text-xs font-bold font-display uppercase tracking-wide text-white">
+                        {t.label.split(' ')[0]}
+                      </span>
+                      <span className="text-[9.5px] font-sans text-neutral-500 text-center leading-tight">
+                        {t.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Storage Used</p>
-                <p className="text-lg font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
-                  {formatBytes(cacheStats?.size_bytes ?? 0)}
-                </p>
+
+              {/* Card & Library Display Options */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    Card & Library Display
+                  </h3>
+                  <span className="text-[10px] font-mono text-neutral-500">Visuals</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                      Default Collection Sort Order
+                    </label>
+                    <CustomDropdown
+                      options={collectionSortOptions}
+                      value={defaultCollectionSort}
+                      onChange={handleChangeDefaultCollectionSort}
+                      palette={palette}
+                    />
+                    <p className="text-[11px] font-sans text-neutral-500">
+                      Initial sorting method applied when opening the Card Library.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                      Compact Card Preview
+                    </label>
+                    <div className="flex items-center justify-between p-2 border border-white/10 bg-black/40 h-10">
+                      <span className="text-xs font-mono text-neutral-300">Slim Card Rows in Lists</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={compactCardsMode}
+                        onClick={() => handleToggleCompactCardsMode(!compactCardsMode)}
+                        className={`relative inline-flex items-center h-5 w-9 shrink-0 cursor-pointer border transition-colors ${
+                          compactCardsMode ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-black/60 border-white/15'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3 w-3 transform transition-transform ${
+                            compactCardsMode ? 'translate-x-5 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-[11px] font-sans text-neutral-500">
+                      Optimizes vertical card height for dense match breakdowns.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                onClick={handlePreDownloadArt}
-                disabled={cacheDownloading}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 disabled:opacity-50 border"
-                style={{ backgroundColor: `${palette?.accent}22`, borderColor: `${palette?.accent}66`, color: palette?.accent }}
-              >
-                <Download className={`w-3.5 h-3.5 ${cacheDownloading ? 'animate-bounce' : ''}`} />
-                {cacheDownloading ? 'Pre-downloading…' : 'Pre-download Collection Art'}
-              </button>
-              <button
-                onClick={handleClearCache}
-                disabled={cacheClearing || (cacheStats?.file_count ?? 0) === 0}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 disabled:opacity-40 border hover:bg-rose-500/20 text-rose-400"
-                style={{ borderColor: 'rgba(244, 63, 94, 0.3)', backgroundColor: 'rgba(244, 63, 94, 0.08)' }}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                {cacheClearing ? 'Clearing…' : 'Clear Image Cache'}
-              </button>
-            </div>
-            {downloadProgress && (
-              <p className="text-[11px] font-mono text-emerald-400 animate-pulse">{downloadProgress}</p>
-            )}
-            {cacheClearSuccess && (
-              <p className="text-[11px] font-mono text-emerald-400">Card image cache successfully cleared.</p>
-            )}
-          </div>
+          {/* ========================================================================= */}
+          {/* TAB 3: MTGA CONNECTION & LOGS                                            */}
+          {/* ========================================================================= */}
+          {activeTab === 'connection' && (
+            <div className="space-y-5 animate-fade-in">
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                      MTGA Active Log Path Configuration
+                    </h3>
+                    <p className="text-xs font-sans text-neutral-400 mt-0.5">
+                      Rhystic Tracker reads MTG Arena's active <code className="font-mono text-emerald-400">Player.log</code> in real time with high-performance incremental tailing.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px] font-mono font-bold uppercase">
+                    <Radio className="w-3 h-3 animate-pulse" /> Live Tailer Active
+                  </span>
+                </div>
 
-          {/* Section 6: Database & Storage Management */}
-          <div 
-            className="p-6 rounded-2xl border space-y-4 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="w-5 h-5" style={{ color: palette?.accent }} />
-                <h3 className="text-base font-bold">Database & Storage Management</h3>
-              </div>
-              <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded border bg-black/30 opacity-75" style={{ borderColor: palette?.border }}>
-                {dbStats?.db_filename ?? 'rhystic.db'}
-              </span>
-            </div>
-            <p className="text-xs opacity-70 leading-relaxed">
-              Rhystic Tracker stores all match timelines, decklists, and collection logs 100% locally in an embedded SQLite database.
-            </p>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                    Active Player.log Path
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                      <input
+                        type="text"
+                        value={logPath}
+                        onChange={(e) => setLogPath(e.target.value)}
+                        placeholder={loadingPath ? 'Loading…' : 'No log detected — use Browse to select'}
+                        className="w-full pl-9 pr-3 py-2 border border-white/10 bg-black/60 text-xs font-mono text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/30"
+                      />
+                    </div>
+                    <button
+                      onClick={handleBrowse}
+                      className="px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 text-xs font-mono font-bold uppercase tracking-wider text-white transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {browseSuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <FolderOpen className="w-3.5 h-3.5" />}
+                      {browseSuccess ? 'Applied' : 'Browse…'}
+                    </button>
+                    <button
+                      onClick={handleSaveConfig}
+                      className="px-4 py-2 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-mono font-bold uppercase tracking-wider text-emerald-300 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {savedSuccess ? <Check className="w-3.5 h-3.5" /> : null}
+                      {savedSuccess ? 'Saved' : 'Save Config'}
+                    </button>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Total Match Records</p>
-                <p className="text-lg font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
-                  {dbStats?.match_count?.toLocaleString() ?? 0}
-                </p>
-              </div>
-              <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Database Size</p>
-                <p className="text-lg font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
-                  {formatBytes(dbStats?.size_bytes ?? 0)}
-                </p>
-              </div>
-            </div>
-
-            {/* MTGA Card Database Indexing Status */}
-            <div className="p-3.5 rounded-xl border space-y-2.5 bg-black/25" style={{ borderColor: palette?.border }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60">MTGA Indexed Card Universe</p>
-                  <p className="text-sm font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
-                    {cardDbStatus?.card_count ? (
-                      <span className="text-emerald-400">{cardDbStatus.card_count.toLocaleString()} Cards Indexed</span>
-                    ) : (
-                      <span className="text-amber-400">0 Cards (Sync Required)</span>
-                    )}
+                {/* Where to find Player.log assistant guide */}
+                <div className="border border-white/10 bg-neutral-950 p-3.5 space-y-2">
+                  <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400">
+                    Common MTGA Install Locations
+                  </p>
+                  <div className="text-[11px] font-mono space-y-1 text-neutral-300">
+                    <div>
+                      <span className="text-neutral-500">Steam (Proton):</span>{' '}
+                      <span className="text-neutral-200 break-all">&lt;SteamLibrary&gt;/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-500">Lutris / Wine:</span>{' '}
+                      <span className="text-neutral-200 break-all">&lt;wine-prefix&gt;/drive_c/users/&lt;user&gt;/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-500">Native Linux:</span>{' '}
+                      <span className="text-neutral-200 break-all">&lt;SteamLibrary&gt;/steamapps/common/MTGA/MTGA_Data/Downloads/Player.log</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] font-sans italic text-neutral-500 pt-1 border-t border-white/5">
+                    Note: Detailed logging must be enabled in MTGA (Options → Account → Detailed Logs Plugin Support).
                   </p>
                 </div>
-                <button
-                  onClick={handleSyncCardDb}
-                  disabled={cardDbSyncing}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 hover:opacity-90 active:scale-95 disabled:opacity-50 border"
-                  style={{ backgroundColor: `${palette?.accent}22`, borderColor: `${palette?.accent}66`, color: palette?.accent }}
-                >
-                  <RefreshCw className={`w-3 h-3 ${cardDbSyncing ? 'animate-spin' : ''}`} />
-                  {cardDbSyncing ? 'Indexing…' : 'Re-sync Cards'}
-                </button>
-              </div>
-              <p className="text-[10px] font-mono break-all opacity-60">
-                Raw DB: {cardDbStatus?.raw_path || 'Auto-scanning Steam / Lutris / Wine'}
-              </p>
-              {cardDbSyncResult && (
-                <p className={`text-[11px] font-mono ${cardDbSyncResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {cardDbSyncResult.success ? `Indexed ${cardDbSyncResult.count.toLocaleString()} cards in ${cardDbSyncResult.elapsedMs}ms` : `Error: ${cardDbSyncResult.error}`}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase font-semibold opacity-50">Active Database Path</p>
-              <p className="text-[11px] font-mono break-all px-2.5 py-1.5 rounded-lg border bg-black/40 opacity-75" style={{ borderColor: palette?.border }}>
-                {dbStats?.db_path ?? '—'}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                onClick={handleExportDb}
-                disabled={dbExporting}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95"
-                style={{ backgroundColor: palette?.accent, color: '#0B0C10' }}
-              >
-                <Download className="w-3.5 h-3.5" />
-                {dbExporting ? 'Exporting…' : 'Backup / Export Database…'}
-              </button>
-
-              <button
-                onClick={() => setShowResetWizardModal(true)}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 border border-white/10 hover:border-white/30 text-neutral-300 hover:text-white"
-                style={{ backgroundColor: `${palette?.mantle || '#12141A'}` }}
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                Re-run Setup Wizard…
-              </button>
-            </div>
-            {dbExportSuccess && (
-              <p className="text-xs font-mono text-emerald-400">{dbExportSuccess}</p>
-            )}
-          </div>
-
-          {/* Section 7: Set Metadata (names + release dates) */}
-          <div
-            className="p-6 rounded-2xl border space-y-3 shadow-xl"
-            style={{ backgroundColor: palette?.surface || '#1A1D24', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-5 h-5" style={{ color: palette?.accent }} />
-                <h3 className="text-base font-bold">Set Metadata</h3>
-              </div>
-              <button
-                onClick={handleRefreshSets}
-                disabled={setMetaBusy}
-                className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 disabled:opacity-50 border"
-                style={{ backgroundColor: `${palette?.surface || '#1A1D24'}99`, borderColor: palette?.border, color: palette?.text }}
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${setMetaBusy ? 'animate-spin' : ''}`} />
-                {setMetaBusy ? 'Updating…' : 'Update Set Lists'}
-              </button>
-            </div>
-            <p className="text-xs opacity-70">
-              Fetches set names and release dates from Scryfall so the Collection view can label sets and sort them by release date.
-            </p>
-            <div className="grid grid-cols-2 gap-4 pt-1">
-              <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Known Sets</p>
-                <p className="text-lg font-bold font-mono mt-0.5" style={{ color: palette?.text }}>
-                  {setMetaStatus?.known_count ?? '—'}
-                </p>
-              </div>
-              <div className="p-3.5 rounded-xl border bg-black/20" style={{ borderColor: palette?.border }}>
-                <p className="text-[10px] uppercase font-semibold opacity-60">Last Updated</p>
-                <p className="text-xs font-mono opacity-80 mt-1.5">
-                  {setMetaStatus?.last_updated ? new Date(setMetaStatus.last_updated).toLocaleDateString() : 'Never'}
-                </p>
               </div>
             </div>
-            {setMetaResult && (
-              <p className="text-xs font-mono text-emerald-400">{setMetaResult}</p>
-            )}
-            {setMetaError && (
-              <p className="text-xs font-mono text-rose-400 flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5" /> {setMetaError}
-              </p>
-            )}
-          </div>
+          )}
 
-          {/* Section 8: Wizards of the Coast & Scryfall Legal Attribution Notice */}
-          <div 
-            className="p-6 rounded-2xl border space-y-3 shadow-xl bg-black/30"
-            style={{ borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center gap-2 text-amber-400">
-              <ShieldCheck className="w-5 h-5" />
-              <h3 className="text-sm font-bold uppercase tracking-wider">Fan Content & Copyright Disclosures</h3>
+          {/* ========================================================================= */}
+          {/* TAB 4: STORAGE, CACHE & DATABASE                                         */}
+          {/* ========================================================================= */}
+          {activeTab === 'storage' && (
+            <div className="space-y-5 animate-fade-in">
+              {/* SQLite Database Stats & Backup */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    SQLite Database Management
+                  </h3>
+                  <span className="text-xs font-mono text-neutral-400">
+                    {dbStats?.db_filename ?? 'rhystic.db'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="border border-white/10 bg-neutral-950 p-3">
+                    <p className="text-[9.5px] font-mono uppercase text-neutral-500">Total Recorded Matches</p>
+                    <p className="text-xl font-mono font-bold text-white tabular-nums mt-0.5">
+                      {dbStats?.match_count?.toLocaleString() ?? 0}
+                    </p>
+                  </div>
+                  <div className="border border-white/10 bg-neutral-950 p-3">
+                    <p className="text-[9.5px] font-mono uppercase text-neutral-500">Database File Size</p>
+                    <p className="text-xl font-mono font-bold text-white tabular-nums mt-0.5">
+                      {formatBytes(dbStats?.size_bytes ?? 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[9.5px] font-mono uppercase text-neutral-500">Database Disk Path</p>
+                  <p className="text-xs font-mono text-neutral-400 break-all p-2 border border-white/10 bg-black/60">
+                    {dbStats?.db_path ?? '—'}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    onClick={handleExportDb}
+                    disabled={dbExporting}
+                    className="px-4 py-2 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-mono font-bold uppercase tracking-wider text-emerald-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {dbExporting ? 'Exporting…' : 'Backup Database to File…'}
+                  </button>
+                  {dbExportSuccess && (
+                    <span className="text-xs font-mono text-emerald-400">{dbExportSuccess}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Local Card Image Cache */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    Local Card Image Cache
+                  </h3>
+                  <span className="text-xs font-mono text-neutral-400">
+                    {formatBytes(cacheStats?.size_bytes ?? 0)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="border border-white/10 bg-neutral-950 p-3">
+                    <p className="text-[9.5px] font-mono uppercase text-neutral-500">Cached Card Illustrations</p>
+                    <p className="text-xl font-mono font-bold text-white tabular-nums mt-0.5">
+                      {cacheStats?.file_count?.toLocaleString() ?? 0} files
+                    </p>
+                  </div>
+                  <div className="border border-white/10 bg-neutral-950 p-3">
+                    <p className="text-[9.5px] font-mono uppercase text-neutral-500">Cache Storage Used</p>
+                    <p className="text-xl font-mono font-bold text-white tabular-nums mt-0.5">
+                      {formatBytes(cacheStats?.size_bytes ?? 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    onClick={handlePreDownloadArt}
+                    disabled={cacheDownloading}
+                    className="px-4 py-2 border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-xs font-mono font-bold uppercase tracking-wider text-sky-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className={`w-3.5 h-3.5 ${cacheDownloading ? 'animate-bounce' : ''}`} />
+                    {cacheDownloading ? 'Pre-downloading…' : 'Pre-download Collection Art'}
+                  </button>
+                  <button
+                    onClick={handleClearCache}
+                    disabled={cacheClearing || (cacheStats?.file_count ?? 0) === 0}
+                    className="px-4 py-2 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-mono font-bold uppercase tracking-wider text-rose-400 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {cacheClearing ? 'Clearing…' : 'Clear Image Cache'}
+                  </button>
+                </div>
+                {downloadProgress && (
+                  <p className="text-xs font-mono text-emerald-400 animate-pulse">{downloadProgress}</p>
+                )}
+                {cacheClearSuccess && (
+                  <p className="text-xs font-mono text-emerald-400">Card image cache successfully cleared.</p>
+                )}
+              </div>
+
+              {/* MTGA Card Database & Scryfall Metadata Sync */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    MTGA Universe & Scryfall Sync
+                  </h3>
+                  <span className="text-[10px] font-mono text-neutral-500">Metadata Sources</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card DB Index */}
+                  <div className="border border-white/10 bg-neutral-950 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">MTGA Card Universe</p>
+                      <button
+                        onClick={handleSyncCardDb}
+                        disabled={cardDbSyncing}
+                        className="text-[10px] font-mono font-bold text-sky-400 hover:underline uppercase flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${cardDbSyncing ? 'animate-spin' : ''}`} />
+                        {cardDbSyncing ? 'Syncing…' : 'Re-sync'}
+                      </button>
+                    </div>
+                    <p className="text-base font-mono font-bold text-white tabular-nums">
+                      {cardDbStatus?.card_count ? (
+                        <span className="text-emerald-400">{cardDbStatus.card_count.toLocaleString()} Cards</span>
+                      ) : (
+                        <span className="text-amber-400">0 Cards</span>
+                      )}
+                    </p>
+                    <p className="text-[9.5px] font-mono text-neutral-500 break-all truncate">
+                      {cardDbStatus?.raw_path || 'Auto-scan enabled'}
+                    </p>
+                  </div>
+
+                  {/* Scryfall Set Metadata */}
+                  <div className="border border-white/10 bg-neutral-950 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Scryfall Set Catalog</p>
+                      <button
+                        onClick={handleRefreshSets}
+                        disabled={setMetaBusy}
+                        className="text-[10px] font-mono font-bold text-sky-400 hover:underline uppercase flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${setMetaBusy ? 'animate-spin' : ''}`} />
+                        {setMetaBusy ? 'Updating…' : 'Update Sets'}
+                      </button>
+                    </div>
+                    <p className="text-base font-mono font-bold text-white tabular-nums">
+                      {setMetaStatus?.known_count ?? 0} Sets Known
+                    </p>
+                    <p className="text-[9.5px] font-mono text-neutral-500">
+                      Last Updated: {setMetaStatus?.last_updated ? new Date(setMetaStatus.last_updated).toLocaleDateString() : 'Never'}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-xs opacity-75 space-y-2 leading-relaxed font-sans">
-              <p>
-                <strong>Rhystic Tracker</strong> is unofficial Fan Content permitted under the Wizards of the Coast Fan Content Policy. Not approved or endorsed by Wizards of the Coast. Portions of the materials used are property of Wizards of the Coast. © Wizards of the Coast LLC.
-              </p>
-              <p>
-                Card metadata, symbol artwork, and mana pips are fetched via <strong>Scryfall's API</strong> under Scryfall's Free Attribution License. Rhystic Tracker is free and open-source software.
-              </p>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 5: ABOUT & LEGAL                                                     */}
+          {/* ========================================================================= */}
+          {activeTab === 'about' && (
+            <div className="space-y-5 animate-fade-in">
+              {/* App Summary */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-3 flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-bold font-display uppercase tracking-wide text-white">
+                      Rhystic Tracker
+                    </h3>
+                    <p className="text-xs font-sans text-neutral-400">
+                      The Next-Generation Native MTG Arena Combat Analytics & Match Companion.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-mono font-bold text-amber-400">v{version}</span>
+                    <p className="text-[10px] font-mono text-neutral-500">Tauri 2.0 / Rust / React</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="border border-white/10 bg-neutral-950 p-2.5">
+                    <p className="text-[9px] font-mono uppercase text-neutral-500">Framework</p>
+                    <p className="text-xs font-mono font-bold text-white mt-0.5">Tauri 2.0</p>
+                  </div>
+                  <div className="border border-white/10 bg-neutral-950 p-2.5">
+                    <p className="text-[9px] font-mono uppercase text-neutral-500">Engine</p>
+                    <p className="text-xs font-mono font-bold text-white mt-0.5">Rust (WebKit)</p>
+                  </div>
+                  <div className="border border-white/10 bg-neutral-950 p-2.5">
+                    <p className="text-[9px] font-mono uppercase text-neutral-500">Database</p>
+                    <p className="text-xs font-mono font-bold text-white mt-0.5">SQLite 3</p>
+                  </div>
+                  <div className="border border-white/10 bg-neutral-950 p-2.5">
+                    <p className="text-[9px] font-mono uppercase text-neutral-500">License</p>
+                    <p className="text-xs font-mono font-bold text-emerald-400 mt-0.5">Open Source</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal Attribution */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <ShieldCheck className="w-4 h-4" />
+                  <h4 className="text-xs font-display font-bold uppercase tracking-wider">
+                    Fan Content Policy & Legal Disclosures
+                  </h4>
+                </div>
+                <div className="text-xs text-neutral-400 space-y-2 leading-relaxed font-sans">
+                  <p>
+                    <strong className="text-white">Rhystic Tracker</strong> is unofficial Fan Content permitted under the Wizards of the Coast Fan Content Policy. Not approved or endorsed by Wizards of the Coast. Portions of the materials used are property of Wizards of the Coast. © Wizards of the Coast LLC.
+                  </p>
+                  <p>
+                    Card metadata, symbol artwork, and mana pips are fetched via <strong className="text-white">Scryfall's API</strong> under Scryfall's Free Attribution License. Rhystic Tracker is free, open-source software built for the Magic: The Gathering community.
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* CONFIRMATION MODAL: RE-RUN SETUP WIZARD */}
+      {/* Re-run Setup Wizard Modal */}
       {showResetWizardModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
-          <div 
-            className="w-full max-w-md rounded-2xl border p-6 space-y-4 shadow-2xl"
-            style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
-          >
-            <div className="flex items-center space-x-3 text-sky-400">
-              <Sliders className="w-6 h-6" />
-              <h3 className="text-base font-bold text-white">Re-run First-Time Setup Wizard?</h3>
+          <div className="w-full max-w-md border border-white/20 bg-neutral-950 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-sky-400">
+              <Sliders className="w-5 h-5" />
+              <h3 className="text-base font-bold font-display uppercase tracking-wide text-white">
+                Re-run Setup Wizard?
+              </h3>
             </div>
             
-            <p className="text-xs text-neutral-300 leading-relaxed">
-              This will re-open the initial setup wizard to verify your MTGA log path and re-index the card database. 
+            <p className="text-xs text-neutral-300 leading-relaxed font-sans">
+              This will re-launch the initial setup wizard to verify your MTGA log path and re-index the card database. 
               <br /><br />
-              <strong className="text-emerald-400">Your match history and deck lists will not be deleted.</strong>
+              <strong className="text-emerald-400">Your match history and deck lists will not be affected or deleted.</strong>
             </p>
 
-            <div className="pt-2 flex items-center justify-end space-x-3">
+            <div className="pt-2 flex items-center justify-end gap-2.5">
               <button
                 onClick={() => setShowResetWizardModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-neutral-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors"
+                className="px-4 py-1.5 border border-white/10 hover:border-white/20 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmResetWizard}
-                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 transition-colors shadow-lg active:scale-95"
+                className="px-4 py-1.5 border border-sky-500/40 bg-sky-500/20 hover:bg-sky-500/30 text-xs font-mono font-bold uppercase tracking-wider text-sky-300 transition-colors cursor-pointer"
               >
                 Launch Setup Wizard
               </button>
@@ -908,3 +1059,5 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     </div>
   );
 };
+
+export default SettingsView;

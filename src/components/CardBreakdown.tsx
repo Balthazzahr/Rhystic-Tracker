@@ -20,7 +20,6 @@ interface CardBreakdownProps {
   impactfulGrpIds?: Set<number>;
 }
 
-// Calculate CMC from parsed MTGA mana symbols
 function getCardCmc(costStr?: string): number {
   if (!costStr) return 0;
   const symbols = parseMtgaManaCost(costStr);
@@ -36,7 +35,6 @@ function getCardCmc(costStr?: string): number {
   return cmc;
 }
 
-// Categorize cards by MTG Card Type
 function getCardCategory(name?: string, typeStr?: string): string {
   const safeName = name || '';
   const safeType = typeStr || '';
@@ -74,7 +72,6 @@ export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: 
       categories[cat].push(card);
     }
 
-    // Sort each group ascending by CMC
     for (const cat in categories) {
       categories[cat].sort((a, b) => getCardCmc(a.mana_cost) - getCardCmc(b.mana_cost));
     }
@@ -89,56 +86,58 @@ export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: 
     const totalCount = Object.values(grouped).flat().reduce((acc, c) => acc + c.count, 0);
 
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden rounded-2xl border bg-black/30" style={{ borderColor: palette?.border }}>
+      <div className="flex-1 flex flex-col h-full overflow-hidden border border-white/10 bg-neutral-950/80 min-h-0">
         {/* Column Header */}
-        <div className="p-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
-          <span className="text-xs font-extrabold uppercase font-outfit tracking-wider" style={{ color: isOpponentSide ? palette?.text : (palette?.accent || '#38BDF8') }}>
+        <div className="p-3 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/50">
+          <span className="text-xs font-bold font-display uppercase tracking-wider text-white">
             {title} ({totalCount})
           </span>
-          <span className="text-[10px] font-mono opacity-50">
+          <span className="text-[10px] font-mono text-neutral-500 uppercase">
             {isOpponentSide ? 'Revealed in Play' : 'Full Deck List'}
           </span>
         </div>
 
         {/* Grouped & Sorted Cards List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 space-y-3.5 custom-scrollbar min-h-0">
           {totalCount === 0 ? (
-            <div className="p-6 border border-dashed rounded-xl text-center text-xs opacity-40 font-mono" style={{ borderColor: palette?.border }}>
+            <div className="p-8 border border-dashed border-white/10 text-center text-xs text-neutral-500 font-mono">
               No recorded cards for {title.toLowerCase()}
             </div>
           ) : (
             Object.entries(grouped).map(([category, list]) => {
               if (list.length === 0) return null;
               return (
-                <div key={category} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider opacity-60 border-b pb-1" style={{ borderColor: `${palette?.border}66` }}>
+                <div key={category} className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 border-b border-white/10 pb-1 px-0.5">
                     <span>{category}</span>
-                    <span>{list.reduce((acc, c) => acc + c.count, 0)}</span>
+                    <span className="tabular-nums">{list.reduce((acc, c) => acc + c.count, 0)}</span>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {list.map((card, idx) => {
                       const isImpactful = impactfulGrpIds?.has(card.grp_id) || false;
                       return (
                         <div
                           key={idx}
                           onClick={() => onCardClick && onCardClick(card)}
-                          className="flex items-center justify-between p-2 rounded-lg border transition-all hover:bg-white/10 cursor-pointer group"
-                          style={{
-                            backgroundColor: `${palette?.surface}99`,
-                            borderColor: isImpactful ? '#D4AF37' : `${palette?.border}66`,
-                            boxShadow: isImpactful ? '0 0 0 1px rgba(212,175,55,0.4)' : undefined,
-                          }}
+                          className={`flex items-center justify-between px-2.5 py-1.5 border transition-colors cursor-pointer group ${
+                            isImpactful
+                              ? 'border-amber-500/30 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]'
+                              : 'border-white/5 bg-white/[0.015] hover:bg-white/[0.04]'
+                          }`}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-5 h-5 rounded bg-black/50 font-mono text-[10px] font-bold flex items-center justify-center shrink-0 border" style={{ borderColor: palette?.border, color: palette?.accent }}>
+                          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 border border-white/10 bg-black/40 text-neutral-300 shrink-0 tabular-nums">
                               {card.count}×
                             </span>
-                            <span className="text-xs font-semibold truncate group-hover:underline" style={{ color: palette?.text }}>
+                            <span className="text-xs font-bold font-display uppercase tracking-wide truncate group-hover:underline text-white leading-tight">
                               {card.name}
                             </span>
                           </div>
-                          <div className="shrink-0 ml-2">
+                          <div className="shrink-0 flex items-center gap-1.5">
+                            {isImpactful && (
+                              <span className="ms ms-ability-duels-renowned text-xs text-amber-400" title="Match MVP Card" />
+                            )}
                             <RenderManaCost costStr={card.mana_cost} size={14} />
                           </div>
                         </div>
@@ -155,17 +154,11 @@ export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: 
   };
 
   return (
-    <div className="flex flex-col h-full gap-2">
-      <div className="flex gap-4 flex-1 min-h-0">
-        {renderCardColumn('Your Cards', playerGrouped, false)}
-        {renderCardColumn('Opponent Cards', opponentGrouped, true)}
-      </div>
-      {impactfulGrpIds && impactfulGrpIds.size > 0 && (
-        <div className="shrink-0 flex items-center justify-center gap-1.5 text-[10px] font-mono text-amber-400/80 border border-amber-500/30 bg-amber-500/5 rounded-lg px-2.5 py-1.5">
-          <span className="text-amber-400">★</span>
-          Impactful Card
-        </div>
-      )}
+    <div className="h-full flex gap-3 overflow-hidden min-h-0">
+      {renderCardColumn('Your Deck', playerGrouped, false)}
+      {renderCardColumn('Opponent Cards', opponentGrouped, true)}
     </div>
   );
 }
+
+export default CardBreakdown;

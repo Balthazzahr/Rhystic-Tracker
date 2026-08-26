@@ -20,119 +20,112 @@ pub struct ManaTheme {
 }
 
 impl ManaTheme {
-    /// SHARED DARK BASE (base identical across all 5 themes).
-    /// Each theme tints its mantle/surface/border with a very subtle amount of
-    /// its accent color so panels and cells take on a faint color cast.
-    /// base: #0B0C10, text: #F8FAFC, subtext: #94A3B8
+    /// SHARED DARK BASE: Grounded neutral darks with subtle warm undertones.
+    /// Each theme tints its mantle/surface/border with a restrained amount of its
+    /// mana identity hue so panels and cells take on an authentic material cast.
 
-    /// 1. Blue (Primary / Default Theme — Sapphire Ice Blue Accent)
-    /// NOTE: Blue (#38BDF8) is an intensified UI-tuned version of Scryfall's raw mana symbol hue (#C1D7E9) for dark mode contrast.
+    /// 1. Blue (Island / Progress — Steel Sapphire Slate Accent)
     pub fn blue() -> Self {
         Self {
             id: "blue".to_string(),
             name: "Blue (Progress)".to_string(),
             is_dark: true,
-            base: "#0D1319".to_string(),
-            mantle: "#14191F".to_string(),
-            surface: "#1C232A".to_string(),
-            border: "#242E37".to_string(),
-            text: "#F8FAFC".to_string(),
-            subtext: "#94A3B8".to_string(),
-            accent: "#38BDF8".to_string(),
-            accent_hover: "#7DD3FC".to_string(),
-            green: "#34D399".to_string(),
-            red: "#F87171".to_string(),
-            yellow: "#FBBF24".to_string(),
-            blue: "#38BDF8".to_string(),
+            base: "#0F1317".to_string(),
+            mantle: "#14191E".to_string(),
+            surface: "#1B222A".to_string(),
+            border: "#27333F".to_string(),
+            text: "#F4F4F6".to_string(),
+            subtext: "#9297A0".to_string(),
+            accent: "#4A7FA3".to_string(),
+            accent_hover: "#6097BC".to_string(),
+            green: "#4A7856".to_string(),
+            red: "#B8503A".to_string(),
+            yellow: "#D4A237".to_string(),
+            blue: "#4A7FA3".to_string(),
         }
     }
 
-    /// 2. White (Plains — Solar Ivory / Parchment Accent)
-    /// NOTE: White (#F8F6D8) is the EXACT raw SVG fill color extracted directly from Scryfall's official White mana symbol asset (W.svg).
+    /// 2. White (Plains / Order — Warm Ivory / Parchment Accent)
     pub fn white() -> Self {
         Self {
             id: "white".to_string(),
             name: "White (Order)".to_string(),
             is_dark: true,
-            base: "#141518".to_string(),
-            mantle: "#141516".to_string(),
-            surface: "#1D1E20".to_string(),
-            border: "#2B2D2E".to_string(),
-            text: "#F8FAFC".to_string(),
-            subtext: "#94A3B8".to_string(),
-            accent: "#F8F6D8".to_string(),
-            accent_hover: "#FFFFF0".to_string(),
-            green: "#34D399".to_string(),
-            red: "#F87171".to_string(),
-            yellow: "#FBBF24".to_string(),
-            blue: "#38BDF8".to_string(),
+            base: "#131313".to_string(),
+            mantle: "#181817".to_string(),
+            surface: "#21211F".to_string(),
+            border: "#32312D".to_string(),
+            text: "#F5F3EC".to_string(),
+            subtext: "#9B988E".to_string(),
+            accent: "#E8E2CC".to_string(),
+            accent_hover: "#F4EEDB".to_string(),
+            green: "#4A7856".to_string(),
+            red: "#B8503A".to_string(),
+            yellow: "#D4A237".to_string(),
+            blue: "#4A7FA3".to_string(),
         }
     }
 
-    /// 3. Black (Swamp — Necromantic Violet / Purple Accent)
-    /// NOTE: Black uses a slightly darker, desaturated purple (#8E59C1) to keep
-    /// the Magic black-mana identity readable on the dark UI without being too fluorescent.
+    /// 3. Black (Swamp / Ambition — Deep Obsidian Violet Accent)
     pub fn black() -> Self {
         Self {
             id: "black".to_string(),
             name: "Black (Ambition)".to_string(),
             is_dark: true,
-            base: "#100F17".to_string(),
-            mantle: "#17141E".to_string(),
-            surface: "#201C2B".to_string(),
-            border: "#2C2638".to_string(),
-            text: "#F8FAFC".to_string(),
-            subtext: "#94A3B8".to_string(),
-            accent: "#8E59C1".to_string(),
-            accent_hover: "#A87BD3".to_string(),
-            green: "#34D399".to_string(),
-            red: "#F87171".to_string(),
-            yellow: "#FBBF24".to_string(),
-            blue: "#38BDF8".to_string(),
+            base: "#0E0D10".to_string(),
+            mantle: "#141217".to_string(),
+            surface: "#1D1922".to_string(),
+            border: "#2C2534".to_string(),
+            text: "#F4F4F6".to_string(),
+            subtext: "#928E99".to_string(),
+            accent: "#8a719d".to_string(),
+            accent_hover: "#a28bb5".to_string(),
+            green: "#4A7856".to_string(),
+            red: "#B8503A".to_string(),
+            yellow: "#D4A237".to_string(),
+            blue: "#4A7FA3".to_string(),
         }
     }
 
-    /// 4. Red (Mountain — Fiery Crimson / Ember Accent)
-    /// NOTE: Red (#F87171) is an intensified UI-tuned version of Scryfall's raw mana symbol hue (#E49977) for dark mode contrast.
+    /// 4. Red (Mountain / Chaos — Brick & Ember Crimson Accent)
     pub fn red() -> Self {
         Self {
             id: "red".to_string(),
             name: "Red (Chaos)".to_string(),
             is_dark: true,
-            base: "#141014".to_string(),
-            mantle: "#1D181A".to_string(),
-            surface: "#261F22".to_string(),
-            border: "#352A2C".to_string(),
-            text: "#F8FAFC".to_string(),
-            subtext: "#94A3B8".to_string(),
-            accent: "#F87171".to_string(),
-            accent_hover: "#FCA5A5".to_string(),
-            green: "#34D399".to_string(),
-            red: "#F87171".to_string(),
-            yellow: "#FBBF24".to_string(),
-            blue: "#38BDF8".to_string(),
+            base: "#141010".to_string(),
+            mantle: "#1A1414".to_string(),
+            surface: "#241B1B".to_string(),
+            border: "#372727".to_string(),
+            text: "#F5F4F4".to_string(),
+            subtext: "#9B9090".to_string(),
+            accent: "#B8503A".to_string(),
+            accent_hover: "#D0644C".to_string(),
+            green: "#4A7856".to_string(),
+            red: "#B8503A".to_string(),
+            yellow: "#D4A237".to_string(),
+            blue: "#4A7FA3".to_string(),
         }
     }
 
-    /// 5. Green (Forest — Sylvan Emerald Accent)
-    /// NOTE: Green (#34D399) is an intensified UI-tuned version of Scryfall's raw mana symbol hue (#A3C095) for dark mode contrast.
+    /// 5. Green (Forest / Nature — Forest Moss & Sylvan Accent)
     pub fn green() -> Self {
         Self {
             id: "green".to_string(),
             name: "Green (Nature)".to_string(),
             is_dark: true,
-            base: "#0D1415".to_string(),
-            mantle: "#141D1A".to_string(),
-            surface: "#1B2723".to_string(),
-            border: "#283731".to_string(),
-            text: "#F8FAFC".to_string(),
-            subtext: "#94A3B8".to_string(),
-            accent: "#34D399".to_string(),
-            accent_hover: "#6EE7B7".to_string(),
-            green: "#34D399".to_string(),
-            red: "#F87171".to_string(),
-            yellow: "#FBBF24".to_string(),
-            blue: "#38BDF8".to_string(),
+            base: "#0F1310".to_string(),
+            mantle: "#141915".to_string(),
+            surface: "#1B231D".to_string(),
+            border: "#27342B".to_string(),
+            text: "#F4F5F4".to_string(),
+            subtext: "#909892".to_string(),
+            accent: "#4A7856".to_string(),
+            accent_hover: "#5E946E".to_string(),
+            green: "#4A7856".to_string(),
+            red: "#B8503A".to_string(),
+            yellow: "#D4A237".to_string(),
+            blue: "#4A7FA3".to_string(),
         }
     }
 }

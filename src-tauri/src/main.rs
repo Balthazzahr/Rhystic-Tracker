@@ -289,7 +289,8 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             hero_deck_name as deck_name,
             COUNT(*) as total_matches,
             SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
-            SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses
+            SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses,
+            MAX(timestamp) as last_played
         FROM matches
         WHERE hero_deck_name IS NOT NULL AND hero_deck_name != ''
         GROUP BY hero_deck_name
@@ -532,6 +533,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         let total: i64 = row.get("total_matches");
         let wins: i64 = row.get("wins");
         let losses: i64 = row.get("losses");
+        let last_played: Option<String> = row.get("last_played");
         let winrate = if total > 0 { (wins as f64 / total as f64) * 100.0 } else { 0.0 };
 
         // Format breakdown.
@@ -683,19 +685,19 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             }
         }
 
-        // Key cards: 6 representative non-commander cards — two highest-CMC
-        // creatures, two highest-CMC spells (instant/sorcery), two highest-CMC
+        // Key cards: 8 representative non-commander cards — three highest-CMC
+        // creatures, three highest-CMC spells (instant/sorcery), two highest-CMC
         // other (non-creature, non-instant/sorcery, non-land). Fallbacks if a
         // category is short: pull the best remaining card from the other
-        // categories so all 6 slots fill when possible.
+        // categories so all 8 slots fill when possible.
         let mut key_cards: Vec<serde_json::Value> = Vec::new();
         let mut used: Vec<String> = Vec::new();
 
-        // Slot mapping: [0,1]=creature, [2,3]=spell, [4,5]=other.
-        let slot_kinds = ["creature", "creature", "spell", "spell", "other", "other"];
+        // Slot mapping: [0,1,2]=creature, [3,4,5]=spell, [6,7]=other.
+        let slot_kinds = ["creature", "creature", "creature", "spell", "spell", "spell", "other", "other"];
 
         // First pass: best (highest CMC) unused card per exact kind.
-        for (slot, kind) in slot_kinds.iter().enumerate() {
+        for (_slot, kind) in slot_kinds.iter().enumerate() {
             let mut best: Option<serde_json::Value> = None;
             for cand in &candidates {
                 let name: String = cand.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -734,10 +736,12 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         let fill_order = [
             (0usize, vec!["creature", "spell", "other"]),
             (1usize, vec!["creature", "spell", "other"]),
-            (2usize, vec!["spell", "creature", "other"]),
+            (2usize, vec!["creature", "spell", "other"]),
             (3usize, vec!["spell", "creature", "other"]),
-            (4usize, vec!["other", "creature", "spell"]),
-            (5usize, vec!["other", "creature", "spell"]),
+            (4usize, vec!["spell", "creature", "other"]),
+            (5usize, vec!["spell", "creature", "other"]),
+            (6usize, vec!["other", "creature", "spell"]),
+            (7usize, vec!["other", "creature", "spell"]),
         ];
         for (slot, priority) in &fill_order {
             if key_cards[*slot].is_null() {
@@ -773,9 +777,9 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
                 }
             }
         }
-        // Drop null placeholders, cap at 6.
+        // Drop null placeholders, cap at 8.
         key_cards.retain(|v| !v.is_null());
-        key_cards.truncate(6);
+        key_cards.truncate(8);
 
         // "% owned": true decklist grp_ids when imported, else logged player-side
         // grp_ids. Card-level — distinct cards, not copies.
@@ -805,6 +809,7 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             "owned_pct": owned_pct,
             "owned_cards": owned_cards,
             "total_ownedable": total_ownedable,
+            "last_played": last_played,
         }));
         let _ = &mut colors_arr;
     }
@@ -2254,19 +2259,15 @@ fn sort_collection_cards(cards: &mut Vec<serde_json::Value>, sort: &str, sort_di
                 .cmp(&b.get("rarity").and_then(|v| v.as_i64()).unwrap_or(0))
                 .then_with(|| collection_name_key(a).cmp(&collection_name_key(b)))
         }),
-        "set" => cards.sort_by(|a, b| {
-            a.get("set_code").and_then(|v| v.as_str()).unwrap_or("")
-                .cmp(b.get("set_code").and_then(|v| v.as_str()).unwrap_or(""))
+        "set" | "released" => cards.sort_by(|a, b| {
+            a.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("")
+                .cmp(b.get("set_released_at").and_then(|v| v.as_str()).unwrap_or(""))
+                .then_with(|| a.get("set_name").and_then(|v| v.as_str()).unwrap_or("").cmp(b.get("set_name").and_then(|v| v.as_str()).unwrap_or("")))
                 .then_with(|| collection_name_key(a).cmp(&collection_name_key(b)))
         }),
         "count" => cards.sort_by(|a, b| {
             b.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0)
                 .cmp(&a.get("owned_count").and_then(|v| v.as_i64()).unwrap_or(0))
-                .then_with(|| collection_name_key(a).cmp(&collection_name_key(b)))
-        }),
-        "released" => cards.sort_by(|a, b| {
-            a.get("set_released_at").and_then(|v| v.as_str()).unwrap_or("")
-                .cmp(b.get("set_released_at").and_then(|v| v.as_str()).unwrap_or(""))
                 .then_with(|| collection_name_key(a).cmp(&collection_name_key(b)))
         }),
         _ => cards.sort_by(|a, b| collection_name_key(a).cmp(&collection_name_key(b))),

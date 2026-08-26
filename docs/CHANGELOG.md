@@ -2,6 +2,46 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.0] - 2026-08-26
+
+### 🎨 Complete Modern MTG Visual Overhaul, Tabbed Settings & Inspector Workspaces
+
+This major feature release overhauls Rhystic Tracker's user interface with an authentic Magic: The Gathering aesthetic. The design replaces rounded borders with sharp geometry, authentic MTG typography, official Mana/Keyrune iconography, and a modernized categorized Settings system alongside expanded floating Inspector workspaces.
+
+---
+
+### 🌟 Added & Enhanced
+
+- **Authentic MTG Visual Design System**:
+  - Replaced generic rounded pill corners (`rounded-xl`, `rounded-full`) with sharp, high-contrast dark fantasy geometry (`rounded-none`).
+  - Integrated authentic typography: **Beleren Bold** for headers/titles, **Plantin MTG** for flavor/body text, and monospace numerals for metrics.
+  - Upgraded icons across the entire application to the authentic MTG Mana & Ability icon font set (`ms-ability-*`, `ms-mana-*`, `ms-battle`, `ms-library`).
+  - Replaced high-fluorescence badges and bars with muted, refined color schemes.
+
+- **Tabbed Settings Architecture**:
+  - Rebuilt the settings screen into 5 organized top tabs:
+    1. **General & Behavior**: Tray minimize behavior, Live Match HUD auto-switch, default startup view selector, setup wizard launcher, and new **Confirm Deck Delete** safety toggle.
+    2. **Appearance & Themes**: 5-Color Mana Theme engine (White, Blue, Black, Red, Green) with active preview cards, collection default sort selector, and **Compact Card Preview** toggle.
+    3. **MTGA Connection**: Active `Player.log` path picker, live engine status tailer badge, and multi-prefix auto-detection for Steam Proton, Lutris, Wine, and native installations.
+    4. **Storage & Database**: Real-time SQLite storage metrics, one-click database backup export, local image cache metrics, pre-download collection art, and card universe synchronization.
+    5. **About & Legal**: Version metadata, engine specs, Fan Content Policy disclosures, and Scryfall attributions.
+
+- **Expanded Floating Inspector Workspaces**:
+  - **Deck Inspector**: Enlarged workspace to `95vw × 97vh` (`max-w-[1520px] max-h-[1150px]`). Eliminated dark boxed enclosures for Mana Pie, Mana Value histogram, Card Types, and stats sidebar into floating cards. Aligned Mana Pie slice colors directly to MTG mana pips.
+  - **Match Inspector**: Expanded dimensions to `95vw × 97vh`. Floating match specs sidebar and modernized sharp MVP honors shelf.
+  - **Card Breakdown & Match Timeline**: Completely modernized with sharp event blocks, opening hand pre-game cards, and crisp action tags (`Play`, `Draw`, `Mulligan`, `Bottom`, `Dies`, `Exile`).
+
+- **Card Library Calibrated 4×3 Grid**:
+  - Calibrated large preview cards to `260px × 363px` strictly preserving the physical 63mm : 88mm MTG card aspect ratio.
+  - Fits a clean **4 columns × 3 rows** (12 cards per page) without side padding dead-zones.
+
+- **Dashboard & Leaderboards Refinements**:
+  - Streamlined mini leaderboard headers to full-width titles while preserving descriptive lore in the expanded **Top 25** modal dialog.
+  - Upgraded Dashboard Format Breakdown to a dedicated 3-column × 2-row grid with formatted `[Count] games - WR: [XX]%` summaries.
+  - Expanded Recent Matches capacity to 10 matches with compact rows.
+
+---
+
 ## [1.2.3] - 2026-08-25
 
 ### 🏆 Deck Format Badges, Non-Commander Fix, Executioner & Over-Killer Tombstone Redesign

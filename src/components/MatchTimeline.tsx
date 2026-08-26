@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, XCircle, AlertCircle, Play, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, Play } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardItem } from './CardBreakdown';
 import { AchievementBadge } from './AchievementBadge';
 import { RenderManaCost } from '../utils/manaUtils';
-import { TITLE_BADGES } from './FullMatchInfoModal';
 
 interface TurnEventItem {
   turn_number: number;
@@ -65,7 +64,6 @@ export function MatchTimeline({
     fetchEvents();
   }, [matchId, goingFirst]);
 
-  // Separate pre-game opening phase (turn 0) from in-game rounds (turn >= 1).
   const { openingEvents, eventsByRound } = React.useMemo(() => {
     const opening: { player: TurnEventItem[]; opponent: TurnEventItem[] } = { player: [], opponent: [] };
     const map: Record<number, { player: TurnEventItem[]; opponent: TurnEventItem[] }> = {};
@@ -86,16 +84,16 @@ export function MatchTimeline({
   }, [turnEvents, heroSeatId]);
 
   const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; border: string }> = {
-    Creature: { icon: 'ms-creature', color: '#34D399', bg: 'rgba(52, 211, 153, 0.1)', border: 'rgba(52, 211, 153, 0.3)' }, // Green
-    Instant: { icon: 'ms-instant', color: '#F87171', bg: 'rgba(248, 113, 113, 0.1)', border: 'rgba(248, 113, 113, 0.3)' }, // Red
-    Sorcery: { icon: 'ms-sorcery', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.3)' }, // Yellow
-    Artifact: { icon: 'ms-artifact', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.3)' }, // Cool blue-grey
-    Enchantment: { icon: 'ms-enchantment', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.1)', border: 'rgba(192, 132, 252, 0.3)' }, // Purple
-    Planeswalker: { icon: 'ms-planeswalker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.3)' }, // Orange/Rose
-    Battle: { icon: 'ms-battle', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.1)', border: 'rgba(244, 63, 94, 0.3)' }, // Rose
-    Land: { icon: 'ms-land', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.3)' }, // Light brown/amber
-    Token: { icon: 'ms-token', color: '#A1A1AA', bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.3)' },
-    Other: { icon: 'ms-multicolor', color: '#E2E8F0', bg: 'rgba(226, 232, 240, 0.1)', border: 'rgba(226, 232, 240, 0.3)' },
+    Creature: { icon: 'ms-creature', color: '#34D399', bg: 'rgba(52, 211, 153, 0.1)', border: 'rgba(52, 211, 153, 0.25)' },
+    Instant: { icon: 'ms-instant', color: '#F87171', bg: 'rgba(248, 113, 113, 0.1)', border: 'rgba(248, 113, 113, 0.25)' },
+    Sorcery: { icon: 'ms-sorcery', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.25)' },
+    Artifact: { icon: 'ms-artifact', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.25)' },
+    Enchantment: { icon: 'ms-enchantment', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.1)', border: 'rgba(192, 132, 252, 0.25)' },
+    Planeswalker: { icon: 'ms-planeswalker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.25)' },
+    Battle: { icon: 'ms-battle', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.1)', border: 'rgba(244, 63, 94, 0.25)' },
+    Land: { icon: 'ms-land', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.25)' },
+    Token: { icon: 'ms-token', color: '#A1A1AA', bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.25)' },
+    Other: { icon: 'ms-multicolor', color: '#E2E8F0', bg: 'rgba(226, 232, 240, 0.1)', border: 'rgba(226, 232, 240, 0.25)' },
   };
 
   const getCardTypeBadge = (rawType?: string) => {
@@ -114,11 +112,11 @@ export function MatchTimeline({
     const conf = CARD_TYPE_CONFIG[category] || CARD_TYPE_CONFIG.Other;
     return (
       <span
-        className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1 py-0.2 rounded border shrink-0"
+        className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.2 border shrink-0"
         style={{ color: conf.color, backgroundColor: conf.bg, borderColor: conf.border }}
         title={rawType}
       >
-        <span className={`ms ${conf.icon} text-[11px] leading-none`} style={{ color: conf.color }} />
+        <span className={`ms ${conf.icon} text-[10px] leading-none`} style={{ color: conf.color }} />
         <span>{category}</span>
       </span>
     );
@@ -148,44 +146,46 @@ export function MatchTimeline({
             onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number);
           }
         }}
-        className={`text-xs flex items-center justify-between p-1.5 rounded ${isHidden ? 'opacity-80' : 'hover:bg-white/10 cursor-pointer'} group`}
+        className={`text-xs flex items-center justify-between p-1.5 border border-white/5 bg-white/[0.015] ${
+          isHidden ? 'opacity-70' : 'hover:bg-white/5 cursor-pointer'
+        } group`}
       >
         <div className="flex items-center gap-1.5 min-w-0">
           {isDamage ? (
-            <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 bg-amber-500/15 text-amber-400 border-amber-500/30">
+            <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">
               {dmgAmount} DMG
             </span>
           ) : (
             (() => {
               let badgeText = 'PLAY';
-              let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+              let badgeStyle = 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
               if (isMulligan) {
                 badgeText = 'MULLIGAN';
-                badgeStyle = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+                badgeStyle = 'bg-amber-500/15 text-amber-300 border-amber-500/30';
               } else if (isBottom) {
                 badgeText = 'BOTTOM';
-                badgeStyle = 'bg-orange-500/15 text-orange-400 border-orange-500/30';
+                badgeStyle = 'bg-orange-500/15 text-orange-300 border-orange-500/30';
               } else if (ev.event_type === 'draw') {
                 badgeText = ev.turn_number === 0 ? 'KEPT' : 'DRAW';
-                badgeStyle = ev.turn_number === 0 ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+                badgeStyle = ev.turn_number === 0 ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-purple-500/10 text-purple-300 border-purple-500/30';
               } else if (ev.event_type === 'token') {
                 badgeText = 'TOKEN';
-                badgeStyle = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+                badgeStyle = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
               } else if (ev.event_type === 'dies') {
                 badgeText = 'DIES';
-                badgeStyle = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+                badgeStyle = 'bg-rose-500/10 text-rose-300 border-rose-500/30';
               } else if (ev.event_type === 'exile') {
                 badgeText = 'EXILE';
-                badgeStyle = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
+                badgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30';
               }
               return (
-                <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${badgeStyle}`}>
+                <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 border shrink-0 ${badgeStyle}`}>
                   {badgeText}
                 </span>
               );
             })()
           )}
-          <span className={`font-semibold text-xs truncate ${isHidden ? 'italic opacity-70' : ''}`} style={{ color: palette?.text }}>
+          <span className={`font-display font-bold text-xs uppercase tracking-wide truncate ${isHidden ? 'italic opacity-60' : 'text-white group-hover:underline'}`}>
             {displayName}
           </span>
           {!isHidden && getCardTypeBadge(ev.card_type)}
@@ -208,18 +208,18 @@ export function MatchTimeline({
   };
 
   return (
-    <div className="h-full flex flex-col space-y-4 p-4 rounded-2xl border" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+    <div className="h-full flex flex-col space-y-3 p-3 border border-white/10 bg-neutral-950/80 min-h-0 overflow-hidden">
       {/* Header Bar */}
-      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: `${palette?.border}88` }}>
+      <div className="flex items-center justify-between border-b border-white/10 pb-2 shrink-0">
         <div className="flex items-center gap-2">
-          <Play className="w-4 h-4" style={{ color: palette?.accent }} />
-          <h3 className="font-bold text-sm font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
+          <Play className="w-3.5 h-3.5 text-neutral-400" />
+          <h3 className="text-xs font-display font-bold uppercase tracking-wider text-white">
             Match Play Timeline
           </h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono opacity-60">Total Events: {turnEvents.length}</span>
-          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase ${
+          <span className="text-[10px] font-mono text-neutral-500 tabular-nums">Total Events: {turnEvents.length}</span>
+          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
             result === 'win' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
           }`}>
             {result}
@@ -228,16 +228,16 @@ export function MatchTimeline({
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar min-h-0">
         {loading ? (
-          <div className="p-8 text-center text-xs opacity-40 font-mono">Loading turn timeline...</div>
+          <div className="p-8 text-center text-xs text-neutral-500 font-mono">Loading turn timeline...</div>
         ) : turnEvents.length === 0 ? (
-          <div className="p-8 border border-dashed rounded-2xl text-center space-y-2" style={{ backgroundColor: `${palette?.surface}44`, borderColor: palette?.border }}>
-            <AlertCircle className="w-6 h-6 mx-auto opacity-40 text-amber-400" />
-            <p className="text-xs font-bold font-outfit" style={{ color: palette?.text }}>
+          <div className="p-8 border border-dashed border-white/10 text-center space-y-1.5 bg-neutral-900/30">
+            <AlertCircle className="w-5 h-5 mx-auto text-amber-400 opacity-60" />
+            <p className="text-xs font-bold font-display uppercase tracking-wide text-white">
               Detailed Turn Timeline Unavailable
             </p>
-            <p className="text-[10px] font-mono opacity-50 max-w-sm mx-auto">
+            <p className="text-[11px] font-sans text-neutral-400 max-w-sm mx-auto">
               This is a historical match. Live turn-stamped event logging is enabled for all new live matches going forward.
             </p>
           </div>
@@ -245,37 +245,34 @@ export function MatchTimeline({
           <>
             {/* Opening Hand & Mulligans Phase (Turn 0) */}
             {(openingEvents.player.length > 0 || openingEvents.opponent.length > 0) && (
-              <div
-                className="p-3 rounded-xl border space-y-2 bg-gradient-to-r from-purple-950/20 via-transparent to-amber-950/20"
-                style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}88` }}
-              >
-                <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: `${palette?.border}44` }}>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border" style={{ borderColor: palette?.border, color: '#A78BFA' }}>
+              <div className="p-2.5 border border-white/10 bg-neutral-900/40 space-y-2">
+                <div className="flex items-center justify-between border-b border-white/10 pb-1">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">
                     Opening Phase & Mulligans
                   </span>
-                  <span className="text-[9px] font-mono opacity-50">Pre-Game</span>
+                  <span className="text-[9px] font-mono text-neutral-500">Pre-Game</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   {/* Player Opening Hand */}
-                  <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
-                    <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                  <div className="border border-white/5 bg-black/40 p-2 space-y-1">
+                    <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-emerald-400 border-b border-white/10 pb-1">
                       You ({openingEvents.player.length})
                     </div>
                     {openingEvents.player.length === 0 ? (
-                      <div className="text-[10px] font-mono opacity-30 p-1">No opening cards recorded</div>
+                      <div className="text-[10px] font-mono text-neutral-600 p-1">No opening cards recorded</div>
                     ) : (
                       openingEvents.player.map((ev) => renderEventRow(ev, true))
                     )}
                   </div>
 
                   {/* Opponent Opening Hand */}
-                  <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
-                    <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                  <div className="border border-white/5 bg-black/40 p-2 space-y-1">
+                    <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-rose-400 border-b border-white/10 pb-1">
                       {(opponentName || 'Opponent')} ({openingEvents.opponent.length})
                     </div>
                     {openingEvents.opponent.length === 0 ? (
-                      <div className="text-[10px] font-mono opacity-30 p-1">No mulligans taken</div>
+                      <div className="text-[10px] font-mono text-neutral-600 p-1">No mulligans taken</div>
                     ) : (
                       openingEvents.opponent.map((ev) => renderEventRow(ev, false))
                     )}
@@ -294,39 +291,37 @@ export function MatchTimeline({
               return (
                 <div
                   key={roundNum}
-                  className="p-3 rounded-xl border space-y-2"
-                  style={{ backgroundColor: palette?.surface, borderColor: `${palette?.border}88` }}
+                  className="p-2.5 border border-white/10 bg-neutral-900/30 space-y-2"
                 >
-                  <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: `${palette?.border}44` }}>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border" style={{ borderColor: palette?.border, color: palette?.accent }}>
+                  <div className="flex items-center justify-between border-b border-white/10 pb-1">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white">
                       Round {roundNum}
                     </span>
-                    <span className="text-[9px] font-mono opacity-50">
+                    <span className="text-[9px] font-mono text-neutral-500">
                       {`Turn ${roundNum * 2 - 1} + ${roundNum * 2}`}
                     </span>
                   </div>
 
-                  {/* Two-column: Player vs Opponent actions for this round */}
                   <div className="grid grid-cols-2 gap-2">
                     {/* Player Column */}
-                    <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
-                      <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                    <div className="border border-white/5 bg-black/40 p-2 space-y-1">
+                      <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-emerald-400 border-b border-white/10 pb-1">
                         You ({playerCount})
                       </div>
                       {playerCount === 0 ? (
-                        <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                        <div className="text-[10px] font-mono text-neutral-600 p-1">No actions</div>
                       ) : (
                         cols.player.map((ev) => renderEventRow(ev, true))
                       )}
                     </div>
 
                     {/* Opponent Column */}
-                    <div className="rounded-lg border p-2 space-y-1" style={{ borderColor: `${palette?.border}66`, backgroundColor: `${palette?.surface}44` }}>
-                      <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 border-b pb-1" style={{ borderColor: `${palette?.border}44` }}>
+                    <div className="border border-white/5 bg-black/40 p-2 space-y-1">
+                      <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-rose-400 border-b border-white/10 pb-1">
                         {(opponentName || 'Opponent')} ({opponentCount})
                       </div>
                       {opponentCount === 0 ? (
-                        <div className="text-[10px] font-mono opacity-30 p-1">No actions</div>
+                        <div className="text-[10px] font-mono text-neutral-600 p-1">No actions</div>
                       ) : (
                         cols.opponent.map((ev) => renderEventRow(ev, false))
                       )}
@@ -338,14 +333,14 @@ export function MatchTimeline({
           </>
         )}
 
-        {/* Item 8: Color-Coded Final Match Outcome Marker at Bottom of Sequence */}
-        <div className="pt-2">
+        {/* Final Match Outcome Marker at Bottom of Sequence */}
+        <div className="pt-1">
           {result === 'win' ? (
-            <div className="p-3 rounded-xl border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center justify-center gap-2 text-xs font-black tracking-widest font-mono uppercase">
+            <div className="p-2.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
               <CheckCircle2 className="w-4 h-4" /> MATCH ENDED — VICTORY
             </div>
           ) : (
-            <div className="p-3 rounded-xl border bg-rose-500/10 text-rose-400 border-rose-500/30 flex items-center justify-center gap-2 text-xs font-black tracking-widest font-mono uppercase">
+            <div className="p-2.5 border border-rose-500/30 bg-rose-500/10 text-rose-400 flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
               <XCircle className="w-4 h-4" /> MATCH ENDED — DEFEAT
             </div>
           )}
@@ -354,3 +349,5 @@ export function MatchTimeline({
     </div>
   );
 }
+
+export default MatchTimeline;

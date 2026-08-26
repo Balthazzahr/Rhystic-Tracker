@@ -65,13 +65,13 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
             <Trophy className="w-6 h-6" style={{ color: palette?.accent || '#FACC15' }} />
           </div>
 
-          <h3 className="text-xl font-black font-outfit tracking-wide" style={{ color: palette?.text }}>
+          <h3 className="rt-card-title tracking-wide" style={{ color: palette?.text }}>
             {cardName}
           </h3>
 
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-mono opacity-60 uppercase tracking-wider">Card Trophy Case</span>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            <span className="rt-label opacity-60">Card Trophy Case</span>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 tabular-nums">
               {totalHonors} {totalHonors === 1 ? 'Honor' : 'Honors'}
             </span>
           </div>
@@ -84,10 +84,10 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
               <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500">
                 <Award className="w-8 h-8 opacity-40" />
               </div>
-              <p className="text-base font-bold font-outfit" style={{ color: palette?.text }}>
+              <p className="rt-section-header" style={{ color: palette?.text }}>
                 No Match Honors Earned
               </p>
-              <p className="text-xs font-mono opacity-50 max-w-sm">
+              <p className="rt-narrative-sm opacity-50 max-w-sm">
                 Cast this card in games to earn lethal strikes, massive combat blows, and lifetime achievements.
               </p>
             </div>
@@ -118,7 +118,7 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
                     </div>
 
                     <div className="space-y-1 min-w-0 w-full px-1">
-                      <p className="text-sm font-black font-outfit truncate tracking-wide" style={{ color: palette?.text }}>
+                      <p className="text-sm font-bold font-display truncate tracking-wide" style={{ color: palette?.text }}>
                         {meta.title}
                       </p>
                       <p className="text-[11px] font-mono opacity-60 truncate">

@@ -21,12 +21,12 @@ export const ManaPip: React.FC<ManaPipProps> = ({
   const isX = sym === 'X';
 
   const defaultColors: Record<string, string> = {
-    W: '#F8F6D8', // Official Scryfall White
-    U: '#38BDF8', // Sapphire Blue
-    B: '#A855F7', // Magic Purple
-    R: '#F87171', // Fiery Ember Red
-    G: '#34D399', // Sylvan Emerald Green
-    C: '#94A3B8', // Colorless Diamond
+    W: '#E8E2CC', // Warm Ivory / Parchment
+    U: '#4A7FA3', // Steel Sapphire Blue
+    B: '#8a719d', // Obsidian / Deep Violet
+    R: '#B8503A', // Brick / Ember Red
+    G: '#4A7856', // Forest Moss Green
+    C: '#94A3B8', // Colorless Slate
   };
 
   const rawFill = colorOverride || defaultColors[sym] || '#94A3B8';

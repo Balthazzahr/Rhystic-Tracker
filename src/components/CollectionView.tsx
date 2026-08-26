@@ -5,10 +5,15 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Home,
   LayoutGrid,
   Table2,
   SlidersHorizontal,
+  GripVertical,
+  RotateCcw,
+  Check,
   X,
   ZoomIn,
   ZoomOut,
@@ -83,6 +88,41 @@ const SORT_OPTIONS = [
   { value: 'count', label: 'Owned Count' },
 ];
 
+export interface CollectionColumnDef {
+  key: string;
+  label: string;
+  description: string;
+  visible: boolean;
+  width?: string;
+  align?: 'left' | 'center' | 'right';
+  sortKey?: string;
+}
+
+const DEFAULT_COLLECTION_COLUMNS: CollectionColumnDef[] = [
+  { key: 'art', label: 'Art', description: 'Card art crop thumbnail preview', visible: true, width: 'w-[52px]', align: 'center' },
+  { key: 'name', label: 'Name', description: 'Card title', visible: true, width: 'flex-1 min-w-[200px]', align: 'left', sortKey: 'name' },
+  { key: 'mana_cost', label: 'Cost', description: 'Mana casting cost symbols', visible: true, width: 'w-[110px]', align: 'left', sortKey: 'cmc' },
+  { key: 'cmc', label: 'MV', description: 'Converted mana value (CMC)', visible: true, width: 'w-[65px]', align: 'center', sortKey: 'cmc' },
+  { key: 'card_type', label: 'Type', description: 'Card type and subtypes', visible: true, width: 'w-[170px]', align: 'left' },
+  { key: 'set', label: 'Set', description: 'Expansion set (sorted by release date)', visible: true, width: 'w-[160px]', align: 'left', sortKey: 'set' },
+  { key: 'rarity', label: 'Rarity', description: 'Card rarity tier', visible: true, width: 'w-[100px]', align: 'left', sortKey: 'rarity' },
+  { key: 'owned', label: 'Owned', description: 'Collected copies control (0–4)', visible: true, width: 'w-[130px]', align: 'center', sortKey: 'count' },
+  { key: 'colors', label: 'Colors', description: 'Color identity mana pips', visible: false, width: 'w-[95px]', align: 'center' },
+  { key: 'collector_number', label: 'Collector #', description: 'Set collector card number', visible: false, width: 'w-[95px]', align: 'center' },
+  { key: 'grp_id', label: 'Arena ID', description: 'Internal MTGA GRP ID', visible: false, width: 'w-[90px]', align: 'center' },
+];
+
+const getContrastTextColor = (hexColor?: string): string => {
+  if (!hexColor) return '#FFFFFF';
+  const cleanHex = hexColor.replace('#', '');
+  if (cleanHex.length < 6) return '#FFFFFF';
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 160 ? '#09090B' : '#FFFFFF';
+};
+
 function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewProps) {
   const [cards, setCards] = useState<CollectionCard[]>([]);
   const [page, setPage] = useState(1);
@@ -144,6 +184,93 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     return () => window.removeEventListener('rhystic-card-style-changed', handleStyleChange);
   }, []);
 
+  // --- Table View Column Customizer State ---
+  const [columns, setColumns] = useState<CollectionColumnDef[]>(() => {
+    try {
+      const saved = localStorage.getItem('rhystic_collection_columns_v2') || localStorage.getItem('rhystic_collection_columns');
+      if (saved) {
+        const parsed: CollectionColumnDef[] = JSON.parse(saved);
+        const existingKeys = new Set(parsed.map((c) => c.key));
+        const missing = DEFAULT_COLLECTION_COLUMNS.filter((c) => !existingKeys.has(c.key));
+        const combined = [...parsed, ...missing];
+        if (!existingKeys.has('art')) {
+          const artDef = DEFAULT_COLLECTION_COLUMNS.find((c) => c.key === 'art');
+          if (artDef) {
+            return [artDef, ...parsed];
+          }
+        }
+        return combined;
+      }
+    } catch (e) {
+      console.error('Failed to load collection columns:', e);
+    }
+    return DEFAULT_COLLECTION_COLUMNS;
+  });
+
+  const [showColumnModal, setShowColumnModal] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const saveColumns = (newCols: CollectionColumnDef[]) => {
+    setColumns(newCols);
+    try {
+      localStorage.setItem('rhystic_collection_columns_v2', JSON.stringify(newCols));
+    } catch (e) {
+      console.error('Failed to persist collection columns:', e);
+    }
+  };
+
+  const toggleColumnVisibility = (key: string) => {
+    const updated = columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c));
+    saveColumns(updated);
+  };
+
+  const moveColumn = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= columns.length || fromIdx === toIdx) return;
+    const updated = [...columns];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    saveColumns(updated);
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIdx =
+      draggedIndex !== null
+        ? draggedIndex
+        : parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (!isNaN(sourceIdx) && sourceIdx !== targetIndex) {
+      moveColumn(sourceIdx, targetIndex);
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const resetColumns = () => {
+    saveColumns(DEFAULT_COLLECTION_COLUMNS);
+  };
+
+  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
+
   useEffect(() => {
     setStyleRev((r) => r + 1);
   }, [refreshTrigger]);
@@ -155,10 +282,10 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   // Art Crop (Landscape ~1.38 aspect ratio):
   //   Small: 236 x 170 (Fills edge and top/bottom padding in 6 cols x 6 rows)
   //   Large: 376 x 268 (Fits 4 cols x 4 rows)
-  const CARD_W_SMALL = artMode === 'crop' ? 236 : 188;
-  const CARD_H_SMALL = artMode === 'crop' ? 170 : 262;
-  const CARD_W_LARGE = artMode === 'crop' ? 376 : 266;
-  const CARD_H_LARGE = artMode === 'crop' ? 268 : 372;
+  const CARD_W_SMALL = artMode === 'crop' ? 232 : 184;
+  const CARD_H_SMALL = artMode === 'crop' ? 166 : 257;
+  const CARD_W_LARGE = artMode === 'crop' ? 370 : 260;
+  const CARD_H_LARGE = artMode === 'crop' ? 264 : 363;
   const GRID_GAP = 12;
 
   const gridWrapRef = useRef<HTMLDivElement>(null);
@@ -441,13 +568,17 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setSort(key);
-      setSortDir('asc');
+      if (key === 'set' || key === 'count' || key === 'rarity') {
+        setSortDir('desc');
+      } else {
+        setSortDir('asc');
+      }
     }
   };
 
   const sortArrow = (key: string) => {
-    if (sort !== key) return <span className="opacity-0 group-hover:opacity-60">↕</span>;
-    return sortDir === 'asc' ? '▲' : '▼';
+    if (sort !== key) return <span className="opacity-0 group-hover:opacity-40 text-neutral-500 font-mono">↕</span>;
+    return <span className="font-bold text-white font-mono">{sortDir === 'asc' ? '▲' : '▼'}</span>;
   };
 
   // Column sort keys map to backend sort values.
@@ -480,12 +611,12 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     const isOwned = card.owned_count > 0;
     if (!isOwned) {
       return (
-        <span className="text-[12px] font-mono opacity-30 text-center block w-full">—</span>
+        <span className="text-[13.5px] font-mono opacity-30 text-center block w-full">—</span>
       );
     }
     return (
       <span
-        className="text-[12px] font-mono font-bold tabular-nums text-center block w-full"
+        className="text-[13.5px] font-mono font-bold tabular-nums text-center block w-full"
         style={{ color: card.owned_count >= 4 ? '#34D399' : palette?.text }}
       >
         {card.owned_count}
@@ -558,37 +689,143 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     );
   };
 
-  const renderTableRow = (card: CollectionCard) => {
-    const isOwned = card.owned_count > 0;
-    const rarity = RARITY_INFO[card.rarity] || { label: '-', color: '#9CA3AF' };
+  const renderCellContent = (col: CollectionColumnDef, card: CollectionCard) => {
+    const rarity = RARITY_INFO[card.rarity] || { label: '—', color: '#9CA3AF' };
     const symbols = parseMtgaManaCost(card.mana_cost || '');
     const cardName = card.name || `Unknown Card (#${card.grp_id})`;
-    return (
-      <tr
-        key={card.grp_id}
-        onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="cursor-pointer transition-colors hover:bg-white/5"
-        style={{ borderColor: `${palette?.border}44` }}
-      >
-        <td className="px-3 py-1.5 text-[12px] font-semibold truncate max-w-[260px]" style={{ color: palette?.text }}>
-          {cardName}
-        </td>
-        <td className="px-3 py-1.5">
-          <span className="flex items-center gap-0.5">
-            {symbols.length > 0 ? symbols.map((s, i) => <ManaFontPip key={i} symbol={s} size={14} />) : <span className="opacity-30 text-[10px]">—</span>}
+
+    switch (col.key) {
+      case 'art':
+        return (
+          <div className="flex items-center justify-center">
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onShowCard({ name: cardName, grp_id: card.grp_id }, false);
+              }}
+              className="w-9 h-9 border border-white/15 overflow-hidden shrink-0 cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:border-white/50 z-10"
+            >
+              <CardImage
+                name={cardName}
+                version="art_crop"
+                alt={cardName}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        );
+
+      case 'name':
+        return (
+          <div className="flex items-center gap-2 truncate">
+            <span
+              className="font-bold text-[13.5px] truncate text-white hover:underline cursor-pointer tracking-wide"
+            >
+              {cardName}
+            </span>
+          </div>
+        );
+
+      case 'mana_cost':
+        return symbols.length > 0 ? (
+          <div className="flex items-center gap-0.5">
+            {symbols.map((s, i) => (
+              <ManaFontPip key={i} symbol={s} size={14} />
+            ))}
+          </div>
+        ) : (
+          <span className="opacity-30 text-xs font-mono">—</span>
+        );
+
+      case 'cmc':
+        return (
+          <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">
+            {card.cmc}
           </span>
-        </td>
-        <td className="px-3 py-1.5 text-[11px] font-mono opacity-70">{card.cmc}</td>
-        <td className="px-3 py-1.5 text-[11px] opacity-70 truncate max-w-[180px]">{card.card_type || '—'}</td>
-        <td className="px-3 py-1.5 text-[11px] opacity-70 truncate max-w-[160px]">{card.set_name || card.set_code || '—'}</td>
-        <td className="px-3 py-1.5 text-[11px] font-mono" style={{ color: rarity.color }}>{rarity.label}</td>
-        <td className="px-3 py-1.5">
-          <div className="flex items-center gap-1.5">
+        );
+
+      case 'card_type':
+        return (
+          <span className="text-xs text-neutral-300 truncate max-w-[170px]" title={card.card_type || ''}>
+            {card.card_type || '—'}
+          </span>
+        );
+
+      case 'set':
+        return (
+          <div className="flex items-center gap-1.5 truncate max-w-[160px]" title={card.set_name || card.set_code || ''}>
+            {card.set_code && (
+              <i className={`${keyruneClass(card.set_code)} text-sm shrink-0`} style={{ color: palette?.text }} />
+            )}
+            <span className="text-xs text-neutral-300 truncate">
+              {card.set_name || card.set_code || '—'}
+            </span>
+          </div>
+        );
+
+      case 'rarity': {
+        const rarityPillStyle: Record<number, { bg: string; fg: string; border: string }> = {
+          1: { bg: '#9CA3AF18', fg: '#9CA3AF', border: '#9CA3AF38' }, // Land
+          2: { bg: '#E5E7EB14', fg: '#E5E7EB', border: '#E5E7EB30' }, // Common
+          3: { bg: '#60A5FA18', fg: '#93C5FD', border: '#60A5FA38' }, // Uncommon (Silver/Blue)
+          4: { bg: '#D4AF3718', fg: '#FCD34D', border: '#D4AF3738' }, // Rare (Gold)
+          5: { bg: '#F9731618', fg: '#FB923C', border: '#F9731638' }, // Mythic (Orange)
+        };
+        const style = rarityPillStyle[card.rarity] || { bg: '#9CA3AF18', fg: '#9CA3AF', border: '#9CA3AF38' };
+        return (
+          <span
+            className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap inline-block"
+            style={{ backgroundColor: style.bg, borderColor: style.border, color: style.fg }}
+          >
+            {rarity.label}
+          </span>
+        );
+      }
+
+      case 'owned':
+        return (
+          <div className="flex items-center justify-center">
             {renderOwnedControl(card)}
           </div>
-        </td>
-      </tr>
-    );
+        );
+
+      case 'colors': {
+        const colorSyms = parseMtgaManaCost(card.color_identity || card.colors || '');
+        return colorSyms.length > 0 ? (
+          <div className="flex items-center justify-center gap-0.5">
+            {colorSyms.map((s, i) => (
+              <ManaPip key={i} symbol={s} size={14} />
+            ))}
+          </div>
+        ) : (
+          <span className="opacity-30 text-xs font-mono">—</span>
+        );
+      }
+
+      case 'collector_number':
+        return (
+          <span className="text-xs font-mono text-neutral-400 tabular-nums">
+            #{card.collector_number || '—'}
+          </span>
+        );
+
+      case 'released':
+        return (
+          <span className="text-xs font-mono text-neutral-400 tabular-nums">
+            {card.set_released_at || '—'}
+          </span>
+        );
+
+      case 'grp_id':
+        return (
+          <span className="text-[11px] font-mono text-neutral-500 tabular-nums">
+            {card.grp_id}
+          </span>
+        );
+
+      default:
+        return null;
+    }
   };
 
   // Active advanced-filter chips shown in a pop-down below the top bar. Search
@@ -781,39 +1018,40 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   }, [chipWidths, ellipsisWidth]);
 
   return (
-    <div className="flex-1 relative flex flex-col space-y-4 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-4xl font-black font-outfit uppercase tracking-wide" style={{ color: palette?.text }}>
-            Card Library
+    <div className="flex-1 min-h-0 flex flex-col space-y-3 px-8 py-4 overflow-hidden">
+      {/* 1. HEADER */}
+      <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <span className="ms ms-library text-2xl" style={{ color: palette?.accent || '#A855F7' }} />
+          <h1 className="text-[26px] font-display font-bold tracking-[0.12em] uppercase text-white leading-none">
+            CARD LIBRARY
           </h1>
+          <span className="text-xs text-neutral-400 font-sans ml-2">
+            ({serverTotalCards.toLocaleString()} cards · {serverTotalOwned.toLocaleString()} collected · {serverTotalOwnedCopies.toLocaleString()} copies)
+          </span>
         </div>
         {error && <span className="text-[11px] font-mono text-rose-400">{error}</span>}
       </div>
 
-      {/* Top bar */}
+      {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
       <div
         ref={topBarRef}
-        className="shrink-0 rounded-2xl border p-2.5 flex items-center gap-2.5"
-        style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}
+        className="shrink-0 border border-white/10 bg-white/[0.02] p-2 flex items-center gap-2.5 flex-wrap"
       >
         {/* Search */}
         <div className="relative w-64 shrink-0">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Search cards..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border bg-black/30 focus:outline-none"
-            style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none border border-white/10 bg-white/[0.03] text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30 transition-colors font-sans"
           />
           {search.length > 0 && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors hover:bg-white/10"
-              style={{ color: palette?.text }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
               title="Clear search"
             >
               <X className="w-3.5 h-3.5" />
@@ -829,7 +1067,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
               <button
                 key={c}
                 onClick={() => toggleIn(selectedColors, c, setSelectedColors)}
-                className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                className={`transition-all cursor-pointer ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
                 title={c === 'C' ? 'Colorless' : `Filter ${c}`}
               >
                 <ManaPip symbol={c} size={22} />
@@ -838,31 +1076,26 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           })}
         </div>
 
-        {/* Advanced Filter — expands to show applied filters inline when active.
-            Chips stay on a single line and clip with an ellipsis if they don't
-            fit, and the pill's height is capped so the top bar never grows. */}
+        {/* Advanced Filter — expands to show applied filters inline when active */}
         <button
           onClick={() => setShowAdvModal(true)}
-          className={`flex items-center gap-1.5 px-2.5 h-[32px] rounded-xl border transition-all hover:bg-white/5 min-w-0 ${
-            hasActiveAdvancedFilters ? '' : 'opacity-60 hover:opacity-100'
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer min-w-0 ${
+            hasActiveAdvancedFilters
+              ? 'border-white/30 bg-white/[0.06] text-white'
+              : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.05] text-neutral-300'
           }`}
-          style={{
-            backgroundColor: palette?.surface,
-            borderColor: hasActiveAdvancedFilters ? `${palette?.accent || '#38BDF8'}55` : palette?.border,
-            color: palette?.text,
-          }}
           title="Advanced filters"
         >
           <SlidersHorizontal
             className="w-3.5 h-3.5 shrink-0"
-            style={{ color: hasActiveAdvancedFilters ? '#FBBF24' : palette?.text }}
+            style={{ color: hasActiveAdvancedFilters ? '#FBBF24' : undefined }}
           />
           {hasActiveAdvancedFilters && activeChips.length === 0 && (
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
           )}
           {activeChips.length > 0 && (
             <>
-              <span className="text-[10px] font-mono uppercase tracking-wide font-bold shrink-0" style={{ color: palette?.accent || '#38BDF8' }}>
+              <span className="text-[10px] font-mono uppercase tracking-wide font-bold shrink-0" style={{ color: palette?.accent || '#A855F7' }}>
                 Filtered by
               </span>
               {/* Chip row: single line, whole chips only, "…" indicator for the rest */}
@@ -873,11 +1106,11 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
               {/* Clear all filters — bold red X */}
               <span
                 onClick={(e) => { e.stopPropagation(); clearAllFilters(); }}
-                className="shrink-0 p-0.5 rounded-md cursor-pointer transition-colors hover:bg-red-500/20"
+                className="shrink-0 p-0.5 rounded-none cursor-pointer transition-colors hover:bg-red-500/20"
                 style={{ color: '#F87171' }}
                 title="Clear all filters"
               >
-                <X className="w-4 h-4" strokeWidth={3} />
+                <X className="w-3.5 h-3.5" strokeWidth={3} />
               </span>
             </>
           )}
@@ -885,65 +1118,39 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
 
         <div ref={spacerRef} className="flex-1" />
 
-        {/* Sort dropdown with embedded direction toggle: clicking an item once
-            selects it ascending; clicking the same item again toggles direction.
-            The selected item is prefixed with an up/down arrow glyph. */}
-        <div className="w-44">
-          <CustomDropdown
-            options={SORT_OPTIONS.map((o) => ({
-              value: o.value,
-              label: sort === o.value
-                ? `${sortDir === 'asc' ? '▲' : '▼'} ${o.label}`
-                : o.label,
-            }))}
-            value={sort}
-            onChange={(val) => {
-              if (val === sort) {
-                setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-              } else {
-                setSort(val);
-                setSortDir('asc');
-              }
-            }}
-            palette={palette}
-          />
-        </div>
-
         {/* View toggle */}
-        <div className="flex items-center rounded-xl border overflow-hidden" style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}>
+        <div className="flex items-center border border-white/10 bg-white/[0.03] overflow-hidden">
           <button
             onClick={() => setView('cards')}
             title="Card view"
-            className={`flex items-center justify-center px-2.5 py-2 transition-all ${view === 'cards' ? '' : 'opacity-50 hover:opacity-100'}`}
-            style={{ color: palette?.text }}
+            className={`flex items-center justify-center px-2.5 py-1.5 transition-all cursor-pointer ${
+              view === 'cards' ? 'bg-white/[0.08] text-white font-bold' : 'opacity-40 hover:opacity-100 text-neutral-400'
+            }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setView('table')}
             title="Table view"
-            className={`flex items-center justify-center px-2.5 py-2 transition-all ${view === 'table' ? '' : 'opacity-50 hover:opacity-100'}`}
-            style={{ color: palette?.text }}
+            className={`flex items-center justify-center px-2.5 py-1.5 transition-all cursor-pointer ${
+              view === 'table' ? 'bg-white/[0.08] text-white font-bold' : 'opacity-40 hover:opacity-100 text-neutral-400'
+            }`}
           >
             <Table2 className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Card Art Mode toggle: Crop (Illustration Only) vs Full Card (Frame & Rules Text) */}
-        <div 
-          className="flex items-center rounded-xl border overflow-hidden" 
-          style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}
-        >
+        {/* Card Art Mode toggle: Crop (Illustration Only) vs Full Card */}
+        <div className="flex items-center border border-white/10 bg-white/[0.03] overflow-hidden">
           <button
             onClick={() => setArtMode('crop')}
             disabled={view !== 'cards'}
             title={view === 'cards' ? "Illustration only (Art Crop)" : "Art mode only applies to card view"}
-            className={`flex items-center justify-center px-2.5 py-2 transition-all ${
+            className={`flex items-center justify-center px-2.5 py-1.5 transition-all ${
               view === 'cards' 
-                ? (artMode === 'crop' ? 'bg-white/10 shadow-inner' : 'opacity-50 hover:opacity-100')
-                : 'opacity-40 cursor-not-allowed'
+                ? (artMode === 'crop' ? 'bg-white/[0.08] text-white' : 'opacity-40 hover:opacity-100 text-neutral-400 cursor-pointer')
+                : 'opacity-20 cursor-not-allowed text-neutral-600'
             }`}
-            style={{ color: palette?.text }}
           >
             <ImageIcon className="w-3.5 h-3.5" />
           </button>
@@ -951,31 +1158,39 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
             onClick={() => setArtMode('full')}
             disabled={view !== 'cards'}
             title={view === 'cards' ? "Full card with rules text & border" : "Art mode only applies to card view"}
-            className={`flex items-center justify-center px-2.5 py-2 transition-all ${
+            className={`flex items-center justify-center px-2.5 py-1.5 transition-all ${
               view === 'cards' 
-                ? (artMode === 'full' ? 'bg-white/10 shadow-inner' : 'opacity-50 hover:opacity-100')
-                : 'opacity-40 cursor-not-allowed'
+                ? (artMode === 'full' ? 'bg-white/[0.08] text-white' : 'opacity-40 hover:opacity-100 text-neutral-400 cursor-pointer')
+                : 'opacity-20 cursor-not-allowed text-neutral-600'
             }`}
-            style={{ color: palette?.text }}
           >
             <RectangleVertical className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Card size toggle: the icon shows what you'll switch TO (zoom-in when
-            currently small, zoom-out when large). Kept visible in table view but
-            disabled/greyed so the top bar stays consistent. */}
+        {/* Card size toggle */}
         <button
           onClick={() => view === 'cards' && setCardSize(cardSize === 'small' ? 'large' : 'small')}
           disabled={view !== 'cards'}
-          className={`flex items-center justify-center px-2.5 py-2 rounded-xl border transition-all ${
-            view === 'cards' ? 'hover:bg-white/5' : 'opacity-40 cursor-not-allowed'
+          className={`flex items-center justify-center px-2.5 py-1.5 border border-white/10 bg-white/[0.03] transition-all ${
+            view === 'cards' ? 'hover:bg-white/[0.06] text-neutral-200 cursor-pointer' : 'opacity-20 cursor-not-allowed text-neutral-600'
           }`}
-          style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
           title={view === 'cards' ? (cardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards') : 'Card size only applies to card view'}
         >
           {cardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
         </button>
+
+        {/* In Table view: Customize Columns button */}
+        {view === 'table' && (
+          <button
+            onClick={() => setShowColumnModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
+            title="Modify, add/remove, and reorder table columns"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: palette?.accent || '#A855F7' }} />
+            <span>COLUMNS ({visibleColumns.length})</span>
+          </button>
+        )}
       </div>
 
       {/* Hidden measurer: all chips + ellipsis at natural width, used to compute
@@ -1010,36 +1225,58 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           </div>
         )}
         {view === 'table' && displayedCards.length > 0 && (
-          <div className="rounded-2xl border overflow-hidden" style={{ borderColor: palette?.border }}>
-            <table className="w-full text-left border-collapse" style={{ color: palette?.text }}>
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wide font-semibold" style={{ color: palette?.subtext, backgroundColor: `${palette?.surface}` }}>
-                  {['Name', 'Cost', 'MV', 'Type', 'Set', 'Rarity', 'Owned'].map((col) => {
-                    const key = colSortKey(col);
-                    const sortable = key != null;
-                    return (
-                      <th key={col} className={`px-3 py-2 ${col === 'Owned' ? 'text-center w-16' : ''}`}>
-                        {sortable ? (
-                          <button
-                            onClick={() => sortByColumn(key!)}
-                            className={`group flex items-center gap-1 text-[10px] uppercase tracking-wide font-semibold hover:opacity-100 ${col === 'Owned' ? 'justify-center w-full' : ''}`}
-                            style={{ color: sort === key ? (palette?.accent || '#38BDF8') : palette?.subtext }}
-                          >
-                            {col}
-                            <span className="text-[9px]">{sortArrow(key!)}</span>
-                          </button>
-                        ) : (
-                          col
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {displayedCards.map(renderTableRow)}
-              </tbody>
-            </table>
+          <div className="border border-white/10 bg-black/20 overflow-hidden flex flex-col">
+            {/* Table Header */}
+            <div className="flex items-center py-2.5 px-4 bg-neutral-950 border-b border-white/10 shrink-0 select-none text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400">
+              {visibleColumns.map((col) => {
+                const sortable = col.sortKey != null;
+                return (
+                  <div
+                    key={col.key}
+                    className={`${col.width || 'flex-1'} px-1.5 ${
+                      col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
+                    }`}
+                  >
+                    {sortable ? (
+                      <button
+                        onClick={() => sortByColumn(col.sortKey!)}
+                        className={`group inline-flex items-center gap-1 hover:text-white transition-colors cursor-pointer ${
+                          col.align === 'center' ? 'justify-center w-full' : ''
+                        }`}
+                        style={{ color: sort === col.sortKey ? (palette?.accent || '#A855F7') : undefined }}
+                      >
+                        <span>{col.label}</span>
+                        <span className="text-[9px]">{sortArrow(col.sortKey!)}</span>
+                      </button>
+                    ) : (
+                      <span>{col.label}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table Rows */}
+            <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar">
+              {displayedCards.map((card) => (
+                <div
+                  key={card.grp_id}
+                  onClick={() => onShowCard({ name: card.name || `Unknown Card (#${card.grp_id})`, grp_id: card.grp_id }, false)}
+                  className="flex items-center py-2 px-4 transition-colors cursor-pointer group hover:bg-white/[0.04]"
+                >
+                  {visibleColumns.map((col) => (
+                    <div
+                      key={col.key}
+                      className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
+                        col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
+                      }`}
+                    >
+                      {renderCellContent(col, card)}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {/* Loading / empty overlays on top of the mounted grid. The loading
@@ -1059,7 +1296,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
 
       {/* Footer: pagination controls (when multiple pages) + global owned/total
           count (always visible, filter-independent) */}
-      <div className="shrink-0 flex items-center gap-4 pt-1">
+      <div className="shrink-0 flex items-center gap-3 pt-1 border-t border-white/5">
         {totalPages > 1 && (
           <>
             <button
@@ -1068,8 +1305,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                 setPage(1);
               }}
               disabled={safePage <= 1}
-              className="flex items-center justify-center p-2 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
-              style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+              className="flex items-center justify-center p-1.5 text-xs font-bold border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-200 transition-colors disabled:opacity-30 cursor-pointer"
               title="First page"
             >
               <Home className="w-3.5 h-3.5" />
@@ -1078,64 +1314,56 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
             <button
               onClick={() => goPage('prev')}
               disabled={safePage <= 1}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
-              style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-200 transition-colors disabled:opacity-30 cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Prev
             </button>
-            <span className="text-[11px] font-mono opacity-60">
-              Page {safePage} of {totalPages}
+            <span className="text-xs font-mono text-neutral-400 px-2">
+              Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
             </span>
             <button
               onClick={() => goPage('next')}
               disabled={safePage >= totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent"
-              style={{ backgroundColor: palette?.surface, borderColor: palette?.border, color: palette?.text }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-200 transition-colors disabled:opacity-30 cursor-pointer"
             >
               Next <ChevronRight className="w-3.5 h-3.5" />
             </button>
             <div className="flex-1" />
           </>
         )}
-        <span className="text-[11px] font-mono opacity-70 ml-auto">
-          {serverTotalOwned} / {serverTotalCards} cards owned
+        <span className="text-xs font-mono text-neutral-400 ml-auto tabular-nums">
+          <span className="text-white font-bold">{serverTotalOwned.toLocaleString()}</span> / {serverTotalCards.toLocaleString()} cards owned
         </span>
       </div>
 
-      {/* Advanced Filter modal (sibling of the grid — the grid stays mounted) */}
+      {/* 3. ADVANCED FILTERS MODAL */}
       {showAdvModal && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
           onClick={() => setShowAdvModal(false)}
         >
           <div
-            className="w-[900px] max-w-full max-h-[50vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden"
-            style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border }}
+            className="w-[900px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header */}
-            <div
-              className="flex items-center justify-between gap-3 px-5 py-3 border-b shrink-0"
-              style={{ borderColor: palette?.border, backgroundColor: palette?.surface }}
-            >
-              <p
-                className="text-sm font-bold uppercase tracking-wide flex items-center gap-2"
-                style={{ color: palette?.text }}
-              >
-                <SlidersHorizontal className="w-4 h-4" style={{ color: hasActiveAdvancedFilters ? '#FBBF24' : palette?.text }} />
-                Advanced Filters
-              </p>
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5" style={{ color: palette?.accent || '#A855F7' }} />
+                <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
+                  ADVANCED CARD FILTERS
+                </h2>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={clearAllFilters}
-                  className="text-[10px] font-mono opacity-60 hover:opacity-100 underline"
+                  className="text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer mr-2"
                 >
                   Clear all
                 </button>
                 <button
                   onClick={() => setShowAdvModal(false)}
-                  className="p-1.5 rounded-lg border transition-colors hover:bg-white/10"
-                  style={{ borderColor: `${palette?.border}66`, color: palette?.text }}
+                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
                   title="Close (Esc)"
                 >
                   <X className="w-4 h-4" />
@@ -1143,16 +1371,15 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
               </div>
             </div>
 
-            {/* Modal body: two columns */}
-            <div className="flex-1 min-h-0 flex">
-              {/* Left column: colors / cmc / collected / copies / rarity / types */}
-              <div
-                className="w-[56%] shrink-0 border-r overflow-y-auto custom-scrollbar p-5 space-y-5"
-                style={{ borderColor: palette?.border }}
-              >
-                {/* Mana cost / color pips + All */}
+            {/* Modal Body: Two Columns */}
+            <div className="flex-1 min-h-0 flex overflow-hidden">
+              {/* Left Column: Colors / Mana Value / Collected / Copies / Rarity / Type */}
+              <div className="w-[55%] shrink-0 border-r border-white/10 overflow-y-auto custom-scrollbar p-6 space-y-5 bg-neutral-950">
+                {/* 1. Mana Cost / Color Identity */}
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Mana Cost / Color</p>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                    MANA COST / COLOR IDENTITY
+                  </p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {['W', 'U', 'B', 'R', 'G', 'C'].map((c) => {
                       const active = selectedColors.includes(c);
@@ -1160,7 +1387,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                         <button
                           key={c}
                           onClick={() => toggleIn(selectedColors, c, setSelectedColors)}
-                          className={`transition-all ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                          className={`transition-all cursor-pointer ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
                           title={c === 'C' ? 'Colorless' : `Toggle ${c}`}
                         >
                           <ManaPip symbol={c} size={24} />
@@ -1169,25 +1396,23 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                     })}
                     <button
                       onClick={() => setSelectedColors([])}
-                      className={`ml-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                        selectedColors.length === 0 ? '' : 'opacity-50 hover:opacity-100'
+                      className={`ml-1 px-2.5 py-1 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                        selectedColors.length === 0
+                          ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                          : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
                       }`}
-                      style={{
-                        backgroundColor: selectedColors.length === 0 ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                        borderColor: selectedColors.length === 0 ? (palette?.accent || '#38BDF8') : palette?.border,
-                        color: selectedColors.length === 0 ? (palette?.accent || '#38BDF8') : palette?.text,
-                      }}
                       title="Clear color filter (show all colors)"
                     >
-                      All
+                      All Colors
                     </button>
                   </div>
-                  <p className="text-[9px] font-mono opacity-40 mt-2">Any selected color identity</p>
                 </div>
 
-                {/* Mana Value (CMC) */}
+                {/* 2. Mana Value (CMC) */}
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Mana Value</p>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                    MANA VALUE (CMC)
+                  </p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {CMC_OPTIONS.map((v) => {
                       const active = cmcFilter === v;
@@ -1195,7 +1420,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                         <button
                           key={v}
                           onClick={() => setCmcFilter(active ? null : v)}
-                          className={`transition-all ${active ? 'scale-110' : 'opacity-35 hover:opacity-75'}`}
+                          className={`transition-all cursor-pointer ${active ? 'scale-110' : 'opacity-35 hover:opacity-75'}`}
                           title={v === 8 ? '8 or more mana' : `Mana value ${v}`}
                         >
                           {v === 8 ? (
@@ -1217,23 +1442,25 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                   </div>
                 </div>
 
-                {/* Collected / Not Collected */}
+                {/* 3. Collected / Uncollected */}
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Collected</p>
-                  <div className="flex rounded-xl border overflow-hidden w-fit" style={{ borderColor: palette?.border }}>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                    COLLECTION STATUS
+                  </p>
+                  <div className="flex border border-white/10 bg-white/[0.02] overflow-hidden w-fit">
                     {(['all', 'owned', 'unowned'] as const).map((o) => {
                       const active = ownedFilter === o;
                       return (
                         <button
                           key={o}
                           onClick={() => setOwnedFilter(o)}
-                          className={`px-3 py-1.5 text-[11px] font-mono font-bold uppercase tracking-wide transition-colors ${
-                            active ? '' : 'opacity-50 hover:opacity-80'
+                          className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer border-r border-white/10 last:border-r-0 ${
+                            active
+                              ? 'bg-white/[0.1] text-white font-bold shadow-sm'
+                              : 'text-neutral-400 hover:text-white'
                           }`}
                           style={{
-                            color: active ? (palette?.accent || '#38BDF8') : palette?.text,
-                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}1a` : 'transparent',
-                            borderRight: `1px solid ${palette?.border || '#2A2F3D'}`,
+                            color: active ? (palette?.accent || '#A855F7') : undefined,
                           }}
                         >
                           {o === 'all' ? 'All' : o === 'owned' ? 'Collected' : 'Not Collected'}
@@ -1243,9 +1470,11 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                   </div>
                 </div>
 
-                {/* Copy count filter */}
+                {/* 4. Copies Owned */}
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Copies Owned</p>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                    EXACT COPIES OWNED
+                  </p>
                   <div className="flex items-center gap-1.5">
                     {[1, 2, 3, 4].map((n) => {
                       const active = copiesFilter === n;
@@ -1253,26 +1482,29 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                         <button
                           key={n}
                           onClick={() => setCopiesFilter(active ? null : n)}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all ${
-                            active ? '' : 'opacity-50 hover:opacity-100'
+                          className={`flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                            active
+                              ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
                           }`}
                           style={{
-                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                            borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                            color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                            borderColor: active ? (palette?.accent || '#A855F7') : undefined,
+                            color: active ? (palette?.accent || '#A855F7') : undefined,
                           }}
                           title={`Exactly ${n} copies owned`}
                         >
-                          {n}
+                          {n} {n === 1 ? 'Copy' : 'Copies'}
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Rarity */}
+                {/* 5. Rarity */}
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Rarity</p>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                    RARITY TIER
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {RARITY_ORDER.map((r) => {
                       const active = selectedRarities.includes(r.value);
@@ -1281,13 +1513,14 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                         <button
                           key={r.value}
                           onClick={() => setSelectedRarities(active ? selectedRarities.filter((x) => x !== r.value) : [...selectedRarities, r.value])}
-                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                            active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                          className={`px-2.5 py-1 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                            active
+                              ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
                           }`}
                           style={{
-                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                            borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                            color: active ? (palette?.accent || '#38BDF8') : info.color,
+                            borderColor: active ? (palette?.accent || '#A855F7') : undefined,
+                            color: active ? info.color : undefined,
                           }}
                         >
                           {r.label}
@@ -1297,9 +1530,11 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                   </div>
                 </div>
 
-                {/* Card type */}
+                {/* 6. Card Type */}
                 <div>
-                  <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">Card Type</p>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                    CARD TYPE
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {CARD_TYPES.map((t) => {
                       const active = selectedTypes.includes(t);
@@ -1307,13 +1542,14 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                         <button
                           key={t}
                           onClick={() => toggleIn(selectedTypes, t, setSelectedTypes)}
-                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
-                            active ? 'opacity-100' : 'opacity-50 hover:opacity-100'
+                          className={`px-2.5 py-1 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                            active
+                              ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
                           }`}
                           style={{
-                            backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                            borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                            color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                            borderColor: active ? (palette?.accent || '#A855F7') : undefined,
+                            color: active ? (palette?.accent || '#A855F7') : undefined,
                           }}
                         >
                           {t}
@@ -1324,18 +1560,17 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                 </div>
               </div>
 
-              {/* Right column: set filter */}
-              <div className="flex-1 min-w-0 flex flex-col p-5">
-                <p className="text-[10px] uppercase font-semibold opacity-60 mb-2">
-                  Set <span className="normal-case opacity-50">({selectedSets.length} selected)</span>
+              {/* Right Column: Set Filter */}
+              <div className="flex-1 min-w-0 flex flex-col p-6 bg-neutral-950">
+                <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
+                  EXPANSION SET <span className="normal-case opacity-50">({selectedSets.length} selected)</span>
                 </p>
                 <input
                   type="text"
                   placeholder="Search sets..."
                   value={setNameQuery}
                   onChange={(e) => setSetNameQuery(e.target.value)}
-                  className="w-full pl-2.5 pr-2.5 py-1.5 text-xs rounded-lg border bg-black/30 focus:outline-none mb-2"
-                  style={{ borderColor: palette?.border || '#2A2F3D', color: palette?.text }}
+                  className="w-full px-3 py-1.5 text-xs rounded-none border border-white/10 bg-white/[0.03] text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30 transition-colors font-sans mb-3"
                 />
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1 pr-1">
                   {sortedSets.map((s) => {
@@ -1344,20 +1579,20 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                       <button
                         key={s.set_code}
                         onClick={() => toggleIn(selectedSets, s.set_code, setSelectedSets)}
-                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
-                          active ? 'opacity-100' : 'opacity-55 hover:opacity-100'
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 border text-xs font-sans transition-colors cursor-pointer ${
+                          active
+                            ? 'border-white/30 bg-white/[0.08] text-white font-bold shadow-sm'
+                            : 'border-white/5 bg-white/[0.01] hover:bg-white/[0.04] text-neutral-400 hover:text-white'
                         }`}
                         style={{
-                          backgroundColor: active ? `${palette?.accent || '#38BDF8'}25` : 'transparent',
-                          borderColor: active ? (palette?.accent || '#38BDF8') : palette?.border,
-                          color: active ? (palette?.accent || '#38BDF8') : palette?.text,
+                          borderColor: active ? (palette?.accent || '#A855F7') : undefined,
+                          color: active ? (palette?.accent || '#A855F7') : undefined,
                         }}
                         title={s.released_at ? `Released ${s.released_at}` : s.set_code}
                       >
-                        {/* Keyrune set icon (ss ss-<code>), rendered from the bundled font */}
                         <i
-                          className={`${keyruneClass(s.set_code || '')} shrink-0`}
-                          style={{ fontSize: 16, color: active ? (palette?.accent || '#38BDF8') : palette?.text }}
+                          className={`${keyruneClass(s.set_code || '')} text-base shrink-0`}
+                          style={{ color: active ? (palette?.accent || '#A855F7') : '#A1A1AA' }}
                           title={s.set_code}
                         />
                         <span className="truncate flex-1 text-left">{s.name || s.set_code}</span>
@@ -1366,10 +1601,187 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                     );
                   })}
                   {sortedSets.length === 0 && (
-                    <p className="text-[10px] font-mono opacity-40">No sets match</p>
+                    <p className="text-xs font-mono opacity-40 py-2">No sets match</p>
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <button
+                onClick={clearAllFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset All Filters</span>
+              </button>
+              <button
+                onClick={() => setShowAdvModal(false)}
+                className="px-5 py-1.5 text-xs font-mono uppercase tracking-wider font-bold shadow-md transition-all cursor-pointer hover:brightness-110 active:scale-95"
+                style={{
+                  backgroundColor: palette?.accent || '#A855F7',
+                  color: getContrastTextColor(palette?.accent || '#A855F7'),
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. CUSTOMIZE COLUMNS MODAL */}
+      {showColumnModal && (
+        <div
+          onClick={() => setShowColumnModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <div>
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5" style={{ color: palette?.accent || '#A855F7' }} />
+                  <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
+                    CUSTOMIZE CARD TABLE COLUMNS
+                  </h2>
+                </div>
+                <p className="text-xs text-neutral-400 mt-1 font-sans">
+                  Toggle column visibility and drag or click arrows to reorder library table columns.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowColumnModal(false)}
+                className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Column List */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
+              {columns.map((col, idx) => {
+                const isDragging = draggedIndex === idx;
+                const isTarget = dragOverIndex === idx && draggedIndex !== null && draggedIndex !== idx;
+
+                return (
+                  <div
+                    key={col.key}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex items-center justify-between p-3 border transition-all cursor-move select-none ${
+                      isDragging
+                        ? 'opacity-30 border-dashed border-white/40 scale-[0.98]'
+                        : isTarget
+                        ? 'border-2 scale-[1.02] shadow-xl ring-1'
+                        : col.visible
+                        ? 'bg-white/[0.04] border-white/15 hover:border-white/30'
+                        : 'bg-white/[0.01] border-white/5 opacity-50'
+                    }`}
+                    style={{
+                      borderColor: isTarget ? (palette?.accent || '#A855F7') : undefined,
+                      backgroundColor: isTarget ? `${palette?.accent || '#A855F7'}18` : undefined,
+                      boxShadow: isTarget ? `0 0 15px ${palette?.accent || '#A855F7'}44` : undefined,
+                    }}
+                  >
+                    {/* Left: Grip Handle + Checkbox + Column Info */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <GripVertical
+                        className={`w-4 h-4 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
+                          isTarget ? 'text-white' : 'text-neutral-500'
+                        }`}
+                      />
+                      <button
+                        onClick={() => toggleColumnVisibility(col.key)}
+                        className={`w-4 h-4 flex items-center justify-center border text-xs cursor-pointer transition-colors ${
+                          col.visible
+                            ? 'border-white/40 text-white shadow-sm'
+                            : 'border-white/20 text-transparent'
+                        }`}
+                        style={{
+                          backgroundColor: col.visible ? (palette?.accent || '#A855F7') : 'transparent',
+                          borderColor: col.visible ? (palette?.accent || '#A855F7') : undefined,
+                        }}
+                      >
+                        {col.visible && (
+                          <Check
+                            className="w-3 h-3 stroke-[3]"
+                            style={{ color: getContrastTextColor(palette?.accent || '#A855F7') }}
+                          />
+                        )}
+                      </button>
+                      <div>
+                        <div className="text-xs font-sans font-bold text-white tracking-wide flex items-center gap-2">
+                          <span>{col.label}</span>
+                          {isTarget && (
+                            <span
+                              className="text-[9px] font-mono uppercase px-1.5 py-0.2 border font-bold"
+                              style={{
+                                color: palette?.accent || '#A855F7',
+                                borderColor: `${palette?.accent || '#A855F7'}66`,
+                                backgroundColor: `${palette?.accent || '#A855F7'}20`,
+                              }}
+                            >
+                              ⇄ SWAP TO POS #{idx + 1}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10.5px] font-mono text-neutral-400 leading-tight">
+                          {col.description}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Reorder Up/Down buttons */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        disabled={idx === 0}
+                        onClick={() => moveColumn(idx, idx - 1)}
+                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                        title="Move column left / up"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        disabled={idx === columns.length - 1}
+                        onClick={() => moveColumn(idx, idx + 1)}
+                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                        title="Move column right / down"
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <button
+                onClick={resetColumns}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset to Defaults</span>
+              </button>
+              <button
+                onClick={() => setShowColumnModal(false)}
+                className="px-5 py-1.5 text-xs font-mono uppercase tracking-wider font-bold shadow-md transition-all cursor-pointer hover:brightness-110 active:scale-95"
+                style={{
+                  backgroundColor: palette?.accent || '#A855F7',
+                  color: getContrastTextColor(palette?.accent || '#A855F7'),
+                }}
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
