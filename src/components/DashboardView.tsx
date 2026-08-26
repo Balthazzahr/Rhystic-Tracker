@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import React, { useMemo, useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -10,14 +10,14 @@ import {
   XAxis,
   YAxis,
   Legend,
-} from 'recharts';
-import { ChevronRight, X } from 'lucide-react';
-import { ManaPip } from './ManaPip';
-import { CardNameTooltip } from './CardNameTooltip';
-import { AchievementBadge } from './AchievementBadge';
-import { getAchievementMeta } from '../utils/achievementBadges';
-import logoSvg from '../assets/RhysticTrackerLogo.svg';
-import iconSvg from '../assets/RhysticTrackerICON.svg';
+} from "recharts";
+import { ChevronRight, X } from "lucide-react";
+import { ManaPip } from "./ManaPip";
+import { CardNameTooltip } from "./CardNameTooltip";
+import { AchievementBadge } from "./AchievementBadge";
+import { getAchievementMeta } from "../utils/achievementBadges";
+import logoSvg from "../assets/RhysticTrackerLogo.svg";
+import iconSvg from "../assets/RhysticTrackerICON.svg";
 
 interface ManaTheme {
   id: string;
@@ -70,7 +70,10 @@ interface DashboardViewProps {
   timeOptions: { value: string; label: string }[];
   onSelectMatch: (matchId: string) => void;
   onSelectDeck: (deckName: string) => void;
-  onShowCard: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
+  onShowCard: (
+    card: { name: string; grp_id?: number },
+    isCommander: boolean,
+  ) => void;
   hideBrandHeader?: boolean;
   isTestEnv?: boolean;
 }
@@ -82,36 +85,49 @@ const scryfallCardUrl = (name: string) =>
   `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 
 const localDateKey = (d: Date): string => {
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${mm}-${dd}`;
 };
 
 const matchDayKey = (m: { timestamp: string }): string => {
   const d = new Date(m.timestamp);
-  if (isNaN(d.getTime())) return '';
+  if (isNaN(d.getTime())) return "";
   return localDateKey(d);
 };
 
 const dayLabel = (key: string, todayKey: string): string => {
-  if (key === todayKey) return 'Today';
+  if (key === todayKey) return "Today";
   const y = new Date();
   y.setDate(y.getDate() - 1);
-  if (key === localDateKey(y)) return 'Yesterday';
-  const parts = key.split('-');
+  if (key === localDateKey(y)) return "Yesterday";
+  const parts = key.split("-");
   if (parts.length !== 3) return key;
   const [, mo, dy] = parts;
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   return `${parseInt(dy, 10)} ${months[parseInt(mo, 10) - 1]}`;
 };
 
 const formatTimeAgo = (ts: string): string => {
   const d = new Date(ts);
-  if (isNaN(d.getTime())) return '';
+  if (isNaN(d.getTime())) return "";
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'now';
+  if (diffMins < 1) return "now";
   if (diffMins < 60) return `${diffMins}m`;
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h`;
@@ -120,10 +136,23 @@ const formatTimeAgo = (ts: string): string => {
 };
 
 const formatEarnedDate = (ts?: string): string => {
-  if (!ts) return '';
+  if (!ts) return "";
   const d = new Date(ts);
-  if (isNaN(d.getTime())) return '';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (isNaN(d.getTime())) return "";
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   return `${d.getDate()} ${months[d.getMonth()]}`;
 };
 
@@ -138,8 +167,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   hideBrandHeader = false,
   isTestEnv = false,
 }) => {
-  const [chartFormat, setChartFormat] = useState('ALL');
-  const [chartTime, setChartTime] = useState('14D');
+  const [chartFormat, setChartFormat] = useState("ALL");
+  const [chartTime, setChartTime] = useState("14D");
   const [rawAchievements, setRawAchievements] = useState<any[]>([]);
   const [recentAchievements, setRecentAchievements] = useState<any[]>([]);
   const [selectedAchievement, setSelectedAchievement] = useState<any>(null);
@@ -148,18 +177,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const todayKey = useMemo(() => localDateKey(new Date()), []);
 
   const winLossMatches = useMemo(
-    () => matches.filter((m) => m.result === 'win' || m.result === 'loss'),
-    [matches]
+    () => matches.filter((m) => m.result === "win" || m.result === "loss"),
+    [matches],
   );
 
   // Escape key listener for achievement drilldown
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedAchievement(null);
+      if (e.key === "Escape") setSelectedAchievement(null);
     };
     if (selectedAchievement) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
     }
   }, [selectedAchievement]);
 
@@ -168,7 +197,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     let isMounted = true;
     (async () => {
       try {
-        const res: any = await invoke('get_global_achievements');
+        const res: any = await invoke("get_global_achievements");
         if (!isMounted || !res?.achievements) return;
         setRawAchievements(res.achievements);
         const allEarnedCards: any[] = [];
@@ -176,22 +205,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           for (const card of ach.cards || []) {
             allEarnedCards.push({
               achievement: ach.achievement,
-              tier: card.highest_tier || ach.highest_tier || 'bronze',
+              tier: card.highest_tier || ach.highest_tier || "bronze",
               cardName: card.card_name,
               grpId: card.grp_id,
               count: card.count,
-              earnedAt: card.earned_at || '',
+              earnedAt: card.earned_at || "",
               rawAch: ach,
             });
           }
         }
-        allEarnedCards.sort((a, b) => (b.earnedAt || '').localeCompare(a.earnedAt || ''));
+        allEarnedCards.sort((a, b) =>
+          (b.earnedAt || "").localeCompare(a.earnedAt || ""),
+        );
         setRecentAchievements(allEarnedCards.slice(0, 3));
       } catch (err) {
-        console.error('Failed to load achievements in dashboard:', err);
+        console.error("Failed to load achievements in dashboard:", err);
       }
     })();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // ---- Fetch Global Leaderboards for Featured Leaderboard ----
@@ -199,18 +232,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     let isMounted = true;
     (async () => {
       try {
-        const res: any = await invoke('get_global_leaderboards');
+        const res: any = await invoke("get_global_leaderboards");
         if (!isMounted || !res) return;
         const categories = [
-          { key: 'combat_single_hit', title: 'Highest Single-Hit Strike', description: 'Most combat damage dealt in a single swing', unit: 'dmg' },
-          { key: 'combat_match_damage', title: 'Match Combat Record', description: 'Most combat damage dealt in a single game', unit: 'dmg' },
-          { key: 'combat_lifetime_damage', title: 'Lifetime Combat Dominance', description: 'Cumulative combat damage across all matches', unit: 'dmg' },
-          { key: 'spell_single_hit', title: 'Highest Single Cast / Hit', description: 'Most non-combat / spell damage in a single cast', unit: 'dmg' },
-          { key: 'spell_match_damage', title: 'Match Spell Record', description: 'Most non-combat / spell damage in a single game', unit: 'dmg' },
+          {
+            key: "combat_single_hit",
+            title: "Highest Single-Hit Strike",
+            description: "Most combat damage dealt in a single swing",
+            unit: "dmg",
+          },
+          {
+            key: "combat_match_damage",
+            title: "Match Combat Record",
+            description: "Most combat damage dealt in a single game",
+            unit: "dmg",
+          },
+          {
+            key: "combat_lifetime_damage",
+            title: "Lifetime Combat Dominance",
+            description: "Cumulative combat damage across all matches",
+            unit: "dmg",
+          },
+          {
+            key: "spell_single_hit",
+            title: "Highest Single Cast / Hit",
+            description: "Most non-combat / spell damage in a single cast",
+            unit: "dmg",
+          },
+          {
+            key: "spell_match_damage",
+            title: "Match Spell Record",
+            description: "Most non-combat / spell damage in a single game",
+            unit: "dmg",
+          },
         ];
-        const validCats = categories.filter((c) => (res[c.key] || []).length > 0);
+        const validCats = categories.filter(
+          (c) => (res[c.key] || []).length > 0,
+        );
         if (validCats.length > 0) {
-          const picked = validCats[Math.floor(Math.random() * validCats.length)];
+          const picked =
+            validCats[Math.floor(Math.random() * validCats.length)];
           setFeaturedLeaderboard({
             title: picked.title,
             description: picked.description,
@@ -219,23 +280,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           });
         }
       } catch (err) {
-        console.error('Failed to load leaderboards in dashboard:', err);
+        console.error("Failed to load leaderboards in dashboard:", err);
       }
     })();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // ---- Statistics Calculation ----
   const stats = useMemo(() => {
-    const todayMatches = winLossMatches.filter((m) => matchDayKey(m) === todayKey);
-    const todayWins = todayMatches.filter((m) => m.result === 'win').length;
-    const todayLosses = todayMatches.filter((m) => m.result === 'loss').length;
+    const todayMatches = winLossMatches.filter(
+      (m) => matchDayKey(m) === todayKey,
+    );
+    const todayWins = todayMatches.filter((m) => m.result === "win").length;
+    const todayLosses = todayMatches.filter((m) => m.result === "loss").length;
 
-    const allWins = winLossMatches.filter((m) => m.result === 'win').length;
-    const allLosses = winLossMatches.filter((m) => m.result === 'loss').length;
+    const allWins = winLossMatches.filter((m) => m.result === "win").length;
+    const allLosses = winLossMatches.filter((m) => m.result === "loss").length;
 
-    const desc = [...winLossMatches].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    let curType = desc[0]?.result || '';
+    const desc = [...winLossMatches].sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
+    let curType = desc[0]?.result || "";
     let curStreak = 0;
     for (const m of desc) {
       if (m.result === curType) curStreak++;
@@ -246,13 +314,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       todayWins,
       todayLosses,
       todayCount: todayMatches.length,
-      todayWinRate: todayMatches.length > 0 ? (todayWins / todayMatches.length) * 100 : 0,
+      todayWinRate:
+        todayMatches.length > 0 ? (todayWins / todayMatches.length) * 100 : 0,
       allWins,
       allLosses,
       allCount: winLossMatches.length,
-      allWinRate: winLossMatches.length > 0 ? (allWins / winLossMatches.length) * 100 : 0,
+      allWinRate:
+        winLossMatches.length > 0 ? (allWins / winLossMatches.length) * 100 : 0,
       curStreak,
-      curStreakType: curType as 'win' | 'loss' | '',
+      curStreakType: curType as "win" | "loss" | "",
     };
   }, [winLossMatches, todayKey]);
 
@@ -264,14 +334,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const start30D = new Date(now.getTime() - 30 * 86400000);
     const startYear = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    if (chartTime === 'TODAY') {
+    if (chartTime === "TODAY") {
       const hourly = new Map<number, { wins: number; losses: number }>();
       let minHour = 23;
       let maxHour = 0;
       let hasMatches = false;
 
       for (const m of winLossMatches) {
-        if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+        if (
+          chartFormat !== "ALL" &&
+          m.format_name.toUpperCase() !== chartFormat
+        )
+          continue;
         if (matchDayKey(m) !== todayKey) continue;
         const d = new Date(m.timestamp);
         const h = d.getHours();
@@ -279,7 +353,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         maxHour = Math.max(maxHour, h);
         hasMatches = true;
         const e = hourly.get(h) || { wins: 0, losses: 0 };
-        if (m.result === 'win') e.wins++;
+        if (m.result === "win") e.wins++;
         else e.losses++;
         hourly.set(h, e);
       }
@@ -295,9 +369,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const rows = [];
       for (let h = minHour; h <= maxHour; h++) {
         const e = hourly.get(h) || { wins: 0, losses: 0 };
-        const label = `${String(h).padStart(2, '0')}:00`;
+        const label = `${String(h).padStart(2, "0")}:00`;
         const total = e.wins + e.losses;
-        const winRate = total > 0 ? Math.round((e.wins / total) * 1000) / 10 : null;
+        const winRate =
+          total > 0 ? Math.round((e.wins / total) * 1000) / 10 : null;
         rows.push({
           date: `hour-${h}`,
           label,
@@ -311,22 +386,49 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return rows;
     }
 
-    if (chartTime === 'YEAR') {
-      const monthly = new Map<string, { wins: number; losses: number; label: string; time: number }>();
+    if (chartTime === "YEAR") {
+      const monthly = new Map<
+        string,
+        { wins: number; losses: number; label: string; time: number }
+      >();
       for (const m of winLossMatches) {
-        if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+        if (
+          chartFormat !== "ALL" &&
+          m.format_name.toUpperCase() !== chartFormat
+        )
+          continue;
         const d = new Date(m.timestamp);
         if (d < startYear) continue;
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const months = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
         const label = `${months[d.getMonth()]}`;
-        const e = monthly.get(key) || { wins: 0, losses: 0, label, time: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
-        if (m.result === 'win') e.wins++;
+        const e = monthly.get(key) || {
+          wins: 0,
+          losses: 0,
+          label,
+          time: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
+        };
+        if (m.result === "win") e.wins++;
         else e.losses++;
         monthly.set(key, e);
       }
 
-      const monthsArr = [...monthly.entries()].sort((a, b) => a[1].time - b[1].time);
+      const monthsArr = [...monthly.entries()].sort(
+        (a, b) => a[1].time - b[1].time,
+      );
       let lastKnownTrend = stats.allWinRate || 50.0;
       return monthsArr.map(([date, { wins, losses, label }], idx) => {
         const total = wins + losses;
@@ -336,7 +438,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         for (let j = windowStart; j <= idx; j++) {
           const e = monthsArr[j][1];
           windowWins += e.wins;
-          windowTotal += (e.wins + e.losses);
+          windowTotal += e.wins + e.losses;
         }
         if (windowTotal > 0) lastKnownTrend = (windowWins / windowTotal) * 100;
         return {
@@ -351,21 +453,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
     }
 
-    if (chartTime === 'ALL') {
-      const monthly = new Map<string, { wins: number; losses: number; label: string; time: number }>();
+    if (chartTime === "ALL") {
+      const monthly = new Map<
+        string,
+        { wins: number; losses: number; label: string; time: number }
+      >();
       for (const m of winLossMatches) {
-        if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+        if (
+          chartFormat !== "ALL" &&
+          m.format_name.toUpperCase() !== chartFormat
+        )
+          continue;
         const d = new Date(m.timestamp);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const months = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
         const label = `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
-        const e = monthly.get(key) || { wins: 0, losses: 0, label, time: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
-        if (m.result === 'win') e.wins++;
+        const e = monthly.get(key) || {
+          wins: 0,
+          losses: 0,
+          label,
+          time: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
+        };
+        if (m.result === "win") e.wins++;
         else e.losses++;
         monthly.set(key, e);
       }
 
-      const monthsArr = [...monthly.entries()].sort((a, b) => a[1].time - b[1].time);
+      const monthsArr = [...monthly.entries()].sort(
+        (a, b) => a[1].time - b[1].time,
+      );
       let lastKnownTrend = stats.allWinRate || 50.0;
       return monthsArr.map(([date, { wins, losses, label }], idx) => {
         const total = wins + losses;
@@ -375,7 +504,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         for (let j = windowStart; j <= idx; j++) {
           const e = monthsArr[j][1];
           windowWins += e.wins;
-          windowTotal += (e.wins + e.losses);
+          windowTotal += e.wins + e.losses;
         }
         if (windowTotal > 0) lastKnownTrend = (windowWins / windowTotal) * 100;
         return {
@@ -390,7 +519,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
     }
 
-    const numDays = chartTime === '7D' ? 7 : chartTime === '14D' ? 14 : 30;
+    const numDays = chartTime === "7D" ? 7 : chartTime === "14D" ? 14 : 30;
     const daily = new Map<string, { wins: number; losses: number }>();
     for (let i = numDays - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
@@ -399,23 +528,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     for (const m of winLossMatches) {
-      if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) continue;
+      if (chartFormat !== "ALL" && m.format_name.toUpperCase() !== chartFormat)
+        continue;
       const key = matchDayKey(m);
       if (!key || !daily.has(key)) continue;
       const e = daily.get(key)!;
-      if (m.result === 'win') e.wins++;
+      if (m.result === "win") e.wins++;
       else e.losses++;
     }
 
     const days = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     let lastKnownTrend = stats.allWinRate || 50.0;
     const priorMatches = winLossMatches.filter((m) => {
-      if (chartFormat !== 'ALL' && m.format_name.toUpperCase() !== chartFormat) return false;
+      if (chartFormat !== "ALL" && m.format_name.toUpperCase() !== chartFormat)
+        return false;
       const d = new Date(m.timestamp);
-      return d < (chartTime === '7D' ? start7D : chartTime === '14D' ? start14D : start30D);
+      return (
+        d <
+        (chartTime === "7D"
+          ? start7D
+          : chartTime === "14D"
+            ? start14D
+            : start30D)
+      );
     });
     if (priorMatches.length > 0) {
-      const pWins = priorMatches.filter((m) => m.result === 'win').length;
+      const pWins = priorMatches.filter((m) => m.result === "win").length;
       lastKnownTrend = (pWins / priorMatches.length) * 100;
     }
 
@@ -427,7 +565,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       for (let j = windowStart; j <= idx; j++) {
         const e = days[j][1];
         windowWins += e.wins;
-        windowTotal += (e.wins + e.losses);
+        windowTotal += e.wins + e.losses;
       }
       if (windowTotal > 0) {
         lastKnownTrend = (windowWins / windowTotal) * 100;
@@ -442,7 +580,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         trend: Math.round(lastKnownTrend * 10) / 10,
       };
     });
-  }, [winLossMatches, chartTime, chartFormat, todayKey, stats.allWinRate, stats.todayWinRate]);
+  }, [
+    winLossMatches,
+    chartTime,
+    chartFormat,
+    todayKey,
+    stats.allWinRate,
+    stats.todayWinRate,
+  ]);
 
   const maxPlays = useMemo(() => {
     const busiest = chartData.reduce((max, r) => Math.max(max, r.total), 0);
@@ -463,24 +608,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // ---- Recent Matches ----
   const recentMatches = useMemo(() => {
     return [...winLossMatches]
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      )
       .slice(0, 16);
   }, [winLossMatches]);
 
   // ---- Format Breakdown ----
   const formatBreakdown = useMemo(() => {
-    const map = new Map<string, { format: string; wins: number; losses: number; total: number }>();
+    const map = new Map<
+      string,
+      { format: string; wins: number; losses: number; total: number }
+    >();
     for (const m of winLossMatches) {
-      const f = m.format_name || 'Other';
+      const f = m.format_name || "Other";
       const e = map.get(f) || { format: f, wins: 0, losses: 0, total: 0 };
       e.total++;
-      if (m.result === 'win') e.wins++;
+      if (m.result === "win") e.wins++;
       else e.losses++;
       map.set(f, e);
     }
-    return [...map.values()]
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 6);
+    return [...map.values()].sort((a, b) => b.total - a.total).slice(0, 6);
   }, [winLossMatches]);
 
   // Map deck names to their key cards for recent matches portraits
@@ -498,14 +647,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const eligibleDecks = useMemo(
     () =>
       deckOverview.filter(
-        (d) => (d.total_matches || 0) >= 10 && (parseFloat(d.winrate) || 0) >= 50
+        (d) =>
+          (d.total_matches || 0) >= 10 && (parseFloat(d.winrate) || 0) >= 50,
       ),
-    [deckOverview]
+    [deckOverview],
   );
 
   const spotlight = useMemo(() => {
     if (eligibleDecks.length > 0) {
-      const idx = Math.floor(Date.now() / (5 * 60 * 1000)) % eligibleDecks.length;
+      const idx =
+        Math.floor(Date.now() / (5 * 60 * 1000)) % eligibleDecks.length;
       return eligibleDecks[idx];
     }
     return deckOverview[0] || null;
@@ -514,32 +665,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const spotlightIsBrawl = useMemo(
     () =>
       (spotlight?.formats || []).some((f: any) =>
-        String(f.format || '').toLowerCase().includes('brawl')
+        String(f.format || "")
+          .toLowerCase()
+          .includes("brawl"),
       ),
-    [spotlight]
+    [spotlight],
   );
 
   const spotlightMarquee = useMemo(() => {
     if (!spotlight) return null;
     if (spotlightIsBrawl && spotlight.top_commander_name) {
-      return { name: spotlight.top_commander_name, grp_id: spotlight.top_commander_grp_id, isCommander: true };
+      return {
+        name: spotlight.top_commander_name,
+        grp_id: spotlight.top_commander_grp_id,
+        isCommander: true,
+      };
     }
     const keys: any[] = spotlight.key_cards || [];
     const best = keys.reduce<any | null>(
       (acc, k) => (!acc || (k.cmc || 0) > (acc.cmc || 0) ? k : acc),
-      null
+      null,
     );
-    if (best) return { name: best.name, grp_id: best.grp_id, isCommander: false };
-    if (spotlight.top_card_name) return { name: spotlight.top_card_name, grp_id: spotlight.top_card_grp_id, isCommander: false };
+    if (best)
+      return { name: best.name, grp_id: best.grp_id, isCommander: false };
+    if (spotlight.top_card_name)
+      return {
+        name: spotlight.top_card_name,
+        grp_id: spotlight.top_card_grp_id,
+        isCommander: false,
+      };
     return null;
   }, [spotlight, spotlightIsBrawl]);
 
   const spotlightKeyCards = useMemo(() => {
     if (!spotlight) return [];
     const BASIC_LANDS = new Set([
-      'Plains', 'Island', 'Swamp', 'Mountain', 'Forest',
-      'Snow-Covered Plains', 'Snow-Covered Island', 'Snow-Covered Swamp',
-      'Snow-Covered Mountain', 'Snow-Covered Forest', 'Wastes'
+      "Plains",
+      "Island",
+      "Swamp",
+      "Mountain",
+      "Forest",
+      "Snow-Covered Plains",
+      "Snow-Covered Island",
+      "Snow-Covered Swamp",
+      "Snow-Covered Mountain",
+      "Snow-Covered Forest",
+      "Wastes",
     ]);
     const rawKeys: any[] = spotlight.key_cards || [];
     const nonLandKeys = rawKeys.filter((k) => !BASIC_LANDS.has(k.name));
@@ -548,7 +719,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const addedNames = new Set(nonLandKeys.map((k) => k.name));
     if (spotlightMarquee) addedNames.add(spotlightMarquee.name);
 
-    const extraCards = cardsList.filter((c) => !BASIC_LANDS.has(c.name) && !addedNames.has(c.name));
+    const extraCards = cardsList.filter(
+      (c) => !BASIC_LANDS.has(c.name) && !addedNames.has(c.name),
+    );
     return [...nonLandKeys, ...extraCards].slice(0, 8);
   }, [spotlight, spotlightMarquee]);
 
@@ -557,26 +730,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const onPlay = winLossMatches.filter((m) => m.going_first === true).length;
     const onDraw = winLossMatches.filter((m) => m.going_first === false).length;
     const playTotal = onPlay + onDraw;
-    const playWins = winLossMatches.filter((m) => m.going_first === true && m.result === 'win').length;
-    const drawWins = winLossMatches.filter((m) => m.going_first === false && m.result === 'win').length;
+    const playWins = winLossMatches.filter(
+      (m) => m.going_first === true && m.result === "win",
+    ).length;
+    const drawWins = winLossMatches.filter(
+      (m) => m.going_first === false && m.result === "win",
+    ).length;
 
     // Arch nemesis: worst win rate opponent commander, min 25 games
-    const agg = new Map<string, { name: string; count: number; wins: number; grp_id?: number; colors: string[]; _freq?: Map<string, number> }>();
+    const agg = new Map<
+      string,
+      {
+        name: string;
+        count: number;
+        wins: number;
+        grp_id?: number;
+        colors: string[];
+        _freq?: Map<string, number>;
+      }
+    >();
     for (const m of winLossMatches) {
       const name = m.opponent_commander_name;
       if (!name) continue;
       const e = agg.get(name) || { name, count: 0, wins: 0, colors: [] };
       e.count++;
-      if (m.result === 'win') e.wins++;
-      if (m.opponent_commander_id && !e.grp_id) e.grp_id = m.opponent_commander_id;
+      if (m.result === "win") e.wins++;
+      if (m.opponent_commander_id && !e.grp_id)
+        e.grp_id = m.opponent_commander_id;
       if (m.opponent_colors && m.opponent_colors.length > 0) {
-        const key = [...m.opponent_colors].sort().join('');
+        const key = [...m.opponent_colors].sort().join("");
         if (!e._freq) e._freq = new Map<string, number>();
         e._freq.set(key, (e._freq.get(key) || 0) + 1);
       }
       agg.set(name, e);
     }
-    let nemesis: { name: string; count: number; winrate: number; grp_id?: number; colors: string[] } | null = null;
+    let nemesis: {
+      name: string;
+      count: number;
+      winrate: number;
+      grp_id?: number;
+      colors: string[];
+    } | null = null;
     for (const e of agg.values()) {
       if (e.count < 25) continue;
       const wr = (e.wins / e.count) * 100;
@@ -584,56 +778,101 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         let colors: string[] = [];
         if (e._freq) {
           const top = [...e._freq.entries()].sort((a, b) => b[1] - a[1])[0];
-          if (top) colors = top[0].split('');
+          if (top) colors = top[0].split("");
         }
-        nemesis = { name: e.name, count: e.count, winrate: wr, grp_id: e.grp_id, colors };
+        nemesis = {
+          name: e.name,
+          count: e.count,
+          winrate: wr,
+          grp_id: e.grp_id,
+          colors,
+        };
       }
     }
 
     // Longest streaks
     const chrono = [...winLossMatches].sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
-    let cur = { type: '', len: 0 };
-    let bestWin = { len: 0, date: '' };
-    let bestLoss = { len: 0, date: '' };
+    let cur = { type: "", len: 0 };
+    let bestWin = { len: 0, date: "" };
+    let bestLoss = { len: 0, date: "" };
     for (const m of chrono) {
       if (cur.type === m.result) cur.len++;
       else cur = { type: m.result, len: 1 };
-      if (m.result === 'win' && cur.len > bestWin.len) bestWin = { len: cur.len, date: matchDayKey(m) };
-      if (m.result === 'loss' && cur.len > bestLoss.len) bestLoss = { len: cur.len, date: matchDayKey(m) };
+      if (m.result === "win" && cur.len > bestWin.len)
+        bestWin = { len: cur.len, date: matchDayKey(m) };
+      if (m.result === "loss" && cur.len > bestLoss.len)
+        bestLoss = { len: cur.len, date: matchDayKey(m) };
     }
 
     // Most played deck
     let mostPlayed: any = null;
     for (const d of deckOverview) {
-      if (!mostPlayed || (d.total_matches || 0) > (mostPlayed.total_matches || 0)) mostPlayed = d;
+      if (
+        !mostPlayed ||
+        (d.total_matches || 0) > (mostPlayed.total_matches || 0)
+      )
+        mostPlayed = d;
     }
-    let mostPlayedArt: { name: string; grp_id?: number; isCommander: boolean } | null = null;
+    let mostPlayedArt: {
+      name: string;
+      grp_id?: number;
+      isCommander: boolean;
+    } | null = null;
     if (mostPlayed) {
-      const isBrawl = (mostPlayed.formats || []).some((f: any) => String(f.format || '').toLowerCase().includes('brawl'));
+      const isBrawl = (mostPlayed.formats || []).some((f: any) =>
+        String(f.format || "")
+          .toLowerCase()
+          .includes("brawl"),
+      );
       if (isBrawl && mostPlayed.top_commander_name) {
-        mostPlayedArt = { name: mostPlayed.top_commander_name, grp_id: mostPlayed.top_commander_grp_id, isCommander: true };
+        mostPlayedArt = {
+          name: mostPlayed.top_commander_name,
+          grp_id: mostPlayed.top_commander_grp_id,
+          isCommander: true,
+        };
       } else {
         const best = (mostPlayed.key_cards || []).reduce<any | null>(
           (acc, k) => (!acc || (k.cmc || 0) > (acc.cmc || 0) ? k : acc),
-          null
+          null,
         );
-        if (best) mostPlayedArt = { name: best.name, grp_id: best.grp_id, isCommander: false };
-        else if (mostPlayed.top_card_name) mostPlayedArt = { name: mostPlayed.top_card_name, grp_id: mostPlayed.top_card_grp_id, isCommander: false };
+        if (best)
+          mostPlayedArt = {
+            name: best.name,
+            grp_id: best.grp_id,
+            isCommander: false,
+          };
+        else if (mostPlayed.top_card_name)
+          mostPlayedArt = {
+            name: mostPlayed.top_card_name,
+            grp_id: mostPlayed.top_card_grp_id,
+            isCommander: false,
+          };
       }
     }
 
     // Match color affinity across games played
-    const matchColorCount: Record<string, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+    const matchColorCount: Record<string, number> = {
+      W: 0,
+      U: 0,
+      B: 0,
+      R: 0,
+      G: 0,
+    };
     for (const m of winLossMatches) {
       const cols = (m.deck_colors || []).slice();
       for (const c of cols) if (c in matchColorCount) matchColorCount[c]++;
     }
-    const favColorMatch = Object.entries(matchColorCount).sort((a, b) => b[1] - a[1])[0];
-    const leastColorMatch = Object.entries(matchColorCount)
-      .filter(([, n]) => n > 0)
-      .sort((a, b) => a[1] - b[1])[0] || Object.entries(matchColorCount).sort((a, b) => a[1] - b[1])[0];
+    const favColorMatch = Object.entries(matchColorCount).sort(
+      (a, b) => b[1] - a[1],
+    )[0];
+    const leastColorMatch =
+      Object.entries(matchColorCount)
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => a[1] - b[1])[0] ||
+      Object.entries(matchColorCount).sort((a, b) => a[1] - b[1])[0];
 
     // Average match duration, turns, fastest organic win, and longest game
     let totalSec = 0;
@@ -643,8 +882,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     let longestGame: { turns: number; duration: number } | null = null;
 
     const isConceded = (m: MatchRecord) => {
-      const r = (m.result_reason || '').toLowerCase();
-      return r.includes('conced') || r.includes('surrender') || r.includes('quit');
+      const r = (m.result_reason || "").toLowerCase();
+      return (
+        r.includes("conced") || r.includes("surrender") || r.includes("quit")
+      );
     };
 
     for (const m of winLossMatches) {
@@ -657,21 +898,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
 
       // Fastest organic victory: must be win, turns > 0, and not ended by concession
-      if (m.result === 'win' && m.turns > 0 && !isConceded(m)) {
-        if (!fastestOrganicWin || m.turns < fastestOrganicWin.turns || (m.turns === fastestOrganicWin.turns && m.duration_seconds < fastestOrganicWin.duration)) {
+      if (m.result === "win" && m.turns > 0 && !isConceded(m)) {
+        if (
+          !fastestOrganicWin ||
+          m.turns < fastestOrganicWin.turns ||
+          (m.turns === fastestOrganicWin.turns &&
+            m.duration_seconds < fastestOrganicWin.duration)
+        ) {
           fastestOrganicWin = { turns: m.turns, duration: m.duration_seconds };
         }
       }
 
       // Longest game (no filter on concede)
       if (m.turns > 0 || m.duration_seconds > 0) {
-        if (!longestGame || m.turns > longestGame.turns || (m.turns === longestGame.turns && m.duration_seconds > longestGame.duration)) {
+        if (
+          !longestGame ||
+          m.turns > longestGame.turns ||
+          (m.turns === longestGame.turns &&
+            m.duration_seconds > longestGame.duration)
+        ) {
           longestGame = { turns: m.turns, duration: m.duration_seconds };
         }
       }
     }
 
-    const avgTurns = winLossMatches.length > 0 ? totalTurns / winLossMatches.length : 0;
+    const avgTurns =
+      winLossMatches.length > 0 ? totalTurns / winLossMatches.length : 0;
     const avgSec = validDurations > 0 ? totalSec / validDurations : 0;
 
     return {
@@ -697,7 +949,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [winLossMatches, deckOverview]);
 
-  const accentColor = palette?.accent || '#A855F7';
+  const accentColor = palette?.accent || "#A855F7";
 
   // Win bars = pure theme color, Loss bars = very dark desaturated theme color
   const winBarColor = accentColor;
@@ -719,31 +971,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 0. BRAND LOGO + TEST ENVIRONMENT BADGE */}
       <div
         className={`flex flex-col items-center justify-center shrink-0 transition-opacity duration-500 pt-1 pb-2 ${
-          hideBrandHeader ? 'opacity-0' : 'opacity-100'
+          hideBrandHeader ? "opacity-0" : "opacity-100"
         }`}
       >
         <div className="flex items-center justify-center gap-3">
-          <img src={iconSvg} alt="" className="h-[48px] w-auto object-contain drop-shadow-md" />
-          <img src={logoSvg} alt="Rhystic Tracker" className="h-[56px] w-auto object-contain drop-shadow-md" />
+          <img
+            src={iconSvg}
+            alt=""
+            className="h-[48px] w-auto object-contain drop-shadow-md"
+          />
+          <img
+            src={logoSvg}
+            alt="Rhystic Tracker"
+            className="h-[56px] w-auto object-contain drop-shadow-md"
+          />
         </div>
         {isTestEnv && (
           <div className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-0.5 rounded text-xs font-mono font-bold tracking-wider bg-purple-950/70 border border-purple-500/50 text-purple-300">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
             <span>TEST ENVIRONMENT</span>
             <span className="opacity-40">•</span>
-            <span className="opacity-70 text-[10px] lowercase font-normal">rhystic_dev.db</span>
+            <span className="opacity-70 text-[10px] lowercase font-normal">
+              rhystic_dev.db
+            </span>
           </div>
         )}
       </div>
 
       {/* TWO-COLUMN ASYMMETRIC MAIN WORKSPACE */}
-      <div className="flex-1 min-h-0 flex flex-row gap-8">
+      <div className="flex-1 flex flex-col min-[1200px]:flex-row gap-8 items-stretch">
         {/* ========================================================================= */}
         {/* LEFT COLUMN (~60%): ALL-TIME HERO + TODAY SPLIT, TRENDING GRAPH, RECENT   */}
         {/* ========================================================================= */}
-        <div className="flex-[1.45] min-w-0 flex flex-col justify-between space-y-6 pr-2">
+        <div className="flex-none min-w-0 flex flex-col space-y-6 pr-2 min-[1200px]:flex-[1.45]">
           {/* 1. TOP STAT ROW: ALL-TIME (LEFT) + TODAY INFO (RIGHT JUSTIFIED) */}
-          <div className="flex items-end justify-between gap-6 pb-2 border-b border-white/10">
+          <div className="flex items-end justify-between gap-6 pb-2 border-b border-white/10 shrink-0">
             {/* Left: All-Time Win Rate */}
             <div>
               <div className="text-[11px] font-sans font-medium tracking-[0.18em] uppercase text-neutral-400 opacity-70">
@@ -753,7 +1015,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {stats.allWinRate.toFixed(1)}%
               </div>
               <div className="text-xs font-sans text-neutral-400 opacity-70 font-normal">
-                {stats.allWins} wins <span className="opacity-40">/</span> {stats.allLosses} losses <span className="opacity-40">/</span> {stats.allCount} games
+                {stats.allWins} wins <span className="opacity-40">/</span>{" "}
+                {stats.allLosses} losses <span className="opacity-40">/</span>{" "}
+                {stats.allCount} games
               </div>
             </div>
 
@@ -768,18 +1032,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="text-xs font-sans text-neutral-400 opacity-70 font-normal tabular-nums flex items-center justify-end gap-1.5">
                 <span>{stats.todayCount} matches</span>
                 <span className="opacity-40">-</span>
-                <span>{stats.todayWins} win / {stats.todayLosses} loss</span>
+                <span>
+                  {stats.todayWins} win / {stats.todayLosses} loss
+                </span>
                 <span className="opacity-40">-</span>
                 <span>
-                  Streak {stats.curStreak > 0 ? (
+                  Streak{" "}
+                  {stats.curStreak > 0 ? (
                     <span
                       className="font-semibold"
-                      style={{ color: stats.curStreakType === 'win' ? accentColor : '#71717A' }}
+                      style={{
+                        color:
+                          stats.curStreakType === "win"
+                            ? accentColor
+                            : "#71717A",
+                      }}
                     >
-                      {stats.curStreakType === 'win' ? 'W' : 'L'}{stats.curStreak}
+                      {stats.curStreakType === "win" ? "W" : "L"}
+                      {stats.curStreak}
                     </span>
                   ) : (
-                    '0'
+                    "0"
                   )}
                 </span>
               </div>
@@ -787,7 +1060,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* 2. TRENDING WIN RATE (No line under heading, expanded filters, subtle legends/axes) */}
-          <div className="flex flex-col min-h-0">
+          <div className="flex flex-col shrink-0">
             <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
               <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
                 TRENDING WIN RATE
@@ -802,7 +1075,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       className="text-[11px] font-sans bg-transparent border-0 text-neutral-400 hover:text-white cursor-pointer pr-4 appearance-none focus:outline-none"
                     >
                       {formatOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value} className="bg-neutral-900 text-white">
+                        <option
+                          key={opt.value}
+                          value={opt.value}
+                          className="bg-neutral-900 text-white"
+                        >
                           {opt.label}
                         </option>
                       ))}
@@ -814,20 +1091,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {/* Extended Time Filters: Today, 7D, 14D, 30D, Year, All */}
                 <div className="flex items-center gap-2.5">
                   {[
-                    { id: 'TODAY', label: 'Today' },
-                    { id: '7D', label: '7D' },
-                    { id: '14D', label: '14D' },
-                    { id: '30D', label: '30D' },
-                    { id: 'YEAR', label: 'Year' },
-                    { id: 'ALL', label: 'All' },
+                    { id: "TODAY", label: "Today" },
+                    { id: "7D", label: "7D" },
+                    { id: "14D", label: "14D" },
+                    { id: "30D", label: "30D" },
+                    { id: "YEAR", label: "Year" },
+                    { id: "ALL", label: "All" },
                   ].map((t) => (
                     <button
                       key={t.id}
                       onClick={() => setChartTime(t.id)}
                       className={`text-[11px] font-sans transition-colors cursor-pointer ${
                         chartTime === t.id
-                          ? 'text-white font-semibold underline underline-offset-4'
-                          : 'text-neutral-500 hover:text-neutral-300'
+                          ? "text-white font-semibold underline underline-offset-4"
+                          : "text-neutral-500 hover:text-neutral-300"
                       }`}
                     >
                       {t.label}
@@ -840,21 +1117,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {/* Tall headline chart (320px) with subtle axes and bright white legend */}
             <div className="h-[320px] w-full pt-3 pb-1">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+                <ComposedChart
+                  data={chartData}
+                  margin={{ top: 8, right: 8, bottom: 4, left: 4 }}
+                >
                   <XAxis
                     dataKey="label"
-                    axisLine={{ stroke: 'rgba(255, 255, 255, 0.12)' }}
+                    axisLine={{ stroke: "rgba(255, 255, 255, 0.12)" }}
                     tickLine={false}
-                    tick={{ fill: 'rgba(255, 255, 255, 0.35)', fontSize: 10, fontFamily: 'monospace' }}
+                    tick={{
+                      fill: "rgba(255, 255, 255, 0.35)",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                    }}
                     interval="preserveStartEnd"
                   />
                   <YAxis
                     yAxisId="played"
                     orientation="left"
                     domain={[0, maxPlays]}
-                    axisLine={{ stroke: 'rgba(255, 255, 255, 0.12)' }}
+                    axisLine={{ stroke: "rgba(255, 255, 255, 0.12)" }}
                     tickLine={false}
-                    tick={{ fill: 'rgba(255, 255, 255, 0.3)', fontSize: 10, fontFamily: 'monospace' }}
+                    tick={{
+                      fill: "rgba(255, 255, 255, 0.3)",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                    }}
                     width={22}
                   />
                   <YAxis
@@ -863,14 +1151,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     domain={[0, 100]}
                     ticks={[0, 50, 100]}
                     tickFormatter={(v) => `${v}%`}
-                    axisLine={{ stroke: 'rgba(255, 255, 255, 0.12)' }}
+                    axisLine={{ stroke: "rgba(255, 255, 255, 0.12)" }}
                     tickLine={false}
-                    tick={{ fill: 'rgba(255, 255, 255, 0.3)', fontSize: 10, fontFamily: 'monospace' }}
+                    tick={{
+                      fill: "rgba(255, 255, 255, 0.3)",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                    }}
                     width={32}
                   />
 
                   {/* 50% Benchmark line (neutral dashed) */}
-                  <ReferenceLine yAxisId="rate" y={50} stroke="rgba(255,255,255,0.18)" strokeDasharray="3 3" />
+                  <ReferenceLine
+                    yAxisId="rate"
+                    y={50}
+                    stroke="rgba(255,255,255,0.18)"
+                    strokeDasharray="3 3"
+                  />
 
                   <Tooltip
                     content={({ active, payload }) => {
@@ -878,9 +1175,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         const d = payload[0].payload;
                         return (
                           <div className="px-3 py-2 bg-neutral-900/95 border border-white/20 text-xs font-sans text-white shadow-2xl backdrop-blur-md">
-                            <div className="font-semibold text-neutral-200">{d.label}</div>
+                            <div className="font-semibold text-neutral-200">
+                              {d.label}
+                            </div>
                             <div className="mt-1">
-                              Trending WR: <span className="font-semibold text-white">{d.trend}%</span>
+                              Trending WR:{" "}
+                              <span className="font-semibold text-white">
+                                {d.trend}%
+                              </span>
                             </div>
                             {d.total > 0 && (
                               <div className="text-[11px] text-neutral-400 mt-0.5">
@@ -898,8 +1200,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <Legend
                     verticalAlign="bottom"
                     height={22}
-                    formatter={(value) => <span className="text-white font-sans text-[11px] font-semibold tracking-wide">{value}</span>}
-                    wrapperStyle={{ paddingTop: 6, fontSize: 11, fontFamily: 'sans-serif' }}
+                    formatter={(value) => (
+                      <span className="text-white font-sans text-[11px] font-semibold tracking-wide">
+                        {value}
+                      </span>
+                    )}
+                    wrapperStyle={{
+                      paddingTop: 6,
+                      fontSize: 11,
+                      fontFamily: "sans-serif",
+                    }}
                   />
 
                   {/* Layer 1: Histogram Volume Bars (Theme win / dark desaturated theme loss) */}
@@ -942,20 +1252,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* 3. RECENT MATCHES (Fight Matchup X vs Y, Impactful Card Mini Portraits, Aligned Outcome) */}
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className="shrink-0 flex flex-col">
             <div className="pb-1.5 border-b border-white/10">
               <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
                 RECENT MATCHES
               </h2>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar divide-y divide-white/5 pr-1">
+            <div className="divide-y divide-white/5 pr-1">
               {recentMatches.length === 0 ? (
-                <div className="py-6 text-sm font-sans italic text-neutral-500">No matches recorded yet.</div>
+                <div className="py-6 text-sm font-sans italic text-neutral-500">
+                  No matches recorded yet.
+                </div>
               ) : (
                 recentMatches.slice(0, 10).map((m) => {
-                  const isWin = m.result === 'win';
-                  const deckArt = getDeckArt(m.player_deck_name, m.player_commander_name);
-                  const keyCards = (deckKeyCardsMap.get(m.player_deck_name) || []).slice(0, 3);
+                  const isWin = m.result === "win";
+                  const deckArt = getDeckArt(
+                    m.player_deck_name,
+                    m.player_commander_name,
+                  );
+                  const keyCards = (
+                    deckKeyCardsMap.get(m.player_deck_name) || []
+                  ).slice(0, 3);
                   return (
                     <div
                       key={m.match_id}
@@ -967,8 +1284,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{
-                            backgroundColor: isWin ? accentColor : '#52525B',
-                            boxShadow: isWin ? `0 0 8px ${accentColor}cc` : 'none',
+                            backgroundColor: isWin ? accentColor : "#52525B",
+                            boxShadow: isWin
+                              ? `0 0 8px ${accentColor}cc`
+                              : "none",
                           }}
                         />
                         {deckArt && (
@@ -978,7 +1297,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               alt={m.player_deck_name}
                               className="w-full h-full object-cover"
                               loading="lazy"
-                              onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                              onError={(e) => {
+                                (
+                                  e.target as HTMLImageElement
+                                ).style.visibility = "hidden";
+                              }}
                             />
                           </div>
                         )}
@@ -993,7 +1316,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             className="font-semibold truncate"
                             style={{ color: accentColor }}
                           >
-                            {m.opponent_name || 'Opponent'}
+                            {m.opponent_name || "Opponent"}
                           </span>
                         </div>
                         {m.format_name && (
@@ -1007,12 +1330,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {keyCards.length > 0 && (
                         <div className="hidden lg:flex items-center gap-1 shrink-0 px-2">
                           {keyCards.map((k) => (
-                            <CardNameTooltip key={k.grp_id ?? k.name} name={k.name}>
+                            <CardNameTooltip
+                              key={k.grp_id ?? k.name}
+                              name={k.name}
+                            >
                               <div
                                 className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900 cursor-zoom-in hover:scale-125 transition-transform"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onShowCard({ name: k.name, grp_id: k.grp_id }, false);
+                                  onShowCard(
+                                    { name: k.name, grp_id: k.grp_id },
+                                    false,
+                                  );
                                 }}
                               >
                                 <img
@@ -1022,7 +1351,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                   loading="lazy"
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
-                                    target.style.visibility = 'hidden';
+                                    target.style.visibility = "hidden";
                                   }}
                                 />
                               </div>
@@ -1035,9 +1364,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className="shrink-0 flex items-center justify-end gap-2 text-right tabular-nums">
                         <span
                           className="w-12 text-left font-semibold text-[13px] tracking-wider"
-                          style={{ color: isWin ? accentColor : '#71717A' }}
+                          style={{ color: isWin ? accentColor : "#71717A" }}
                         >
-                          {isWin ? 'WIN' : 'LOSS'}
+                          {isWin ? "WIN" : "LOSS"}
                         </span>
                         <span className="opacity-30">·</span>
                         <span className="w-8 text-right text-xs text-neutral-400 opacity-80">
@@ -1061,12 +1390,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div className="grid grid-cols-3 gap-3 pt-0.5">
                 {formatBreakdown.slice(0, 6).map((f) => {
-                  const wr = f.total > 0 ? Math.round((f.wins / f.total) * 100) : 0;
+                  const wr =
+                    f.total > 0 ? Math.round((f.wins / f.total) * 100) : 0;
                   return (
-                    <div key={f.format} className="flex items-center justify-between text-xs font-sans py-2.5 px-3 bg-white/[0.02] border border-white/10">
-                      <span className="text-neutral-200 font-medium truncate mr-2">{f.format}</span>
+                    <div
+                      key={f.format}
+                      className="flex items-center justify-between text-xs font-sans py-2.5 px-3 bg-white/[0.02] border border-white/10"
+                    >
+                      <span className="text-neutral-200 font-medium truncate mr-2">
+                        {f.format}
+                      </span>
                       <span className="tabular-nums text-neutral-400 shrink-0">
-                        {f.total} {f.total === 1 ? 'game' : 'games'} <span className="opacity-40">-</span> WR: <span className="font-semibold text-white">{wr}%</span>
+                        {f.total} {f.total === 1 ? "game" : "games"}{" "}
+                        <span className="opacity-40">-</span> WR:{" "}
+                        <span className="font-semibold text-white">{wr}%</span>
                       </span>
                     </div>
                   );
@@ -1079,12 +1416,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* ========================================================================= */}
         {/* VERTICAL DIVIDER                                                          */}
         {/* ========================================================================= */}
-        <div className="w-px self-stretch bg-white/10 shrink-0" />
+        <div className="h-px w-full bg-white/10 shrink-0 min-[1200px]:h-auto min-[1200px]:w-px min-[1200px]:self-stretch" />
 
         {/* ========================================================================= */}
         {/* RIGHT COLUMN (~40% DYNAMIC): DECK SPOTLIGHT, FUN FACTS, ACHIEVEMENTS...   */}
         {/* ========================================================================= */}
-        <div className="flex-1 min-w-[420px] max-w-[620px] flex flex-col space-y-7 pl-2">
+        <div className="flex-1 min-w-0 flex flex-col space-y-7 pl-2 min-[1200px]:min-w-[420px] min-[1200px]:max-w-[620px]">
           {/* 1. DECK SPOTLIGHT (Feature Card perfectly matching 2x3 Notable Cards height) */}
           <div className="flex flex-col">
             <div className="pb-1.5 border-b border-white/10">
@@ -1100,7 +1437,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       className="w-[184px] h-[257px] shrink-0 overflow-hidden cursor-zoom-in group shadow-2xl transition-transform hover:scale-105 border border-white/10 bg-neutral-900"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onShowCard({ name: spotlightMarquee.name, grp_id: spotlightMarquee.grp_id }, spotlightMarquee.isCommander);
+                        onShowCard(
+                          {
+                            name: spotlightMarquee.name,
+                            grp_id: spotlightMarquee.grp_id,
+                          },
+                          spotlightMarquee.isCommander,
+                        );
                       }}
                     >
                       <img
@@ -1108,7 +1451,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         alt={spotlightMarquee.name}
                         className="w-full h-full object-cover"
                         loading="lazy"
-                        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility =
+                            "hidden";
+                        }}
                       />
                     </div>
                   )}
@@ -1131,7 +1477,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         )}
                       </div>
                       <div className="text-xs font-sans text-neutral-300 mt-1.5 tabular-nums">
-                        {spotlight.total_matches} games <span className="opacity-40">·</span> <span className="font-semibold text-white">{String(spotlight.winrate || '').replace(/%/g, '')}% WR</span>
+                        {spotlight.total_matches} games{" "}
+                        <span className="opacity-40">·</span>{" "}
+                        <span className="font-semibold text-white">
+                          {String(spotlight.winrate || "").replace(/%/g, "")}%
+                          WR
+                        </span>
                       </div>
                     </div>
 
@@ -1143,13 +1494,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </div>
                         <div className="grid grid-cols-4 gap-2 w-fit">
                           {spotlightKeyCards.slice(0, 8).map((k) => (
-                            <div key={k.grp_id ?? k.name} className="w-[50px] h-[70px] shrink-0">
+                            <div
+                              key={k.grp_id ?? k.name}
+                              className="w-[50px] h-[70px] shrink-0"
+                            >
                               <CardNameTooltip name={k.name}>
                                 <div
                                   className="w-[50px] h-[70px] overflow-hidden border border-white/15 cursor-zoom-in hover:scale-105 transition-transform shadow-md bg-neutral-900"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onShowCard({ name: k.name, grp_id: k.grp_id }, false);
+                                    onShowCard(
+                                      { name: k.name, grp_id: k.grp_id },
+                                      false,
+                                    );
                                   }}
                                 >
                                   <img
@@ -1158,7 +1515,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                     className="w-full h-full object-cover"
                                     loading="lazy"
                                     onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
+                                      const target =
+                                        e.target as HTMLImageElement;
                                       target.src = scryfallArtUrl(k.name);
                                     }}
                                   />
@@ -1189,7 +1547,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="pt-2.5 space-y-2 text-xs font-sans">
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">Games played</span>
-                <span className="font-semibold text-white tabular-nums">{funFacts.totalGames.toLocaleString()}</span>
+                <span className="font-semibold text-white tabular-nums">
+                  {funFacts.totalGames.toLocaleString()}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">On play %</span>
@@ -1198,22 +1558,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-neutral-400">Win Rate - Play vs Draw</span>
+                <span className="text-neutral-400">
+                  Win Rate - Play vs Draw
+                </span>
                 <span className="font-semibold text-white tabular-nums">
-                  {funFacts.playWinRate.toFixed(0)}% / {funFacts.drawWinRate.toFixed(0)}%
+                  {funFacts.playWinRate.toFixed(0)}% /{" "}
+                  {funFacts.drawWinRate.toFixed(0)}%
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">Average match length</span>
                 <span className="font-semibold text-white tabular-nums">
-                  {funFacts.avgTurns.toFixed(1)} turns ({Math.floor(funFacts.avgSec / 60)}m {Math.floor(funFacts.avgSec % 60)}s)
+                  {funFacts.avgTurns.toFixed(1)} turns (
+                  {Math.floor(funFacts.avgSec / 60)}m{" "}
+                  {Math.floor(funFacts.avgSec % 60)}s)
                 </span>
               </div>
               {funFacts.fastestOrganicWin && (
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-400">Fastest game (no concedes)</span>
+                  <span className="text-neutral-400">
+                    Fastest game (no concedes)
+                  </span>
                   <span className="font-semibold text-emerald-400 tabular-nums">
-                    Turn {funFacts.fastestOrganicWin.turns} ({Math.floor(funFacts.fastestOrganicWin.duration / 60)}m {Math.floor(funFacts.fastestOrganicWin.duration % 60)}s)
+                    Turn {funFacts.fastestOrganicWin.turns} (
+                    {Math.floor(funFacts.fastestOrganicWin.duration / 60)}m{" "}
+                    {Math.floor(funFacts.fastestOrganicWin.duration % 60)}s)
                   </span>
                 </div>
               )}
@@ -1221,25 +1590,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-neutral-400">Longest game</span>
                   <span className="font-semibold text-amber-300 tabular-nums">
-                    Turn {funFacts.longestGame.turns} ({Math.floor(funFacts.longestGame.duration / 60)}m {Math.floor(funFacts.longestGame.duration % 60)}s)
+                    Turn {funFacts.longestGame.turns} (
+                    {Math.floor(funFacts.longestGame.duration / 60)}m{" "}
+                    {Math.floor(funFacts.longestGame.duration % 60)}s)
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">Longest win streak</span>
                 <span className="font-semibold text-white tabular-nums">
-                  {funFacts.bestWin.len > 0 ? `${funFacts.bestWin.len} games` : '—'}
+                  {funFacts.bestWin.len > 0
+                    ? `${funFacts.bestWin.len} games`
+                    : "—"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-neutral-400">Longest loss streak</span>
                 <span className="font-semibold text-neutral-300 tabular-nums">
-                  {funFacts.bestLoss.len > 0 ? `${funFacts.bestLoss.len} games` : '—'}
+                  {funFacts.bestLoss.len > 0
+                    ? `${funFacts.bestLoss.len} games`
+                    : "—"}
                 </span>
               </div>
               {funFacts.favColorMatch && (
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-400">Most favorite deck color</span>
+                  <span className="text-neutral-400">
+                    Most favorite deck color
+                  </span>
                   <span className="flex items-center gap-1 font-semibold text-white">
                     <ManaPip symbol={funFacts.favColorMatch[0]} size={12} />
                     <span>({funFacts.favColorMatch[1]} games)</span>
@@ -1248,7 +1625,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               )}
               {funFacts.leastColorMatch && (
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-400">Least used deck color</span>
+                  <span className="text-neutral-400">
+                    Least used deck color
+                  </span>
                   <span className="flex items-center gap-1 font-semibold text-white">
                     <ManaPip symbol={funFacts.leastColorMatch[0]} size={12} />
                     <span>({funFacts.leastColorMatch[1]} games)</span>
@@ -1257,28 +1636,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               )}
               {funFacts.mostPlayed && (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-neutral-400 shrink-0">Most played deck</span>
+                  <span className="text-neutral-400 shrink-0">
+                    Most played deck
+                  </span>
                   <div
                     onClick={() => onSelectDeck(funFacts.mostPlayed.deck_name)}
                     className="flex items-center gap-1.5 font-semibold text-white truncate max-w-[220px] cursor-pointer hover:underline"
                     style={{ color: accentColor }}
                   >
                     {renderColorPips(funFacts.mostPlayed.colors || [], 11)}
-                    <span className="truncate">{funFacts.mostPlayed.deck_name}</span>
-                    <span className="text-neutral-400 font-normal">({funFacts.mostPlayed.total_matches}g)</span>
+                    <span className="truncate">
+                      {funFacts.mostPlayed.deck_name}
+                    </span>
+                    <span className="text-neutral-400 font-normal">
+                      ({funFacts.mostPlayed.total_matches}g)
+                    </span>
                   </div>
                 </div>
               )}
               {funFacts.nemesis && (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-neutral-400 shrink-0">Arch Nemesis</span>
+                  <span className="text-neutral-400 shrink-0">
+                    Arch Nemesis
+                  </span>
                   <div
-                    onClick={() => onShowCard({ name: funFacts.nemesis.name, grp_id: funFacts.nemesis.grp_id }, true)}
+                    onClick={() =>
+                      onShowCard(
+                        {
+                          name: funFacts.nemesis.name,
+                          grp_id: funFacts.nemesis.grp_id,
+                        },
+                        true,
+                      )
+                    }
                     className="flex items-center gap-1.5 font-semibold text-white min-w-0 cursor-pointer hover:underline"
                   >
                     {renderColorPips(funFacts.nemesis.colors || [], 11)}
-                    <span className="truncate max-w-[190px]" title={funFacts.nemesis.name}>{funFacts.nemesis.name}</span>
-                    <span className="text-rose-400 tabular-nums shrink-0">({funFacts.nemesis.winrate.toFixed(0)}% WR)</span>
+                    <span
+                      className="truncate max-w-[190px]"
+                      title={funFacts.nemesis.name}
+                    >
+                      {funFacts.nemesis.name}
+                    </span>
+                    <span className="text-rose-400 tabular-nums shrink-0">
+                      ({funFacts.nemesis.winrate.toFixed(0)}% WR)
+                    </span>
                   </div>
                 </div>
               )}
@@ -1302,11 +1704,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div
                     key={`${item.achievement}-${item.cardName}-${idx}`}
                     onClick={() => {
-                      const found = rawAchievements.find((a) => a.achievement === item.achievement) || {
+                      const found = rawAchievements.find(
+                        (a) => a.achievement === item.achievement,
+                      ) || {
                         achievement: item.achievement,
                         highest_tier: item.tier,
                         total_awards: item.count,
-                        cards: [{ card_name: item.cardName, grp_id: item.grpId, count: item.count }],
+                        cards: [
+                          {
+                            card_name: item.cardName,
+                            grp_id: item.grpId,
+                            count: item.count,
+                          },
+                        ],
                       };
                       setSelectedAchievement(found);
                     }}
@@ -1338,7 +1748,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           alt={item.cardName}
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform"
                           loading="lazy"
-                          onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.visibility =
+                              "hidden";
+                          }}
                         />
                       </div>
                     </div>
@@ -1369,11 +1782,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {featuredLeaderboard.items.map((entry: any, i: number) => (
                     <div
                       key={entry.grp_id ?? i}
-                      onClick={() => onShowCard({ name: entry.card_name, grp_id: entry.grp_id }, false)}
+                      onClick={() =>
+                        onShowCard(
+                          { name: entry.card_name, grp_id: entry.grp_id },
+                          false,
+                        )
+                      }
                       className="flex items-center justify-between gap-2.5 p-1.5 bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors cursor-pointer group text-xs font-sans"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={`w-4 text-center font-bold font-mono text-[11px] ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-neutral-500'}`}>
+                        <span
+                          className={`w-4 text-center font-bold font-mono text-[11px] ${i === 0 ? "text-amber-400" : i === 1 ? "text-slate-300" : i === 2 ? "text-amber-700" : "text-neutral-500"}`}
+                        >
                           #{i + 1}
                         </span>
                         <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 bg-neutral-900">
@@ -1382,7 +1802,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             alt={entry.card_name}
                             className="w-full h-full object-cover"
                             loading="lazy"
-                            onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.visibility =
+                                "hidden";
+                            }}
                           />
                         </div>
                         <span className="font-medium text-neutral-200 group-hover:text-white truncate">
@@ -1427,7 +1850,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {getAchievementMeta(selectedAchievement.achievement).title}
                   </h3>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    {getAchievementMeta(selectedAchievement.achievement).description}
+                    {
+                      getAchievementMeta(selectedAchievement.achievement)
+                        .description
+                    }
                   </p>
                 </div>
               </div>
@@ -1450,7 +1876,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     key={c.grp_id ?? i}
                     onClick={() => {
                       setSelectedAchievement(null);
-                      onShowCard({ name: c.card_name, grp_id: c.grp_id }, false);
+                      onShowCard(
+                        { name: c.card_name, grp_id: c.grp_id },
+                        false,
+                      );
                     }}
                     className="flex items-center justify-between p-2.5 bg-white/[0.03] border border-white/5 hover:bg-white/10 transition-colors cursor-pointer text-xs group"
                   >
@@ -1461,12 +1890,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           alt={c.card_name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           loading="lazy"
-                          onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.visibility =
+                              "hidden";
+                          }}
                         />
                       </div>
-                      <span className="font-semibold text-white truncate">{c.card_name}</span>
+                      <span className="font-semibold text-white truncate">
+                        {c.card_name}
+                      </span>
                     </div>
-                    <span className="text-neutral-400 tabular-nums font-mono">{c.count}×</span>
+                    <span className="text-neutral-400 tabular-nums font-mono">
+                      {c.count}×
+                    </span>
                   </div>
                 ))}
               </div>
