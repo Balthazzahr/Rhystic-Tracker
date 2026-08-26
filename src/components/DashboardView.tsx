@@ -974,7 +974,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {deckArt && (
                           <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
                             <img
-                              src={deckArt}
+                              src={scryfallArtUrl(deckArt)}
                               alt={m.player_deck_name}
                               className="w-full h-full object-cover"
                               loading="lazy"
