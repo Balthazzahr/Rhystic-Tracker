@@ -182,8 +182,23 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
   // Columns Configuration
   const [columns, setColumns] = useState<DeckColumnDef[]>(() => loadSavedDeckColumns());
   const [showColumnModal, setShowColumnModal] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const SORT_LABEL: Record<string, string> = {
+    deck_name: 'DECK NAME',
+    games: 'GAMES',
+    winrate: 'WIN RATE',
+    last_played: 'LAST PLAYED',
+  };
+
+  useEffect(() => {
+    if (!sortOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSortOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sortOpen]);
 
   const saveColumns = (newCols: DeckColumnDef[]) => {
     setColumns(newCols);
@@ -527,6 +542,48 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
         <div className="flex-1" />
 
+        {/* SORT (cards) / COLUMNS (table) — left of view toggle */}
+        <div className="relative">
+          {deckView === 'table' ? (
+            <button
+              onClick={() => setShowColumnModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
+              title="Modify, add/remove, and reorder table columns"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
+              <span>COLUMNS ({visibleColumns.length})</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => setSortOpen((o) => !o)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
+                title="Sort decks"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                <span>SORT: {SORT_LABEL[deckSort] || deckSort.toUpperCase()}</span>
+                <span className="font-mono text-[10px] ml-1">{deckSortDir === 'asc' ? '▲' : '▼'}</span>
+              </button>
+              {sortOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setSortOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-30 w-44 border border-white/15 bg-neutral-950 shadow-xl">
+                    {(['deck_name', 'games', 'winrate', 'last_played'] as const).map((k) => (
+                      <button
+                        key={k}
+                        onClick={() => { handleSortColumn(k); setSortOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-white/[0.06] transition-colors cursor-pointer ${deckSort === k ? 'text-white font-bold bg-white/[0.08]' : 'text-neutral-400'}`}
+                      >
+                        {SORT_LABEL[k]}<span className="float-right font-mono text-[10px]">{deckSort === k ? (deckSortDir === 'asc' ? '▲' : '▼') : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
         {/* View toggle */}
         <div className="flex items-center border border-white/10 bg-white/[0.03] overflow-hidden">
           <button
@@ -560,18 +617,6 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
         >
           {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
         </button>
-
-        {/* In Table view: Customize Columns button */}
-        {deckView === 'table' && (
-          <button
-            onClick={() => setShowColumnModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
-            title="Modify, add/remove, and reorder table columns"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
-            <span>COLUMNS ({visibleColumns.length})</span>
-          </button>
-        )}
       </div>
 
       {/* 3. MAIN CONTENT: CARD VIEW vs TABLE VIEW */}

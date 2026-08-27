@@ -156,6 +156,21 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     return saved === 'released' || !saved ? 'desc' : 'asc';
   });
   const [showAdvModal, setShowAdvModal] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const SORT_LABEL: Record<string, string> = {
+    name: 'NAME',
+    cmc: 'MANA VALUE',
+    rarity: 'RARITY',
+    set: 'SET',
+    released: 'RELEASE DATE',
+    count: 'OWNED COUNT',
+  };
+  useEffect(() => {
+    if (!sortOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSortOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sortOpen]);
 
   const [setOptions, setSetOptions] = useState<{ set_code: string; name: string | null; released_at: string | null; icon_svg_uri: string | null }[]>([]);
   const [setNameQuery, setSetNameQuery] = useState('');
@@ -1118,6 +1133,48 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
 
         <div ref={spacerRef} className="flex-1" />
 
+        {/* SORT (cards) / COLUMNS (table) — left of view toggle */}
+        <div className="relative">
+          {view === 'table' ? (
+            <button
+              onClick={() => setShowColumnModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
+              title="Modify, add/remove, and reorder table columns"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: palette?.accent || '#A855F7' }} />
+              <span>COLUMNS ({visibleColumns.length})</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => setSortOpen((o) => !o)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
+                title="Sort cards"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: palette?.accent || '#A855F7' }} />
+                <span>SORT: {SORT_LABEL[sort] || sort.toUpperCase()}</span>
+                <span className="font-mono text-[10px] ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+              </button>
+              {sortOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setSortOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-30 w-52 border border-white/15 bg-neutral-950 shadow-xl">
+                    {(['name','cmc','rarity','set','released','count'] as const).map((k) => (
+                      <button
+                        key={k}
+                        onClick={() => { sortByColumn(k as any); setSortOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-white/[0.06] transition-colors cursor-pointer ${sort === k ? 'text-white font-bold bg-white/[0.08]' : 'text-neutral-400'}`}
+                      >
+                        {SORT_LABEL[k]}<span className="float-right font-mono text-[10px]">{sort === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
         {/* View toggle */}
         <div className="flex items-center border border-white/10 bg-white/[0.03] overflow-hidden">
           <button
@@ -1179,18 +1236,6 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
         >
           {cardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
         </button>
-
-        {/* In Table view: Customize Columns button */}
-        {view === 'table' && (
-          <button
-            onClick={() => setShowColumnModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
-            title="Modify, add/remove, and reorder table columns"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: palette?.accent || '#A855F7' }} />
-            <span>COLUMNS ({visibleColumns.length})</span>
-          </button>
-        )}
       </div>
 
       {/* Hidden measurer: all chips + ellipsis at natural width, used to compute
