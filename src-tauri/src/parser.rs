@@ -11,7 +11,7 @@ pub struct AuthPayload {
 #[derive(Debug, Clone)]
 pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
-    MatchCreated { match_id: String, format_name: String, reserved_players: serde_json::Value },
+    MatchCreated { match_id: String, format_name: String, assigned_deck_event: bool, reserved_players: serde_json::Value },
     DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32>, deck_id: Option<String> },
     DeckCatalogBatch { decks: Vec<(String, String, Option<u32>, Vec<u32>)> },
     GameStateUpdateCombined {
@@ -103,6 +103,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     return ParsedEvent::MatchCreated {
                         match_id: mid,
                         format_name: normalize_format(&raw_format),
+                        assigned_deck_event: is_assigned_deck_event(&raw_format),
                         reserved_players,
                     };
                 }
@@ -548,6 +549,18 @@ pub fn normalize_format(raw_event_id: &str) -> String {
     }
 }
 
+/// True for events where Arena assigns the deck (packet/precon selection in the
+/// event UI) and therefore NEVER emits an `EventSetDeck`/`deckSubmit` line for
+/// the match. Verified against real logs for Welcome Deck Duels
+/// (`WelcomeDeckDuels_HOB_20260811`) and Jump In (`Jump_In_2024`): the queue
+/// goes `EventEnterPairing` -> `MatchCreated` with no deck submission between,
+/// so any cached deck from the previous queue would be stale. Both sides are
+/// lowercased so the check is accurate regardless of casing.
+pub fn is_assigned_deck_event(raw_event_id: &str) -> bool {
+    let lower = raw_event_id.to_lowercase();
+    lower.contains("welcomedeckduels") || lower.contains("jump_in")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -605,6 +618,48 @@ mod tests {
         assert_eq!(normalize_format("AIBotMatch_Rebalanced"), "Bot Match");
         assert_eq!(normalize_format("DirectGame_Challenge"), "Direct Challenge");
         assert_eq!(normalize_format("Gladiator_Play"), "Gladiator");
+    }
+
+    #[test]
+    fn test_assigned_deck_event_detection() {
+        // Real event IDs from Player.log (queue -> MatchCreated eventId).
+        assert!(is_assigned_deck_event("WelcomeDeckDuels_HOB_20260811"));
+        assert!(is_assigned_deck_event("Jump_In_2024"));
+        // Casing must not matter on either side.
+        assert!(is_assigned_deck_event("welcomedeckduels_hob_20260811"));
+        assert!(is_assigned_deck_event("JUMP_IN_2024"));
+        assert!(is_assigned_deck_event("jump_in"));
+
+        // Deck-submitting queues must NOT be flagged: they always emit a fresh
+        // EventSetDeck before MatchCreated, so the cache is never stale there.
+        assert!(!is_assigned_deck_event("Historic_Ladder"));
+        assert!(!is_assigned_deck_event("Historic_Play"));
+        assert!(!is_assigned_deck_event("MWM_BrawlBuilder_20260825"));
+        assert!(!is_assigned_deck_event("Standard_Ranked"));
+        assert!(!is_assigned_deck_event("Ladder"));
+        // Bot matches resolve their deck via the catalog on purpose — keep false.
+        assert!(!is_assigned_deck_event("AIBotMatch_Rebalanced"));
+        assert!(!is_assigned_deck_event(""));
+    }
+
+    #[test]
+    fn test_match_created_flags_assigned_deck_event() {
+        // Real MatchGameRoomStateChangedEvent payload (trimmed) from Player.log.
+        let welcome = r#"{"matchGameRoomStateChangedEvent":{"gameRoomInfo":{"gameRoomConfig":{"reservedPlayers":[{"userId":"opp","playerName":"Discy","systemSeatId":1,"teamId":1,"eventId":"WelcomeDeckDuels_HOB_20260811"},{"userId":"me","playerName":"luckypanda","systemSeatId":2,"teamId":2,"eventId":"WelcomeDeckDuels_HOB_20260811"}],"matchId":"5fca06f3-6d40-4248-88dc-d8aef5cb96d0"},"stateType":"MatchGameRoomStateType_Playing"}}}"#;
+        match parse_line(welcome) {
+            ParsedEvent::MatchCreated { assigned_deck_event, .. } => {
+                assert!(assigned_deck_event, "WelcomeDeckDuels match must be flagged as assigned-deck event");
+            }
+            other => panic!("expected MatchCreated, got {:?}", other),
+        }
+
+        let historic = r#"{"matchGameRoomStateChangedEvent":{"gameRoomInfo":{"gameRoomConfig":{"reservedPlayers":[{"userId":"a","playerName":"Jorge","systemSeatId":1,"teamId":1,"eventId":"Historic_Ladder"},{"userId":"b","playerName":"luckypanda","systemSeatId":2,"teamId":2,"eventId":"Historic_Ladder"}],"matchId":"310bb394-5e44-423d-b3ac-bb3750ba0263"},"stateType":"MatchGameRoomStateType_Playing"}}}"#;
+        match parse_line(historic) {
+            ParsedEvent::MatchCreated { assigned_deck_event, .. } => {
+                assert!(!assigned_deck_event, "Historic_Ladder submits a deck; must not be flagged");
+            }
+            other => panic!("expected MatchCreated, got {:?}", other),
+        }
     }
 
     #[test]

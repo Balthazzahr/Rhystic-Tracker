@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use std::path::PathBuf;
 use tailer::{FileTailer, TailerEvent};
 use parser::{parse_line, ParsedEvent};
-use match_assembler::{MatchAssembler, MatchRecord};
+use match_assembler::{MatchAssembler, MatchRecord, PRESET_EVENT_DECK_NAME};
 use db::DatabaseManager;
 use theme::{get_mana_theme, ManaTheme};
 use tauri::Emitter;
@@ -4331,6 +4331,21 @@ async fn record_match_deck_audit(
     assembler: &MatchAssembler,
     match_id: &str,
 ) {
+    // Assigned-deck events (Welcome Deck Duels, Jump In) never submit a deck;
+    // the cache would hold the previous queue's deck. Audit the event preset
+    // instead so this table stays a truthful detector for the bug class.
+    if assembler.last_assigned_deck_event {
+        let _ = db_manager
+            .upsert_match_deck(
+                match_id,
+                Some(PRESET_EVENT_DECK_NAME),
+                None,
+                true,
+                Some("assigned-deck event (no deck submitted)"),
+            )
+            .await;
+        return;
+    }
     let deck_name = assembler.cached_deck_name.clone();
     let deck_id = assembler.cached_deck_id.clone();
     let (preset, reason) = match deck_name.as_deref() {
@@ -4357,13 +4372,14 @@ async fn dispatch_parsed_event(
                 redact_str(&client_id)
             );
         }
-        ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-            assembler.start_match(match_id.clone(), format_name.clone());
+        ParsedEvent::MatchCreated { match_id, format_name, assigned_deck_event, reserved_players } => {
+            assembler.start_match(match_id.clone(), format_name.clone(), assigned_deck_event);
             assembler.update_reserved_players(&reserved_players);
             println!(
-                "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Player Seat = {}, Opponent = \"{}\"",
+                "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Assigned-Deck Event = {}, Player Seat = {}, Opponent = \"{}\"",
                 redact_str(&match_id),
                 format_name,
+                assigned_deck_event,
                 assembler.player_seat_id,
                 redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
             );

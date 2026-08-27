@@ -33,8 +33,8 @@ fn main() {
                 ParsedEvent::Auth { screen_name, client_id } => {
                     assembler.set_player_user_id(client_id);
                 }
-                ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-                    assembler.start_match(match_id, format_name);
+                ParsedEvent::MatchCreated { match_id, format_name, assigned_deck_event, reserved_players } => {
+                    assembler.start_match(match_id, format_name, assigned_deck_event);
                     assembler.update_reserved_players(&reserved_players);
                 }
                 ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, .. } => {
