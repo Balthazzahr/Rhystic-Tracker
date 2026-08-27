@@ -205,8 +205,14 @@ impl DatabaseManager {
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
+            .acquire_timeout(std::time::Duration::from_secs(10))
             .connect(&conn_str)
             .await?;
+
+        // Prevent SQLITE_BUSY "database is locked" during concurrent tailer + UI reads
+        let _ = sqlx::query("PRAGMA journal_mode=WAL;").execute(&pool).await;
+        let _ = sqlx::query("PRAGMA busy_timeout=5000;").execute(&pool).await;
+        let _ = sqlx::query("PRAGMA synchronous=NORMAL;").execute(&pool).await;
 
         // Automatically initialize tables if initializing a new dev database
         sqlx::query(SCHEMA_SQL)
