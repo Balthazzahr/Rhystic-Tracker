@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   SlidersHorizontal,
+  Columns3,
   ChevronUp,
   ChevronDown,
   GripVertical,
@@ -9,6 +10,8 @@ import {
   RotateCcw,
   Check,
   ChevronRight,
+  ChevronLeft,
+  Home,
   Swords,
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -69,9 +72,7 @@ const getContrastTextColor = (hexColor?: string): string => {
 
 const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
   const f = (format || '').toLowerCase();
-  if (f.includes('brawl - standard') || f.includes('standard brawl')) {
-    return { bg: '#4A7FA318', fg: '#7FAAC9', border: '#4A7FA338' };
-  } else if (f.includes('brawl - competitive') || f.includes('competitive brawl')) {
+  if (f.includes('standard brawl')) {
     return { bg: '#8a719d18', fg: '#b39ec4', border: '#8a719d38' };
   } else if (f.includes('brawl')) {
     return { bg: '#4A7FA318', fg: '#7FAAC9', border: '#4A7FA338' };
@@ -134,17 +135,17 @@ export interface ColumnDef {
 }
 
 const DEFAULT_COLUMNS: ColumnDef[] = [
-  { key: 'result', label: 'Result', description: 'Win/Loss indicator and status badge', visible: true, width: 'w-[100px]', align: 'left' },
-  { key: 'date', label: 'Date & Time', description: 'Match timestamp and relative time', visible: true, width: 'w-[130px]', align: 'left' },
   { key: 'matchup', label: 'Matchup', description: 'Player Deck vs Opponent (combined)', visible: true, width: 'flex-1 min-w-[200px]', align: 'left' },
+  { key: 'date', label: 'Date & Time', description: 'Match timestamp and relative time', visible: true, width: 'w-[130px]', align: 'center' },
+  { key: 'result', label: 'Result', description: 'Win/Loss indicator and status badge', visible: true, width: 'w-[100px]', align: 'center' },
+  { key: 'colors', label: 'Colors', description: 'Player deck mana color identity', visible: true, width: 'w-[90px]', align: 'center' },
+  { key: 'format', label: 'Format', description: 'Game format badge', visible: true, width: 'w-[130px]', align: 'center' },
+  { key: 'play_draw', label: 'Play', description: 'Opening turn position (Play / Draw)', visible: true, width: 'w-[80px]', align: 'center' },
+  { key: 'mana_curve', label: 'Mana Curve', description: 'Mini deck mana histogram', visible: true, width: 'w-[130px]', align: 'center' },
   { key: 'deck', label: 'Deck', description: 'Player deck artwork thumbnail and name', visible: false, width: 'flex-1 min-w-[160px]', align: 'left' },
   { key: 'opponent', label: 'Opponent', description: 'Opponent username (click to filter)', visible: false, width: 'w-[150px]', align: 'left' },
-  { key: 'format', label: 'Format', description: 'Game format badge', visible: true, width: 'w-[130px]', align: 'center' },
-  { key: 'colors', label: 'Colors', description: 'Player deck mana color identity', visible: true, width: 'w-[90px]', align: 'center' },
-  { key: 'game_stats', label: 'Game Stats', description: 'Turns elapsed and duration', visible: true, width: 'w-[120px]', align: 'center' },
-  { key: 'play_draw', label: 'Play / Draw', description: 'Opening turn position', visible: true, width: 'w-[95px]', align: 'center' },
-  { key: 'key_cards', label: 'Key Cards', description: 'Mini portraits of notable cards played', visible: true, width: 'w-[105px]', align: 'center' },
-  { key: 'mana_curve', label: 'Mana Curve', description: 'Mini deck mana histogram', visible: false, width: 'w-[130px]', align: 'center' },
+  { key: 'game_stats', label: 'Game Stats', description: 'Turns elapsed and duration', visible: false, width: 'w-[120px]', align: 'center' },
+  { key: 'key_cards', label: 'Key Cards', description: 'Mini portraits of notable cards played', visible: false, width: 'w-[105px]', align: 'center' },
   { key: 'life_totals', label: 'Final Life', description: 'Ending life score (You - Opp)', visible: false, width: 'w-[100px]', align: 'center' },
   { key: 'mulligans', label: 'Mulligans', description: 'Opening hand mulligans taken', visible: false, width: 'w-[100px]', align: 'center' },
   { key: 'end_reason', label: 'End Reason', description: 'Victory/defeat condition', visible: false, width: 'w-[110px]', align: 'center' },
@@ -177,13 +178,81 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
   // --- Filter State ---
   const [searchTerm, setSearchTerm] = useState(initialSearch || '');
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
   const [formatFilter, setFormatFilter] = useState('ALL');
-  const [timeFilter, setTimeFilter] = useState('ALL');
+  const [timeFilter, setTimeFilter] = useState<'ALL' | '7D' | 'LAST_WEEK' | '30D' | 'PREV_MONTH' | 'THIS_YEAR' | 'PREV_YEAR'>('ALL');
   const [resultFilter, setResultFilter] = useState<'ALL' | 'win' | 'loss'>('ALL');
+  const [positionFilter, setPositionFilter] = useState<'ALL' | 'play' | 'draw'>('ALL');
+  const [showAdvModal, setShowAdvModal] = useState(false);
 
   useEffect(() => {
     if (initialSearch !== undefined && initialSearch !== '') setSearchTerm(initialSearch);
   }, [initialSearch]);
+
+  // Close the advanced-filter modal on Escape
+  useEffect(() => {
+    if (!showAdvModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowAdvModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showAdvModal]);
+
+  const TIME_FILTER_OPTIONS: Array<{ id: 'ALL' | '7D' | 'LAST_WEEK' | '30D' | 'PREV_MONTH' | 'THIS_YEAR' | 'PREV_YEAR'; label: string; description: string }> = [
+    { id: 'ALL', label: 'All Time', description: 'Entire recorded match history' },
+    { id: '7D', label: 'Past 7 Days', description: 'Rolling 7 days from now' },
+    { id: 'LAST_WEEK', label: 'Last Week', description: 'Monday to Sunday of previous calendar week' },
+    { id: '30D', label: 'Past 30 Days', description: 'Rolling 30 days from now' },
+    { id: 'PREV_MONTH', label: 'Previous Month', description: '1st to last day of previous calendar month' },
+    { id: 'THIS_YEAR', label: 'This Year', description: 'Jan 1 of current year to present' },
+    { id: 'PREV_YEAR', label: 'Previous Year', description: 'Jan 1 to Dec 31 of previous calendar year' },
+  ];
+
+  const isMatchInTimeFilter = (timestamp: string, tf: string): boolean => {
+    if (tf === 'ALL') return true;
+    const matchDate = new Date(timestamp);
+    const matchTime = matchDate.getTime();
+    if (isNaN(matchTime)) return false;
+
+    const now = new Date();
+    const nowTime = now.getTime();
+
+    if (tf === '7D') {
+      return matchTime >= nowTime - 7 * 24 * 60 * 60 * 1000;
+    }
+
+    if (tf === 'LAST_WEEK') {
+      const currentDay = now.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+      const daysSinceMonday = (currentDay + 6) % 7; // Mon = 0, Tue = 1, ..., Sun = 6
+      const startOfCurrentWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0).getTime();
+      const startOfLastWeek = startOfCurrentWeek - 7 * 24 * 60 * 60 * 1000;
+      return matchTime >= startOfLastWeek && matchTime < startOfCurrentWeek;
+    }
+
+    if (tf === '30D') {
+      return matchTime >= nowTime - 30 * 24 * 60 * 60 * 1000;
+    }
+
+    if (tf === 'PREV_MONTH') {
+      const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0).getTime();
+      return matchTime >= startOfPrevMonth && matchTime < startOfCurrentMonth;
+    }
+
+    if (tf === 'THIS_YEAR') {
+      const startOfThisYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0).getTime();
+      return matchTime >= startOfThisYear;
+    }
+
+    if (tf === 'PREV_YEAR') {
+      const startOfThisYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0).getTime();
+      const startOfPrevYear = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0).getTime();
+      return matchTime >= startOfPrevYear && matchTime < startOfThisYear;
+    }
+
+    return true;
+  };
 
   // Normalize formatOptions defensively so it supports strings or objects seamlessly
   const normalizedFormatOptions = useMemo(() => {
@@ -302,7 +371,6 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
   // --- Filtering Logic ---
   const filteredMatches = useMemo(() => {
-    const now = Date.now();
     const cleanSearch = searchTerm.trim().toLowerCase();
 
     return matches.filter((m) => {
@@ -316,19 +384,27 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       }
 
       // 3. Time period filter
-      if (timeFilter !== 'ALL') {
-        const matchTime = new Date(m.timestamp).getTime();
-        const diffMs = now - matchTime;
-        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      if (!isMatchInTimeFilter(m.timestamp, timeFilter)) return false;
 
-        if (timeFilter === 'TODAY' && diffDays > 1) return false;
-        if (timeFilter === '7D' && diffDays > 7) return false;
-        if (timeFilter === '14D' && diffDays > 14) return false;
-        if (timeFilter === '30D' && diffDays > 30) return false;
-        if (timeFilter === 'YEAR' && diffDays > 365) return false;
+      // 4. Position filter (Play vs Draw)
+      if (positionFilter !== 'ALL') {
+        if (positionFilter === 'play' && !m.going_first) return false;
+        if (positionFilter === 'draw' && m.going_first) return false;
       }
 
-      // 4. Search term (deck name, opponent name, commander)
+      // 5. Color filter (exact color identity matching)
+      if (colorFilter.length > 0) {
+        if (colorFilter.includes('C')) {
+          if ((m.deck_colors || []).length !== 0) return false;
+        } else {
+          const deckCols = [...(m.deck_colors || [])].sort();
+          const selCols = [...colorFilter.filter((c) => c !== 'C')].sort();
+          const matchesColor = deckCols.length === selCols.length && deckCols.every((c, i) => c === selCols[i]);
+          if (!matchesColor) return false;
+        }
+      }
+
+      // 6. Search term (deck name, opponent name, commander)
       if (cleanSearch) {
         const dName = (m.player_deck_name || '').toLowerCase();
         const oName = (m.opponent_name || '').toLowerCase();
@@ -348,62 +424,82 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
       return true;
     });
-  }, [matches, searchTerm, formatFilter, timeFilter, resultFilter]);
+  }, [matches, searchTerm, formatFilter, timeFilter, resultFilter, positionFilter, colorFilter]);
 
-  // --- Dynamic Reactive KPI Summary Stats ---
-  const stats = useMemo(() => {
-    const total = filteredMatches.length;
-    const wins = filteredMatches.filter((m) => m.result === 'win').length;
-    const losses = filteredMatches.filter((m) => m.result === 'loss').length;
-    const winrate = total > 0 ? (wins / total) * 100 : 0;
+  const hasActiveAdvancedFilters = formatFilter !== 'ALL' || timeFilter !== 'ALL' || resultFilter !== 'ALL' || positionFilter !== 'ALL';
 
-    // Play vs Draw
-    const onPlayMatches = filteredMatches.filter((m) => m.going_first === true);
-    const onPlayWins = onPlayMatches.filter((m) => m.result === 'win').length;
-    const onPlayWR = onPlayMatches.length > 0 ? (onPlayWins / onPlayMatches.length) * 100 : 0;
+  const activeAdvancedFilterCount =
+    (formatFilter !== 'ALL' ? 1 : 0) +
+    (timeFilter !== 'ALL' ? 1 : 0) +
+    (resultFilter !== 'ALL' ? 1 : 0) +
+    (positionFilter !== 'ALL' ? 1 : 0);
 
-    const onDrawMatches = filteredMatches.filter((m) => m.going_first === false);
-    const onDrawWins = onDrawMatches.filter((m) => m.result === 'win').length;
-    const onDrawWR = onDrawMatches.length > 0 ? (onDrawWins / onDrawMatches.length) * 100 : 0;
+  const clearAdvancedFilters = () => {
+    setFormatFilter('ALL');
+    setTimeFilter('ALL');
+    setResultFilter('ALL');
+    setPositionFilter('ALL');
+  };
 
-    // Averages
-    const totalTurns = filteredMatches.reduce((acc, m) => acc + (m.turns || 0), 0);
-    const avgTurns = total > 0 ? (totalTurns / total).toFixed(1) : '0';
+  const activeChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; onRemove: () => void }> = [];
 
-    const totalSec = filteredMatches.reduce((acc, m) => acc + (m.duration_seconds || 0), 0);
-    const avgSec = total > 0 ? Math.round(totalSec / total) : 0;
-
-    // Current Streak in this filtered subset
-    const sorted = [...filteredMatches].sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    let streakType: 'win' | 'loss' | '' = (sorted[0]?.result as any) || '';
-    let streakCount = 0;
-    for (const m of sorted) {
-      if (m.result === streakType) streakCount++;
-      else break;
+    if (formatFilter !== 'ALL') {
+      const opt = normalizedFormatOptions.find((f) => f.value.toUpperCase() === formatFilter.toUpperCase());
+      chips.push({
+        key: 'format',
+        label: `Format: ${opt?.label || formatFilter}`,
+        onRemove: () => setFormatFilter('ALL'),
+      });
     }
 
-    return {
-      total,
-      wins,
-      losses,
-      winrate,
-      onPlayCount: onPlayMatches.length,
-      onPlayWR,
-      onDrawCount: onDrawMatches.length,
-      onDrawWR,
-      avgTurns,
-      avgSec,
-      streakType,
-      streakCount,
-    };
-  }, [filteredMatches]);
+    if (timeFilter !== 'ALL') {
+      const opt = TIME_FILTER_OPTIONS.find((t) => t.id === timeFilter);
+      chips.push({
+        key: 'time',
+        label: opt?.label || timeFilter,
+        onRemove: () => setTimeFilter('ALL'),
+      });
+    }
+
+    if (resultFilter !== 'ALL') {
+      chips.push({
+        key: 'result',
+        label: resultFilter === 'win' ? 'Wins Only' : 'Losses Only',
+        onRemove: () => setResultFilter('ALL'),
+      });
+    }
+
+    if (positionFilter !== 'ALL') {
+      chips.push({
+        key: 'position',
+        label: positionFilter === 'play' ? 'On the Play' : 'On the Draw',
+        onRemove: () => setPositionFilter('ALL'),
+      });
+    }
+
+    return chips;
+  }, [formatFilter, timeFilter, resultFilter, positionFilter, normalizedFormatOptions]);
+
+  // --- Pagination (50 matches per page) ---
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, formatFilter, timeFilter, resultFilter, positionFilter, colorFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMatches.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedMatches = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredMatches.slice(start, start + PAGE_SIZE);
+  }, [filteredMatches, safePage]);
 
   // --- Virtualized Table Setup ---
   const parentRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
-    count: filteredMatches.length,
+    count: pagedMatches.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 54, // Modern crisp row height: 54px
     overscan: 12,
@@ -416,7 +512,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     if (!curve || curve.length === 0) return <span className="opacity-30">—</span>;
     const maxVal = Math.max(...curve, 1);
     return (
-      <div className="flex items-end gap-1 h-5 w-24">
+      <div className="flex items-end justify-center gap-1 h-5 w-24 mx-auto">
         {curve.slice(0, 7).map((val, idx) => {
           const heightPct = Math.max((val / maxVal) * 100, 15);
           return (
@@ -442,7 +538,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     switch (col.key) {
       case 'result':
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-1.5 w-full">
             <span
               className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{
@@ -461,9 +557,10 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
       case 'date':
         return (
-          <div className="flex flex-col text-left leading-tight font-sans">
-            <span className="text-neutral-200 text-xs font-medium">{formatDateShort(m.timestamp)}</span>
-            <span className="text-[10px] text-neutral-500 font-mono">{formatTimeAgo(m.timestamp)}</span>
+          <div className="flex items-center justify-center w-full text-center">
+            <span className="text-neutral-200 text-xs font-medium font-sans">
+              {formatDateShort(m.timestamp)}
+            </span>
           </div>
         );
 
@@ -551,7 +648,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
       case 'opponent':
         return (
-          <div className="flex items-center gap-1.5 truncate">
+          <div className="flex items-center justify-center w-full">
             <span
               onClick={(e) => {
                 if (m.opponent_name) {
@@ -572,29 +669,35 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         const fmtName = m.format_name || 'Constructed';
         const chip = formatChipColor(fmtName);
         return (
-          <span
-            className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap"
-            style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
-          >
-            {fmtName}
-          </span>
+          <div className="flex items-center justify-center w-full">
+            <span
+              className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap"
+              style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
+            >
+              {fmtName}
+            </span>
+          </div>
         );
       }
 
       case 'colors':
-        return m.deck_colors && m.deck_colors.length > 0 ? (
-          <div className="flex items-center justify-center gap-0.5">
-            {m.deck_colors.map((c) => (
-              <ManaPip key={c} symbol={c} size={14} />
-            ))}
+        return (
+          <div className="flex items-center justify-center w-full">
+            {m.deck_colors && m.deck_colors.length > 0 ? (
+              <div className="flex items-center justify-center gap-0.5">
+                {m.deck_colors.map((c) => (
+                  <ManaPip key={c} symbol={c} size={14} />
+                ))}
+              </div>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
+            )}
           </div>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
         );
 
       case 'game_stats':
         return (
-          <div className="text-xs font-mono text-neutral-300 tabular-nums">
+          <div className="flex items-center justify-center w-full text-xs font-mono text-neutral-300 tabular-nums">
             <span className="text-white font-medium">T{m.turns || '?'}</span>
             <span className="opacity-40 mx-1">·</span>
             <span className="text-neutral-400">{formatDuration(m.duration_seconds)}</span>
@@ -602,125 +705,143 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         );
 
       case 'play_draw':
-        return m.going_first !== undefined ? (
-          <span
-            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 border ${
-              m.going_first
-                ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
-            }`}
-          >
-            {m.going_first ? 'PLAY' : 'DRAW'}
-          </span>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
+        return (
+          <div className="flex items-center justify-center w-full">
+            {m.going_first !== undefined ? (
+              <span
+                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 border ${
+                  m.going_first
+                    ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                    : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                }`}
+              >
+                {m.going_first ? 'PLAY' : 'DRAW'}
+              </span>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
+            )}
+          </div>
         );
 
       case 'key_cards': {
         const keyCards = (deckKeyCardsMap.get(m.player_deck_name) || []).slice(0, 3);
-        return keyCards.length > 0 ? (
-          <div className="flex items-center justify-center gap-1">
-            {keyCards.map((k) => (
-              <CardNameTooltip key={k.grp_id ?? k.name} name={k.name}>
-                <div
-                  className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900 cursor-zoom-in hover:scale-125 transition-transform"
-                  onClick={(e) => {
-                    if (onShowCard) {
-                      e.stopPropagation();
-                      onShowCard({ name: k.name, grp_id: k.grp_id }, false);
-                    }
-                  }}
-                >
-                  <img
-                    src={scryfallArtUrl(k.name)}
-                    alt={k.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.visibility = 'hidden';
-                    }}
-                  />
-                </div>
-              </CardNameTooltip>
-            ))}
+        return (
+          <div className="flex items-center justify-center w-full">
+            {keyCards.length > 0 ? (
+              <div className="flex items-center justify-center gap-1">
+                {keyCards.map((k) => (
+                  <CardNameTooltip key={k.grp_id ?? k.name} name={k.name}>
+                    <div
+                      className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900 cursor-zoom-in hover:scale-125 transition-transform"
+                      onClick={(e) => {
+                        if (onShowCard) {
+                          e.stopPropagation();
+                          onShowCard({ name: k.name, grp_id: k.grp_id }, false);
+                        }
+                      }}
+                    >
+                      <img
+                        src={scryfallArtUrl(k.name)}
+                        alt={k.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = 'hidden';
+                        }}
+                      />
+                    </div>
+                  </CardNameTooltip>
+                ))}
+              </div>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
+            )}
           </div>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
         );
       }
 
       case 'mana_curve':
-        return renderMiniHistogram(m.mana_curve);
+        return (
+          <div className="flex items-center justify-center w-full">
+            {renderMiniHistogram(m.mana_curve)}
+          </div>
+        );
 
       case 'life_totals':
-        return m.player_life_end !== undefined ? (
-          <span className="text-xs font-mono tabular-nums text-neutral-300 font-semibold">
-            <span className={m.player_life_end > 0 ? 'text-emerald-400' : 'text-rose-400'}>
-              {m.player_life_end}
+        return (
+          <div className="flex items-center justify-center w-full text-center">
+            <span className="text-xs font-mono font-bold text-white tabular-nums">
+              {m.player_life_end ?? '—'} <span className="text-neutral-500 font-normal">:</span> {m.opponent_life_end ?? '—'}
             </span>
-            <span className="opacity-40 mx-1">—</span>
-            <span className={m.opponent_life_end && m.opponent_life_end <= 0 ? 'text-rose-400' : 'text-neutral-400'}>
-              {m.opponent_life_end ?? '?'}
-            </span>
-          </span>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
+          </div>
         );
 
       case 'mulligans':
-        return m.player_mulligans !== undefined ? (
-          <span className="text-xs font-mono tabular-nums text-neutral-400">
-            {m.player_mulligans} / {m.opponent_mulligans ?? 0}
-          </span>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
+        return (
+          <div className="flex items-center justify-center w-full text-center">
+            <span className="text-xs font-mono text-neutral-300 tabular-nums">
+              {m.player_mulligans ?? 0}
+            </span>
+          </div>
         );
 
       case 'end_reason':
-        return m.result_reason ? (
-          <span className="text-[11px] font-mono text-neutral-400 capitalize truncate max-w-[100px]" title={m.result_reason}>
-            {m.result_reason}
-          </span>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
+        return (
+          <div className="flex items-center justify-center w-full text-center">
+            <span className="text-xs font-sans text-neutral-400 capitalize">
+              {m.result_reason?.replace('ResultReason_', '') || '—'}
+            </span>
+          </div>
         );
 
       case 'opp_colors':
-        return m.opponent_colors && m.opponent_colors.length > 0 ? (
-          <div className="flex items-center justify-center gap-0.5">
-            {m.opponent_colors.map((c) => (
-              <ManaPip key={c} symbol={c} size={14} />
-            ))}
+        return (
+          <div className="flex items-center justify-center w-full">
+            {m.opponent_colors && m.opponent_colors.length > 0 ? (
+              <div className="flex items-center justify-center gap-0.5">
+                {m.opponent_colors.map((c) => (
+                  <ManaPip key={c} symbol={c} size={14} />
+                ))}
+              </div>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
+            )}
           </div>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
         );
 
-      case 'commanders':
-        return m.player_commander_name || m.opponent_commander_name ? (
-          <div className="flex items-center justify-center gap-1.5">
-            {m.player_commander_name && (
-              <CardNameTooltip name={m.player_commander_name}>
-                <img
-                  src={scryfallArtUrl(m.player_commander_name)}
-                  alt=""
-                  className="w-5 h-5 rounded-full object-cover border border-white/20"
-                />
-              </CardNameTooltip>
-            )}
-            {m.opponent_commander_name && (
-              <CardNameTooltip name={m.opponent_commander_name}>
-                <img
-                  src={scryfallArtUrl(m.opponent_commander_name)}
-                  alt=""
-                  className="w-5 h-5 rounded-full object-cover border border-rose-500/40"
-                />
-              </CardNameTooltip>
+      case 'commanders': {
+        const pCmd = m.player_commander_name;
+        const oCmd = m.opponent_commander_name;
+        return (
+          <div className="flex items-center justify-center w-full">
+            {pCmd || oCmd ? (
+              <div className="flex items-center justify-center gap-1.5">
+                {pCmd && (
+                  <CardNameTooltip name={pCmd}>
+                    <img
+                      src={scryfallArtUrl(pCmd)}
+                      alt=""
+                      className="w-5 h-5 rounded-full object-cover border border-white/20"
+                    />
+                  </CardNameTooltip>
+                )}
+                {pCmd && oCmd && <span className="text-[10px] text-neutral-500 font-mono">vs</span>}
+                {oCmd && (
+                  <CardNameTooltip name={oCmd}>
+                    <img
+                      src={scryfallArtUrl(oCmd)}
+                      alt=""
+                      className="w-5 h-5 rounded-full object-cover border border-rose-500/40"
+                    />
+                  </CardNameTooltip>
+                )}
+              </div>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
             )}
           </div>
-        ) : (
-          <span className="opacity-30 text-xs font-mono">—</span>
         );
+      }
 
       default:
         return null;
@@ -728,7 +849,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col space-y-4 px-8 py-4 overflow-hidden">
+    <div className="flex-1 min-h-0 flex flex-col space-y-3 px-8 py-4 overflow-hidden">
       {/* 1. TOP HEADER */}
       <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -737,285 +858,430 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
             MATCH HISTORY
           </h1>
           <span className="text-xs text-neutral-400 font-sans ml-2">
-            ({stats.total.toLocaleString()} games recorded across all formats)
+            ({filteredMatches.length.toLocaleString()} {filteredMatches.length === 1 ? 'match' : 'matches'} recorded across all formats)
           </span>
         </div>
       </div>
 
-      {/* 2. DYNAMIC REACTIVE KPI SUMMARY BAR */}
-      {(() => {
-        const isOutcomeFiltered = resultFilter !== 'ALL';
-
-        return (
-          <div className="grid grid-cols-4 gap-4 p-3.5 bg-white/[0.02] border border-white/5 shrink-0">
-            {/* Metric 1: Filtered Win Rate */}
-            <div className={`transition-opacity duration-200 ${isOutcomeFiltered ? 'opacity-25 select-none grayscale' : ''}`}>
-              <div className="text-[11px] font-sans font-medium tracking-[0.16em] uppercase text-neutral-400 opacity-70">
-                WIN RATE
-              </div>
-              <div className="text-[34px] font-display font-bold text-white tracking-tight leading-none my-0.5 tabular-nums">
-                {isOutcomeFiltered ? '—' : `${stats.winrate.toFixed(1)}%`}
-              </div>
-              <div className="text-xs font-sans text-neutral-400 opacity-75 tabular-nums">
-                {isOutcomeFiltered
-                  ? `${stats.total} ${resultFilter === 'win' ? 'wins' : 'losses'} in view`
-                  : `${stats.wins} wins / ${stats.losses} losses / ${stats.total} matches`}
-              </div>
-            </div>
-
-            {/* Metric 2: Win/Loss Streak */}
-            <div className={`transition-opacity duration-200 ${isOutcomeFiltered ? 'opacity-25 select-none grayscale' : ''}`}>
-              <div className="text-[11px] font-sans font-medium tracking-[0.16em] uppercase text-neutral-400 opacity-70">
-                CURRENT STREAK
-              </div>
-              <div className="text-[34px] font-display font-bold text-white tracking-tight leading-none my-0.5 tabular-nums flex items-center gap-2">
-                {isOutcomeFiltered ? (
-                  <span className="opacity-40">—</span>
-                ) : stats.streakCount > 0 ? (
-                  <span style={{ color: stats.streakType === 'win' ? accentColor : '#71717A' }}>
-                    {stats.streakType === 'win' ? 'W' : 'L'}{stats.streakCount}
-                  </span>
-                ) : (
-                  <span className="opacity-40">0</span>
-                )}
-                {!isOutcomeFiltered && (
-                  <span className="text-xs font-sans font-normal text-neutral-400">
-                    {stats.streakType === 'win' ? 'Win Streak' : stats.streakType === 'loss' ? 'Loss Streak' : 'No streak'}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs font-sans text-neutral-400 opacity-75">
-                {isOutcomeFiltered ? 'Unavailable in filtered outcome view' : 'Active in current filter view'}
-              </div>
-            </div>
-
-            {/* Metric 3: Play vs Draw */}
-            <div className={`transition-opacity duration-200 ${isOutcomeFiltered ? 'opacity-25 select-none grayscale' : ''}`}>
-              <div className="text-[11px] font-sans font-medium tracking-[0.16em] uppercase text-neutral-400 opacity-70">
-                PLAY VS DRAW
-              </div>
-              <div className="text-[20px] font-display font-bold text-white tracking-tight leading-snug mt-1 tabular-nums">
-                {isOutcomeFiltered ? (
-                  <span className="opacity-40">Play: — · Draw: —</span>
-                ) : (
-                  <>
-                    Play: <span className="text-amber-300">{stats.onPlayWR.toFixed(0)}%</span> <span className="opacity-40 font-mono text-xs font-normal">({stats.onPlayCount}g)</span>
-                    <span className="opacity-40 mx-2">·</span>
-                    Draw: <span className="text-blue-300">{stats.onDrawWR.toFixed(0)}%</span> <span className="opacity-40 font-mono text-xs font-normal">({stats.onDrawCount}g)</span>
-                  </>
-                )}
-              </div>
-              <div className="text-xs font-sans text-neutral-400 opacity-75">
-                {isOutcomeFiltered ? 'Unavailable in filtered outcome view' : 'Opening turn impact on win rate'}
-              </div>
-            </div>
-
-            {/* Metric 4: Match Length (Always Active & Accurate for Wins/Losses/All) */}
-            <div>
-              <div className="text-[11px] font-sans font-medium tracking-[0.16em] uppercase text-neutral-400 opacity-70 flex items-center justify-between">
-                <span>AVG MATCH LENGTH</span>
-                {isOutcomeFiltered && (
-                  <span
-                    className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 border"
-                    style={{
-                      color: resultFilter === 'win' ? accentColor : '#A1A1AA',
-                      borderColor: resultFilter === 'win' ? `${accentColor}44` : '#3F3F46',
-                      backgroundColor: resultFilter === 'win' ? `${accentColor}12` : '#27272A',
-                    }}
-                  >
-                    {resultFilter === 'win' ? 'WINS ONLY' : 'LOSSES ONLY'}
-                  </span>
-                )}
-              </div>
-              <div className="text-[20px] font-display font-bold text-white tracking-tight leading-snug mt-1 tabular-nums">
-                {stats.avgTurns} <span className="text-sm font-sans font-normal text-neutral-400">turns</span>
-                <span className="opacity-40 mx-2">·</span>
-                {formatDuration(stats.avgSec)}
-              </div>
-              <div className="text-xs font-sans text-neutral-400 opacity-75">
-                {resultFilter === 'win'
-                  ? 'Average duration for won games'
-                  : resultFilter === 'loss'
-                  ? 'Average duration for lost games'
-                  : 'Average organic game duration'}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* 3. FILTER CONTROLS & SEARCH TOOLBAR ROW */}
-      <div className="flex items-center justify-between gap-3 pb-2 shrink-0 flex-wrap">
-        {/* Left: Format -> Time Period -> Outcome */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* 1. Format Selector */}
-          <div className="relative inline-flex items-center bg-white/[0.03] border border-white/10 px-2.5 py-1">
-            <span className="text-[11px] font-mono text-neutral-400 uppercase mr-2">Format:</span>
-            <select
-              value={formatFilter}
-              onChange={(e) => setFormatFilter(e.target.value)}
-              className="text-xs font-sans bg-transparent border-0 text-white cursor-pointer pr-4 appearance-none focus:outline-none"
+      {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
+      <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
+        {/* 1. Search Filter */}
+        <div className="relative w-64 shrink-0">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search deck, opponent..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+              title="Clear search filter"
             >
-              <option value="ALL" className="bg-neutral-900 text-white">All Formats</option>
-              {normalizedFormatOptions.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-neutral-900 text-white">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <ChevronRight className="w-2.5 h-2.5 rotate-90 absolute right-2 pointer-events-none text-neutral-400" />
-          </div>
-
-          {/* 2. Time Period Filter Pills */}
-          <div className="flex items-center gap-1 bg-white/[0.02] border border-white/5 p-0.5">
-            {[
-              { id: 'ALL', label: 'All Time' },
-              { id: 'TODAY', label: 'Today' },
-              { id: '7D', label: '7D' },
-              { id: '14D', label: '14D' },
-              { id: '30D', label: '30D' },
-              { id: 'YEAR', label: 'Year' },
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTimeFilter(t.id)}
-                className={`text-xs font-sans px-2.5 py-1 transition-colors cursor-pointer ${
-                  timeFilter === t.id
-                    ? 'bg-white/[0.08] text-white font-semibold shadow-sm'
-                    : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-                style={{
-                  color: timeFilter === t.id ? accentColor : undefined,
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* 3. Outcome Filter (All | Wins | Losses) */}
-          <div className="flex items-center gap-1 bg-white/[0.02] border border-white/5 p-0.5">
-            {[
-              { id: 'ALL', label: 'All Results' },
-              { id: 'win', label: 'Wins Only' },
-              { id: 'loss', label: 'Losses Only' },
-            ].map((r) => (
-              <button
-                key={r.id}
-                onClick={() => setResultFilter(r.id as any)}
-                className={`text-xs font-sans px-2.5 py-1 transition-colors cursor-pointer ${
-                  resultFilter === r.id
-                    ? 'bg-white/[0.08] text-white font-semibold'
-                    : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-                style={{
-                  color: resultFilter === r.id ? (r.id === 'win' ? accentColor : r.id === 'loss' ? '#71717A' : '#FFF') : undefined,
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        {/* Right (right-justified): Search on left, Columns button on far right */}
-        <div className="flex items-center gap-2.5 ml-auto">
-          {/* Search Filter */}
-          <div className="relative w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search deck, opponent..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none border border-white/10 bg-white/[0.03] text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30 transition-colors font-sans"
-            />
-            {searchTerm && (
+        {/* 2. Mana Color Pips Filter (Exact Color Identity Matching) */}
+        <div className="flex items-center gap-1.5 pl-0.5">
+          {['W', 'U', 'B', 'R', 'G', 'C'].map((c) => {
+            const active = colorFilter.includes(c);
+            return (
               <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-                title="Clear search filter"
+                key={c}
+                onClick={() =>
+                  setColorFilter((prev) =>
+                    active ? prev.filter((x) => x !== c) : [...prev, c]
+                  )
+                }
+                className={`transition-all cursor-pointer ${active ? 'scale-110' : 'opacity-30 hover:opacity-70'}`}
+                title={c === 'C' ? 'Colorless Decks Only' : `Filter ${c}`}
               >
-                <X className="w-3.5 h-3.5" />
+                <ManaPip symbol={c} size={22} />
               </button>
+            );
+          })}
+          {colorFilter.length > 0 && (
+            <button
+              onClick={() => setColorFilter([])}
+              className="ml-1 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all cursor-pointer"
+              title="Clear color filter"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        {/* 3. Advanced Filters Button */}
+        <button
+          onClick={() => setShowAdvModal(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+            hasActiveAdvancedFilters
+              ? 'bg-white/[0.08] text-white font-bold'
+              : 'bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white'
+          }`}
+          title="Open advanced match filters"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
+          {activeAdvancedFilterCount > 0 && (
+            <span
+              className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full border ml-1"
+              style={{
+                backgroundColor: `${accentColor}20`,
+                borderColor: `${accentColor}60`,
+                color: accentColor,
+              }}
+            >
+              {activeAdvancedFilterCount}
+            </span>
+          )}
+        </button>
+
+        {/* 4. Active Filter Chips */}
+        {activeChips.map((chip) => (
+          <span
+            key={chip.key}
+            onClick={(e) => { e.stopPropagation(); chip.onRemove(); }}
+            className="group flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-mono uppercase tracking-wider cursor-pointer transition-colors hover:bg-white/10"
+            style={{
+              color: '#FFFFFF',
+              backgroundColor: `${accentColor}20`,
+            }}
+            title="Click to remove this filter"
+          >
+            <span>{chip.label}</span>
+            <X className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+          </span>
+        ))}
+
+        <div className="flex-1" />
+
+        {/* 5. Customize Columns Button */}
+        <button
+          onClick={() => setShowColumnModal(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all cursor-pointer shrink-0"
+          title="Modify, add/remove, and reorder table columns"
+        >
+          <Columns3 className="w-3.5 h-3.5" style={{ color: accentColor }} />
+          <span>({visibleColumns.length})</span>
+        </button>
+      </div>
+
+      {/* 3. TABLE VIEW CONTAINER (Floating Header + Table Body) */}
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* Floating Table Header */}
+        <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
+          {visibleColumns.map((col) => {
+            const isMatchup = col.key === 'matchup' || col.key === 'deck';
+            return (
+              <div
+                key={col.key}
+                className={`${col.width || 'flex-1'} px-1.5 ${
+                  isMatchup ? 'text-left' : 'text-center'
+                }`}
+              >
+                {col.label}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Main Data Table Body */}
+        <div className="flex-1 min-h-0 border border-white/10 bg-black/20 flex flex-col overflow-hidden">
+          {/* Virtualized Rows Viewport */}
+          <div ref={parentRef} className="flex-1 overflow-y-auto relative custom-scrollbar divide-y divide-white/5">
+            {pagedMatches.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 text-neutral-500 font-sans italic">
+                <Swords className="w-8 h-8 opacity-20 mb-2" />
+                <span>No matches found matching your active filter criteria.</span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const m = pagedMatches[virtualRow.index];
+                  if (!m) return null;
+                  return (
+                    <div
+                      key={m.match_id}
+                      onClick={() => onSelectMatch(m.match_id)}
+                      className="absolute top-0 left-0 w-full flex items-center py-2 px-4 border-b border-white/5 transition-colors cursor-pointer group hover:bg-white/[0.04]"
+                      style={{
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {visibleColumns.map((col) => {
+                        const isMatchup = col.key === 'matchup' || col.key === 'deck' || col.key === 'opponent';
+                        return (
+                          <div
+                            key={col.key}
+                            className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
+                              isMatchup ? 'text-left' : 'text-center flex items-center justify-center'
+                            }`}
+                          >
+                            {renderCellContent(col, m)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
-
-          {/* Customize Columns Button */}
-          <button
-            onClick={() => setShowColumnModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer shrink-0"
-            title="Modify, add/remove, and reorder table columns"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
-            <span>COLUMNS ({visibleColumns.length})</span>
-          </button>
         </div>
       </div>
 
-      {/* 4. MAIN DATA TABLE (Virtualized, Sticky Header, Customizable Columns) */}
-      <div className="flex-1 min-h-0 border border-white/10 bg-black/20 flex flex-col overflow-hidden">
-        {/* Sticky Table Header */}
-        <div className="flex items-center py-2.5 px-4 bg-neutral-950 border-b border-white/10 shrink-0 select-none text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400">
-          {visibleColumns.map((col) => (
-            <div
-              key={col.key}
-              className={`${col.width || 'flex-1'} px-1.5 ${
-                col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
-              }`}
+      {/* Footer: pagination controls + total match count */}
+      <div className="shrink-0 flex items-center gap-3 pt-2">
+        {totalPages > 1 && (
+          <>
+            <button
+              onClick={() => setPage(1)}
+              disabled={safePage <= 1}
+              className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              title="First page"
             >
-              {col.label}
-            </div>
-          ))}
-        </div>
-
-        {/* Virtualized Rows Viewport */}
-        <div ref={parentRef} className="flex-1 overflow-y-auto relative custom-scrollbar divide-y divide-white/5">
-          {filteredMatches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-neutral-500 font-sans italic">
-              <Swords className="w-8 h-8 opacity-20 mb-2" />
-              <span>No matches found matching your active filter criteria.</span>
-            </div>
-          ) : (
-            <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                width: '100%',
-                position: 'relative',
-              }}
+              <Home className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex-1" />
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
             >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const m = filteredMatches[virtualRow.index];
-                return (
-                  <div
-                    key={m.match_id}
-                    onClick={() => onSelectMatch(m.match_id)}
-                    className="absolute top-0 left-0 w-full flex items-center py-2 px-4 border-b border-white/5 transition-colors cursor-pointer group hover:bg-white/[0.04]"
-                    style={{
-                      height: `${virtualRow.size}px`,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    {visibleColumns.map((col) => (
-                      <div
-                        key={col.key}
-                        className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
-                          col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
-                        }`}
-                      >
-                        {renderCellContent(col, m)}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            </button>
+            <span className="text-xs font-mono text-neutral-400 px-2">
+              Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex-1" />
+          </>
+        )}
+        <span className="text-xs font-mono text-neutral-400 ml-auto tabular-nums">
+          <span className="text-white font-bold">{filteredMatches.length.toLocaleString()}</span> {filteredMatches.length === 1 ? 'match' : 'matches'} recorded
+        </span>
       </div>
 
       {/* ========================================================================= */}
-      {/* 5. CUSTOMIZE COLUMNS MODAL (Drag & Drop + Toggle Visibility + Persistence) */}
+      {/* 5. ADVANCED FILTERS MODAL */}
+      {/* ========================================================================= */}
+      {showAdvModal && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          onClick={() => setShowAdvModal(false)}
+        >
+          <div
+            className="w-[850px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5" style={{ color: accentColor }} />
+                <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
+                  ADVANCED MATCH FILTERS
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={clearAdvancedFilters}
+                  className="text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer mr-2"
+                >
+                  Clear all
+                </button>
+                <button
+                  onClick={() => setShowAdvModal(false)}
+                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: 2 Columns */}
+            <div className="flex-1 min-h-0 flex overflow-hidden">
+              {/* Left Column: Format & Time Periods */}
+              <div className="w-1/2 shrink-0 border-r border-white/10 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950">
+                {/* Format Selection */}
+                <div>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                    GAME FORMAT
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setFormatFilter('ALL')}
+                      className={`px-2.5 py-1 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                        formatFilter === 'ALL'
+                          ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                          : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      All Formats
+                    </button>
+                    {normalizedFormatOptions.map((opt) => {
+                      const active = formatFilter.toUpperCase() === opt.value.toUpperCase();
+                      const chip = formatChipColor(opt.label);
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => setFormatFilter(opt.value)}
+                          className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider border transition-all cursor-pointer ${
+                            active
+                              ? 'scale-105 font-bold shadow-sm'
+                              : 'opacity-60 hover:opacity-100'
+                          }`}
+                          style={{
+                            backgroundColor: active ? chip.bg : 'rgba(255,255,255,0.02)',
+                            borderColor: active ? chip.border : 'rgba(255,255,255,0.1)',
+                            color: active ? chip.fg : '#A1A1AA',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Time Period Filter */}
+                <div>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                    TIME PERIOD
+                  </p>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {TIME_FILTER_OPTIONS.map((t) => {
+                      const active = timeFilter === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => setTimeFilter(t.id)}
+                          className={`w-full text-left px-3 py-2 border transition-colors cursor-pointer flex items-center justify-between ${
+                            active
+                              ? 'border-white/40 bg-white/[0.08] text-white font-semibold'
+                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white hover:bg-white/[0.04]'
+                          }`}
+                        >
+                          <div>
+                            <div className="text-xs font-mono uppercase tracking-wider" style={{ color: active ? accentColor : undefined }}>
+                              {t.label}
+                            </div>
+                            <div className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                              {t.description}
+                            </div>
+                          </div>
+                          {active && <Check className="w-3.5 h-3.5 shrink-0" style={{ color: accentColor }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Result & Position Filters */}
+              <div className="w-1/2 shrink-0 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950">
+                {/* Result / Outcome */}
+                <div>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                    MATCH OUTCOME
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'ALL', label: 'All Results' },
+                      { id: 'win', label: 'Wins Only' },
+                      { id: 'loss', label: 'Losses Only' },
+                    ].map((r) => {
+                      const active = resultFilter === r.id;
+                      return (
+                        <button
+                          key={r.id}
+                          onClick={() => setResultFilter(r.id as any)}
+                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer text-center ${
+                            active
+                              ? 'border-white/40 bg-white/[0.08] text-white font-bold shadow-sm'
+                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
+                          }`}
+                          style={{
+                            color: active ? (r.id === 'win' ? '#34D399' : r.id === 'loss' ? '#F87171' : accentColor) : undefined,
+                          }}
+                        >
+                          {r.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Turn Position: Play vs Draw */}
+                <div>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                    TURN POSITION (PLAY / DRAW)
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'ALL', label: 'All Positions' },
+                      { id: 'play', label: 'On the Play' },
+                      { id: 'draw', label: 'On the Draw' },
+                    ].map((p) => {
+                      const active = positionFilter === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => setPositionFilter(p.id as any)}
+                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer text-center ${
+                            active
+                              ? 'border-white/40 bg-white/[0.08] text-white font-bold shadow-sm'
+                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
+                          }`}
+                          style={{
+                            color: active ? (p.id === 'play' ? '#FCD34D' : p.id === 'draw' ? '#93C5FD' : accentColor) : undefined,
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 bg-neutral-900/40 flex items-center justify-between shrink-0">
+              <span className="text-xs font-mono text-neutral-400">
+                <span className="text-white font-bold">{filteredMatches.length.toLocaleString()}</span> {filteredMatches.length === 1 ? 'match' : 'matches'} match active filters
+              </span>
+              <button
+                onClick={() => setShowAdvModal(false)}
+                className="px-4 py-1.5 text-xs font-mono uppercase tracking-wider font-bold border border-white/20 bg-white/[0.08] hover:bg-white/[0.15] text-white transition-colors cursor-pointer"
+              >
+                Apply & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. CUSTOMIZE COLUMNS MODAL (Drag & Drop + Toggle Visibility + Persistence) */}
       {/* ========================================================================= */}
       {showColumnModal && (
         <div
@@ -1030,7 +1296,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
               <div>
                 <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-5 h-5" style={{ color: accentColor }} />
+                  <Columns3 className="w-5 h-5" style={{ color: accentColor }} />
                   <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
                     CUSTOMIZE TABLE COLUMNS
                   </h2>
