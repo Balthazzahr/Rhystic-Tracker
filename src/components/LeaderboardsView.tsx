@@ -203,7 +203,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
       </div>
 
       {/* 3. MAIN SCROLLABLE CONTENT */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1 min-h-0">
+      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 min-h-0">
         {loading ? (
           <div className="py-24 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
             Calculating Hall of Fame records...
@@ -211,18 +211,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
         ) : (
           sections.map((sec) => {
             return (
-              <div key={sec.domainId} className="space-y-2">
-                {/* Domain Category Header */}
-                <div className="flex items-center gap-2 px-1">
-                  <span className={`${sec.domainIconClass} text-sm`} style={{ color: sec.domainColor }} />
-                  <h2 className="text-xs font-display font-bold uppercase tracking-wider text-white">
-                    {sec.domainTitle}
-                  </h2>
-                  <span className="text-[11px] font-sans text-neutral-400 hidden sm:inline">
-                    — {sec.domainSubtitle}
-                  </span>
-                </div>
-
+              <div key={sec.domainId} className="space-y-0">
                 {/* 3 Columns Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {sec.categories.map((cat) => {
@@ -250,8 +239,8 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                         {/* Leaderboard Card Header */}
                         <div className="px-3 py-2.5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
                           <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                            <span className={`${cat.iconClass} text-sm shrink-0`} style={{ color: cat.color }} />
-                            <h3 className="text-xs font-bold font-display uppercase tracking-wide text-white truncate">
+                            <span className={`${cat.iconClass} text-base shrink-0`} style={{ color: cat.color }} />
+                            <h3 className="text-sm font-bold font-display uppercase tracking-wide text-white truncate">
                               {cat.title}
                             </h3>
                           </div>
@@ -267,8 +256,8 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                           </button>
                         </div>
 
-                        {/* List items with exact h-[318px] container and h-[58px] item rows */}
-                        <div className="p-2 space-y-1 h-[318px] overflow-y-auto custom-scrollbar flex flex-col justify-start">
+                        {/* List items with exact h-[348px] container and h-[64px] item rows */}
+                        <div className="p-2 space-y-1 h-[348px] overflow-y-auto custom-scrollbar flex flex-col justify-start">
                           {allItems.length === 0 ? (
                             <div className="py-24 text-center text-xs font-mono uppercase tracking-wider text-neutral-500 my-auto">
                               No match records logged yet
@@ -284,7 +273,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                   <div
                                     key={`${cat.id}-${item.grp_id}-${item.rank}`}
                                     onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                    className={`flex items-center justify-between px-2.5 h-[58px] border transition-colors cursor-pointer group shrink-0 ${
+                                    className={`flex items-center justify-between px-2.5 h-[64px] border transition-colors cursor-pointer group shrink-0 ${
                                       isFirst
                                         ? 'bg-amber-500/[0.03] border-amber-500/25 hover:border-amber-500/40'
                                         : isSecond
@@ -303,7 +292,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                           <span className="text-[10.5px] font-mono font-bold text-amber-600">#3</span>
                                         )}
                                       </div>
-                                      <div className="w-9 h-9 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
+                                      <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
                                         <CardImage
                                           name={item.card_name}
                                           version="art_crop"
@@ -341,14 +330,14 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                 <div
                                   key={`${cat.id}-${item.grp_id}-${item.rank}`}
                                   onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                  className="flex items-center justify-between px-2.5 h-[58px] border border-white/5 bg-white/[0.015] hover:bg-white/[0.04] transition-colors cursor-pointer group shrink-0"
+                                  className="flex items-center justify-between px-2.5 h-[64px] border border-white/5 bg-white/[0.015] hover:bg-white/[0.04] transition-colors cursor-pointer group shrink-0"
                                   title="Click to view card details"
                                 >
                                   <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                                     <div className="w-5 shrink-0 flex items-center justify-center">
                                       <span className="text-[10px] font-mono text-neutral-500">#{item.rank}</span>
                                     </div>
-                                    <div className="w-9 h-9 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
+                                    <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
                                       <CardImage
                                         name={item.card_name}
                                         version="art_crop"
@@ -388,7 +377,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                   <div
                                     key={`${cat.id}-top3-${item.grp_id}-${item.rank}`}
                                     onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                    className={`flex items-center justify-between px-2.5 h-[58px] border transition-colors cursor-pointer group shrink-0 ${
+                                    className={`flex items-center justify-between px-2.5 h-[64px] border transition-colors cursor-pointer group shrink-0 ${
                                       isMatch
                                         ? 'border-sky-400 bg-sky-500/20 shadow-md shadow-sky-500/20'
                                         : isFirst
@@ -409,7 +398,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                           <span className="text-[10.5px] font-mono font-bold text-amber-600">#3</span>
                                         )}
                                       </div>
-                                      <div className="w-9 h-9 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
+                                      <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
                                         <CardImage
                                           name={item.card_name}
                                           version="art_crop"
@@ -449,14 +438,14 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                       <div
                                         key={`${cat.id}-match-${item.grp_id}-${item.rank}`}
                                         onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                        className="flex items-center justify-between px-2.5 h-[58px] border border-sky-400/80 bg-sky-500/15 hover:bg-sky-500/25 transition-colors cursor-pointer group shrink-0"
+                                        className="flex items-center justify-between px-2.5 h-[64px] border border-sky-400/80 bg-sky-500/15 hover:bg-sky-500/25 transition-colors cursor-pointer group shrink-0"
                                         title="Click to view card details"
                                       >
                                         <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                                           <div className="w-7 shrink-0 text-center">
                                             <span className="text-xs font-mono font-bold text-sky-300">#{item.rank}</span>
                                           </div>
-                                          <div className="w-9 h-9 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
+                                          <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
                                             <CardImage
                                               name={item.card_name}
                                               version="art_crop"

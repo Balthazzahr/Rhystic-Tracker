@@ -651,16 +651,23 @@ impl DatabaseManager {
             }
         }
 
-        Self::backfill_draw_records_from_logs(&pool).await;
+        // Draw-engine backfill is now additive-only; the previous destructive reset
+        // (UPDATE cards_drawn=0 + DELETE pure-draw rows) wiped Rhystic Study etc.
+        // on every restart, making card_draw_engines ephemeral. Live draws are
+        // persisted via MatchAssembler::process_draw_event → upsert_match, so
+        // no startup wipe is needed. Keep the function for manual migration only.
+        // Self::backfill_draw_records_from_logs(&pool).await;
 
         Ok(Self { pool, db_filename })
     }
 
     async fn backfill_draw_records_from_logs(pool: &Pool<Sqlite>) {
-        // Purge non-card records and reset cards_drawn for re-attribution from logs
+        // NOTE: previously wiped cards_drawn and deleted pure-draw rows on every
+        // init, making card_draw_engines vanish after restart. Now additive-only.
+        // Keep the purge of orphan grp_ids only if needed; never zero existing draws.
         let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE grp_id NOT IN (SELECT grp_id FROM cards_cache)").execute(pool).await;
-        let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = 0").execute(pool).await;
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND max_hit = 0 AND titles = '[]' AND cards_drawn = 0").execute(pool).await;
+        // let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = 0").execute(pool).await;
+        // let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND max_hit = 0 AND titles = '[]' AND cards_drawn = 0").execute(pool).await;
 
         let log_path = match crate::tailer::discover_log_path() {
             Some(p) => p,
