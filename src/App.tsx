@@ -1220,7 +1220,7 @@ export default function App() {
 
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
   // random non-land card (non-commander). Clicking opens the card overlay.
-  const renderDeckArt = (d: any, size: string = 'w-10 h-10') => {
+  const renderDeckArt = (d: any, size: string = 'w-7 h-7') => {
     const artName = d.top_commander_name || d.top_card_name;
     const openOverlay = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -1230,21 +1230,22 @@ export default function App() {
     };
     if (!artName) {
       return (
-        <div className={`${size} rounded-lg bg-black/40 border shrink-0 flex items-center justify-center`} style={{ borderColor: palette?.border }}>
-          <Layers className="w-4 h-4 opacity-30" />
+        <div className={`${size} rounded-none bg-black/40 border border-white/10 shrink-0 flex items-center justify-center`}>
+          <Layers className="w-3.5 h-3.5 opacity-30" />
         </div>
       );
     }
     return (
       <CardNameTooltip name={artName}>
-        <CardImage
-          name={artName}
-          version="art_crop"
-          alt={artName}
-          onClick={openOverlay}
-          className={`${size} rounded-lg object-cover shrink-0 border cursor-pointer transition-all duration-150 hover:scale-110 hover:brightness-110 hover:ring-2 theme-ring-strong`}
-          style={{ borderColor: `${palette?.border}66` }}
-        />
+        <div className={`${size} shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900`}>
+          <CardImage
+            name={artName}
+            version="art_crop"
+            alt={artName}
+            onClick={openOverlay}
+            className="w-full h-full object-cover shrink-0 cursor-pointer transition-transform duration-150 group-hover:scale-110 hover:brightness-110"
+          />
+        </div>
       </CardNameTooltip>
     );
   };

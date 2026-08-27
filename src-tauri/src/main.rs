@@ -2820,6 +2820,23 @@ fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Resul
         }
     }
 
+    // 3. If printing-specific name ('Name|set|cn'), check base card name on disk
+    if let Some(base_name) = name.split('|').next() {
+        let trimmed_base = base_name.trim();
+        if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
+            let base_path = dir.join(card_img_filename(trimmed_base, &version));
+            if base_path.exists() {
+                return Ok(Some(base_path.to_string_lossy().to_string()));
+            }
+            if version == "small" {
+                let base_normal = dir.join(card_img_filename(trimmed_base, "normal"));
+                if base_normal.exists() {
+                    return Ok(Some(base_normal.to_string_lossy().to_string()));
+                }
+            }
+        }
+    }
+
     Ok(None)
 }
 

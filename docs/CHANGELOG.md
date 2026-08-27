@@ -2,7 +2,36 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [1.3.1] - 2026-08-27
+## [1.3.2] - 2026-08-27
+
+### 🎨 Minimalist Borderless Floating UI, Deck Advanced Filters, Dynamic Orbital Spinner & Table Alignment Polish
+
+- **Borderless Floating Toolbars & Footers**:
+  - Upgraded top filter bars and bottom pagination footers across Match History, Card Library, and Deck Library to borderless floating controls.
+  - Eliminated hard bounding boxes and horizontal dividing lines (`border-t border-white/5` removed) in favor of translucent floating pills (`hover:bg-white/[0.08] text-neutral-300 hover:text-white active:scale-95`).
+  - Styled search bars with subtle glass backgrounds (`bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] border-0`).
+  - Converted segmented view toggles (`[Cards] [Table]`, `[Crop] [Full]`) to borderless floating selectors (`bg-white/[0.03]`).
+- **Advanced Deck Filters in Deck Library**:
+  - Added dedicated Advanced Filters modal to the Deck Library toolbar matching Card Library and Match History positioning.
+  - Filter decks by **Format** (Standard, Alchemy, Historic, Explorer, Timeless, Brawl, Commander, Limited, Casual, etc.), **Win Rate** (`≥ 50%`, `< 50%`), and **Games Played** (`0 Games`, `< 10`, `< 50`, `< 100`, `≥ 100`).
+  - Added filter chip counters and active badge counts.
+- **Universal Column Selector (`Columns3` & Minimalist Count)**:
+  - Replaced slider icon with `Columns3` across toolbars and column customizer modal headers in Match History, Card Library, and Deck Library.
+  - Omitted the word `"COLUMNS"` to display cleanly as `[Columns3] (X)`.
+- **Advanced Card Filters Visual Polish**:
+  - **Copies Owned**: Replaced plain text with custom diamond indicators (`◆ ◇ ◇ ◇`, `◆ ◆ ◇ ◇`, `◆ ◆ ◆ ◇`, `◆ ◆ ◆ ◆`).
+  - **Rarity Tiers**: Colored typography and borders matching official MTG rarity tiers (Common `#94A3B8`, Uncommon `#38BDF8`, Rare `#FBBF24`, Mythic `#F97316`).
+  - **Card Types**: Official vector font icons (`ms ms-creature`, `ms ms-instant`, etc.) alongside type names.
+- **Dynamic Orbital Loader & Missing Art Placeholders**:
+  - Replaced standard loaders with high-fidelity `OrbitSpinner` scaling responsively from `32px` table thumbnails to `84px` card frames in the Card Inspector.
+  - Replaced generic broken image boxes with official `RhysticIcon` placeholders in muted neutral tones.
+- **Table Column Centering & Alignment Consistency**:
+  - Fixed horizontal disconnect between table headers and cell contents in Match History and Card Library.
+  - Enforced strict alignment rule: Primary entity columns (`Name`, `Matchup`, `Deck`) remain left-aligned; all other data columns (`Cost`, `Type`, `Set`, `Rarity`, `Date`, `Result`, `Colors`, `Format`, `Play`, `Curve`, `Games`, etc.) are centered in both headers and row cells.
+- **Design System Master Documentation**:
+  - Updated `DESIGN_SYSTEM.md` with comprehensive UI specifications for borderless floating toolbars, table centering, icon conventions, and filter styling standards.
+
+---
 
 ### 🐛 Fixes & Polish (Community PR + Dashboard + Deck & Card Library + Leaderboards + DB Concurrency)
 
