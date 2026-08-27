@@ -2,6 +2,22 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.1] - 2026-08-27
+
+### 🐛 Fixes & Polish (Community PR + Dashboard + Deck & Card Library + Leaderboards)
+
+- **Merged Community PR #9 — Dashboard Responsive Layout** (`jte0711`): Two-column dashboard now stacks to single-column below `1200px` (`flex-col min-[1200px]:flex-row`), divider switches horizontal/vertical, Recent Matches removes inner `overflow-y-auto` in favor of outer scroll — fixes height/width break when resizing (fixes #8).
+- **Deck Inspector Win Rate by Position**: Fixed white `0.0%` above On the Play / On the Draw continuum bars — now computes `wins/(wins+losses)*100` instead of missing `detail.play.total` (reported post-1.3.0).
+- **Deck Inspector → View All**: Now seeds Match History `initialSearch` with deck name and filters to that deck’s matches instead of showing unfiltered entire history (`App.tsx` `matchHistorySearch` + `MatchHistoryView` `initialSearch` prop).
+- **Deck Library Sorting in Card View**: Moved `COLUMNS` button left of view toggle (`Search | Colors | flex-1 | SORT/COLUMNS | View Toggle | Card Size`). In card view it now shows a themed `SORT: …` dropdown (`deck_name` / `games` / `winrate` / `last_played`) reusing `handleSortColumn` with same `asc/desc` logic, `Escape`/backdrop close.
+- **Card Library Sorting in Card View**: Mirrored pattern — `Search | Colors | Adv Filter | flex-1 | SORT/COLUMNS | View Toggle | Art Mode | Card Size`. Cards dropdown offers `Name` / `Mana Value` / `Rarity` / `Set` / `Release Date` / `Owned Count` (`sortByColumn` / `get_collection {sort,sort_dir}`).
+- **Leaderboards — Domain Titles Removed & Entry Height**: Removed 3 domain headers (Combat Damage / Non-Combat Spells & Abilities / Honors & Mastery) and `space-y-4 → space-y-3` reclaiming ~85px. Leaderboard list `h-[318px] → h-[348px]` and rows `h-[58px] → h-[64px]` (`w-9 → w-10` art), keeps strictly 5 visible with no 6th peek, each entry taller.
+- **Leaderboards — Card Title Size**: Individual leaderboard headers `text-xs → text-sm` (and icon `text-sm → text-base`) for two steps larger, per design system.
+- **Card Draw Engines Persistence**: Disabled destructive `backfill_draw_records_from_logs` wipe in `db.rs:654` (`UPDATE cards_drawn=0` + `DELETE pure-draw rows` every `init`). Draws now persist via `MatchAssembler::process_draw_event → match_impactful_cards.cards_drawn` accumulative `SUM(cards_drawn)` leaderboard, surviving restarts (Rhystic Study 12×2=24 stays).
+- **Tooling**: Added `.prettierrc` (`singleQuote:true, printWidth:120`) + `.prettierignore` per contributor suggestion on #9 to prevent future formatting churn.
+
+---
+
 ## [1.3.0] - 2026-08-26
 
 ### 🎨 Complete Modern MTG Visual Overhaul, Tabbed Settings & Inspector Workspaces
