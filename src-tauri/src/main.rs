@@ -2820,6 +2820,23 @@ fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Resul
         }
     }
 
+    // 3. If printing-specific name ('Name|set|cn'), check base card name on disk
+    if let Some(base_name) = name.split('|').next() {
+        let trimmed_base = base_name.trim();
+        if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
+            let base_path = dir.join(card_img_filename(trimmed_base, &version));
+            if base_path.exists() {
+                return Ok(Some(base_path.to_string_lossy().to_string()));
+            }
+            if version == "small" {
+                let base_normal = dir.join(card_img_filename(trimmed_base, "normal"));
+                if base_normal.exists() {
+                    return Ok(Some(base_normal.to_string_lossy().to_string()));
+                }
+            }
+        }
+    }
+
     Ok(None)
 }
 
@@ -4408,12 +4425,15 @@ async fn dispatch_parsed_event(
             assembler.register_deck_catalog(decks);
             println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog & saved decklists", count);
         }
-        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, draw_events, diff_deleted_ids, mulligan_events } => {
+        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, draw_events, diff_deleted_ids, mulligan_events, ability_associations } => {
             for (m_seat, is_mul, num_cards) in mulligan_events {
                 assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
             }
             if !diff_deleted_ids.is_empty() {
                 assembler.handle_deleted_instances(&diff_deleted_ids);
+            }
+            for (ability_id, parent_id) in ability_associations {
+                assembler.register_ability_parent(ability_id, parent_id);
             }
             for (instance_id, grp_id, owner_seat, zone_id, is_card) in objects {
                 assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card);

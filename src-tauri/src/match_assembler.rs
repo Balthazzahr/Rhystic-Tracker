@@ -117,6 +117,7 @@ pub struct MatchAssembler {
     pub instance_map: HashMap<u32, u32>, // instanceId -> grpId
     pub instance_zone_map: HashMap<u32, u32>, // instanceId -> current zoneId
     pub instance_owner_map: HashMap<u32, u32>, // instanceId -> ownerSeatId
+    pub ability_parent_map: HashMap<u32, u32>, // abilityInstanceId -> parentInstanceId
     pub recorded_actions: HashSet<(u32, u32, String)>, // (turn_number, instance_id, event_type)
     pub turn_events: Vec<MatchTurnEventRecord>,
     pub turn_event_seqs: Vec<u64>,
@@ -159,6 +160,7 @@ impl MatchAssembler {
             instance_map: HashMap::new(),
             instance_zone_map: HashMap::new(),
             instance_owner_map: HashMap::new(),
+            ability_parent_map: HashMap::new(),
             recorded_actions: HashSet::new(),
             turn_events: Vec::new(),
             turn_event_seqs: Vec::new(),
@@ -224,6 +226,7 @@ impl MatchAssembler {
         self.instance_map.clear();
         self.instance_zone_map.clear();
         self.instance_owner_map.clear();
+        self.ability_parent_map.clear();
         self.recorded_actions.clear();
         self.turn_events.clear();
         self.turn_event_seqs.clear();
@@ -678,17 +681,58 @@ impl MatchAssembler {
         self.feed_seq += 1;
     }
 
+    pub fn register_ability_parent(&mut self, ability_id: u32, parent_id: u32) {
+        if ability_id > 0 && parent_id > 0 {
+            self.ability_parent_map.insert(ability_id, parent_id);
+            if let Some(pgid) = self.instance_map.get(&parent_id).copied() {
+                self.instance_map.entry(ability_id).or_insert(pgid);
+            }
+            if let Some(powner) = self.instance_owner_map.get(&parent_id).copied() {
+                self.instance_owner_map.entry(ability_id).or_insert(powner);
+            }
+        }
+    }
+
     /// Record extra card draws caused by a spell/ability/card instance.
     /// Aggregates lifetime draw engine metrics and awards Rhystic Tracker honors.
     pub fn process_draw_event(&mut self, affector_instance_id: u32, count: u32) {
         if affector_instance_id == 0 || count == 0 {
             return;
         }
-        let grp_id = self.instance_map.get(&affector_instance_id).copied().unwrap_or(0);
+        let mut grp_id = self.instance_map.get(&affector_instance_id).copied().unwrap_or(0);
+        let mut seat_id = self.instance_owner_map.get(&affector_instance_id).copied().unwrap_or(0);
+
+        // Resolve through ability_parent_map if missing or not a known card in match
+        if (grp_id == 0 || (!self.player_cards_seen.contains_key(&grp_id) && !self.opp_cards_seen.contains_key(&grp_id)))
+            && self.ability_parent_map.contains_key(&affector_instance_id)
+        {
+            if let Some(parent_id) = self.ability_parent_map.get(&affector_instance_id).copied() {
+                if let Some(pgid) = self.instance_map.get(&parent_id).copied() {
+                    grp_id = pgid;
+                }
+                if seat_id == 0 {
+                    seat_id = self.instance_owner_map.get(&parent_id).copied().unwrap_or(0);
+                }
+            }
+        }
+
+        if seat_id == 0 {
+            seat_id = self.player_seat_id;
+        }
+
         if grp_id == 0 {
+            // Heuristic fallback: attribute to most recent card played by this seat within 2 turns
+            if let Some(last_play) = self.turn_events.iter().rev().find(|e| e.seat_id == seat_id && e.event_type == "play" && e.turn_number >= self.current_turn.saturating_sub(1)) {
+                grp_id = last_play.grp_id;
+            }
+        }
+
+        if grp_id == 0 {
+            println!("[DRAW DEBUG] affector {} could not be resolved to a grp_id (available keys: {:?})", affector_instance_id, self.instance_map.keys().take(5).collect::<Vec<_>>());
             return;
         }
-        let seat_id = self.instance_owner_map.get(&affector_instance_id).copied().unwrap_or(self.player_seat_id);
+
+        println!("[DRAW] affector {} -> grp {} seat {} count {} (hero_seat {})", affector_instance_id, grp_id, seat_id, count, self.player_seat_id);
 
         let entry = self.impactful_cards.entry(grp_id).or_default();
         if entry.seat_id == 0 {
@@ -828,9 +872,9 @@ impl MatchAssembler {
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         let exec_tier = if *amt >= 15 {
                             "Gold"
-                        } else if *amt >= 8 {
+                        } else if *amt >= 10 {
                             "Silver"
-                        } else if *amt >= 1 {
+                        } else if *amt >= 7 {
                             "Bronze"
                         } else {
                             ""
@@ -978,7 +1022,9 @@ impl MatchAssembler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::parser::is_assigned_deck_event;
+
+use super::*;
 
     #[test]
     fn test_event_ordering_deck_submitted_before_match_created() {
@@ -1323,6 +1369,34 @@ mod tests {
     }
 
     #[test]
+    fn test_aura_ability_parent_draw_attribution() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-feather-draw".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 2);
+
+        // Instance 324 = Feather of Flight (Grp 91549), cast by Hero (seat 2)
+        assembler.process_game_object(324, Some(91549), Some(2), 28, true);
+
+        // Ability instance 327 created with parent 324
+        assembler.register_ability_parent(327, 324);
+
+        // ZoneTransfer Draw event triggered with affectorId 327 (the ability instance)
+        assembler.process_draw_event(327, 1);
+
+        let (_, _, _, impactful) = assembler.complete_match(2, "Loss_Life").expect("match should complete");
+        let feather_entry = impactful.iter().find(|i| i.grp_id == 91549).expect("Feather of Flight should be impactful");
+
+        assert_eq!(feather_entry.cards_drawn, 1, "Feather of Flight should have 1 card drawn");
+        assert_eq!(feather_entry.seat_id, 2, "Feather of Flight seat should be hero seat 2");
+    }
+
+    #[test]
     fn test_abilities_do_not_generate_play_events() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
@@ -1373,14 +1447,14 @@ mod tests {
 
         assembler.update_game_state(Some(1), 5, &[(1, 20), (2, 17)], 1);
 
-        // Instance 10 = Optimistic Scavenger (Grp 501, 9 DMG)
-        // Instance 11 = Spellbook Vendor (Grp 502, 8 DMG)
+        // Instance 10 = Optimistic Scavenger (Grp 501, 10 DMG)
+        // Instance 11 = Spellbook Vendor (Grp 502, 12 DMG)
         assembler.process_game_object(10, Some(501), Some(1), 28, true);
         assembler.process_game_object(11, Some(502), Some(1), 28, true);
 
-        // Both swing in for 9 DMG and 8 DMG (total 17 DMG vs 17 Life)
-        assembler.process_damage_event(10, 2, 9, 1);
-        assembler.process_damage_event(11, 2, 8, 1);
+        // Both swing in for 10 DMG and 12 DMG (total 22 DMG vs 17 Life)
+        assembler.process_damage_event(10, 2, 10, 1);
+        assembler.process_damage_event(11, 2, 12, 1);
         assembler.update_game_state(Some(2), 5, &[(1, 20), (2, 0)], 1);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match complete");
@@ -1388,9 +1462,9 @@ mod tests {
         let imp_scavenger = impactful.iter().find(|i| i.grp_id == 501).expect("scavenger exists");
         let imp_vendor = impactful.iter().find(|i| i.grp_id == 502).expect("vendor exists");
 
-        // Both individually dealt 8-14 damage, so both should be Silver Executioner (NOT Gold)
-        assert!(imp_scavenger.titles.iter().any(|t| t == "Executioner (Silver)"), "Scavenger dealt 9 DMG -> Executioner (Silver)");
-        assert!(imp_vendor.titles.iter().any(|t| t == "Executioner (Silver)"), "Spellbook Vendor dealt 8 DMG -> Executioner (Silver)");
+        // Both individually dealt 10-14 damage, so both should be Silver Executioner (NOT Gold)
+        assert!(imp_scavenger.titles.iter().any(|t| t == "Executioner (Silver)"), "Scavenger dealt 10 DMG -> Executioner (Silver)");
+        assert!(imp_vendor.titles.iter().any(|t| t == "Executioner (Silver)"), "Spellbook Vendor dealt 12 DMG -> Executioner (Silver)");
         assert!(!imp_vendor.titles.iter().any(|t| t.contains("Gold")), "Spellbook Vendor must NOT receive Gold Executioner");
     }
 

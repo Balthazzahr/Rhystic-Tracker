@@ -3,6 +3,7 @@ import {
   Search,
   X,
   SlidersHorizontal,
+  Columns3,
   LayoutGrid,
   Table2,
   ZoomIn,
@@ -16,6 +17,7 @@ import {
   Check,
   Trash2,
   Layers,
+  Home,
 } from 'lucide-react';
 import { ThemePalette } from '../types';
 import CardImage from './CardImage';
@@ -37,19 +39,19 @@ export interface DeckColumnDef {
 }
 
 const DEFAULT_DECK_COLUMNS: DeckColumnDef[] = [
-  { key: 'deck', label: 'Deck', description: 'Deck name and preview art thumbnail', visible: true, width: 'flex-[4] min-w-[220px]', align: 'left', sortKey: 'deck_name' },
-  { key: 'key_cards', label: 'Key Cards', description: 'Up to 3 high-impact card art crops', visible: true, width: 'w-[140px]', align: 'center' },
-  { key: 'colors', label: 'Colors', description: 'Color identity mana pips', visible: true, width: 'w-[100px]', align: 'center', sortKey: 'colors' },
-  { key: 'mana_curve', label: 'Curve', description: 'Mana value distribution curve', visible: true, width: 'w-[110px]', align: 'center' },
-  { key: 'format', label: 'Format', description: 'Played formats tag pill', visible: true, width: 'w-[100px]', align: 'center', sortKey: 'format' },
-  { key: 'games', label: 'Games', description: 'Total matches recorded', visible: true, width: 'w-[75px]', align: 'center', sortKey: 'games' },
-  { key: 'record', label: 'W / L', description: 'Total wins and losses split', visible: true, width: 'w-[90px]', align: 'center', sortKey: 'record' },
-  { key: 'winrate', label: 'Win Rate', description: 'Percentage of matches won', visible: true, width: 'w-[90px]', align: 'center', sortKey: 'winrate' },
-  { key: 'source', label: 'Source', description: 'True decklist vs match log source', visible: true, width: 'w-[65px]', align: 'center' },
-  { key: 'commanders', label: 'Commanders', description: 'Dominant or registered commander cards', visible: false, width: 'w-[140px]', align: 'left', sortKey: 'commander' },
-  { key: 'last_played', label: 'Last Played', description: 'Date or relative time of the most recent match', visible: false, width: 'w-[115px]', align: 'center', sortKey: 'last_played' },
-  { key: 'wins', label: 'Wins', description: 'Total won matches count', visible: false, width: 'w-[65px]', align: 'center', sortKey: 'wins' },
-  { key: 'losses', label: 'Losses', description: 'Total lost matches count', visible: false, width: 'w-[65px]', align: 'center', sortKey: 'losses' },
+  { key: 'deck', label: 'Deck', description: 'Deck name and preview art thumbnail', visible: true, width: 'flex-1 min-w-[200px]', align: 'left', sortKey: 'deck_name' },
+  { key: 'key_cards', label: 'Key Cards', description: 'Up to 3 high-impact card art crops', visible: true, width: 'w-32', align: 'center' },
+  { key: 'colors', label: 'Colors', description: 'Color identity mana pips', visible: true, width: 'w-24', align: 'center', sortKey: 'colors' },
+  { key: 'mana_curve', label: 'Curve', description: 'Mana value distribution curve', visible: true, width: 'w-28', align: 'center' },
+  { key: 'format', label: 'Format', description: 'Primary played format tag', visible: true, width: 'w-28', align: 'center', sortKey: 'format' },
+  { key: 'games', label: 'Games', description: 'Total matches recorded', visible: true, width: 'w-20', align: 'center', sortKey: 'games' },
+  { key: 'record', label: 'W / L', description: 'Total wins and losses split', visible: true, width: 'w-20', align: 'center', sortKey: 'record' },
+  { key: 'winrate', label: 'Win Rate', description: 'Percentage of matches won', visible: true, width: 'w-24', align: 'center', sortKey: 'winrate' },
+  { key: 'source', label: 'Source', description: 'True decklist vs match log source', visible: true, width: 'w-16', align: 'center' },
+  { key: 'commanders', label: 'Commanders', description: 'Dominant or registered commander cards', visible: false, width: 'w-36', align: 'left', sortKey: 'commander' },
+  { key: 'last_played', label: 'Last Played', description: 'Date or relative time of the most recent match', visible: false, width: 'w-28', align: 'center', sortKey: 'last_played' },
+  { key: 'wins', label: 'Wins', description: 'Total won matches count', visible: false, width: 'w-16', align: 'center', sortKey: 'wins' },
+  { key: 'losses', label: 'Losses', description: 'Total lost matches count', visible: false, width: 'w-16', align: 'center', sortKey: 'losses' },
 ];
 
 const DECK_COLUMNS_STORAGE_KEY = 'rhystic_deck_columns_v2';
@@ -64,9 +66,8 @@ function loadSavedDeckColumns(): DeckColumnDef[] {
     const map = new Map(parsed.map((c: any) => [c.key, c]));
     const result: DeckColumnDef[] = [];
 
-    // Keep stored order and visibility for known columns
     for (const saved of parsed) {
-      if (saved.key === 'owned_pct') continue; // Remove removed collection % column
+      if (saved.key === 'owned_pct') continue; 
       const def = DEFAULT_DECK_COLUMNS.find((d) => d.key === saved.key);
       if (def) {
         result.push({
@@ -76,7 +77,6 @@ function loadSavedDeckColumns(): DeckColumnDef[] {
       }
     }
 
-    // Add any newly introduced columns that weren't in saved list
     for (const def of DEFAULT_DECK_COLUMNS) {
       if (!map.has(def.key)) {
         result.push(def);
@@ -150,6 +150,11 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
   // State with LocalStorage Persistence
   const [deckSearch, setDeckSearch] = useState('');
   const [deckColorFilter, setDeckColorFilter] = useState<string[]>([]);
+  const [showAdvModal, setShowAdvModal] = useState(false);
+  const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
+  const [winRateFilter, setWinRateFilter] = useState<'all' | 'ge50' | 'lt50'>('all');
+  const [gamesFilter, setGamesFilter] = useState<'all' | 'zero' | 'lt10' | 'lt50' | 'lt100' | 'ge100'>('all');
+
   const [deckView, setDeckView] = useState<'cards' | 'table'>(() => {
     const saved = localStorage.getItem('rhystic_deck_view');
     return saved === 'cards' || saved === 'table' ? saved : 'cards';
@@ -165,6 +170,26 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     const saved = localStorage.getItem('rhystic_deck_sort_dir');
     return saved === 'asc' || saved === 'desc' ? saved : 'desc';
   });
+
+  const availableFormats = useMemo(() => {
+    const set = new Set<string>();
+    (deckOverview || []).forEach((d) => {
+      (d.formats || []).forEach((f: any) => {
+        if (f.format) set.add(f.format);
+      });
+    });
+    ['Standard', 'Alchemy', 'Historic', 'Explorer', 'Timeless', 'Brawl', 'Standard Brawl', 'Commander', 'Limited', 'Casual'].forEach((f) => set.add(f));
+    return Array.from(set).sort();
+  }, [deckOverview]);
+
+  const activeAdvCount = (selectedFormats.length > 0 ? 1 : 0) + (winRateFilter !== 'all' ? 1 : 0) + (gamesFilter !== 'all' ? 1 : 0);
+  const hasActiveAdv = activeAdvCount > 0;
+
+  const clearAllFilters = () => {
+    setSelectedFormats([]);
+    setWinRateFilter('all');
+    setGamesFilter('all');
+  };
 
   useEffect(() => {
     localStorage.setItem('rhystic_deck_view', deckView);
@@ -182,8 +207,23 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
   // Columns Configuration
   const [columns, setColumns] = useState<DeckColumnDef[]>(() => loadSavedDeckColumns());
   const [showColumnModal, setShowColumnModal] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const SORT_LABEL: Record<string, string> = {
+    deck_name: 'DECK NAME',
+    games: 'GAMES',
+    winrate: 'WIN RATE',
+    last_played: 'LAST PLAYED',
+  };
+
+  useEffect(() => {
+    if (!sortOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSortOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sortOpen]);
 
   const saveColumns = (newCols: DeckColumnDef[]) => {
     setColumns(newCols);
@@ -315,7 +355,34 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
         }
       }
 
-      return matchesSearch && matchesColor;
+      let matchesFormat = true;
+      if (selectedFormats.length > 0) {
+        matchesFormat = (d.formats || []).some((f: any) => selectedFormats.includes(f.format));
+      }
+
+      let matchesWinRate = true;
+      const wr = parseFloat(d.winrate) || 0;
+      const totalMatches = d.total_matches || 0;
+      if (winRateFilter === 'ge50') {
+        matchesWinRate = totalMatches > 0 && wr >= 50;
+      } else if (winRateFilter === 'lt50') {
+        matchesWinRate = totalMatches > 0 && wr < 50;
+      }
+
+      let matchesGames = true;
+      if (gamesFilter === 'zero') {
+        matchesGames = totalMatches === 0;
+      } else if (gamesFilter === 'lt10') {
+        matchesGames = totalMatches < 10;
+      } else if (gamesFilter === 'lt50') {
+        matchesGames = totalMatches < 50;
+      } else if (gamesFilter === 'lt100') {
+        matchesGames = totalMatches < 100;
+      } else if (gamesFilter === 'ge100') {
+        matchesGames = totalMatches >= 100;
+      }
+
+      return matchesSearch && matchesColor && matchesFormat && matchesWinRate && matchesGames;
     });
 
     const dir = deckSortDir === 'asc' ? 1 : -1;
@@ -378,22 +445,25 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
   const deckCols = cardArea.w > 0 && deckCardW > 0
     ? Math.max(1, Math.floor((cardArea.w + DECK_GAP) / (deckCardW + DECK_GAP)))
     : 1;
-  const deckPageSize = deckCols * deckRows;
+  const gridPageSize = deckCols * deckRows;
+  const tablePageSize = 25;
+  const activePageSize = deckView === 'cards' ? gridPageSize : tablePageSize;
+
   const [deckPage, setDeckPage] = useState(1);
-  const deckTotalPages = Math.max(1, Math.ceil(filteredDecks.length / deckPageSize));
-  const safeDeckPage = Math.min(deckPage, deckTotalPages);
-  const deckDisplayed = filteredDecks.slice((safeDeckPage - 1) * deckPageSize, safeDeckPage * deckPageSize);
+  const activeTotalPages = Math.max(1, Math.ceil(filteredDecks.length / activePageSize));
+  const safeDeckPage = Math.min(deckPage, activeTotalPages);
+  const displayedDecks = filteredDecks.slice((safeDeckPage - 1) * activePageSize, safeDeckPage * activePageSize);
 
   useEffect(() => {
     setDeckPage(1);
-  }, [deckSearch, deckColorFilter.join(','), deckSort, deckSortDir, deckView, deckPageSize]);
+  }, [deckSearch, deckColorFilter.join(','), deckSort, deckSortDir, deckView, activePageSize]);
 
   // Wheel listener
   const deckWheelRef = useRef<HTMLDivElement>(null);
   const deckPageDirRef = useRef<'next' | 'prev'>('next');
   const goDeckPage = (dir: 'next' | 'prev') => {
     deckPageDirRef.current = dir;
-    if (dir === 'next') setDeckPage((p) => Math.min(deckTotalPages, p + 1));
+    if (dir === 'next') setDeckPage((p) => Math.min(activeTotalPages, p + 1));
     else setDeckPage((p) => Math.max(1, p - 1));
   };
 
@@ -403,7 +473,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     let lock = false;
     const onWheel = (e: WheelEvent) => {
       if (lock) return;
-      if (deckTotalPages <= 1) return;
+      if (activeTotalPages <= 1) return;
       if (Math.abs(e.deltaY) < 10) return;
       e.preventDefault();
       lock = true;
@@ -413,7 +483,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [deckView, deckTotalPages]);
+  }, [deckView, activeTotalPages]);
 
   // Page turn animation
   const deckGridAnimRef = useRef<HTMLDivElement>(null);
@@ -473,7 +543,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       </div>
 
       {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
-      <div className="shrink-0 border border-white/10 bg-white/[0.02] p-2 flex items-center gap-2.5 flex-wrap">
+      <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
         {/* Search */}
         <div className="relative w-64 shrink-0">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
@@ -482,7 +552,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
             placeholder="Search decks, commanders..."
             value={deckSearch}
             onChange={(e) => setDeckSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none border border-white/10 bg-white/[0.03] text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30 transition-colors font-sans"
+            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
           />
           {deckSearch.length > 0 && (
             <button
@@ -517,7 +587,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
           {deckColorFilter.length > 0 && (
             <button
               onClick={() => setDeckColorFilter([])}
-              className="ml-1 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.02] text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              className="ml-1 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all cursor-pointer"
               title="Clear color filter"
             >
               Clear
@@ -525,15 +595,82 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
           )}
         </div>
 
+        {/* Advanced Filters Button */}
+        <button
+          onClick={() => setShowAdvModal(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+            hasActiveAdv
+              ? 'bg-white/[0.08] text-white font-bold'
+              : 'bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white'
+          }`}
+          title="Open advanced deck filters"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
+          {activeAdvCount > 0 && (
+            <span
+              className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full border ml-1"
+              style={{
+                backgroundColor: `${accentColor}20`,
+                borderColor: `${accentColor}60`,
+                color: accentColor,
+              }}
+            >
+              {activeAdvCount}
+            </span>
+          )}
+        </button>
+
         <div className="flex-1" />
 
+        {/* SORT (cards) / COLUMNS (table) — left of view toggle */}
+        <div className="relative">
+          {deckView === 'table' ? (
+            <button
+              onClick={() => setShowColumnModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all cursor-pointer"
+              title="Modify, add/remove, and reorder table columns"
+            >
+              <Columns3 className="w-3.5 h-3.5" style={{ color: accentColor }} />
+              <span>({visibleColumns.length})</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => setSortOpen((o) => !o)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all cursor-pointer"
+                title="Sort decks"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                <span>SORT: {SORT_LABEL[deckSort] || deckSort.toUpperCase()}</span>
+                <span className="font-mono text-[10px] ml-1">{deckSortDir === 'asc' ? '▲' : '▼'}</span>
+              </button>
+              {sortOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setSortOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-30 w-44 border border-white/15 bg-neutral-950 shadow-xl">
+                    {(['deck_name', 'games', 'winrate', 'last_played'] as const).map((k) => (
+                      <button
+                        key={k}
+                        onClick={() => { handleSortColumn(k); setSortOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-mono uppercase tracking-wider hover:bg-white/[0.06] transition-colors cursor-pointer ${deckSort === k ? 'text-white font-bold bg-white/[0.08]' : 'text-neutral-400'}`}
+                      >
+                        {SORT_LABEL[k]}<span className="float-right font-mono text-[10px]">{deckSort === k ? (deckSortDir === 'asc' ? '▲' : '▼') : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
         {/* View toggle */}
-        <div className="flex items-center border border-white/10 bg-white/[0.03] overflow-hidden">
+        <div className="flex items-center bg-white/[0.03] p-0.5 overflow-hidden gap-0.5">
           <button
             onClick={() => setDeckView('cards')}
             title="Card view"
-            className={`flex items-center justify-center px-2.5 py-1.5 transition-all cursor-pointer ${
-              deckView === 'cards' ? 'bg-white/[0.08] text-white font-bold' : 'opacity-40 hover:opacity-100 text-neutral-400'
+            className={`flex items-center justify-center px-2 py-1 transition-all cursor-pointer ${
+              deckView === 'cards' ? 'bg-white/[0.12] text-white shadow-sm font-bold' : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
@@ -541,8 +678,8 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
           <button
             onClick={() => setDeckView('table')}
             title="Table view"
-            className={`flex items-center justify-center px-2.5 py-1.5 transition-all cursor-pointer ${
-              deckView === 'table' ? 'bg-white/[0.08] text-white font-bold' : 'opacity-40 hover:opacity-100 text-neutral-400'
+            className={`flex items-center justify-center px-2 py-1 transition-all cursor-pointer ${
+              deckView === 'table' ? 'bg-white/[0.12] text-white shadow-sm font-bold' : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
             }`}
           >
             <Table2 className="w-3.5 h-3.5" />
@@ -553,25 +690,13 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
         <button
           onClick={() => deckView === 'cards' && setDeckCardSize(deckCardSize === 'small' ? 'large' : 'small')}
           disabled={deckView !== 'cards'}
-          className={`flex items-center justify-center px-2.5 py-1.5 border border-white/10 bg-white/[0.03] transition-all ${
-            deckView === 'cards' ? 'hover:bg-white/[0.06] text-neutral-200 cursor-pointer' : 'opacity-20 cursor-not-allowed text-neutral-600'
+          className={`flex items-center justify-center px-2.5 py-1.5 bg-transparent hover:bg-white/[0.08] active:scale-95 transition-all ${
+            deckView === 'cards' ? 'text-neutral-300 hover:text-white cursor-pointer' : 'opacity-20 cursor-not-allowed text-neutral-600'
           }`}
           title={deckView === 'cards' ? (deckCardSize === 'small' ? 'Switch to large cards' : 'Switch to small cards') : 'Card size only applies to card view'}
         >
           {deckCardSize === 'small' ? <ZoomIn className="w-4 h-4" /> : <ZoomOut className="w-4 h-4" />}
         </button>
-
-        {/* In Table view: Customize Columns button */}
-        {deckView === 'table' && (
-          <button
-            onClick={() => setShowColumnModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-neutral-200 transition-colors cursor-pointer"
-            title="Modify, add/remove, and reorder table columns"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
-            <span>COLUMNS ({visibleColumns.length})</span>
-          </button>
-        )}
       </div>
 
       {/* 3. MAIN CONTENT: CARD VIEW vs TABLE VIEW */}
@@ -585,34 +710,49 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
             ) : (
               <div
                 ref={deckWheelRef}
-                className="h-full min-h-0 flex flex-wrap justify-center content-center items-start gap-4"
+                className="h-full min-h-0 flex flex-wrap justify-center content-center items-start gap-3"
               >
                 <div
                   ref={deckGridAnimRef}
-                  className="h-full min-h-0 w-full flex flex-wrap justify-center content-center items-start gap-4"
+                  className="h-full min-h-0 w-full flex flex-wrap content-center items-start justify-center gap-3"
                 >
-                  {deckDisplayed.map((d) => {
-                    const artName = d.top_commander_name || d.top_card_name;
-                    const fmt = (d.formats || [])[0]?.format;
+                  {displayedDecks.map((d) => {
+                    const fmt = d.primary_format || d.formats?.[0]?.format;
                     const fmtChip = fmt ? formatChipColor(fmt) : null;
                     return (
                       <button
                         key={d.deck_name}
                         onClick={() => onSelectDeck(d.deck_name)}
-                        className="group relative border border-white/10 hover:border-white/30 overflow-hidden shadow-xl text-left transition-all duration-200 cursor-pointer shrink-0 bg-neutral-950 rounded-none"
+                        className="group relative rounded-none overflow-hidden border border-white/10 bg-neutral-900/90 shadow-md hover:border-white/30 hover:shadow-xl transition-all duration-200 text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer"
                         style={{ width: deckCardW, height: deckCardH }}
                       >
-                        {/* Full artwork cover */}
-                        {artName ? (
-                          <CardImage
-                            name={artName}
-                            version="art_crop"
-                            alt={artName}
-                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-                            <Layers className="w-8 h-8 opacity-30 text-white" />
+                        {/* Artwork Background */}
+                        <div className="absolute inset-0 bg-neutral-950 flex items-center justify-center overflow-hidden">
+                          {renderDeckArt(d, 'w-full h-full')}
+                          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/80 via-transparent to-neutral-950/60 pointer-events-none" />
+                        </div>
+
+                        {/* Middle: Key Cards preview (on hover or persistent) */}
+                        {d.key_cards && d.key_cards.length > 0 && (
+                          <div className="absolute top-12 left-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            {d.key_cards.slice(0, 3).map((k: any) => (
+                              <CardNameTooltip key={k.grp_id || k.name} name={k.name}>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenCardOverlay(k, false);
+                                  }}
+                                  className="w-6 h-6 border border-white/20 overflow-hidden shadow-sm bg-neutral-900 cursor-zoom-in hover:scale-125 transition-transform"
+                                >
+                                  <CardImage
+                                    name={k.name}
+                                    version="art_crop"
+                                    alt={k.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              </CardNameTooltip>
+                            ))}
                           </div>
                         )}
 
@@ -670,84 +810,74 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
               </div>
             )}
           </div>
-
-          {/* Card View Pagination Footer */}
-          {deckTotalPages > 1 && (
-            <div className="shrink-0 flex items-center justify-center gap-4 pt-2 border-t border-white/5">
-              <button
-                onClick={() => goDeckPage('prev')}
-                disabled={safeDeckPage <= 1}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-200 transition-colors disabled:opacity-30 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Prev
-              </button>
-              <span className="text-xs font-mono text-neutral-400 tabular-nums">
-                Page <span className="text-white font-bold">{safeDeckPage}</span> of <span className="text-neutral-400">{deckTotalPages}</span> · {filteredDecks.length} decks
-              </span>
-              <button
-                onClick={() => goDeckPage('next')}
-                disabled={safeDeckPage >= deckTotalPages}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-200 transition-colors disabled:opacity-30 cursor-pointer"
-              >
-                Next <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
         </div>
       ) : (
         /* TABLE VIEW */
-        <div className="flex-1 border border-white/10 bg-white/[0.01] overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse">
-              {/* Sticky Header */}
-              <thead className="sticky top-0 z-20 bg-neutral-950/95 backdrop-blur-md border-b border-white/10">
-                <tr>
-                  {visibleColumns.map((col) => (
-                    <th
-                      key={col.key}
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Floating Table Header */}
+          <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
+            {visibleColumns.map((col) => {
+              const sortable = col.sortKey != null;
+              const isDeckName = col.key === 'deck';
+              return (
+                <div
+                  key={col.key}
+                  className={`${col.width || 'flex-1'} px-1.5 ${
+                    isDeckName ? 'text-left' : 'text-center'
+                  }`}
+                >
+                  {sortable ? (
+                    <button
                       onClick={() => handleSortColumn(col.sortKey)}
-                      className={`py-2.5 px-3 text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 select-none ${col.width} ${
-                        col.sortKey ? 'cursor-pointer hover:text-white group' : ''
-                      } ${col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'}`}
+                      className={`group inline-flex items-center gap-1 hover:text-neutral-200 transition-colors cursor-pointer text-white font-bold ${
+                        isDeckName ? 'justify-start' : 'justify-center w-full'
+                      }`}
+                      style={{ color: deckSort === col.sortKey ? accentColor : '#FFFFFF' }}
                     >
-                      <span className="inline-flex items-center">
-                        {col.label}
-                        {sortArrow(col.sortKey)}
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+                      <span>{col.label}</span>
+                      <span className="text-[9px]">{sortArrow(col.sortKey)}</span>
+                    </button>
+                  ) : (
+                    <div className={`flex items-center ${isDeckName ? 'justify-start' : 'justify-center'}`}>
+                      <span>{col.label}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-              {/* Body */}
-              <tbody className="divide-y divide-white/5">
-                {filteredDecks.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={visibleColumns.length}
-                      className="py-16 text-center text-xs font-mono uppercase tracking-wider text-neutral-500"
-                    >
-                      No decks match the current filters
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDecks.map((d) => (
-                    <tr
-                      key={d.deck_name}
-                      onClick={() => onSelectDeck(d.deck_name)}
-                      className="hover:bg-white/[0.04] transition-colors cursor-pointer group"
-                    >
-                      {visibleColumns.map((col) => {
-                        switch (col.key) {
-                          case 'deck':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="shrink-0 border border-white/10 overflow-hidden shadow-sm">
-                                    {renderDeckArt(d, 'w-12 h-12')}
+          {/* Table Rows Body Container */}
+          <div className="border border-white/10 bg-black/20 overflow-hidden flex flex-col flex-1 min-h-0">
+            <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
+              {displayedDecks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-neutral-500 font-sans italic">
+                  <span>No decks match the current filters</span>
+                </div>
+              ) : (
+                displayedDecks.map((d) => (
+                  <div
+                    key={d.deck_name}
+                    onClick={() => onSelectDeck(d.deck_name)}
+                    className="flex items-center py-2 px-4 transition-colors cursor-pointer group hover:bg-white/[0.04]"
+                  >
+                    {visibleColumns.map((col) => (
+                      <div
+                        key={col.key}
+                        className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
+                          col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
+                        }`}
+                      >
+                        {(() => {
+                          switch (col.key) {
+                            case 'deck':
+                              return (
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
+                                    {renderDeckArt(d, 'w-full h-full')}
                                   </div>
-                                  <div className="min-w-0 flex items-center gap-2">
-                                    <span className="text-[19px] font-bold font-display tracking-wide uppercase truncate text-white transition-colors">
+                                  <div className="min-w-0 flex items-center gap-2 truncate">
+                                    <span className="font-semibold text-neutral-100 hover:text-white truncate hover:underline cursor-pointer text-[14px]">
                                       {d.deck_name}
                                     </span>
                                     <button
@@ -762,12 +892,10 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
                                     </button>
                                   </div>
                                 </div>
-                              </td>
-                            );
+                              );
 
-                          case 'key_cards':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center">
+                            case 'key_cards':
+                              return (
                                 <div className="flex items-center justify-center gap-1.5">
                                   {(d.key_cards || []).slice(0, 3).map((k: any) => (
                                     <CardNameTooltip key={k.grp_id || k.name} name={k.name}>
@@ -776,7 +904,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
                                           e.stopPropagation();
                                           onOpenCardOverlay(k, false);
                                         }}
-                                        className="w-9 h-9 border border-white/15 overflow-hidden shrink-0 cursor-pointer transition-all duration-150 hover:scale-125 hover:brightness-110 hover:border-white/50 z-10"
+                                        className="w-7 h-7 border border-white/10 overflow-hidden shadow-sm bg-neutral-900 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
                                       >
                                         <CardImage
                                           name={k.name}
@@ -791,147 +919,306 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
                                     <span className="text-xs font-mono text-neutral-600">—</span>
                                   )}
                                 </div>
-                              </td>
-                            );
+                              );
 
-                          case 'colors':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center">
+                            case 'colors':
+                              return (
                                 <div className="flex justify-center">
-                                  {renderDeckColorIdentity(d.colors, 20)}
+                                  {renderDeckColorIdentity(d.colors, 16)}
                                 </div>
-                              </td>
-                            );
+                              );
 
-                          case 'mana_curve':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center">
+                            case 'mana_curve':
+                              return (
                                 <div className="flex justify-center">
                                   {renderManaHistogram(d.mana_curve)}
                                 </div>
-                              </td>
-                            );
+                              );
 
-                          case 'format':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center">
-                                <div className="flex flex-wrap gap-1 justify-center">
-                                  {(d.formats || []).map((f: any, i: number) => {
-                                    const chip = formatChipColor(f.format);
-                                    return (
-                                      <span
-                                        key={i}
-                                        className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border"
-                                        style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
-                                      >
-                                        {f.format}
-                                      </span>
-                                    );
-                                  })}
-                                  {(!d.formats || d.formats.length === 0) && (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  )}
+                            case 'format': {
+                              const primaryFormat = d.primary_format || d.formats?.[0]?.format;
+                              if (!primaryFormat) return <span className="text-xs font-mono text-neutral-600">—</span>;
+                              const chip = formatChipColor(primaryFormat);
+                              return (
+                                <div className="flex justify-center">
+                                  <span
+                                    className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap"
+                                    style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
+                                  >
+                                    {primaryFormat}
+                                  </span>
                                 </div>
-                              </td>
-                            );
+                              );
+                            }
 
-                          case 'games':
-                            return (
-                              <td
-                                key={col.key}
-                                className="py-2 px-3 align-middle text-center font-mono font-bold text-[18px] tabular-nums"
-                                style={{ color: accentColor }}
-                              >
-                                {d.total_matches}
-                              </td>
-                            );
+                            case 'games':
+                              return (
+                                <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">
+                                  {d.total_matches}
+                                </span>
+                              );
 
-                          case 'record':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center font-mono text-xs font-bold tabular-nums">
-                                <span className="text-emerald-400">{d.wins}</span>
-                                <span className="text-neutral-600 px-1">/</span>
-                                <span className="text-rose-400">{d.losses}</span>
-                              </td>
-                            );
+                            case 'record':
+                              return (
+                                <span className="text-xs font-mono tabular-nums">
+                                  <span className="text-emerald-400 font-semibold">{d.wins}</span>
+                                  <span className="text-neutral-600 px-1">/</span>
+                                  <span className="text-rose-400 font-semibold">{d.losses}</span>
+                                </span>
+                              );
 
-                          case 'winrate':
-                            return (
-                              <td
-                                key={col.key}
-                                className="py-2 px-3 align-middle text-center font-mono font-bold text-xs tabular-nums"
-                                style={{ color: winRateColor(d.winrate) }}
-                              >
-                                {d.winrate}
-                              </td>
-                            );
+                            case 'winrate':
+                              return (
+                                <span
+                                  className="text-xs font-mono font-bold tabular-nums"
+                                  style={{ color: winRateColor(d.winrate) }}
+                                >
+                                  {d.winrate}
+                                </span>
+                              );
 
-                          case 'source':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center">
+                            case 'source':
+                              return (
                                 <span
                                   className="inline-flex items-center justify-center"
-                                  style={{ color: d.has_list ? '#FBBF24' : '#71717A', fontSize: 14 }}
+                                  style={{ color: d.has_list ? '#FBBF24' : '#71717A', fontSize: 13 }}
                                   title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
                                 >
                                   <NerdIcon glyph={d.has_list ? 'nf-md-cards' : 'nf-oct-log'} />
                                 </span>
-                              </td>
-                            );
+                              );
 
-                          case 'commanders': {
-                            const cmdName = d.top_commander_name || (d.commanders || [])[0]?.name;
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle">
-                                {cmdName ? (
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-6 h-6 border border-white/10 shrink-0 overflow-hidden">
-                                      <CardImage name={cmdName} version="art_crop" alt={cmdName} className="w-full h-full object-cover" />
-                                    </div>
-                                    <span className="text-xs font-sans text-neutral-300 truncate">{cmdName}</span>
+                            case 'commanders': {
+                              const cmdName = d.top_commander_name || (d.commanders || [])[0]?.name;
+                              return cmdName ? (
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 border border-white/10 shrink-0 overflow-hidden shadow-sm bg-neutral-900">
+                                    <CardImage name={cmdName} version="art_crop" alt={cmdName} className="w-full h-full object-cover" />
                                   </div>
-                                ) : (
-                                  <span className="text-xs font-mono text-neutral-600">—</span>
-                                )}
-                              </td>
-                            );
+                                  <span className="text-xs font-sans text-neutral-300 truncate">{cmdName}</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs font-mono text-neutral-600">—</span>
+                              );
+                            }
+
+                            case 'last_played':
+                              return (
+                                <span className="text-xs font-mono text-neutral-400 tabular-nums">
+                                  {formatRelativeTime(d.last_played)}
+                                </span>
+                              );
+
+                            case 'wins':
+                              return (
+                                <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
+                                  {d.wins ?? 0}
+                                </span>
+                              );
+
+                            case 'losses':
+                              return (
+                                <span className="text-xs font-mono font-bold text-rose-400 tabular-nums">
+                                  {d.losses ?? 0}
+                                </span>
+                              );
+
+                            default:
+                              return null;
                           }
-
-                          case 'last_played':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center font-mono text-[11px] text-neutral-400 tabular-nums">
-                                {formatRelativeTime(d.last_played)}
-                              </td>
-                            );
-
-                          case 'wins':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center font-mono text-xs font-bold text-emerald-400 tabular-nums">
-                                {d.wins ?? 0}
-                              </td>
-                            );
-
-                          case 'losses':
-                            return (
-                              <td key={col.key} className="py-2 px-3 align-middle text-center font-mono text-xs font-bold text-rose-400 tabular-nums">
-                                {d.losses ?? 0}
-                              </td>
-                            );
-
-                          default:
-                            return <td key={col.key} className="py-2 px-3" />;
-                        }
-                      })}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* 4. CUSTOMIZE COLUMNS MODAL */}
+      {/* Footer: pagination controls + total decks count */}
+      <div className="shrink-0 flex items-center gap-3 pt-2">
+        {activeTotalPages > 1 && (
+          <>
+            <button
+              onClick={() => setDeckPage(1)}
+              disabled={safeDeckPage <= 1}
+              className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              title="First page"
+            >
+              <Home className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex-1" />
+            <button
+              onClick={() => goDeckPage('prev')}
+              disabled={safeDeckPage <= 1}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            </button>
+            <span className="text-xs font-mono text-neutral-400 px-2">
+              Page <span className="text-white font-bold">{safeDeckPage}</span> of <span className="text-neutral-400">{activeTotalPages}</span>
+            </span>
+            <button
+              onClick={() => goDeckPage('next')}
+              disabled={safeDeckPage >= activeTotalPages}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex-1" />
+          </>
+        )}
+        <span className="text-xs font-mono text-neutral-400 ml-auto tabular-nums">
+          <span className="text-white font-bold">{filteredDecks.length.toLocaleString()}</span> {filteredDecks.length === 1 ? 'deck' : 'decks'} recorded
+        </span>
+      </div>
+
+      {/* 4. ADVANCED DECK FILTERS MODAL */}
+      {showAdvModal && (
+        <div
+          onClick={() => setShowAdvModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-[800px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5" style={{ color: accentColor }} />
+                <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
+                  ADVANCED DECK FILTERS
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer mr-2"
+                >
+                  Clear all
+                </button>
+                <button
+                  onClick={() => setShowAdvModal(false)}
+                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+              {/* 1. Format */}
+              <div>
+                <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                  DECK FORMAT ({selectedFormats.length === 0 ? 'ALL FORMATS' : `${selectedFormats.length} SELECTED`})
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableFormats.map((fmt) => {
+                    const active = selectedFormats.includes(fmt);
+                    return (
+                      <button
+                        key={fmt}
+                        onClick={() =>
+                          setSelectedFormats((prev) =>
+                            active ? prev.filter((f) => f !== fmt) : [...prev, fmt]
+                          )
+                        }
+                        className={`px-3 py-1 text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer ${
+                          active
+                            ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-400 hover:text-white'
+                        }`}
+                        style={{
+                          borderColor: active ? accentColor : undefined,
+                          color: active ? accentColor : undefined,
+                        }}
+                      >
+                        {fmt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Win Rate */}
+              <div>
+                <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                  WIN RATE PERFORMANCE
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { id: 'all', label: 'All Decks' },
+                    { id: 'ge50', label: '≥ 50% Win Rate' },
+                    { id: 'lt50', label: '< 50% Win Rate' },
+                  ].map((opt) => {
+                    const active = winRateFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => setWinRateFilter(opt.id as any)}
+                        className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer ${
+                          active
+                            ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-400 hover:text-white'
+                        }`}
+                        style={{
+                          borderColor: active ? accentColor : undefined,
+                          color: active ? accentColor : undefined,
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. Games Played */}
+              <div>
+                <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                  TOTAL GAMES PLAYED
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { id: 'all', label: 'Any Games' },
+                    { id: 'zero', label: '0 Games (Untested)' },
+                    { id: 'lt10', label: '< 10 Games' },
+                    { id: 'lt50', label: '< 50 Games' },
+                    { id: 'lt100', label: '< 100 Games' },
+                    { id: 'ge100', label: '≥ 100 Games' },
+                  ].map((opt) => {
+                    const active = gamesFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => setGamesFilter(opt.id as any)}
+                        className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-all cursor-pointer ${
+                          active
+                            ? 'border-white/40 bg-white/[0.1] text-white font-bold shadow-sm'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06] text-neutral-400 hover:text-white'
+                        }`}
+                        style={{
+                          borderColor: active ? accentColor : undefined,
+                          color: active ? accentColor : undefined,
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. CUSTOMIZE COLUMNS MODAL */}
       {showColumnModal && (
         <div
           onClick={() => setShowColumnModal(false)}
@@ -945,7 +1232,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
               <div>
                 <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-5 h-5" style={{ color: accentColor }} />
+                  <Columns3 className="w-5 h-5" style={{ color: accentColor }} />
                   <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
                     CUSTOMIZE DECK COLUMNS
                   </h2>

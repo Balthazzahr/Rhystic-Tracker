@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Trophy } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
 import { AchievementBadge } from './AchievementBadge';
 import { setCardStylePref } from '../utils/cardStylePrefs';
+import { CardImage } from './CardImage';
 
 interface CardInspectorModalProps {
   isOpen: boolean;
@@ -95,10 +96,16 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
   const [overlayImgTriedNamed, setOverlayImgTriedNamed] = useState(false);
   const [overlayImgFailed, setOverlayImgFailed] = useState(false);
 
+  const cardName = deckCardOverlay?.card?.name || 'Card';
+
+  useEffect(() => {
+    setOverlayImgFailed(false);
+    setOverlayImgTriedNamed(false);
+  }, [cardName, isOpen, overlaySelected]);
+
   if (!isOpen || !deckCardOverlay) return null;
 
   const accentColor = palette?.accent || '#A855F7';
-  const cardName = deckCardOverlay.card?.name || 'Card';
   const selPrinting = overlayPrintings.find((p) => printingKey(p) === overlaySelected);
   const rarity = selPrinting?.rarity ?? deckCardOverlay.card.rarity;
 
@@ -126,38 +133,14 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
           {/* PANEL 1: Card image preview + Set / Art Selector                         */}
           {/* ========================================================================= */}
           <div className="w-[420px] max-w-[90vw] shrink-0 flex flex-col">
-            {overlayImgFailed ? (
-              <div className="w-full aspect-[2.5/3.5] border border-white/20 bg-neutral-950 flex flex-col items-center justify-center p-6 text-center space-y-3 shadow-2xl">
-                <div className="w-16 h-16 bg-neutral-900 border border-white/15 flex items-center justify-center text-neutral-500 shadow-inner">
-                  <span className="ms ms-library text-2xl" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold font-display uppercase tracking-wide text-neutral-300">
-                    {cardName}
-                  </p>
-                  <span className="inline-block text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold bg-neutral-900 px-2 py-0.5 border border-white/15">
-                    Card Art Missing
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <img
-                src={
-                  overlayImgTriedNamed
-                    ? `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}&format=image&version=normal`
-                    : scryfallPrintingImageUrl(cardName, selPrinting)
-                }
-                alt={cardName}
-                className="w-full h-auto shadow-2xl block border border-white/20"
-                onError={() => {
-                  if (!overlayImgTriedNamed) {
-                    setOverlayImgTriedNamed(true);
-                  } else {
-                    setOverlayImgFailed(true);
-                  }
-                }}
-              />
-            )}
+            <CardImage
+              key={`${cardName}:${selPrinting?.set_code || ''}:${selPrinting?.collector_number || ''}`}
+              name={cardName}
+              version="normal"
+              printing={selPrinting ? { setCode: selPrinting.set_code, collectorNumber: selPrinting.collector_number } : undefined}
+              className="w-full aspect-[2.5/3.5] shadow-2xl block border border-white/20"
+              alt={cardName}
+            />
 
             {/* Set / Art Selector Underneath */}
             <div className="mt-3 shrink-0">

@@ -205,8 +205,14 @@ impl DatabaseManager {
 
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
+            .acquire_timeout(std::time::Duration::from_secs(10))
             .connect(&conn_str)
             .await?;
+
+        // Prevent SQLITE_BUSY "database is locked" during concurrent tailer + UI reads
+        let _ = sqlx::query("PRAGMA journal_mode=WAL;").execute(&pool).await;
+        let _ = sqlx::query("PRAGMA busy_timeout=5000;").execute(&pool).await;
+        let _ = sqlx::query("PRAGMA synchronous=NORMAL;").execute(&pool).await;
 
         // Automatically initialize tables if initializing a new dev database
         sqlx::query(SCHEMA_SQL)
@@ -497,7 +503,7 @@ impl DatabaseManager {
         let _ = sqlx::query("DELETE FROM matches WHERE id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
 
         // Migration: Purge non-impactful zero-damage and non-titled records from match_impactful_cards
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND (titles IS NULL OR titles = '' OR titles = '[]')").execute(&pool).await;
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND (titles IS NULL OR titles = '' OR titles = '[]') AND (cards_drawn = 0 OR cards_drawn IS NULL)").execute(&pool).await;
 
         // Migration: Reclassify creature fight damage from damage_spell to damage_combat
         let _ = sqlx::query(
@@ -651,16 +657,14 @@ impl DatabaseManager {
             }
         }
 
+        // Backfill draw records from logs additively for any historical matches missing draw stats
         Self::backfill_draw_records_from_logs(&pool).await;
 
         Ok(Self { pool, db_filename })
     }
 
     async fn backfill_draw_records_from_logs(pool: &Pool<Sqlite>) {
-        // Purge non-card records and reset cards_drawn for re-attribution from logs
         let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE grp_id NOT IN (SELECT grp_id FROM cards_cache)").execute(pool).await;
-        let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = 0").execute(pool).await;
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND max_hit = 0 AND titles = '[]' AND cards_drawn = 0").execute(pool).await;
 
         let log_path = match crate::tailer::discover_log_path() {
             Some(p) => p,
@@ -681,6 +685,7 @@ impl DatabaseManager {
         let mut current_match_id: Option<String> = None;
         let mut inst_map: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
         let mut inst_owner: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        let mut ability_parent: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
         let mut hero_seat: u32 = 1;
 
         for line in reader.lines().flatten() {
@@ -692,7 +697,12 @@ impl DatabaseManager {
                                 current_match_id = Some(mid.to_string());
                                 inst_map.clear();
                                 inst_owner.clear();
-                                hero_seat = 1;
+                                ability_parent.clear();
+                                if let Ok(Some(hs)) = sqlx::query_scalar::<_, i64>("SELECT hero_seat_id FROM matches WHERE id = ?").bind(mid).fetch_optional(pool).await {
+                                    hero_seat = hs as u32;
+                                } else {
+                                    hero_seat = 1;
+                                }
                             }
                         }
                     }
@@ -734,6 +744,7 @@ impl DatabaseManager {
                                                         inst_owner.insert(iid, o);
                                                     }
                                                     if let Some(pid) = obj.get("parentId").and_then(|p| p.as_u64()).map(|p| p as u32) {
+                                                        ability_parent.insert(iid, pid);
                                                         if let Some(pgid) = inst_map.get(&pid).copied() {
                                                             inst_map.entry(iid).or_insert(pgid);
                                                         }
@@ -745,6 +756,22 @@ impl DatabaseManager {
                                         if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
                                             for a in anns {
                                                 let ann_types = a.get("type").and_then(|t| t.as_array());
+                                                let is_ability_link = ann_types.as_ref().map(|arr| arr.iter().any(|s| {
+                                                    let st = s.as_str().unwrap_or("");
+                                                    st.contains("AbilityInstanceCreated") || st.contains("AbilityInstanceDeleted")
+                                                })).unwrap_or(false);
+
+                                                if is_ability_link {
+                                                    let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                                    if affector_id > 0 {
+                                                        if let Some(affected_ids) = a.get("affectedIds").and_then(|arr| arr.as_array()) {
+                                                            for aff_id in affected_ids.iter().filter_map(|x| x.as_u64().map(|v| v as u32)) {
+                                                                ability_parent.insert(aff_id, affector_id);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
                                                 let is_zone_transfer = ann_types.map(|arr| arr.iter().any(|s| s.as_str() == Some("AnnotationType_ZoneTransfer"))).unwrap_or(false);
                                                 if is_zone_transfer {
                                                     let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
@@ -758,8 +785,18 @@ impl DatabaseManager {
 
                                                         if is_draw {
                                                             let affected_count = a.get("affectedIds").and_then(|arr| arr.as_array()).map(|arr| arr.len()).unwrap_or(1).max(1) as i64;
-                                                            if let Some(src_grp) = inst_map.get(&affector_id).copied() {
-                                                                let seat = inst_owner.get(&affector_id).copied().unwrap_or(hero_seat);
+                                                            let mut resolved_grp = inst_map.get(&affector_id).copied();
+                                                            if resolved_grp.is_none() {
+                                                                if let Some(pid) = ability_parent.get(&affector_id).copied() {
+                                                                    resolved_grp = inst_map.get(&pid).copied();
+                                                                }
+                                                            }
+
+                                                            if let Some(src_grp) = resolved_grp {
+                                                                let seat = inst_owner.get(&affector_id)
+                                                                    .or_else(|| ability_parent.get(&affector_id).and_then(|pid| inst_owner.get(pid)))
+                                                                    .copied()
+                                                                    .unwrap_or(hero_seat);
                                                                 
                                                                 let match_exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM matches WHERE id = ?")
                                                                     .bind(mid)
@@ -768,19 +805,22 @@ impl DatabaseManager {
                                                                     .unwrap_or(None);
 
                                                                 if match_exists.is_some() {
-                                                                    let existing_id: Option<i64> = sqlx::query_scalar("SELECT id FROM match_impactful_cards WHERE match_id = ? AND grp_id = ?")
+                                                                    let existing_id: Option<(i64, i64)> = sqlx::query_as("SELECT id, cards_drawn FROM match_impactful_cards WHERE match_id = ? AND grp_id = ?")
                                                                         .bind(mid)
                                                                         .bind(src_grp as i64)
                                                                         .fetch_optional(pool)
                                                                         .await
                                                                         .unwrap_or(None);
 
-                                                                    if let Some(row_id) = existing_id {
-                                                                        let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = cards_drawn + ? WHERE id = ?")
-                                                                            .bind(affected_count)
-                                                                            .bind(row_id)
-                                                                            .execute(pool)
-                                                                            .await;
+                                                                    if let Some((row_id, curr_drawn)) = existing_id {
+                                                                        if curr_drawn < affected_count {
+                                                                            let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = ?, seat_id = ? WHERE id = ?")
+                                                                                .bind(affected_count)
+                                                                                .bind(seat as i64)
+                                                                                .bind(row_id)
+                                                                                .execute(pool)
+                                                                                .await;
+                                                                        }
                                                                     } else {
                                                                         let _ = sqlx::query(
                                                                             r#"

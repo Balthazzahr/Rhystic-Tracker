@@ -2,6 +2,53 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.2] - 2026-08-27
+
+### 🎨 Minimalist Borderless Floating UI, Deck Advanced Filters, Dynamic Orbital Spinner & Table Alignment Polish
+
+- **Borderless Floating Toolbars & Footers**:
+  - Upgraded top filter bars and bottom pagination footers across Match History, Card Library, and Deck Library to borderless floating controls.
+  - Eliminated hard bounding boxes and horizontal dividing lines (`border-t border-white/5` removed) in favor of translucent floating pills (`hover:bg-white/[0.08] text-neutral-300 hover:text-white active:scale-95`).
+  - Styled search bars with subtle glass backgrounds (`bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] border-0`).
+  - Converted segmented view toggles (`[Cards] [Table]`, `[Crop] [Full]`) to borderless floating selectors (`bg-white/[0.03]`).
+- **Advanced Deck Filters in Deck Library**:
+  - Added dedicated Advanced Filters modal to the Deck Library toolbar matching Card Library and Match History positioning.
+  - Filter decks by **Format** (Standard, Alchemy, Historic, Explorer, Timeless, Brawl, Commander, Limited, Casual, etc.), **Win Rate** (`≥ 50%`, `< 50%`), and **Games Played** (`0 Games`, `< 10`, `< 50`, `< 100`, `≥ 100`).
+  - Added filter chip counters and active badge counts.
+- **Universal Column Selector (`Columns3` & Minimalist Count)**:
+  - Replaced slider icon with `Columns3` across toolbars and column customizer modal headers in Match History, Card Library, and Deck Library.
+  - Omitted the word `"COLUMNS"` to display cleanly as `[Columns3] (X)`.
+- **Advanced Card Filters Visual Polish**:
+  - **Copies Owned**: Replaced plain text with custom diamond indicators (`◆ ◇ ◇ ◇`, `◆ ◆ ◇ ◇`, `◆ ◆ ◆ ◇`, `◆ ◆ ◆ ◆`).
+  - **Rarity Tiers**: Colored typography and borders matching official MTG rarity tiers (Common `#94A3B8`, Uncommon `#38BDF8`, Rare `#FBBF24`, Mythic `#F97316`).
+  - **Card Types**: Official vector font icons (`ms ms-creature`, `ms ms-instant`, etc.) alongside type names.
+- **Dynamic Orbital Loader & Missing Art Placeholders**:
+  - Replaced standard loaders with high-fidelity `OrbitSpinner` scaling responsively from `32px` table thumbnails to `84px` card frames in the Card Inspector.
+  - Replaced generic broken image boxes with official `RhysticIcon` placeholders in muted neutral tones.
+- **Table Column Centering & Alignment Consistency**:
+  - Fixed horizontal disconnect between table headers and cell contents in Match History and Card Library.
+  - Enforced strict alignment rule: Primary entity columns (`Name`, `Matchup`, `Deck`) remain left-aligned; all other data columns (`Cost`, `Type`, `Set`, `Rarity`, `Date`, `Result`, `Colors`, `Format`, `Play`, `Curve`, `Games`, etc.) are centered in both headers and row cells.
+- **Design System Master Documentation**:
+  - Updated `DESIGN_SYSTEM.md` with comprehensive UI specifications for borderless floating toolbars, table centering, icon conventions, and filter styling standards.
+
+---
+
+### 🐛 Fixes & Polish (Community PR + Dashboard + Deck & Card Library + Leaderboards + DB Concurrency)
+
+- **Merged Community PR #9 — Dashboard Responsive Layout** (`jte0711`): Two-column dashboard now stacks to single-column below `1200px` (`flex-col min-[1200px]:flex-row`), divider switches horizontal/vertical, Recent Matches removes inner `overflow-y-auto` in favor of outer scroll — fixes height/width break when resizing (fixes #8).
+- **Deck Inspector Win Rate by Position**: Fixed white `0.0%` above On the Play / On the Draw continuum bars — now computes `wins/(wins+losses)*100` instead of missing `detail.play.total` (reported post-1.3.0).
+- **Deck Inspector → View All**: Now seeds Match History `initialSearch` with deck name and filters to that deck’s matches instead of showing unfiltered entire history (`App.tsx` `matchHistorySearch` + `MatchHistoryView` `initialSearch` prop).
+- **Deck Library Sorting in Card View**: Moved `COLUMNS` button left of view toggle (`Search | Colors | flex-1 | SORT/COLUMNS | View Toggle | Card Size`). In card view it now shows a themed `SORT: …` dropdown (`deck_name` / `games` / `winrate` / `last_played`) reusing `handleSortColumn` with same `asc/desc` logic, `Escape`/backdrop close.
+- **Card Library Sorting in Card View**: Mirrored pattern — `Search | Colors | Adv Filter | flex-1 | SORT/COLUMNS | View Toggle | Art Mode | Card Size`. Cards dropdown offers `Name` / `Mana Value` / `Rarity` / `Set` / `Release Date` / `Owned Count` (`sortByColumn` / `get_collection {sort,sort_dir}`).
+- **Leaderboards — Domain Titles Removed & Entry Height**: Removed 3 domain headers (Combat Damage / Non-Combat Spells & Abilities / Honors & Mastery) and `space-y-4 → space-y-3` reclaiming ~85px. Leaderboard list `h-[318px] → h-[348px]` and rows `h-[58px] → h-[64px]` (`w-9 → w-10` art), keeps strictly 5 visible with no 6th peek, each entry taller.
+- **Leaderboards — Card Title Size**: Individual leaderboard headers `text-xs → text-sm` (and icon `text-sm → text-base`) for two steps larger, per design system.
+- **Card Draw Engines Attribution & Ability Parent Resolution**: Resolved MTGA `ZoneTransfer` draw triggers (e.g. *Feather of Flight*, *The Ten Rings*, *Thought Monitor*, *Aether Spellbomb*) where draw events reference ephemeral ability instances rather than source cards. `parser.rs` and `MatchAssembler` now track ability parentage via `parentId`, `AnnotationType_AbilityInstanceCreated`, and `AnnotationType_AbilityInstanceDeleted`.
+- **Card Draw Engines Persistence & Startup Protection**: Fixed startup database cleanup query in `db.rs` to ensure cards with `cards_drawn > 0` and 0 damage are never pruned on restart, and enabled additive, idempotent historical log backfill.
+- **SQLite Concurrency & Busy Timeout**: Added 10s pool acquire timeout, `PRAGMA busy_timeout = 5000;`, `PRAGMA journal_mode = WAL;`, and `PRAGMA synchronous = NORMAL;` to eliminate "database is locked (code 5)" errors during startup when the log tailer and UI query concurrently.
+- **Tooling**: Added `.prettierrc` (`singleQuote:true, printWidth:120`) + `.prettierignore` per contributor suggestion on #9 to prevent future formatting churn.
+
+---
+
 ## [1.3.0] - 2026-08-26
 
 ### 🎨 Complete Modern MTG Visual Overhaul, Tabbed Settings & Inspector Workspaces
