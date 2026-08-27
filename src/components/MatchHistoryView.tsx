@@ -182,7 +182,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   const [resultFilter, setResultFilter] = useState<'ALL' | 'win' | 'loss'>('ALL');
 
   useEffect(() => {
-    if (initialSearch !== undefined) setSearchTerm(initialSearch);
+    if (initialSearch !== undefined && initialSearch !== '') setSearchTerm(initialSearch);
   }, [initialSearch]);
 
   // Normalize formatOptions defensively so it supports strings or objects seamlessly

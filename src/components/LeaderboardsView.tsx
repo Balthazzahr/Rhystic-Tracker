@@ -185,7 +185,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
           <input
             type="text"
-            placeholder="Search any card across all 9 leaderboards..."
+            placeholder="Search for card..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-8 py-1.5 text-xs font-mono border border-white/10 bg-black/40 text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30"
@@ -256,8 +256,8 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                           </button>
                         </div>
 
-                        {/* List items with exact h-[348px] container and h-[64px] item rows */}
-                        <div className="p-2 space-y-1 h-[348px] overflow-y-auto custom-scrollbar flex flex-col justify-start">
+                        {/* List items with exact h-[343px] container and h-[63px] item rows */}
+                        <div className="p-2 space-y-1 h-[343px] overflow-y-auto custom-scrollbar flex flex-col justify-start">
                           {allItems.length === 0 ? (
                             <div className="py-24 text-center text-xs font-mono uppercase tracking-wider text-neutral-500 my-auto">
                               No match records logged yet
@@ -273,7 +273,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                   <div
                                     key={`${cat.id}-${item.grp_id}-${item.rank}`}
                                     onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                    className={`flex items-center justify-between px-2.5 h-[64px] border transition-colors cursor-pointer group shrink-0 ${
+                                    className={`flex items-center justify-between px-2.5 h-[63px] border transition-colors cursor-pointer group shrink-0 ${
                                       isFirst
                                         ? 'bg-amber-500/[0.03] border-amber-500/25 hover:border-amber-500/40'
                                         : isSecond
@@ -330,7 +330,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                 <div
                                   key={`${cat.id}-${item.grp_id}-${item.rank}`}
                                   onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                  className="flex items-center justify-between px-2.5 h-[64px] border border-white/5 bg-white/[0.015] hover:bg-white/[0.04] transition-colors cursor-pointer group shrink-0"
+                                  className="flex items-center justify-between px-2.5 h-[63px] border border-white/5 bg-white/[0.015] hover:bg-white/[0.04] transition-colors cursor-pointer group shrink-0"
                                   title="Click to view card details"
                                 >
                                   <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
@@ -377,7 +377,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                   <div
                                     key={`${cat.id}-top3-${item.grp_id}-${item.rank}`}
                                     onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                    className={`flex items-center justify-between px-2.5 h-[64px] border transition-colors cursor-pointer group shrink-0 ${
+                                    className={`flex items-center justify-between px-2.5 h-[63px] border transition-colors cursor-pointer group shrink-0 ${
                                       isMatch
                                         ? 'border-sky-400 bg-sky-500/20 shadow-md shadow-sky-500/20'
                                         : isFirst
@@ -438,7 +438,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                       <div
                                         key={`${cat.id}-match-${item.grp_id}-${item.rank}`}
                                         onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                        className="flex items-center justify-between px-2.5 h-[64px] border border-sky-400/80 bg-sky-500/15 hover:bg-sky-500/25 transition-colors cursor-pointer group shrink-0"
+                                        className="flex items-center justify-between px-2.5 h-[63px] border border-sky-400/80 bg-sky-500/15 hover:bg-sky-500/25 transition-colors cursor-pointer group shrink-0"
                                         title="Click to view card details"
                                       >
                                         <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
