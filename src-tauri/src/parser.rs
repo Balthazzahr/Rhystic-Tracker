@@ -24,6 +24,7 @@ pub enum ParsedEvent {
         draw_events: Vec<(u32, u32)>,
         diff_deleted_ids: Vec<u32>,
         mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
+        ability_associations: Vec<(u32, u32)>,    // (ability_instance_id, parent_instance_id)
     },
     MulliganEvent { seat_id: u32, is_mulligan: bool, num_cards: Option<u32> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
@@ -250,6 +251,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     let mut draw_events: Vec<(u32, u32)> = Vec::new();
                     let mut diff_deleted_ids: Vec<u32> = Vec::new();
                     let mut mulligan_events: Vec<(u32, bool, Option<u32>)> = Vec::new();
+                    let mut ability_associations: Vec<(u32, u32)> = Vec::new();
                     let mut any_content = false;
 
                     for msg in msgs {
@@ -260,13 +262,11 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                 if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
                                     for obj in objs {
                                         let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                                        let is_ability = obj_type.contains("Ability") || obj_type.contains("Trigger");
+                                        let is_ability = obj_type.contains("Ability") || obj_type.contains("Trigger") || obj.get("objectSourceGrpId").is_some();
                                         let is_card = !is_ability;
 
-                                        if let (Some(inst_id), Some(zone_id)) = (
-                                            obj.get("instanceId").and_then(|i| i.as_u64()),
-                                            obj.get("zoneId").and_then(|z| z.as_u64())
-                                        ) {
+                                        if let Some(inst_id) = obj.get("instanceId").and_then(|i| i.as_u64()) {
+                                            let zone_id = obj.get("zoneId").and_then(|z| z.as_u64()).map(|z| z as u32).unwrap_or(0);
                                             let grp_id = if is_ability {
                                                 obj.get("objectSourceGrpId")
                                                     .or_else(|| obj.get("overlayGrpId"))
@@ -281,7 +281,12 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                                     .map(|g| g as u32)
                                             };
                                             let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
-                                            batch.push((inst_id as u32, grp_id, owner_seat, zone_id as u32, is_card));
+                                            if let Some(pid) = obj.get("parentId").and_then(|p| p.as_u64()).map(|p| p as u32) {
+                                                if pid > 0 {
+                                                    ability_associations.push((inst_id as u32, pid));
+                                                }
+                                            }
+                                            batch.push((inst_id as u32, grp_id, owner_seat, zone_id, is_card));
                                         }
                                     }
                                 }
@@ -320,7 +325,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                     }
                                 }
 
-                                // Extract annotations for damage attribution and extra card draw tracking.
+                                // Extract annotations for damage attribution, ability parent links, and extra card draw tracking.
                                 if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
                                     for a in anns {
                                         let ann_type = a.get("type").and_then(|t| t.as_array())
@@ -367,6 +372,15 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                                     }
                                                 }
                                             }
+                                        } else if ann_type.contains("AbilityInstanceCreated") || ann_type.contains("AbilityInstanceDeleted") {
+                                            let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                            if affector_id > 0 {
+                                                if let Some(affected_ids) = a.get("affectedIds").and_then(|arr| arr.as_array()) {
+                                                    for aff_id in affected_ids.iter().filter_map(|x| x.as_u64().map(|v| v as u32)) {
+                                                        ability_associations.push((aff_id, affector_id));
+                                                    }
+                                                }
+                                            }
                                         } else if ann_type.contains("ZoneTransfer") {
                                             let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
                                             if affector_id > 0 {
@@ -401,7 +415,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                     }
                                 }
 
-                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() || !draw_events.is_empty() || !diff_deleted_ids.is_empty() {
+                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() || !draw_events.is_empty() || !diff_deleted_ids.is_empty() || !ability_associations.is_empty() {
                                     any_content = true;
                                 }
                                 let _ = msg_id;
@@ -445,6 +459,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                             draw_events,
                             diff_deleted_ids,
                             mulligan_events,
+                            ability_associations,
                         };
                     }
                 }
@@ -686,6 +701,26 @@ mod tests {
                 assert_eq!(draw_events.len(), 1);
                 assert_eq!(draw_events[0].0, 870, "affectorId should match");
                 assert_eq!(draw_events[0].1, 2, "affectedIds count should match");
+            }
+            other => panic!("expected GameStateUpdateCombined, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_ability_association_parsing() {
+        let line = r#"{"greToClientEvent":{"greToClientMessages":[
+            {"type":"GREMessageType_GameStateMessage","msgId":11,"gameStateMessage":{"type":"GameStateType_Diff","gameObjects":[
+                {"instanceId":327,"grpId":86788,"type":"GameObjectType_Ability","parentId":324,"objectSourceGrpId":91549,"zoneId":27,"ownerSeatId":2}
+            ],"annotations":[
+                {"id":519,"affectorId":324,"affectedIds":[327],"type":["AnnotationType_AbilityInstanceCreated"]},
+                {"id":525,"affectorId":324,"affectedIds":[327],"type":["AnnotationType_AbilityInstanceDeleted"]}
+            ]}}
+        ]}}"#;
+
+        match parse_line(line) {
+            ParsedEvent::GameStateUpdateCombined { ability_associations, objects, .. } => {
+                assert_eq!(objects.len(), 1);
+                assert!(ability_associations.contains(&(327, 324)));
             }
             other => panic!("expected GameStateUpdateCombined, got {:?}", other),
         }
