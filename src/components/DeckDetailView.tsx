@@ -252,8 +252,10 @@ export function DeckDetailView({
   if (!isOpen || !detail) return null;
 
   const winrateNum = parseFloat(detail.winrate) || 0;
-  const playWinPct = detail.play?.total ? (detail.play.wins / detail.play.total) * 100 : 0;
-  const drawWinPct = detail.draw?.total ? (detail.draw.wins / detail.draw.total) * 100 : 0;
+  const playTotal = (detail.play?.wins || 0) + (detail.play?.losses || 0);
+  const playWinPct = playTotal > 0 ? (detail.play.wins / playTotal) * 100 : 0;
+  const drawTotal = (detail.draw?.wins || 0) + (detail.draw?.losses || 0);
+  const drawWinPct = drawTotal > 0 ? (detail.draw.wins / drawTotal) * 100 : 0;
 
   const winLossBar = (wins: number, losses: number, winPct: number) => {
     const total = wins + losses;

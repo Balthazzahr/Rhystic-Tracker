@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -160,6 +160,7 @@ interface MatchHistoryViewProps {
   onSelectMatch: (matchId: string) => void;
   onSelectDeck?: (deckName: string) => void;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
+  initialSearch?: string;
 }
 
 export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
@@ -170,14 +171,19 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   onSelectMatch,
   onSelectDeck,
   onShowCard,
+  initialSearch,
 }) => {
   const accentColor = palette?.accent || '#A855F7';
 
   // --- Filter State ---
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialSearch || '');
   const [formatFilter, setFormatFilter] = useState('ALL');
   const [timeFilter, setTimeFilter] = useState('ALL');
   const [resultFilter, setResultFilter] = useState<'ALL' | 'win' | 'loss'>('ALL');
+
+  useEffect(() => {
+    if (initialSearch !== undefined) setSearchTerm(initialSearch);
+  }, [initialSearch]);
 
   // Normalize formatOptions defensively so it supports strings or objects seamlessly
   const normalizedFormatOptions = useMemo(() => {

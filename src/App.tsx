@@ -276,6 +276,7 @@ export default function App() {
   const [formatFilter, setFormatFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');
   const [resultFilter, setResultFilter] = useState<string>('ALL');
+  const [matchHistorySearch, setMatchHistorySearch] = useState('');
 
   // Match Inspection & Real Data State
   const [matches, setMatches] = useState<MatchRecord[]>([]);
@@ -1649,6 +1650,7 @@ export default function App() {
               setSelectedDeckDetail(null);
             }}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            initialSearch={matchHistorySearch}
           />
         )}
 
@@ -1681,8 +1683,8 @@ export default function App() {
           setIsFullInfoOpen(true);
         }}
         onViewAll={() => {
+          setMatchHistorySearch(deckDetail?.deck_name || '');
           setSelectedDeckName(null);
-          setDeckSearch(deckDetail?.deck_name || '');
           setActiveTab('matches');
         }}
         onDeckListImported={async () => {
