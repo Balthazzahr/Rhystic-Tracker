@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Search,
   X,
@@ -18,6 +18,8 @@ import {
   Trash2,
   Layers,
   Home,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
 } from 'lucide-react';
 import { ThemePalette } from '../types';
 import CardImage from './CardImage';
@@ -285,14 +287,21 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
   const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
 
-  // Card view layout measurement
+  // Card view layout measurement (callback ref: measures the moment the grid
+  // mounts — including after a table→cards switch — so pagination is never
+  // stuck at a 1×1 stale measurement).
   const cardAreaRef = useRef<HTMLDivElement>(null);
+  const cardAreaRORef = useRef<ResizeObserver | null>(null);
   const [cardArea, setCardArea] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  useEffect(() => {
-    const el = cardAreaRef.current;
-    if (!el) return;
+  const setCardAreaRef = useCallback((node: HTMLDivElement | null) => {
+    cardAreaRef.current = node;
+    if (cardAreaRORef.current) {
+      cardAreaRORef.current.disconnect();
+      cardAreaRORef.current = null;
+    }
+    if (!node) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
+      const r = node.getBoundingClientRect();
       setCardArea((prev) => {
         const w = Math.round(r.width);
         const h = Math.round(r.height);
@@ -301,15 +310,15 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       });
     };
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [deckView]);
+    cardAreaRORef.current = new ResizeObserver(measure);
+    cardAreaRORef.current.observe(node);
+  }, []);
 
   const DECK_RATIO = 3 / 2;
   const DECK_LARGE_ROWS = 4;
   const DECK_SMALL_ROWS = 6;
-  const DECK_GAP = 16;
+  const DECK_GAP = 16;         // vertical safety gap for card-height derivation
+  const DECK_COL_GAP = 12;     // must match gap-3 on the wrap containers
   const DECK_WRAP_PAD = 0;
   const DECK_LARGE_HEIGHT_SHRINK = 0.97;
   const DECK_LARGE_WIDEN = 1.15;
@@ -443,7 +452,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
   }, [deckOverview, deckSearch, deckColorFilter, deckSort, deckSortDir]);
 
   const deckCols = cardArea.w > 0 && deckCardW > 0
-    ? Math.max(1, Math.floor((cardArea.w + DECK_GAP) / (deckCardW + DECK_GAP)))
+    ? Math.max(1, Math.floor((cardArea.w - 0.5 + DECK_COL_GAP) / (deckCardW + DECK_COL_GAP)))
     : 1;
   const gridPageSize = deckCols * deckRows;
   const tablePageSize = 25;
@@ -487,9 +496,13 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
   // Page turn animation
   const deckGridAnimRef = useRef<HTMLDivElement>(null);
+  const prevDeckPageSizeRef = useRef<number>(0);
   useEffect(() => {
     const el = deckGridAnimRef.current;
     if (!el || deckView !== 'cards') return;
+    const layoutChanged = prevDeckPageSizeRef.current > 0 && prevDeckPageSizeRef.current !== gridPageSize;
+    prevDeckPageSizeRef.current = gridPageSize;
+    if (layoutChanged) return; // reflow-driven page clamp — no animation
     el.getAnimations().forEach((a) => a.cancel());
     const next = deckPageDirRef.current === 'next';
     el.animate(
@@ -499,7 +512,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       ],
       { duration: 250, easing: 'ease-out' },
     );
-  }, [deckPage, deckView]);
+  }, [deckPage, deckView, gridPageSize]);
 
   const handleSortColumn = (key?: string) => {
     if (!key) return;
@@ -545,7 +558,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
       <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
         {/* Search */}
-        <div className="relative w-64 shrink-0">
+        <div className="relative w-64 shrink-0 h-8 flex items-center">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input
             type="text"
@@ -640,9 +653,10 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all cursor-pointer"
                 title="Sort decks"
               >
-                <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: accentColor }} />
-                <span>SORT: {SORT_LABEL[deckSort] || deckSort.toUpperCase()}</span>
-                <span className="font-mono text-[10px] ml-1">{deckSortDir === 'asc' ? '▲' : '▼'}</span>
+                {deckSortDir === 'asc'
+                  ? <ArrowUpNarrowWide className="w-3.5 h-3.5 -scale-x-100" />
+                  : <ArrowDownWideNarrow className="w-3.5 h-3.5 -scale-x-100" />}
+                <span>: {SORT_LABEL[deckSort] || deckSort.toUpperCase()}</span>
               </button>
               {sortOpen && (
                 <>
@@ -702,7 +716,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       {/* 3. MAIN CONTENT: CARD VIEW vs TABLE VIEW */}
       {deckView === 'cards' ? (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <div ref={cardAreaRef} className="flex-1 min-h-0 overflow-hidden">
+          <div ref={setCardAreaRef} className="flex-1 min-h-0 overflow-hidden">
             {filteredDecks.length === 0 ? (
               <div className="p-16 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
                 No decks match the current filters
@@ -723,7 +737,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
                       <button
                         key={d.deck_name}
                         onClick={() => onSelectDeck(d.deck_name)}
-                        className="group relative rounded-none overflow-hidden border border-white/10 bg-neutral-900/90 shadow-md hover:border-white/30 hover:shadow-xl transition-all duration-200 text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer"
+                        className="group relative rounded-none overflow-hidden border border-white/10 bg-neutral-900/90 shadow-md hover:border-white/30 hover:shadow-xl transition-[border-color,box-shadow] duration-200 text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer"
                         style={{ width: deckCardW, height: deckCardH }}
                       >
                         {/* Artwork Background */}
@@ -1041,38 +1055,42 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       <div className="shrink-0 flex items-center gap-3 pt-2">
         {activeTotalPages > 1 && (
           <>
-            <button
-              onClick={() => setDeckPage(1)}
-              disabled={safeDeckPage <= 1}
-              className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-              title="First page"
-            >
-              <Home className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex-1" />
-            <button
-              onClick={() => goDeckPage('prev')}
-              disabled={safeDeckPage <= 1}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Prev
-            </button>
-            <span className="text-xs font-mono text-neutral-400 px-2">
-              Page <span className="text-white font-bold">{safeDeckPage}</span> of <span className="text-neutral-400">{activeTotalPages}</span>
-            </span>
-            <button
-              onClick={() => goDeckPage('next')}
-              disabled={safeDeckPage >= activeTotalPages}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-            >
-              Next <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex-1" />
+            <div className="flex-1 flex justify-start">
+              <button
+                onClick={() => setDeckPage(1)}
+                disabled={safeDeckPage <= 1}
+                className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+                title="First page"
+              >
+                <Home className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => goDeckPage('prev')}
+                disabled={safeDeckPage <= 1}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-xs font-mono text-neutral-400 px-2">
+                Page <span className="text-white font-bold">{safeDeckPage}</span> of <span className="text-neutral-400">{activeTotalPages}</span>
+              </span>
+              <button
+                onClick={() => goDeckPage('next')}
+                disabled={safeDeckPage >= activeTotalPages}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </>
         )}
-        <span className="text-xs font-mono text-neutral-400 ml-auto tabular-nums">
-          <span className="text-white font-bold">{filteredDecks.length.toLocaleString()}</span> {filteredDecks.length === 1 ? 'deck' : 'decks'} recorded
-        </span>
+        <div className="flex-1 flex justify-end">
+          <span className="text-xs font-mono text-neutral-400 tabular-nums">
+            <span className="text-white font-bold">{filteredDecks.length.toLocaleString()}</span> {filteredDecks.length === 1 ? 'deck' : 'decks'} recorded
+          </span>
+        </div>
       </div>
 
       {/* 4. ADVANCED DECK FILTERS MODAL */}
