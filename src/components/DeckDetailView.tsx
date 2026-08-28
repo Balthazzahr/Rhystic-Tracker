@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
+import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2, Image as ImageIcon, RotateCcw, Search } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
@@ -173,6 +173,94 @@ export function DeckDetailView({
   const [copied, setCopied] = useState(false);
   const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
 
+  // Custom Deck Box Cover Art Picker State
+  const [chooseArtOpen, setChooseArtOpen] = useState(false);
+  const [artSearch, setArtSearch] = useState('');
+  const [deckCardsList, setDeckCardsList] = useState<{ name: string; grp_id?: number; type?: string; mana_cost?: string }[]>([]);
+  const [hoveredCardArt, setHoveredCardArt] = useState<string | null>(null);
+  const [artSaving, setArtSaving] = useState(false);
+
+  useEffect(() => {
+    if (!chooseArtOpen || !deckName) return;
+    let cancelled = false;
+    const loadCards = async () => {
+      try {
+        const cardsRes = await invoke<any>('get_deck_cards', { deckName });
+        if (cancelled) return;
+        const list: { name: string; grp_id?: number; type?: string; mana_cost?: string }[] = [];
+        const seen = new Set<string>();
+
+        if (cardsRes?.commander?.name) {
+          seen.add(cardsRes.commander.name);
+          list.push({
+            name: cardsRes.commander.name,
+            grp_id: cardsRes.commander.grp_id,
+            type: cardsRes.commander.card_type || 'Commander',
+            mana_cost: cardsRes.commander.mana_cost,
+          });
+        }
+
+        if (Array.isArray(cardsRes?.cards)) {
+          cardsRes.cards.forEach((c: any) => {
+            if (c?.name && !seen.has(c.name)) {
+              seen.add(c.name);
+              list.push({
+                name: c.name,
+                grp_id: c.grp_id,
+                type: c.card_type,
+                mana_cost: c.mana_cost,
+              });
+            }
+          });
+        }
+
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        setDeckCardsList(list);
+        if (list.length > 0) {
+          setHoveredCardArt(detail?.custom_art_name || detail?.commander_name || list[0].name);
+        }
+      } catch (e) {
+        console.error('Failed to load deck cards for art picker:', e);
+      }
+    };
+    loadCards();
+    return () => { cancelled = true; };
+  }, [chooseArtOpen, deckName, detail]);
+
+  const handleSelectCustomArt = async (card: { name: string; grp_id?: number }) => {
+    try {
+      setArtSaving(true);
+      await invoke('set_deck_custom_art', {
+        deckName,
+        cardName: card.name,
+        grpId: card.grp_id || null,
+      });
+      setChooseArtOpen(false);
+      if (onDeckListImported) {
+        onDeckListImported();
+      }
+    } catch (e) {
+      console.error('Failed to set custom art:', e);
+    } finally {
+      setArtSaving(false);
+    }
+  };
+
+  const handleResetCustomArt = async () => {
+    try {
+      setArtSaving(true);
+      await invoke('reset_deck_custom_art', { deckName });
+      setChooseArtOpen(false);
+      if (onDeckListImported) {
+        onDeckListImported();
+      }
+    } catch (e) {
+      console.error('Failed to reset custom art:', e);
+    } finally {
+      setArtSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (!exportOpen || !deckName) return;
     let cancelled = false;
@@ -191,8 +279,21 @@ export function DeckDetailView({
     return () => { cancelled = true; };
   }, [exportOpen, exportMode, deckName, importResult]);
 
+  const [chartsReady, setChartsReady] = useState(false);
+
   useEffect(() => {
-    if (!isOpen || !deckName) { setDeckListData(null); setDeckListStatus(null); return; }
+    if (!isOpen) {
+      setChartsReady(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setChartsReady(true);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isOpen, deckName]);
+
+  useEffect(() => {
+    if (!isOpen || !deckName || !chartsReady) { setDeckListData(null); setDeckListStatus(null); return; }
     let cancelled = false;
     const load = async () => {
       try {
@@ -213,7 +314,7 @@ export function DeckDetailView({
     };
     load();
     return () => { cancelled = true; };
-  }, [isOpen, deckName, importResult]);
+  }, [isOpen, deckName, chartsReady, importResult]);
 
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
@@ -234,7 +335,9 @@ export function DeckDetailView({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (achievementsModalOpen) {
+        if (chooseArtOpen) {
+          setChooseArtOpen(false);
+        } else if (achievementsModalOpen) {
           setAchievementsModalOpen(false);
         } else if (exportOpen) {
           setExportOpen(false);
@@ -247,7 +350,7 @@ export function DeckDetailView({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, achievementsModalOpen, exportOpen, importOpen, importBusy, onBack]);
+  }, [isOpen, chooseArtOpen, achievementsModalOpen, exportOpen, importOpen, importBusy, onBack]);
 
   if (!isOpen || !detail) return null;
 
@@ -278,7 +381,8 @@ export function DeckDetailView({
   return (
     <div 
       onClick={onBack}
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xl animate-fade-in select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 animate-fade-in select-none"
+      style={{ transform: 'translateZ(0)' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -306,10 +410,18 @@ export function DeckDetailView({
           <div className="p-5 border-b border-white/10 bg-neutral-900/30 shrink-0 space-y-4">
             <div className="flex items-center justify-between gap-6 flex-wrap">
               <div className="flex flex-col min-w-0 max-w-[60%] space-y-1.5">
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-wrap">
                   <h2 className="text-2xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white truncate">
                     {detail.deck_name}
                   </h2>
+                  <button
+                    onClick={() => { setArtSearch(''); setChooseArtOpen(true); }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-neutral-300 hover:text-white transition-colors cursor-pointer rounded-sm shrink-0"
+                    title="Choose Deck Box Artwork"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Cover Art</span>
+                  </button>
                   <button
                     onClick={() => onDeleteDeck(detail.deck_name)}
                     className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors cursor-pointer shrink-0"
@@ -369,15 +481,23 @@ export function DeckDetailView({
 
             {/* Row 2: Floating Analytics (No inner bounding boxes / darker backgrounds) */}
             <div className="grid grid-cols-1 md:grid-cols-[220px_1fr_1fr] gap-6 pt-3 border-t border-white/10 h-[175px] items-center">
-              <div className="flex items-center justify-center h-full min-h-0">
-                <ManaPie data={detail.mana_distribution || []} />
-              </div>
-              <div className="flex flex-col h-full min-h-0">
-                <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
-              </div>
-              <div className="flex flex-col h-full min-h-0 pr-2">
-                <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
-              </div>
+              {chartsReady ? (
+                <>
+                  <div className="flex items-center justify-center h-full min-h-0">
+                    <ManaPie data={detail.mana_distribution || []} />
+                  </div>
+                  <div className="flex flex-col h-full min-h-0">
+                    <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
+                  </div>
+                  <div className="flex flex-col h-full min-h-0 pr-2">
+                    <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
+                  </div>
+                </>
+              ) : (
+                <div className="col-span-full h-full flex items-center justify-center text-xs font-mono text-neutral-500 uppercase tracking-widest">
+                  Loading analytics...
+                </div>
+              )}
             </div>
           </div>
 
@@ -733,6 +853,150 @@ export function DeckDetailView({
                   >
                     <Copy className="w-3.5 h-3.5" />
                     <span>{copied ? 'Copied!' : 'Copy to Clipboard'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Choose Deck Box Artwork Modal */}
+        {chooseArtOpen && (
+          <div
+            onClick={() => setChooseArtOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fade-in"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden max-h-[85vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-3.5 border-b border-white/10 flex items-center justify-between bg-neutral-900/80 shrink-0">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-white">
+                    Choose Deck Box Artwork
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleResetCustomArt}
+                    disabled={artSaving || !detail?.custom_art_name}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono uppercase border transition-colors ${
+                      detail?.custom_art_name
+                        ? 'border-white/20 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white cursor-pointer'
+                        : 'border-white/5 bg-transparent text-neutral-600 cursor-not-allowed opacity-50'
+                    }`}
+                    title="Reset to default commander or top card artwork"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset to Default</span>
+                  </button>
+                  <button
+                    onClick={() => setChooseArtOpen(false)}
+                    className="p-1 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="p-3 border-b border-white/10 bg-neutral-900/40 shrink-0">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={artSearch}
+                    onChange={(e) => setArtSearch(e.target.value)}
+                    placeholder="Search cards in this deck..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-black/60 border border-white/15 text-xs font-mono text-white placeholder-neutral-500 focus:outline-none focus:border-white/40"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {/* Content Split: Card List + Live Art Crop Preview */}
+              <div className="flex-1 min-h-0 flex divide-x divide-white/10 overflow-hidden">
+                {/* Scrollable list of cards in deck */}
+                <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-white/5 bg-black/20">
+                  {deckCardsList
+                    .filter((c) => c.name.toLowerCase().includes(artSearch.toLowerCase()))
+                    .map((card) => {
+                      const isCurrent = (detail?.custom_art_name || detail?.commander_name || detail?.top_card_name) === card.name;
+                      const isHovered = (hoveredCardArt || detail?.custom_art_name || detail?.commander_name) === card.name;
+                      return (
+                        <div
+                          key={card.name}
+                          onMouseEnter={() => setHoveredCardArt(card.name)}
+                          onClick={() => handleSelectCustomArt(card)}
+                          className={`flex items-center justify-between p-2.5 transition-colors cursor-pointer ${
+                            isHovered ? 'bg-white/10' : 'hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex flex-col min-w-0 pr-2">
+                            <span className="text-xs font-mono font-bold text-neutral-200 truncate">
+                              {card.name}
+                            </span>
+                            {card.type && (
+                              <span className="text-[10px] font-sans text-neutral-500 truncate">
+                                {card.type}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isCurrent && (
+                              <span className="text-[9.5px] font-mono font-bold uppercase px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                Current
+                              </span>
+                            )}
+                            <span className="text-[10px] font-mono text-neutral-500">
+                              {card.mana_cost || ''}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  {deckCardsList.filter((c) => c.name.toLowerCase().includes(artSearch.toLowerCase())).length === 0 && (
+                    <div className="p-8 text-center text-xs font-mono text-neutral-500 uppercase">
+                      No matching cards found
+                    </div>
+                  )}
+                </div>
+
+                {/* Live Art Crop Preview */}
+                <div className="w-64 shrink-0 p-4 bg-neutral-900/30 flex flex-col items-center justify-center space-y-3">
+                  <div className="w-full aspect-[4/3] border border-white/20 bg-black overflow-hidden shadow-lg relative rounded-sm">
+                    {hoveredCardArt ? (
+                      <CardImage
+                        name={hoveredCardArt}
+                        version="art_crop"
+                        alt={hoveredCardArt}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs font-mono text-neutral-600">
+                        No Preview
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-center w-full min-w-0">
+                    <p className="text-xs font-mono font-bold text-white uppercase truncate">
+                      {hoveredCardArt || 'Select a card'}
+                    </p>
+                    <p className="text-[10px] font-sans text-neutral-400 mt-0.5">
+                      Art Crop Deck Box Preview
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const c = deckCardsList.find((x) => x.name === hoveredCardArt);
+                      if (c) handleSelectCustomArt(c);
+                    }}
+                    disabled={artSaving || !hoveredCardArt}
+                    className="w-full py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Set as Deck Box Cover
                   </button>
                 </div>
               </div>

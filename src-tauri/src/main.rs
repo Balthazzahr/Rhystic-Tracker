@@ -430,6 +430,21 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    // 4c-ii. Custom deck artwork overrides
+    let art_override_rows = sqlx::query(
+        "SELECT deck_name, card_name, grp_id FROM deck_art_overrides"
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap_or_default();
+    let mut art_overrides: std::collections::HashMap<String, (String, Option<i64>)> = std::collections::HashMap::new();
+    for a in &art_override_rows {
+        let dname: String = a.get("deck_name");
+        let cname: String = a.get("card_name");
+        let gid: Option<i64> = a.get("grp_id");
+        art_overrides.insert(dname, (cname, gid));
+    }
+
     // 4d. Collection ownership for the "% owned" column: every grp_id with
     //     owned_count > 0, plus each deck's logged player-side grp_ids.
     let owned = owned_grp_ids(db.pool()).await?;
@@ -790,6 +805,15 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
         let (owned_cards, total_ownedable, pct) = ownership_stats(&deck_grps, &owned);
         let owned_pct = if total_ownedable > 0 { Some((pct * 10.0).round() / 10.0) } else { None };
 
+        let mut custom_art_name: Option<String> = None;
+        let mut custom_art_grp: Option<i64> = None;
+        if let Some((override_name, override_grp)) = art_overrides.get(&deck_name) {
+            custom_art_name = Some(override_name.clone());
+            custom_art_grp = *override_grp;
+            top_commander_name = Some(override_name.clone());
+            top_commander_grp = *override_grp;
+        }
+
         result.push(serde_json::json!({
             "deck_name": deck_name,
             "has_list": true_list_grps.contains_key(&deck_name),
@@ -805,6 +829,8 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
             "top_commander_grp_id": top_commander_grp,
             "top_card_name": top_card_name,
             "top_card_grp_id": top_card_grp,
+            "custom_art_name": custom_art_name,
+            "custom_art_grp_id": custom_art_grp,
             "key_cards": key_cards,
             "owned_pct": owned_pct,
             "owned_cards": owned_cards,
@@ -815,6 +841,49 @@ async fn get_deck_overview() -> Result<Vec<serde_json::Value>, String> {
     }
 
     Ok(result)
+}
+
+/// Set a custom deck box artwork override for a deck.
+#[tauri::command]
+async fn set_deck_custom_art(
+    deck_name: String,
+    card_name: String,
+    grp_id: Option<i64>,
+) -> Result<(), String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        r#"
+        INSERT INTO deck_art_overrides (deck_name, card_name, grp_id, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(deck_name) DO UPDATE SET
+            card_name = excluded.card_name,
+            grp_id = excluded.grp_id,
+            updated_at = excluded.updated_at
+        "#
+    )
+    .bind(&deck_name)
+    .bind(&card_name)
+    .bind(grp_id)
+    .bind(&now)
+    .execute(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Reset custom deck box artwork override for a deck.
+#[tauri::command]
+async fn reset_deck_custom_art(deck_name: String) -> Result<(), String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM deck_art_overrides WHERE deck_name = ?")
+        .bind(&deck_name)
+        .execute(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// Full detail for a single deck (Deck Detail view, Stage 1):
@@ -1318,6 +1387,20 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         tot_b.cmp(&tot_a)
     });
 
+    let custom_art_row = sqlx::query(
+        "SELECT card_name, grp_id FROM deck_art_overrides WHERE deck_name = ?"
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .unwrap_or(None);
+
+    let (custom_art_name, custom_art_grp_id) = if let Some(ca) = custom_art_row {
+        (ca.get::<Option<String>, _>("card_name"), ca.get::<Option<i64>, _>("grp_id"))
+    } else {
+        (None, None)
+    };
+
     Ok(serde_json::json!({
         "deck_name": deck_name,
         "total": total,
@@ -1328,6 +1411,8 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         "draw": draw,
         "commander_name": commander_name,
         "commander_grp_id": commander_grp_id,
+        "custom_art_name": custom_art_name,
+        "custom_art_grp_id": custom_art_grp_id,
         "formats": formats,
         "colors": colors_arr,
         "recent_matches": recent,
@@ -4826,6 +4911,8 @@ fn main() {
             set_raw_path,
             get_global_achievements,
             get_global_leaderboards,
+            set_deck_custom_art,
+            reset_deck_custom_art,
             delete_match
         ])
         .run(tauri::generate_context!())
