@@ -25,6 +25,7 @@ import { ThemePalette } from '../types';
 import CardImage from './CardImage';
 import { CardNameTooltip } from './CardNameTooltip';
 import { ManaPip } from './ManaPip';
+import { DeckBoxCard, DeckBoxClipDef } from './DeckBoxCard';
 
 const NerdIcon = ({ glyph, className = '', style }: { glyph: string; className?: string; style?: React.CSSProperties }) => (
   <i className={`nf ${glyph} ${className}`} style={style} aria-hidden="true" />
@@ -127,6 +128,7 @@ function formatRelativeTime(dateStr?: string | null): string {
 interface DeckLibraryViewProps {
   deckOverview: any[];
   palette: ThemePalette | null;
+  showFlair?: boolean;
   onSelectDeck: (deckName: string) => void;
   onDeleteDeck: (deckName: string) => void;
   onOpenCardOverlay: (card: any, isOpponent?: boolean) => void;
@@ -140,6 +142,7 @@ interface DeckLibraryViewProps {
 export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
   deckOverview,
   palette,
+  showFlair = true,
   onSelectDeck,
   onDeleteDeck,
   onOpenCardOverlay,
@@ -505,13 +508,17 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     if (layoutChanged) return; // reflow-driven page clamp — no animation
     el.getAnimations().forEach((a) => a.cancel());
     const next = deckPageDirRef.current === 'next';
-    el.animate(
+    el.style.willChange = 'opacity, transform';
+    const anim = el.animate(
       [
-        { opacity: 0.25, transform: next ? 'translateX(14px)' : 'translateX(-14px)' },
-        { opacity: 1, transform: 'translateX(0)' },
+        { opacity: 0.2, transform: next ? 'translateX(12px) translateZ(0)' : 'translateX(-12px) translateZ(0)' },
+        { opacity: 1, transform: 'translateX(0) translateZ(0)' },
       ],
-      { duration: 250, easing: 'ease-out' },
+      { duration: 200, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' },
     );
+    anim.onfinish = () => {
+      if (el) el.style.willChange = 'auto';
+    };
   }, [deckPage, deckView, gridPageSize]);
 
   const handleSortColumn = (key?: string) => {
@@ -542,6 +549,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-3 px-8 py-4 overflow-hidden">
+      <DeckBoxClipDef />
       {/* 1. HEADER */}
       <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -728,98 +736,25 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
               >
                 <div
                   ref={deckGridAnimRef}
+                  style={{ transform: 'translateZ(0)' }}
                   className="h-full min-h-0 w-full flex flex-wrap content-center items-start justify-center gap-3"
                 >
-                  {displayedDecks.map((d) => {
-                    const fmt = d.primary_format || d.formats?.[0]?.format;
-                    const fmtChip = fmt ? formatChipColor(fmt) : null;
-                    return (
-                      <button
-                        key={d.deck_name}
-                        onClick={() => onSelectDeck(d.deck_name)}
-                        className="group relative rounded-none overflow-hidden border border-white/10 bg-neutral-900/90 shadow-md hover:border-white/30 hover:shadow-xl transition-[border-color,box-shadow] duration-200 text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 cursor-pointer"
-                        style={{ width: deckCardW, height: deckCardH }}
-                      >
-                        {/* Artwork Background */}
-                        <div className="absolute inset-0 bg-neutral-950 flex items-center justify-center overflow-hidden">
-                          {renderDeckArt(d, 'w-full h-full')}
-                          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/80 via-transparent to-neutral-950/60 pointer-events-none" />
-                        </div>
-
-                        {/* Middle: Key Cards preview (on hover or persistent) */}
-                        {d.key_cards && d.key_cards.length > 0 && (
-                          <div className="absolute top-12 left-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            {d.key_cards.slice(0, 3).map((k: any) => (
-                              <CardNameTooltip key={k.grp_id || k.name} name={k.name}>
-                                <div
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onOpenCardOverlay(k, false);
-                                  }}
-                                  className="w-6 h-6 border border-white/20 overflow-hidden shadow-sm bg-neutral-900 cursor-zoom-in hover:scale-125 transition-transform"
-                                >
-                                  <CardImage
-                                    name={k.name}
-                                    version="art_crop"
-                                    alt={k.name}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                              </CardNameTooltip>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Top Bar: Deck Name + Delete + Color Identity */}
-                        <div className="absolute top-0 left-0 right-0 px-3 py-2 flex items-center justify-between gap-2 bg-black/75 backdrop-blur-sm transition-colors duration-200 group-hover:bg-black/60 border-b border-white/10">
-                          <span className="text-[17px] font-bold font-display tracking-wide uppercase leading-tight truncate group/title flex items-center gap-1.5 text-white">
-                            <span className="truncate">{d.deck_name}</span>
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteDeck(d.deck_name);
-                              }}
-                              className="opacity-0 group-hover/title:opacity-100 shrink-0 p-1 transition-opacity hover:bg-red-500/20 text-rose-400 cursor-pointer"
-                              title="Delete deck"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </span>
-                          </span>
-                          <span className="shrink-0 flex items-center gap-0.5">
-                            {renderDeckColorIdentity(d.colors, 15)}
-                          </span>
-                        </div>
-
-                        {/* Bottom Bar: Source + Format + Win Rate */}
-                        <div className="absolute bottom-0 left-0 right-0 px-3 py-1.5 bg-black/75 backdrop-blur-sm transition-colors duration-200 group-hover:bg-black/60 border-t border-white/10">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="flex items-center gap-1.5 min-w-0">
-                              <span
-                                className="shrink-0 flex items-center justify-center"
-                                style={{ color: d.has_list ? '#FBBF24' : '#9CA3AF', fontSize: 13 }}
-                                title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
-                              >
-                                <NerdIcon glyph={d.has_list ? 'nf-md-cards' : 'nf-oct-log'} />
-                              </span>
-                              {fmtChip ? (
-                                <span
-                                  className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border"
-                                  style={{ backgroundColor: fmtChip.bg, borderColor: fmtChip.border, color: fmtChip.fg }}
-                                >
-                                  {fmt}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-mono opacity-40 text-neutral-400">—</span>
-                              )}
-                            </span>
-                            <span className="text-xs font-bold font-mono tracking-wider tabular-nums shrink-0" style={{ color: winRateColor(d.winrate) }}>
-                              WR: {d.winrate}
-                            </span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {displayedDecks.map((d) => (
+                    <DeckBoxCard
+                      key={d.deck_name}
+                      deck={d}
+                      width={deckCardW}
+                      height={deckCardH}
+                      palette={palette}
+                      showFlair={showFlair}
+                      onSelectDeck={onSelectDeck}
+                      onDeleteDeck={onDeleteDeck}
+                      onOpenCardOverlay={onOpenCardOverlay}
+                      formatChipColor={formatChipColor}
+                      winRateColor={winRateColor}
+                      renderDeckColorIdentity={renderDeckColorIdentity}
+                    />
+                  ))}
                 </div>
               </div>
             )}
