@@ -227,6 +227,22 @@ export default function App() {
     localStorage.setItem('sidebarIcons', JSON.stringify(updated));
   };
 
+  // Deck Box Visual Flair state from Settings
+  const [deckBoxFlair, setDeckBoxFlair] = useState(() => {
+    return localStorage.getItem('deckBoxFlair') !== 'false';
+  });
+  useEffect(() => {
+    const handleSettingsChange = () => {
+      setDeckBoxFlair(localStorage.getItem('deckBoxFlair') !== 'false');
+    };
+    window.addEventListener('rhystic_settings_changed', handleSettingsChange);
+    window.addEventListener('storage', handleSettingsChange);
+    return () => {
+      window.removeEventListener('rhystic_settings_changed', handleSettingsChange);
+      window.removeEventListener('storage', handleSettingsChange);
+    };
+  }, []);
+
   // First-launch Splash Screen State (2.0s duration, instant dismiss)
   const [showSplash, setShowSplash] = useState(false);
   useEffect(() => {
@@ -1621,18 +1637,21 @@ export default function App() {
 
         {/* VIEW 4A: Deck Library */}
         {activeTab === 'decks' && (
-          <DeckLibraryView
-            deckOverview={deckOverview}
-            palette={palette}
-            onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
-            onDeleteDeck={(deckName) => setDeckToDelete(deckName)}
-            onOpenCardOverlay={(card, isOpponent) => openCardOverlay(card, isOpponent)}
-            formatChipColor={formatChipColor}
-            winRateColor={winRateColor}
-            renderDeckArt={renderDeckArt}
-            renderDeckColorIdentity={renderDeckColorIdentity}
-            renderManaHistogram={renderManaHistogram}
-          />
+          <div className="flex-1 min-h-0 flex flex-col" style={{ display: selectedDeckName ? 'none' : 'flex' }}>
+            <DeckLibraryView
+              deckOverview={deckOverview}
+              palette={palette}
+              showFlair={deckBoxFlair}
+              onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
+              onDeleteDeck={(deckName) => setDeckToDelete(deckName)}
+              onOpenCardOverlay={(card, isOpponent) => openCardOverlay(card, isOpponent)}
+              formatChipColor={formatChipColor}
+              winRateColor={winRateColor}
+              renderDeckArt={renderDeckArt}
+              renderDeckColorIdentity={renderDeckColorIdentity}
+              renderManaHistogram={renderManaHistogram}
+            />
+          </div>
         )}
 
         {/* VIEW 2: Overhauled Modern Match History View */}

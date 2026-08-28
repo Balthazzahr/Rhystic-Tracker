@@ -80,6 +80,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [compactCardsMode, setCompactCardsMode] = useState(() => {
     return localStorage.getItem('compactCardsMode') === 'true';
   });
+  const [deckBoxFlair, setDeckBoxFlair] = useState(() => {
+    return localStorage.getItem('deckBoxFlair') !== 'false';
+  });
 
   // Cache stats & actions
   const [cacheStats, setCacheStats] = useState<{ size_bytes: number; file_count: number } | null>(null);
@@ -152,6 +155,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleToggleCompactCardsMode = (val: boolean) => {
     setCompactCardsMode(val);
     localStorage.setItem('compactCardsMode', String(val));
+  };
+
+  const handleToggleDeckBoxFlair = (val: boolean) => {
+    setDeckBoxFlair(val);
+    localStorage.setItem('deckBoxFlair', String(val));
+    window.dispatchEvent(new Event('rhystic_settings_changed'));
   };
 
   const loadCacheStats = async () => {
@@ -707,6 +716,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                     <p className="text-[11px] font-sans text-neutral-500">
                       Optimizes vertical card height for dense match breakdowns.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                      Deck Box Visual Flair
+                    </label>
+                    <div className="flex items-center justify-between p-2 border border-white/10 bg-black/40 h-10">
+                      <span className="text-xs font-mono text-neutral-300">Mana Pip Stickers & Win Rate Stamps</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={deckBoxFlair}
+                        onClick={() => handleToggleDeckBoxFlair(!deckBoxFlair)}
+                        className={`relative inline-flex items-center h-5 w-9 shrink-0 cursor-pointer border transition-colors ${
+                          deckBoxFlair ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-black/60 border-white/15'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3 w-3 transform transition-transform ${
+                            deckBoxFlair ? 'translate-x-5 bg-emerald-400' : 'translate-x-1 bg-neutral-500'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-[11px] font-sans text-neutral-500">
+                      Display mana pip stickers and hand-drawn win rate percentage on deck library boxes. Turning this off displays minimal boxes with deck title only.
                     </p>
                   </div>
                 </div>
