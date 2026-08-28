@@ -1388,11 +1388,16 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         rarity: Option<String>,
         set_code: Option<String>,
         count: i64,
+        gold_count: i64,
+        silver_count: i64,
+        bronze_count: i64,
         highest_tier: String,
+        first_earned_at: Option<String>,
         last_earned_at: Option<String>,
     }
 
-    let mut ach_map: std::collections::HashMap<String, (i64, String, std::collections::HashMap<i64, CardStats>)> = std::collections::HashMap::new();
+    // HashMap: achievement_title -> (total, highest, first_earned, gold, silver, bronze, cards_map)
+    let mut ach_map: std::collections::HashMap<String, (i64, String, Option<String>, i64, i64, i64, std::collections::HashMap<i64, CardStats>)> = std::collections::HashMap::new();
 
     let mut total_honors_count = 0i64;
     let mut gold_count = 0i64;
@@ -1420,13 +1425,25 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     _ => bronze_count += 1,
                 }
 
-                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, "bronze".to_string(), std::collections::HashMap::new()));
+                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, "bronze".to_string(), match_timestamp.clone(), 0, 0, 0, std::collections::HashMap::new()));
                 entry.0 += 1;
                 if tier_rank(&tier) > tier_rank(&entry.1) {
                     entry.1 = tier.clone();
                 }
+                match tier.as_str() {
+                    "gold" => entry.3 += 1,
+                    "silver" => entry.4 += 1,
+                    _ => entry.5 += 1,
+                }
+                if let Some(ref ts) = match_timestamp {
+                    match &entry.2 {
+                        None => entry.2 = Some(ts.clone()),
+                        Some(prev) if prev > ts => entry.2 = Some(ts.clone()),
+                        _ => {}
+                    }
+                }
 
-                let card_entry = entry.2.entry(grp_id).or_insert_with(|| CardStats {
+                let card_entry = entry.6.entry(grp_id).or_insert_with(|| CardStats {
                     grp_id,
                     card_name: card_name.clone(),
                     mana_cost: mana_cost.clone(),
@@ -1434,13 +1451,25 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     rarity: rarity.clone(),
                     set_code: set_code.clone(),
                     count: 0,
+                    gold_count: 0,
+                    silver_count: 0,
+                    bronze_count: 0,
                     highest_tier: "bronze".to_string(),
+                    first_earned_at: match_timestamp.clone(),
                     last_earned_at: match_timestamp.clone(),
                 });
                 card_entry.count += 1;
+                match tier.as_str() {
+                    "gold" => card_entry.gold_count += 1,
+                    "silver" => card_entry.silver_count += 1,
+                    _ => card_entry.bronze_count += 1,
+                }
                 if let Some(ts) = &match_timestamp {
                     if card_entry.last_earned_at.as_ref().map_or(true, |prev| ts > prev) {
                         card_entry.last_earned_at = Some(ts.clone());
+                    }
+                    if card_entry.first_earned_at.as_ref().map_or(true, |prev| ts < prev) {
+                        card_entry.first_earned_at = Some(ts.clone());
                     }
                 }
                 if tier_rank(&tier) > tier_rank(&card_entry.highest_tier) {
@@ -1450,7 +1479,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         }
     }
 
-    let mut achievements: Vec<serde_json::Value> = ach_map.into_iter().map(|(title, (total_awards, highest_tier, cards_map))| {
+    let mut achievements: Vec<serde_json::Value> = ach_map.into_iter().map(|(title, (total_awards, highest_tier, first_earned, ac_gold, ac_silver, ac_bronze, cards_map))| {
         let mut cards: Vec<serde_json::Value> = cards_map.into_values().map(|c| {
             serde_json::json!({
                 "grp_id": c.grp_id,
@@ -1460,22 +1489,26 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                 "rarity": c.rarity,
                 "set_code": c.set_code,
                 "count": c.count,
+                "gold_count": c.gold_count,
+                "silver_count": c.silver_count,
+                "bronze_count": c.bronze_count,
                 "highest_tier": c.highest_tier,
+                "first_earned_at": c.first_earned_at,
                 "earned_at": c.last_earned_at
             })
         }).collect();
 
         cards.sort_by(|a, b| {
-            let t_a = a.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
-            let t_b = b.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
-            tier_rank(t_b).cmp(&tier_rank(t_a)).then_with(|| {
+            let g_a = a.get("gold_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let g_b = b.get("gold_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let s_a = a.get("silver_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let s_b = b.get("silver_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let b_a = a.get("bronze_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let b_b = b.get("bronze_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            g_b.cmp(&g_a).then_with(|| s_b.cmp(&s_a)).then_with(|| b_b.cmp(&b_a)).then_with(|| {
                 let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
                 let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-                cnt_b.cmp(&cnt_a).then_with(|| {
-                    let name_a = a.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
-                    let name_b = b.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
-                    name_a.cmp(name_b)
-                })
+                cnt_b.cmp(&cnt_a)
             })
         });
 
@@ -1483,6 +1516,10 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
             "achievement": title,
             "total_awards": total_awards,
             "highest_tier": highest_tier,
+            "gold_count": ac_gold,
+            "silver_count": ac_silver,
+            "bronze_count": ac_bronze,
+            "first_earned_at": first_earned,
             "cards": cards
         })
     }).collect();
