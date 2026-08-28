@@ -485,7 +485,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                     Card Library & Combat Analytics
                   </div>
                   <p className="rt-narrative-sm opacity-70 leading-relaxed">
-                    26,000+ card browser with dual <strong>Landscape Art Crop</strong> & <strong>Portrait Full Card</strong> modes, 4-diamond interactive ownership adjusters, and persistent per-card combat analytics.
+                    26,000+ card browser in full card frame view, 4-diamond interactive ownership adjusters, and persistent per-card combat analytics.
                   </p>
                 </div>
               </div>

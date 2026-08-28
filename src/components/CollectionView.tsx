@@ -18,8 +18,8 @@ import {
   X,
   ZoomIn,
   ZoomOut,
-  Image as ImageIcon,
-  RectangleVertical,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
@@ -186,13 +186,11 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     const saved = localStorage.getItem('collectionCardSize');
     return saved === 'small' ? 'small' : 'large';
   });
-  const [artMode, setArtMode] = useState<'crop' | 'full'>(() => {
-    const saved = localStorage.getItem('collectionArtMode');
-    return saved === 'full' ? 'full' : 'crop';
-  });
+  // artMode removed (Crop view eliminated — always full card view now).
+  // Purge any stale localStorage key left over from the removed toggle.
   useEffect(() => {
-    localStorage.setItem('collectionArtMode', artMode);
-  }, [artMode]);
+    localStorage.removeItem('collectionArtMode');
+  }, []);
 
   const [styleRev, setStyleRev] = useState(0);
   useEffect(() => {
@@ -292,30 +290,32 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     setStyleRev((r) => r + 1);
   }, [refreshTrigger]);
 
-  // Mode-dependent card footprints:
   // Full Card (Portrait 63:88 aspect ratio):
-  //   Small: 188 x 262 (Guarantees 4 rows minimum and 7 cols)
-  //   Large: 266 x 372 (Fits 3 rows and 6 cols)
-  // Art Crop (Landscape ~1.38 aspect ratio):
-  //   Small: 236 x 170 (Fills edge and top/bottom padding in 6 cols x 6 rows)
-  //   Large: 376 x 268 (Fits 4 cols x 4 rows)
-  const CARD_W_SMALL = artMode === 'crop' ? 232 : 184;
-  const CARD_H_SMALL = artMode === 'crop' ? 166 : 257;
-  const CARD_W_LARGE = artMode === 'crop' ? 370 : 260;
-  const CARD_H_LARGE = artMode === 'crop' ? 264 : 363;
+  //   Small: 184 x 257 (Guarantees 4 rows minimum and 7 cols)
+  //   Large: 260 x 363 (Calibrated 4-column x 3-row grid, 12 cards per page)
+  const CARD_W_SMALL = 184;
+  const CARD_H_SMALL = 257;
+  const CARD_W_LARGE = 260;
+  const CARD_H_LARGE = 363;
   const GRID_GAP = 12;
 
   const gridWrapRef = useRef<HTMLDivElement>(null);
+  const gridSizeRORef = useRef<ResizeObserver | null>(null);
   const [gridSize, setGridSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Measure the content area so we can auto-fit columns/rows of fixed cards in card view.
   // Only drives CLIENT-SIDE pagination (never the network fetch), so resizing
-  // the window can't cause refetch loops.
-  useEffect(() => {
-    const el = gridWrapRef.current;
-    if (!el) return;
+  // the window can't cause refetch loops. Callback ref ensures the grid is
+  // measured the moment it mounts (including after a table→cards switch).
+  const setGridWrapRef = useCallback((node: HTMLDivElement | null) => {
+    gridWrapRef.current = node;
+    if (gridSizeRORef.current) {
+      gridSizeRORef.current.disconnect();
+      gridSizeRORef.current = null;
+    }
+    if (!node) return;
     const measure = () => {
-      const rect = el.getBoundingClientRect();
+      const rect = node.getBoundingClientRect();
       setGridSize((prev) => {
         const w = Math.round(rect.width);
         const h = Math.round(rect.height);
@@ -324,9 +324,8 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       });
     };
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    gridSizeRORef.current = new ResizeObserver(measure);
+    gridSizeRORef.current.observe(node);
   }, []);
 
   // Cards have a FIXED footprint per size mode. The grid fits as many rows and
@@ -523,10 +522,14 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   // an explicit cancel) means the animation can never double-fire or overlap,
   // and the image tiles keep their state (no spinner flash mid-transition).
   const gridAnimRef = useRef<HTMLDivElement>(null);
+  const prevCardsPageSizeRef = useRef<number>(0);
   useEffect(() => {
     const el = gridAnimRef.current;
     if (!el) return;
-    // Cancel any still-running animation so rapid paging can't stack them.
+    const cardsPageSize = cols * rows;
+    const layoutChanged = prevCardsPageSizeRef.current > 0 && prevCardsPageSizeRef.current !== cardsPageSize;
+    prevCardsPageSizeRef.current = cardsPageSize;
+    if (layoutChanged) return; // reflow-driven page clamp — no animation
     el.getAnimations().forEach((a) => a.cancel());
     const next = pageDirRef.current === 'next';
     el.animate(
@@ -536,7 +539,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       ],
       { duration: 250, easing: 'ease-out' },
     );
-  }, [safePage]);
+  }, [safePage, cols, rows]);
 
   const goPage = (dir: 'next' | 'prev') => {
     pageDirRef.current = dir;
@@ -651,7 +654,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       <button
         key={`${card.grp_id}-${styleRev}-${activePrinting?.setCode || ''}-${activePrinting?.collectorNumber || ''}`}
         onClick={() => onShowCard({ name: cardName, grp_id: card.grp_id }, false)}
-        className="group relative rounded-[6px] overflow-hidden text-left transition-all hover:shadow-xl hover:ring-2 theme-ring shrink-0"
+        className="group relative rounded-[6px] overflow-hidden text-left transition-shadow hover:shadow-xl hover:ring-2 theme-ring shrink-0"
         style={{ width: cardW, height: cardH }}
         title={cardName}
       >
@@ -659,31 +662,16 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           {card.name ? (
             <CardImage
               name={card.name}
-              version={artMode === 'crop' ? 'art_crop' : (isOwned ? 'normal' : 'small')}
+              version={isOwned ? 'normal' : 'small'}
               printing={activePrinting}
               alt={cardName}
-              className={`absolute inset-0 w-full h-full ${artMode === 'crop' ? 'object-cover' : 'object-contain'}`}
+              className="absolute inset-0 w-full h-full object-contain"
             />
           ) : (
             <div className="absolute inset-0 w-full h-full bg-black" />
           )}
         </div>
 
-        {/* Top Name & Mana Bar for Landscape Art Crop Mode */}
-        {artMode === 'crop' && (
-          <div className="absolute top-0 inset-x-0 z-10 px-2 py-1 bg-black/75 backdrop-blur-xs flex items-center justify-between gap-1.5 border-b border-white/10">
-            <span className="text-[11px] font-bold text-white truncate drop-shadow-sm leading-tight">
-              {cardName}
-            </span>
-            {card.mana_cost && (
-              <div className="flex items-center gap-0.5 shrink-0">
-                {parseMtgaManaCost(card.mana_cost).map((sym, idx) => (
-                  <ManaPip key={idx} symbol={sym} size={12} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         {/* Ownership diamonds: filled diamonds = owned copies, outline diamonds = unowned,
             shown bottom-center left-to-right. */}
         <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5">
@@ -1086,7 +1074,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
         className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap"
       >
         {/* Search */}
-        <div className="relative w-64 shrink-0">
+        <div className="relative w-64 shrink-0 h-8 flex items-center">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input
             type="text"
@@ -1183,9 +1171,10 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all cursor-pointer"
                 title="Sort cards"
               >
-                <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: palette?.accent || '#A855F7' }} />
-                <span>SORT: {SORT_LABEL[sort] || sort.toUpperCase()}</span>
-                <span className="font-mono text-[10px] ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                {sortDir === 'asc'
+                  ? <ArrowUpNarrowWide className="w-3.5 h-3.5 -scale-x-100" />
+                  : <ArrowDownWideNarrow className="w-3.5 h-3.5 -scale-x-100" />}
+                <span>: {SORT_LABEL[sort] || sort.toUpperCase()}</span>
               </button>
               {sortOpen && (
                 <>
@@ -1229,34 +1218,6 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           </button>
         </div>
 
-        {/* Card Art Mode toggle: Crop (Illustration Only) vs Full Card */}
-        <div className="flex items-center bg-white/[0.03] p-0.5 overflow-hidden gap-0.5">
-          <button
-            onClick={() => setArtMode('crop')}
-            disabled={view !== 'cards'}
-            title={view === 'cards' ? "Illustration only (Art Crop)" : "Art mode only applies to card view"}
-            className={`flex items-center justify-center px-2 py-1 transition-all ${
-              view === 'cards' 
-                ? (artMode === 'crop' ? 'bg-white/[0.12] text-white shadow-sm font-bold' : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400 cursor-pointer')
-                : 'opacity-20 cursor-not-allowed text-neutral-600'
-            }`}
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setArtMode('full')}
-            disabled={view !== 'cards'}
-            title={view === 'cards' ? "Full card with rules text & border" : "Art mode only applies to card view"}
-            className={`flex items-center justify-center px-2 py-1 transition-all ${
-              view === 'cards' 
-                ? (artMode === 'full' ? 'bg-white/[0.12] text-white shadow-sm font-bold' : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400 cursor-pointer')
-                : 'opacity-20 cursor-not-allowed text-neutral-600'
-            }`}
-          >
-            <RectangleVertical className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
         {/* Card size toggle */}
         <button
           onClick={() => view === 'cards' && setCardSize(cardSize === 'small' ? 'large' : 'small')}
@@ -1286,7 +1247,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       {/* Content: cards grid or table */}
       {view === 'cards' ? (
         <div
-          ref={gridWrapRef}
+          ref={setGridWrapRef}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar relative"
         >
           <div
@@ -1389,41 +1350,45 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       <div className="shrink-0 flex items-center gap-3 pt-2">
         {totalPages > 1 && (
           <>
-            <button
-              onClick={() => {
-                pageDirRef.current = 'prev';
-                setPage(1);
-              }}
-              disabled={safePage <= 1}
-              className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-              title="First page"
-            >
-              <Home className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex-1" />
-            <button
-              onClick={() => goPage('prev')}
-              disabled={safePage <= 1}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Prev
-            </button>
-            <span className="text-xs font-mono text-neutral-400 px-2">
-              Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
-            </span>
-            <button
-              onClick={() => goPage('next')}
-              disabled={safePage >= totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-            >
-              Next <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex-1" />
+            <div className="flex-1 flex justify-start">
+              <button
+                onClick={() => {
+                  pageDirRef.current = 'prev';
+                  setPage(1);
+                }}
+                disabled={safePage <= 1}
+                className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+                title="First page"
+              >
+                <Home className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => goPage('prev')}
+                disabled={safePage <= 1}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-xs font-mono text-neutral-400 px-2">
+                Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
+              </span>
+              <button
+                onClick={() => goPage('next')}
+                disabled={safePage >= totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </>
         )}
-        <span className="text-xs font-mono text-neutral-400 ml-auto tabular-nums">
-          <span className="text-white font-bold">{serverTotalOwned.toLocaleString()}</span> / {serverTotalCards.toLocaleString()} cards owned
-        </span>
+        <div className="flex-1 flex justify-end">
+          <span className="text-xs font-mono text-neutral-400 tabular-nums">
+            <span className="text-white font-bold">{serverTotalOwned.toLocaleString()}</span> / {serverTotalCards.toLocaleString()} cards owned
+          </span>
+        </div>
       </div>
 
       {/* 3. ADVANCED FILTERS MODAL */}
