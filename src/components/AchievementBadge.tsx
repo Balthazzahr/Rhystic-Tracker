@@ -118,7 +118,7 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
       crownHeight: 12,
     },
     hero: {
-      icon: 'w-36 h-36',
+      icon: 'w-[174px] h-[174px]',
       text: 'text-2xl font-display font-bold tracking-wider',
       count: 'text-lg font-mono px-4 py-1.5',
       padding: 'px-8 py-4',
