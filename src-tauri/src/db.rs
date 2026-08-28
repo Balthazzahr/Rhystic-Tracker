@@ -140,25 +140,30 @@ impl DatabaseManager {
     /// function (and tested without calling `init()`) so the production-mode
     /// logic is verified without ever opening a production handle in a test.
     fn resolve_db_filename(env_mode: &str) -> String {
-        if env_mode.to_lowercase() == "production" {
+        if env_mode.eq_ignore_ascii_case("development") || env_mode.eq_ignore_ascii_case("dev") || env_mode.eq_ignore_ascii_case("test") {
+            println!("[DB SECURITY] Running in DEV mode -> Connecting to rhystic_dev.db");
+            "rhystic_dev.db".to_string()
+        } else {
             println!("[DB SECURITY] Running in PRODUCTION mode -> Connecting to rhystic.db");
             "rhystic.db".to_string()
-        } else {
-            println!("[DB SECURITY] Running in DEV mode (Default) -> Connecting to rhystic_dev.db");
-            "rhystic_dev.db".to_string()
         }
     }
 
     /// Resolves the effective environment mode. Precedence:
     /// 1. `production-env` cargo feature enabled (default for release/bundled
     ///    builds) -> always "production".
-    /// 2. Otherwise, the RHYSTIC_ENV environment variable if set.
-    /// 3. Otherwise "development".
+    /// 2. If RHYSTIC_ENV is "development", "dev", or "test" -> "development".
+    /// 3. Otherwise (including when unset) -> "production".
     pub fn resolve_env() -> String {
         if cfg!(feature = "production-env") {
             return "production".to_string();
         }
-        std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string())
+        let val = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "production".to_string());
+        if val.eq_ignore_ascii_case("development") || val.eq_ignore_ascii_case("dev") || val.eq_ignore_ascii_case("test") {
+            "development".to_string()
+        } else {
+            "production".to_string()
+        }
     }
     
     pub async fn init() -> Result<Self, Box<dyn std::error::Error>> {
@@ -1553,23 +1558,21 @@ mod tests {
     }
 
     #[test]
-    fn test_db_isolation_defaults_to_dev() {
-        // Filename mapping: unset/unknown env defaults to the dev DB name.
-        // Pure check — no production (or real dev) handle is opened.
+    fn test_db_isolation_defaults_to_dev_when_specified() {
+        // Filename mapping: dev/development/test maps to dev DB name.
         assert_eq!(DatabaseManager::resolve_db_filename("development"), "rhystic_dev.db");
-        assert_eq!(DatabaseManager::resolve_db_filename("garbage"), "rhystic_dev.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("DEVELOPMENT"), "rhystic_dev.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("dev"), "rhystic_dev.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("test"), "rhystic_dev.db");
     }
 
     #[test]
-    fn test_db_isolation_requires_explicit_production_env() {
-        // Tests the pure filename mapping WITHOUT ever opening a production DB
-        // handle: a test must never call init() with RHYSTIC_ENV=production
-        // against a live path. (The init()-time guard additionally redirects
-        // any such call to /tmp, but this test doesn't rely on that.)
+    fn test_db_isolation_production_and_fallback() {
+        // Unset, default, or explicit production maps to production DB name.
         assert_eq!(DatabaseManager::resolve_db_filename("production"), "rhystic.db");
         assert_eq!(DatabaseManager::resolve_db_filename("PRODUCTION"), "rhystic.db");
-        assert_eq!(DatabaseManager::resolve_db_filename("development"), "rhystic_dev.db");
-        assert_eq!(DatabaseManager::resolve_db_filename(""), "rhystic_dev.db");
+        assert_eq!(DatabaseManager::resolve_db_filename(""), "rhystic.db");
+        assert_eq!(DatabaseManager::resolve_db_filename("default"), "rhystic.db");
     }
 
     #[tokio::test]

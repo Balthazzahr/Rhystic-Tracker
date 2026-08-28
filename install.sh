@@ -147,7 +147,7 @@ cat <<EOF > "$DESKTOP_FILE"
 Name=$APP_NAME
 GenericName=MTG Arena Tracker
 Comment=Real-time MTGA match tracking and deck analysis companion
-Exec=env GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 RHYSTIC_ENV=production $INSTALL_DIR/$EXEC_NAME
+Exec=$INSTALL_DIR/$EXEC_NAME
 Icon=$ICON_NAME
 Terminal=false
 Type=Application

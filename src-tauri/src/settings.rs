@@ -31,11 +31,11 @@ impl Default for AppSettings {
 fn settings_path() -> Option<PathBuf> {
     let mut dir = dirs::config_dir()?;
     dir.push("rhystic-tracker");
-    let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
-    if env_mode.eq_ignore_ascii_case("production") {
-        dir.push("settings.json");
-    } else {
+    let env_mode = crate::db::DatabaseManager::resolve_env();
+    if env_mode.eq_ignore_ascii_case("development") {
         dir.push("settings_dev.json");
+    } else {
+        dir.push("settings.json");
     }
     Some(dir)
 }

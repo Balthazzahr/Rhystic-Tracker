@@ -2892,7 +2892,7 @@ async fn get_database_stats() -> Result<DatabaseStats, String> {
     let match_count = db.get_match_count().await.unwrap_or(0);
     let db_filename = db.db_filename.clone();
 
-    let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    let env_mode = db::DatabaseManager::resolve_env();
     let is_prod = env_mode.to_lowercase() == "production";
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -3018,7 +3018,7 @@ async fn set_raw_path(path: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn export_database_backup(destination_path: String) -> Result<String, String> {
-    let env_mode = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "development".to_string());
+    let env_mode = db::DatabaseManager::resolve_env();
     let is_prod = env_mode.to_lowercase() == "production";
     let config_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
