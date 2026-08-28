@@ -294,7 +294,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
       {/* 1. HEADER */}
       <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2.5">
-          <span className="ms ms-ability-duels-renowned text-2xl" style={{ color: accentColor }} />
+          <span className="ms ms-ability-duels-renowned text-2xl leading-none" style={{ color: accentColor }} />
           <h1 className="text-[26px] font-display font-bold tracking-[0.12em] uppercase text-white leading-none">
             ACHIEVEMENTS
           </h1>
@@ -331,7 +331,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
         <div className="flex items-center bg-white/[0.03] p-0.5 gap-0.5">
           <button
             onClick={() => setActiveCategory('card')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
               activeCategory === 'card'
                 ? 'bg-white/[0.12] text-white shadow-sm font-bold'
                 : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
@@ -341,14 +341,14 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
           </button>
           <button
             onClick={() => setActiveCategory('deck')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
               activeCategory === 'deck'
                 ? 'bg-white/[0.12] text-white shadow-sm font-bold'
                 : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
             }`}
           >
             <span>Deck</span>
-            <span className="text-[9px] font-mono px-1 py-0.2 border border-white/10 bg-white/5 text-neutral-400 ml-0.5">
+            <span className="text-[9px] font-mono px-1 border border-white/10 bg-white/5 text-neutral-400 ml-0.5 leading-tight">
               Soon
             </span>
           </button>
@@ -363,7 +363,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all cursor-pointer shrink-0"
             title="Modify, add/remove, and reorder table columns"
           >
-            <Columns3 className="w-3.5 h-3.5" />
+            <Columns3 className="w-3.5 h-3.5" style={{ color: accentColor }} />
             <span>({visibleColumns.length})</span>
           </button>
         )}
@@ -500,7 +500,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
             </>
           ) : (
             /* Table View: floating header + rows */
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
               {/* Floating Table Header */}
               <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
                 {visibleColumns.map((col) => (
@@ -560,7 +560,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                             case 'bronze':
                               return (
                                 <div key={col.key} className={cellClass}>
-                                  <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">{ach[col.key] || '—'}</span>
+                                  <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">{ach[`${col.key}_count`] || '—'}</span>
                                 </div>
                               );
                             case 'first_earned':
