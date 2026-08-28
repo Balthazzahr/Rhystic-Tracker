@@ -866,7 +866,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
       <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
         {/* 1. Search Filter */}
-        <div className="relative w-64 shrink-0">
+        <div className="relative w-64 shrink-0 h-8 flex items-center">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input
             type="text"
@@ -1046,38 +1046,42 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       <div className="shrink-0 flex items-center gap-3 pt-2">
         {totalPages > 1 && (
           <>
-            <button
-              onClick={() => setPage(1)}
-              disabled={safePage <= 1}
-              className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-              title="First page"
-            >
-              <Home className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex-1" />
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={safePage <= 1}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" /> Prev
-            </button>
-            <span className="text-xs font-mono text-neutral-400 px-2">
-              Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safePage >= totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-            >
-              Next <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex-1" />
+            <div className="flex-1 flex justify-start">
+              <button
+                onClick={() => setPage(1)}
+                disabled={safePage <= 1}
+                className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+                title="First page"
+              >
+                <Home className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-xs font-mono text-neutral-400 px-2">
+                Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </>
         )}
-        <span className="text-xs font-mono text-neutral-400 ml-auto tabular-nums">
-          <span className="text-white font-bold">{filteredMatches.length.toLocaleString()}</span> {filteredMatches.length === 1 ? 'match' : 'matches'} recorded
-        </span>
+        <div className="flex-1 flex justify-end">
+          <span className="text-xs font-mono text-neutral-400 tabular-nums">
+            <span className="text-white font-bold">{filteredMatches.length.toLocaleString()}</span> {filteredMatches.length === 1 ? 'match' : 'matches'} recorded
+          </span>
+        </div>
       </div>
 
       {/* ========================================================================= */}
