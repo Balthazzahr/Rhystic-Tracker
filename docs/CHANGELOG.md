@@ -2,6 +2,23 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.3] - 2026-08-28
+
+### 🏆 Achievements Page Overhaul & Cross-View Grid Refinements
+
+- **Achievements Page Redesign**: The Achievements view now mirrors the design language of Match History, Card Library, and Deck Library — borderless floating toolbar, glass search, segmented toggles, flat trophy cards, and a unified pagination footer.
+- **New Achievements Table View**: 8-column table (Achievement, Highest Tier, Gold/Silver/Bronze earned counts, First Earned, Cards, Cards Achieved) with a drag-and-drop column picker, top-earner art previews, and desaturated unearned badges.
+- **Achievements Card View**: Shelf-style top-down/left-to-right grid, larger cards (325×370) with scaled-up emblems, and full pagination (wheel + footer).
+- **Card Library**: Removed the art-crop (illustration-only) mode — the collection now always displays full card frames.
+- **Deck Library**: Fixed card-grid column fit so it fills a full page at half-screen tiled widths.
+- **Directional Sort Indicators**: Card & Deck Library sort menus now show up/down bar icons that flip with sort direction, with a compact `: Name` label.
+- **Instant Grid Reflow**: Card grids no longer shuffle or resize when the window resizes or the card size toggles.
+- **Perfectly Centered Pagination**: The Prev / Page / Next cluster is now centered on the table in Match History, Card Library, Deck Library, and Achievements, independent of the summary text.
+- **Mount-Safe Grid Measurement**: Card grids are measured via callback refs, fixing a bug where a section opened in Card Mode could paginate at one item per page.
+- **Backend**: `get_global_achievements` now returns per-tier earned counts, first-earned dates, and per-card tier breakdowns for the new table view.
+
+---
+
 ## [1.3.2] - 2026-08-27
 
 ### 🎨 Minimalist Borderless Floating UI, Deck Advanced Filters, Dynamic Orbital Spinner & Table Alignment Polish

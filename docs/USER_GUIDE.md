@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.3.2**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux or macOS environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
+Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.3.3**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux or macOS environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
 
 ---
 
@@ -30,7 +30,7 @@ Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v
    - [Live Match HUD & Real-Time Combat Feed](#live-match-hud--real-time-combat-feed)
    - [Match History & Full Match Inspector](#match-history--full-match-inspector)
    - [Deck Library, 3-Column Inspector & True Decklists](#deck-library-3-column-inspector--true-decklists)
-   - [Card Library, Dual Art Modes & Diamond Ownership](#card-library-dual-art-modes--diamond-ownership)
+   - [Card Library, Full-Card View & Real-Time Ownership Sync](#card-library-full-card-view--real-time-ownership-sync)
    - [Settings & Configuration Control Panel](#settings--configuration-control-panel)
    - [Theming Engine](#theming-engine)
 7. [Data Storage & Privacy](#7-data-storage--privacy)
@@ -122,11 +122,11 @@ RHYSTIC_MTGA_RAW_DIR="/path/to/Raw/Card/Database" rhystic-tracker
 ```
 
 ### Environment Mode (`RHYSTIC_ENV`)
-Standard builds of Rhystic Tracker read the `RHYSTIC_ENV` environment variable, defaulting to `development` (using `rhystic_dev.db`) when unset:
+Standard builds of Rhystic Tracker read the `RHYSTIC_ENV` environment variable, defaulting to `production` (using `rhystic.db`) when unset. To launch in the isolated test environment with `rhystic_dev.db`:
 ```bash
 RHYSTIC_ENV=development rhystic-tracker
 ```
-Release builds compiled with the `production-env` cargo feature (`cargo build --features production-env`) are always `production` (using `rhystic.db`) — this cannot be overridden at runtime.
+Or run the dedicated launcher `./launch-test.sh`.
 
 ---
 
@@ -400,7 +400,7 @@ The **Deck Library** tracks performance per deck, format legitimacy, automatic a
 
 ---
 
-### Card Library, Dual Art Modes & Real-Time Ownership Sync
+### Card Library, Full-Card View & Real-Time Ownership Sync
 The **Card Library** provides an interactive visual explorer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics.
 
 <p align="center">
@@ -417,10 +417,8 @@ Because MTGA no longer dumps complete raw collections into `Player.log`, Rhystic
   <img src="screenshots/v13%20CardInspector.png" alt="3-Panel Card Inspector" width="900" />
 </p>
 
-#### Dual Art Mode Viewers
-Switch between two visual styles in the top toolbar:
-- 🖼️ **Landscape Art Crop Mode (`<Image />`)**: Displays uncropped card illustrations in native widescreen aspect ratio with a top semi-transparent title and `<ManaPip />` mana cost bar.
-- 🎴 **Portrait Full Card Mode (`<RectangleVertical />`)**: Displays classic complete card frames with oracle rules text in a calibrated 4×3 grid.
+#### Full Card Frame View
+The Card Library displays every card as a complete **full card frame** with rules text in a calibrated 4×3 portrait grid. Cards render in their native 63:88 aspect ratio with mana cost, rarity, and type faithfully reproduced.
 
 #### Persistent Alternate Set Printings
 When inspecting any card, selecting an alternate set printing from the **Card Style / Set** dropdown immediately updates the main grid with the selected artwork and persists across sessions.
