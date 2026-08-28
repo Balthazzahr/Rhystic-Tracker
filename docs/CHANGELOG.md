@@ -2,6 +2,32 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.4] - 2026-08-28
+
+### 📦 3D Physical Deck Box Cards, Custom Cover Art Selector & Visual Flair Settings
+
+- **3D Realistic Deck Box Cards (Deck Library)**:
+  - **Authentic Physical MTG Deck Box Silhouette**: Rendered with a resting angled closed envelope-flap lid via SVG vector clip-paths (`#deckBoxLidClip`), continuous body/lid card artwork alignment, and subtle translucent upturned cardboard lip bevels.
+  - **Interactive 3D Opening Lid**: Smooth 3D tilt animation on hover (`rotateX(-26deg) translateY(-3px)`) with a recessed dark interior chamber peeking 3 authentic MTG cards complete with full black borders, headers, and text boxes (`version="normal"`).
+  - **Handwritten Masking Tape Label**: Organic hastily-applied rotated tape strip with rough-torn jagged edges across the lid flap, featuring authentic marker pen typography powered by Google Font `Permanent Marker`.
+  - **Die-Cut Circular Mana Stickers**: Die-cut individual circular mana pip stickers with fine cream vinyl borders (`#FAF7EE`), subtle non-obscuring organic touch overlap, and natural vertical staggering.
+  - **Hand-Drawn Grease Pencil Win Rate Loop**: Bold handwritten win rate percentage numbers layered strictly on top of an organic hand-sketched marker circle stroke (Green for $\ge 50\%$, Red for $< 50\%$, Slate for unplayed) with high-contrast multi-stage drop-shadows for 100% legibility across all artwork.
+- **Custom Deck Box Cover Art Selector (Deck Inspector)**:
+  - Added a dedicated **"Cover Art"** button next to the deck name in the Deck Inspector header.
+  - Interactive selection modal featuring real-time card name search across all unique cards in the deck, live `art_crop` hover preview, one-click cover art selection, and a **"Reset to Default"** button.
+  - Persists custom artwork overrides to SQLite via the new `deck_art_overrides` table, syncing instantly across the Deck Inspector and Deck Library.
+- **Deck Box Visual Flair Toggle (Settings)**:
+  - Added a dedicated switch under **Settings > Appearance & Themes > Card & Library Display**: *Deck Box Visual Flair*.
+  - Toggling off removes the mana pip stickers and win rate marker circles, displaying a clean, minimal aesthetic with deck titles and continuous card artwork only.
+- **WebKitGTK Performance & Compositing Optimizations**:
+  - Isolated the Deck Library grid during modal transitions (`display: none` when Deck Inspector is open), eliminating WebKitGTK multi-layer SVG compositing stutter.
+  - Deferred heavy analytics charts and card list IPC during modal mount for silky 60 FPS transitions.
+  - Gated interior peek card image decodes to hover-only, eliminating ~75% of background image decodes across large libraries.
+- **Achievements Table Hotfix**:
+  - Corrected tier mapping in the Achievements table view to read backend `gold_count`, `silver_count`, and `bronze_count` fields.
+
+---
+
 ## [1.3.3] - 2026-08-28
 
 ### 🏆 Achievements Page Overhaul & Cross-View Grid Refinements
