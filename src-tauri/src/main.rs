@@ -2673,17 +2673,40 @@ async fn query_collection(
         });
     }
     if !colors.is_empty() {
+        let has_c = colors.iter().any(|c| c == "C");
+        let mut target_colors: Vec<String> = colors.iter().filter(|c| *c != "C").cloned().collect();
+        target_colors.sort();
+
         cards.retain(|c| {
-            let ci = c.get("color_identity").and_then(|v| v.as_str()).unwrap_or("");
-            colors.iter().any(|col| match col.as_str() {
-                "C" => ci.trim().is_empty(),
-                "W" => ci.split(',').any(|p| p == "1"),
-                "U" => ci.split(',').any(|p| p == "2"),
-                "B" => ci.split(',').any(|p| p == "3"),
-                "R" => ci.split(',').any(|p| p == "4"),
-                "G" => ci.split(',').any(|p| p == "5"),
-                _ => false,
-            })
+            let ci_str = c.get("color_identity").and_then(|v| v.as_str()).unwrap_or("");
+            let col_str = c.get("colors").and_then(|v| v.as_str()).unwrap_or("");
+            let mut card_colors: Vec<String> = Vec::new();
+            for src in [ci_str, col_str] {
+                for ch in src.chars() {
+                    let letter = match ch {
+                        '1' | 'W' => "W",
+                        '2' | 'U' => "U",
+                        '3' | 'B' => "B",
+                        '4' | 'R' => "R",
+                        '5' | 'G' => "G",
+                        _ => "",
+                    };
+                    if !letter.is_empty() && !card_colors.contains(&letter.to_string()) {
+                        card_colors.push(letter.to_string());
+                    }
+                }
+            }
+            card_colors.sort();
+
+            if has_c && target_colors.is_empty() {
+                card_colors.is_empty()
+            } else if !has_c && !target_colors.is_empty() {
+                card_colors == target_colors
+            } else if has_c && !target_colors.is_empty() {
+                card_colors.is_empty() || card_colors == target_colors
+            } else {
+                true
+            }
         });
     }
     if !rarities.is_empty() {
@@ -5111,26 +5134,35 @@ mod tests {
         seed_card(pool, 1004, "Lightning Bolt", "oR", "4", "LEA", 2, "Instant").await;
         seed_card(pool, 1005, "Llanowar Elves", "oG", "5", "LEG", 3, "Creature").await;
         seed_card(pool, 1006, "Mox Amber", "o0", "", "DOM", 4, "Legendary Artifact").await;
+        seed_card(pool, 1007, "Teferi", "o1oWoU", "1,2", "DOM", 5, "Legendary Planeswalker").await;
 
         set_owned(pool, 1001, 2).await;
         set_owned(pool, 1002, 1).await;
         set_owned(pool, 1003, 4).await;
         set_owned(pool, 1004, 1).await;
         set_owned(pool, 1006, 1).await;
+        set_owned(pool, 1007, 1).await;
 
         // Universe = the full cards_cache (all seeded cards are visible).
-        seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":4},{"grp_id":1002,"count":2},{"grp_id":1003,"count":3},{"grp_id":1004,"count":1},{"grp_id":1006,"count":1}]"#).await;
+        seed_decklist(pool, "My Deck", r#"[{"grp_id":1001,"count":4},{"grp_id":1002,"count":2},{"grp_id":1003,"count":3},{"grp_id":1004,"count":1},{"grp_id":1006,"count":1},{"grp_id":1007,"count":1}]"#).await;
         seed_match(pool, "m1", "My Deck").await;
         seed_match_card(pool, "m1", 1005, false, 1).await;
 
         let set = query_collection(pool, &serde_json::json!({"sets": ["LEA"]})).await.unwrap();
         assert_eq!(set.get("cards").and_then(|v| v.as_array()).unwrap().len(), 4);
 
+        // Strict mono-white: only Knight of Dawn and Serra Angel (not Teferi WU)
         let w = query_collection(pool, &serde_json::json!({"colors": ["W"]})).await.unwrap();
         assert_eq!(w.get("cards").and_then(|v| v.as_array()).unwrap().len(), 2);
 
+        // Strict mono-blue: only Counterspell (not Teferi WU)
         let u = query_collection(pool, &serde_json::json!({"colors": ["U"]})).await.unwrap();
         assert_eq!(u.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);
+
+        // Strict dual-color WU (Azorius): only Teferi
+        let wu = query_collection(pool, &serde_json::json!({"colors": ["W", "U"]})).await.unwrap();
+        assert_eq!(wu.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);
+        assert_eq!(wu.get("cards").and_then(|v| v.as_array()).unwrap()[0].get("name").and_then(|v| v.as_str()).unwrap(), "Teferi");
 
         let colorless = query_collection(pool, &serde_json::json!({"colors": ["C"]})).await.unwrap();
         assert_eq!(colorless.get("cards").and_then(|v| v.as_array()).unwrap().len(), 1);

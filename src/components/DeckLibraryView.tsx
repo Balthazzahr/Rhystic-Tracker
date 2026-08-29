@@ -369,7 +369,13 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
       let matchesFormat = true;
       if (selectedFormats.length > 0) {
-        matchesFormat = (d.formats || []).some((f: any) => selectedFormats.includes(f.format));
+        matchesFormat = (d.formats || []).some((f: any) => {
+          const fmt = (f.format || '').toLowerCase();
+          return selectedFormats.some((sel) => {
+            const s = sel.toLowerCase();
+            return fmt === s || fmt.startsWith(s) || s.startsWith(fmt);
+          });
+        });
       }
 
       let matchesWinRate = true;
@@ -452,7 +458,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       return cmp * dir;
     });
     return list;
-  }, [deckOverview, deckSearch, deckColorFilter, deckSort, deckSortDir]);
+  }, [deckOverview, deckSearch, deckColorFilter, deckSort, deckSortDir, selectedFormats, winRateFilter, gamesFilter]);
 
   const deckCols = cardArea.w > 0 && deckCardW > 0
     ? Math.max(1, Math.floor((cardArea.w - 0.5 + DECK_COL_GAP) / (deckCardW + DECK_COL_GAP)))
@@ -468,7 +474,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
   useEffect(() => {
     setDeckPage(1);
-  }, [deckSearch, deckColorFilter.join(','), deckSort, deckSortDir, deckView, activePageSize]);
+  }, [deckSearch, deckColorFilter.join(','), deckSort, deckSortDir, deckView, activePageSize, selectedFormats.join(','), winRateFilter, gamesFilter]);
 
   // Wheel listener
   const deckWheelRef = useRef<HTMLDivElement>(null);
