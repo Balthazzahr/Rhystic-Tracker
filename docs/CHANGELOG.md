@@ -2,6 +2,33 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.5] - 2026-08-29
+
+### 🐛 Minor Bug Fixes, Filter Polish & Miscellaneous Issues Pass
+
+- **Deck Library Advanced Filters Fix (Issue #8 / UI)**:
+  - Fixed `filteredDecks` memoization bug where `selectedFormats`, `winRateFilter`, and `gamesFilter` were missing from the React `useMemo` dependency array, preventing filter selections in the Advanced Deck Filters modal from updating the deck list.
+  - Added filter states to the pagination reset effect to automatically return to Page 1 when filtering.
+  - Enhanced format matching so base formats (e.g. "Standard") seamlessly match extended format tags ("Standard Ranked", "Standard Play").
+- **Card Library Exact Color Identity Filtering**:
+  - Rewrote color filtering in `query_collection` to enforce exact color identity matching.
+  - Selecting a single color (e.g. `R`) now strictly filters for mono-color cards (excluding multi-color / dual cards).
+  - Selecting multiple colors (e.g. `R` + `B`) filters strictly for cards with that exact color identity (e.g. Rakdos).
+  - Selecting Colorless (`C`) filters strictly for cards with no color identity.
+- **Assigned-Deck Event Identification & Stale Deck Cache Prevention (Fixes #7 / Merged #11)**:
+  - Added native detection for assigned-deck queues like **Welcome Deck Duels** and **Jump In**.
+  - Prevents the match assembler from inheriting the previously cached deck name, cleanly labelling matches as `"Preset / Event Deck"`.
+  - Marks `match_legitimate = false` to guarantee borrowed event cards never contaminate the user's permanent collection inventory.
+- **Standalone Linux Release Packaging Fix (Fixes #10)**:
+  - Updated the GitHub Actions Linux release build step to compile via `npx @tauri-apps/cli build --no-bundle --features production-env`.
+  - Fixes the `Could not connect to localhost: Connection refused` error by ensuring the Vite frontend bundle is embedded directly into the binary.
+  - Standardized environment variables (`GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 RHYSTIC_ENV=production`) in the `.desktop` launcher created by `install.sh`.
+- **Arch Linux AUR Packaging (Resolves #12)**:
+  - Added official `PKGBUILD` and `.SRCINFO` recipes in `packaging/aur/` for both `rhystic-tracker-bin` and `rhystic-tracker-git`.
+  - Added an automated AUR deployment step to the release workflow.
+
+---
+
 ## [1.3.4] - 2026-08-28
 
 ### 📦 3D Physical Deck Box Cards, Custom Cover Art Selector & Visual Flair Settings
