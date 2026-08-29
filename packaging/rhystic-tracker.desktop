@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Rhystic Tracker
+GenericName=MTG Arena Tracker
+Comment=Real-time MTGA match tracking and deck analysis companion
+Exec=env GDK_BACKEND=x11 WEBKIT_DISABLE_COMPOSITING_MODE=1 RHYSTIC_ENV=production rhystic-tracker
+Icon=rhystic-tracker
+Terminal=false
+Type=Application
+Categories=Game;Utility;
+StartupNotify=false
+Keywords=mtg;magic;arena;tracker;rhystic;

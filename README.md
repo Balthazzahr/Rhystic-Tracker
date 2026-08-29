@@ -97,7 +97,20 @@ The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers hig
 
 > **Note:** `install.sh` automatically sets `GDK_BACKEND=x11` in the desktop launcher so the app works correctly on both X11 and Wayland sessions (via XWayland).
 
-### Option 2: Manual Download from GitHub Releases
+### Option 2: Arch Linux (AUR)
+
+For **Arch Linux**, **Omarchy**, **CachyOS**, **Manjaro**, and **EndeavourOS** users:
+
+```bash
+# Install pre-compiled binary package
+yay -S rhystic-tracker-bin
+# or build latest from git master
+yay -S rhystic-tracker-git
+```
+
+*(Or build manually using `makepkg -si` inside `packaging/aur/rhystic-tracker-bin/`)*
+
+### Option 3: Manual Download from GitHub Releases
 
 - **Linux (`x86_64`)**:
   1. Download `rhystic-tracker-linux-x86_64.tar.gz` from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
@@ -114,7 +127,7 @@ The installer copies the binary to `~/.local/bin/rhystic-tracker`, registers hig
 
 ---
 
-### Option 3: Build from Source
+### Option 4: Build from Source
 
 If you prefer to compile from source or clone the repository:
 

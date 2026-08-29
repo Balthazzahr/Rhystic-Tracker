@@ -1,0 +1,24 @@
+pkgbase = rhystic-tracker-bin
+	pkgdesc = Real-time MTGA match tracking and deck analysis companion for Magic: The Gathering Arena
+	pkgver = 1.3.5
+	pkgrel = 1
+	url = https://github.com/Balthazzahr/Rhystic-Tracker
+	arch = x86_64
+	license = MIT
+	depends = webkit2gtk-4.1
+	depends = libayatana-appindicator
+	depends = openssl
+	depends = hicolor-icon-theme
+	provides = rhystic-tracker
+	conflicts = rhystic-tracker
+	conflicts = rhystic-tracker-git
+	source = rhystic-tracker-1.3.5.tar.gz::https://github.com/Balthazzahr/Rhystic-Tracker/releases/download/v1.3.5/rhystic-tracker-linux-x86_64.tar.gz
+	source = https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/v1.3.5/packaging/rhystic-tracker.desktop
+	source = https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/v1.3.5/src-tauri/icons/icon.png
+	source = https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/v1.3.5/LICENSE
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = SKIP
+
+pkgname = rhystic-tracker-bin

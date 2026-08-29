@@ -169,6 +169,15 @@ curl -sSL https://raw.githubusercontent.com/Balthazzahr/Rhystic-Tracker/main/ins
    ./install.sh
    ```
 
+#### Option C: Arch Linux (AUR)
+If you run **Arch Linux**, **Omarchy**, **CachyOS**, **Manjaro**, or **EndeavourOS**, you can install directly from the AUR:
+```bash
+# Binary package (pre-compiled release)
+yay -S rhystic-tracker-bin
+# or build from source
+yay -S rhystic-tracker-git
+```
+
 #### What `install.sh` Does:
 1. Copies the release binary to `~/.local/bin/rhystic-tracker`.
 2. Installs high-resolution app icons into `~/.local/share/icons/hicolor/512x512/apps/rhystic-tracker.png`.
