@@ -39,7 +39,7 @@ jobs:
       - name: Build Linux Binary
         run: |
           npm run build
-          cargo build --release --manifest-path src-tauri/Cargo.toml
+          npx @tauri-apps/cli build --no-bundle --features production-env
 
       - name: Package Linux Artifact
         run: |
@@ -135,3 +135,17 @@ jobs:
             SHA256SUMS.txt
           generate_release_notes: true
           make_latest: "true"
+
+      - name: Publish to Arch User Repository (AUR)
+        if: env.AUR_KEY != ''
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_KEY }}
+        uses: KSXGitHub/github-actions-deploy-aur@v4
+        with:
+          pkgname: rhystic-tracker-bin
+          pkgbuild: ./packaging/aur/rhystic-tracker-bin/PKGBUILD
+          commit_username: ${{ github.actor }}
+          commit_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_KEY }}
+          commit_message: "Release ${{ github.ref_name }}"
+
