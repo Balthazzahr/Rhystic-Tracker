@@ -44,13 +44,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         redact_str(&client_id)
                     );
                 }
-                ParsedEvent::MatchCreated { match_id, format_name, reserved_players } => {
-                    assembler.start_match(match_id.clone(), format_name.clone());
+                ParsedEvent::MatchCreated { match_id, format_name, assigned_deck_event, reserved_players } => {
+                    assembler.start_match(match_id.clone(), format_name.clone(), assigned_deck_event);
                     assembler.update_reserved_players(&reserved_players);
                     println!(
-                        "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Player Seat = {}, Opponent = \"{}\"",
+                        "[EVENT 2: MATCH_CREATED] Match ID = \"{}\", Format = \"{}\", Assigned-Deck Event = {}, Player Seat = {}, Opponent = \"{}\"",
                         redact_str(&match_id),
                         format_name,
+                        assigned_deck_event,
                         assembler.player_seat_id,
                         redact_str(assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()).unwrap_or("Unknown"))
                     );

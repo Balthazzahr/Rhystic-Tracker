@@ -81,6 +81,12 @@ pub struct LiveDamageFeedEvent {
     pub damage_type: u32, // 1 = combat, 2 = non-combat/spell
 }
 
+/// Placeholder deck name for assigned-deck events (Welcome Deck Duels, Jump In)
+/// where Arena never emits a deck submission. Deliberately NOT "Selected Deck":
+/// the post-match fingerprint resolvers key on that exact string and would
+/// re-misattribute the match to a real deck with >= 3 card overlap.
+pub const PRESET_EVENT_DECK_NAME: &str = "Preset / Event Deck";
+
 pub struct MatchAssembler {
     pub active_match: Option<MatchRecord>,
     pub player_seat_id: u32,
@@ -92,6 +98,11 @@ pub struct MatchAssembler {
     /// True when the current (or cached) deck is a legitimate user deck, not a
     /// preset. Only legitimate matches feed the draw-based collection.
     pub match_legitimate: bool,
+    /// True when the active (or just completed) match belongs to an
+    /// assigned-deck event (see `is_assigned_deck_event` in the parser). Read
+    /// by the match-decks audit so it records the event preset instead of the
+    /// stale cached deck.
+    pub last_assigned_deck_event: bool,
     /// grp_ids of my cards drawn from my own library into my hand during a
     /// legitimate match. Drained by the tailer into collection_cards.
     pub collection_draws: Vec<u32>,
@@ -136,6 +147,7 @@ impl MatchAssembler {
             cached_commander_id: None,
             known_decks: HashMap::new(),
             match_legitimate: true,
+            last_assigned_deck_event: false,
             collection_draws: Vec::new(),
             current_player_life: 20,
             current_opp_life: 20,
@@ -191,12 +203,13 @@ impl MatchAssembler {
         }
     }
 
-    pub fn start_match(&mut self, match_id: String, format_name: String) {
+    pub fn start_match(&mut self, match_id: String, format_name: String, assigned_deck_event: bool) {
         let now = Utc::now();
         let is_brawl = format_name.to_lowercase().contains("brawl") || format_name.to_lowercase().contains("commander");
         if !is_brawl {
             self.cached_commander_id = None;
         }
+        self.last_assigned_deck_event = assigned_deck_event;
 
         let default_life = if is_brawl { 25 } else { 20 };
 
@@ -228,11 +241,22 @@ impl MatchAssembler {
         self.turn_1_active_seat = None;
         self.match_start_time = Some(now);
 
-        // Resolve deck name from cached deck or catalog lookup by cached_deck_id
-        let mut deck_name = self.cached_deck_name.clone().unwrap_or_default();
+        // Resolve deck name from cached deck or catalog lookup by cached_deck_id.
+        //
+        // Assigned-deck events (Welcome Deck Duels, Jump In) pick a packet/precon
+        // deck in the event UI and NEVER emit EventSetDeck/deckSubmit, so the
+        // cache would still hold the previous queue's deck ("stale deck name"
+        // bug). Bypass the cache AND the catalog lookup for this match — the
+        // cache itself is left intact because the next deck-submitting queue
+        // overwrites it anyway.
+        let mut deck_name = if assigned_deck_event {
+            String::new()
+        } else {
+            self.cached_deck_name.clone().unwrap_or_default()
+        };
         let mut commander_id = if is_brawl { self.cached_commander_id } else { None };
 
-        if deck_name.is_empty() || deck_name == "Selected Deck" {
+        if !assigned_deck_event && (deck_name.is_empty() || deck_name == "Selected Deck") {
             if let Some(did) = &self.cached_deck_id {
                 if let Some((name, cmd, _)) = self.known_decks.get(did) {
                     if !name.is_empty() {
@@ -248,10 +272,17 @@ impl MatchAssembler {
         }
 
         if deck_name.is_empty() {
-            deck_name = "Selected Deck".to_string();
+            deck_name = if assigned_deck_event {
+                PRESET_EVENT_DECK_NAME.to_string()
+            } else {
+                "Selected Deck".to_string()
+            };
         }
 
-        self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
+        // Assigned-deck decks are lent by the event, not owned: their draws must
+        // never feed the collection, regardless of what the deck name looks like.
+        self.match_legitimate = !assigned_deck_event
+            && crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
 
         self.active_match = Some(MatchRecord {
             match_id,
@@ -991,7 +1022,9 @@ impl MatchAssembler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::parser::is_assigned_deck_event;
+
+use super::*;
 
     #[test]
     fn test_event_ordering_deck_submitted_before_match_created() {
@@ -1010,7 +1043,7 @@ mod tests {
         assert!(assembler.match_legitimate);
 
         // 2. Simulate Event 2 (MatchCreated) arriving AFTER Event 3
-        assembler.start_match("test-match-uuid-123".to_string(), "Brawl".to_string());
+        assembler.start_match("test-match-uuid-123".to_string(), "Brawl".to_string(), false);
 
         let active = assembler.active_match.as_ref().expect("Active match should exist");
 
@@ -1030,11 +1063,77 @@ mod tests {
 
         // 2. Simulate match queued with only cached_deck_id (e.g. headless deck submission)
         assembler.cached_deck_id = Some("deck-uuid-1".to_string());
-        assembler.start_match("match-123".to_string(), "Bot Match".to_string());
+        assembler.start_match("match-123".to_string(), "Bot Match".to_string(), false);
 
         let active = assembler.active_match.as_ref().expect("Active match should exist");
         assert_eq!(active.player_deck_name, "MonoWhite - Auras (Standard)");
         assert!(assembler.match_legitimate);
+    }
+
+    #[test]
+    fn test_assigned_deck_event_bypasses_stale_cache() {
+        // Reproduces the "welcome deck duel uses the previous queue's deck" bug:
+        // a deck-submitting queue runs first, then WelcomeDeckDuels starts with
+        // no EventSetDeck in between.
+        let mut assembler = MatchAssembler::new();
+
+        assembler.set_deck(
+            "Mono White".to_string(),
+            Some("deck-mwm-brawl".to_string()),
+            Some(103392),
+            vec![67692, 97817, 88930],
+        );
+        assert!(assembler.match_legitimate);
+
+        assembler.start_match(
+            "match-wdd".to_string(),
+            "WelcomeDeckDuels HOB 20260811".to_string(),
+            true,
+        );
+
+        let active = assembler.active_match.as_ref().expect("Active match should exist");
+        // The stale cached deck name must NOT be attributed to this match.
+        assert_eq!(active.player_deck_name, PRESET_EVENT_DECK_NAME);
+        assert_ne!(active.player_deck_name, "Mono White");
+        // Lent event decks never feed the draw-based collection.
+        assert!(!assembler.match_legitimate);
+        assert!(assembler.last_assigned_deck_event);
+
+        // The cache itself is bypassed, not destroyed: the deck id/name remain
+        // available for their other consumers (catalog backfill, rename sync).
+        assert_eq!(assembler.cached_deck_name, Some("Mono White".to_string()));
+        assert_eq!(assembler.cached_deck_id, Some("deck-mwm-brawl".to_string()));
+    }
+
+    #[test]
+    fn test_assigned_deck_event_no_fingerprint_reattribute_and_no_collection() {
+        let mut assembler = MatchAssembler::new();
+
+        // Known deck sharing cards with the event deck (Jump In packets share
+        // staples with constructed decks all the time).
+        assembler.register_deck_catalog(vec![
+            ("deck-auras".to_string(), "MonoWhite - Auras (Standard)".to_string(), None, vec![86715, 97964, 92090, 92081]),
+        ]);
+        assembler.start_match("match-jumpin".to_string(), "Jump In 2024".to_string(), true);
+
+        // Draw an opening hand of cards that overlap a known deck by >= 3 cards
+        // so the fingerprint resolver WOULD misattribute if it ran.
+        let hand: [u32; 7] = [86715, 97964, 92090, 92081, 70001, 70002, 70003];
+        for (i, gid) in hand.iter().enumerate() {
+            let inst = (i + 1) as u32;
+            assembler.process_game_object(inst, Some(*gid), Some(1), 31, true);
+        }
+        assembler.update_game_state(Some(10), 1, &[(1, 20), (2, 20)], 1);
+
+        let (rec, _, _, _) = assembler.complete_match(1, "Concede").expect("match should complete");
+
+        // The placeholder must survive completion: both fingerprint resolvers
+        // key on "Selected Deck"/empty, so this name cannot be that string.
+        assert_eq!(rec.player_deck_name, PRESET_EVENT_DECK_NAME);
+        assert!(!assembler.match_legitimate);
+        // No draws from a lent event deck may be collected as ownership.
+        assert!(assembler.collection_draws.is_empty(),
+            "assigned-deck event draws must not feed the collection");
     }
 
     #[test]
@@ -1061,7 +1160,7 @@ mod tests {
     fn test_going_first_play_vs_draw() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("user-hero".to_string());
-        assembler.start_match("match-play".to_string(), "Standard".to_string());
+        assembler.start_match("match-play".to_string(), "Standard".to_string(), false);
 
         // Hero is seat 1, opponent is seat 2
         assembler.update_reserved_players(&serde_json::json!([
@@ -1078,7 +1177,7 @@ mod tests {
         // Now test On the draw
         let mut assembler_draw = MatchAssembler::new();
         assembler_draw.set_player_user_id("user-hero".to_string());
-        assembler_draw.start_match("match-draw".to_string(), "Standard".to_string());
+        assembler_draw.start_match("match-draw".to_string(), "Standard".to_string(), false);
 
         assembler_draw.update_reserved_players(&serde_json::json!([
             { "userId": "user-hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
@@ -1095,7 +1194,7 @@ mod tests {
     #[test]
     fn test_match_duration_calculation() {
         let mut assembler = MatchAssembler::new();
-        assembler.start_match("match-dur".to_string(), "Standard".to_string());
+        assembler.start_match("match-dur".to_string(), "Standard".to_string(), false);
 
         // Manually adjust start time back by 120 seconds to simulate a 2-minute game
         assembler.match_start_time = Some(Utc::now() - chrono::Duration::seconds(120));
@@ -1107,7 +1206,7 @@ mod tests {
     #[test]
     fn test_opening_hand_no_mulligans() {
         let mut assembler = MatchAssembler::new();
-        assembler.start_match("match-no-mul".to_string(), "Standard".to_string());
+        assembler.start_match("match-no-mul".to_string(), "Standard".to_string(), false);
 
         // 7 opening hand cards arrive at turn 0
         for i in 1..=7 {
@@ -1135,7 +1234,7 @@ mod tests {
     #[test]
     fn test_hero_and_opponent_mulligan_cycle() {
         let mut assembler = MatchAssembler::new();
-        assembler.start_match("match-mul".to_string(), "Standard".to_string());
+        assembler.start_match("match-mul".to_string(), "Standard".to_string(), false);
 
         // 1. Initial 7 cards dealt to Hero (inst 1..=7)
         for i in 1..=7 {
@@ -1186,7 +1285,7 @@ mod tests {
     fn test_achievement_titles_heavy_hitters_and_closers() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("match-achieve".to_string(), "Standard".to_string());
+        assembler.start_match("match-achieve".to_string(), "Standard".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
@@ -1224,7 +1323,7 @@ mod tests {
     fn test_achievement_title_scoop_inducer() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("match-scoop".to_string(), "Standard".to_string());
+        assembler.start_match("match-scoop".to_string(), "Standard".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
@@ -1246,7 +1345,7 @@ mod tests {
     fn test_card_draw_engine_and_rhystic_tracker_achievement() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("match-draw-engine".to_string(), "Commander".to_string());
+        assembler.start_match("match-draw-engine".to_string(), "Commander".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
@@ -1273,7 +1372,7 @@ mod tests {
     fn test_aura_ability_parent_draw_attribution() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("match-feather-draw".to_string(), "Standard".to_string());
+        assembler.start_match("match-feather-draw".to_string(), "Standard".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 1, "teamId": 1 },
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 2, "teamId": 2 }
@@ -1301,7 +1400,7 @@ mod tests {
     fn test_abilities_do_not_generate_play_events() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("match-abilities".to_string(), "Standard".to_string());
+        assembler.start_match("match-abilities".to_string(), "Standard".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
@@ -1325,13 +1424,13 @@ mod tests {
 
         // Match 1: Brawl deck with Commander (grp 91719)
         assembler.set_deck("Hobbits Brawl".to_string(), Some("deck-brawl".to_string()), Some(91719), vec![101, 102]);
-        assembler.start_match("m1".to_string(), "Brawl".to_string());
+        assembler.start_match("m1".to_string(), "Brawl".to_string(), false);
         let (m1, _, _, _) = assembler.complete_match(1, "Loss_Life").expect("m1 complete");
         assert_eq!(m1.player_commander_id, Some(91719), "Brawl match should have commander");
 
         // Match 2: Standard deck without Commander
         assembler.set_deck("Aura Farming (STD)".to_string(), Some("deck-std".to_string()), None, vec![201, 202]);
-        assembler.start_match("m2".to_string(), "Standard".to_string());
+        assembler.start_match("m2".to_string(), "Standard".to_string(), false);
         let (m2, _, _, _) = assembler.complete_match(1, "Loss_Life").expect("m2 complete");
         assert_eq!(m2.player_commander_id, None, "Standard match must NOT inherit commander from previous Brawl match");
     }
@@ -1340,7 +1439,7 @@ mod tests {
     fn test_executioner_multi_attacker_individual_thresholds() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("m-exec-multi".to_string(), "Standard".to_string());
+        assembler.start_match("m-exec-multi".to_string(), "Standard".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
@@ -1373,7 +1472,7 @@ mod tests {
     fn test_overkiller_individual_thresholds() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_user_id("hero".to_string());
-        assembler.start_match("m-overkiller".to_string(), "Standard".to_string());
+        assembler.start_match("m-overkiller".to_string(), "Standard".to_string(), false);
         assembler.update_reserved_players(&serde_json::json!([
             { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
             { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
