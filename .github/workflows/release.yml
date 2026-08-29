@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install system dependencies
         run: |
@@ -25,7 +25,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: 'npm'
@@ -48,7 +48,7 @@ jobs:
           tar -czvf rhystic-tracker-linux-x86_64.tar.gz -C dist-release rhystic-tracker
 
       - name: Upload Linux Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: linux-artifact
           path: rhystic-tracker-linux-x86_64.tar.gz
@@ -58,10 +58,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: 'npm'
@@ -85,13 +85,13 @@ jobs:
           tar -czvf dist-release/rhystic-tracker-macos-universal-app.tar.gz -C "src-tauri/target/universal-apple-darwin/release/bundle/macos" "Rhystic Tracker.app"
 
       - name: Upload macOS DMG Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: macos-dmg
           path: dist-release/rhystic-tracker-macos-universal.dmg
 
       - name: Upload macOS App Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: macos-app
           path: dist-release/rhystic-tracker-macos-universal-app.tar.gz
@@ -104,20 +104,20 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download Linux Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: linux-artifact
 
       - name: Download macOS DMG Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: macos-dmg
 
       - name: Download macOS App Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: macos-app
 
@@ -128,6 +128,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
           files: |
             rhystic-tracker-linux-x86_64.tar.gz
             rhystic-tracker-macos-universal.dmg
@@ -138,9 +139,10 @@ jobs:
 
       - name: Publish to Arch User Repository (AUR)
         if: env.AUR_KEY != ''
+        continue-on-error: true
         env:
           AUR_KEY: ${{ secrets.AUR_SSH_KEY }}
-        uses: KSXGitHub/github-actions-deploy-aur@v4
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
         with:
           pkgname: rhystic-tracker-bin
           pkgbuild: ./packaging/aur/rhystic-tracker-bin/PKGBUILD
