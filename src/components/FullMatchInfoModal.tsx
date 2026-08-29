@@ -86,7 +86,7 @@ export function FullMatchInfoModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[95vw] max-w-[1520px] h-[97vh] max-h-[1150px] border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden relative"
+        className="w-[95vw] max-w-[1520px] h-[97vh] max-h-[1150px] border border-white/20 bg-neutral-950/92 backdrop-blur-md shadow-2xl flex flex-col overflow-hidden relative"
       >
         {/* Header Bar: VS Header with Status */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">

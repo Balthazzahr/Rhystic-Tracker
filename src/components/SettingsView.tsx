@@ -22,13 +22,30 @@ import {
   AlertCircle,
   Clock,
   Terminal,
-  Monitor
+  Monitor,
+  Shuffle,
+  ImageOff,
+  Plus,
+  X as XIcon,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { ManaPip } from './ManaPip';
 import { CustomDropdown } from './CustomDropdown';
+import { CardImage } from './CardImage';
 import { APP_VERSION } from '../version';
+
+// Background preset window list
+const BG_WINDOWS = [
+  { id: 'dashboard', label: 'Dashboard', iconClass: 'ms ms-ability-party' },
+  { id: 'matches', label: 'Match History', iconClass: 'ms ms-battle' },
+  { id: 'decks', label: 'Deck Library', iconClass: 'ms ms-ability-adventure' },
+  { id: 'collection', label: 'Card Library', iconClass: 'ms ms-library' },
+  { id: 'achievements', label: 'Achievements', iconClass: 'ms ms-ability-duels-renowned' },
+  { id: 'leaderboards', label: 'Leaderboards', iconClass: 'ms ms-ability-kicker' },
+  { id: 'live', label: 'Live HUD', iconClass: 'ms ms-instant' },
+  { id: 'settings', label: 'Settings', iconClass: 'ms ms-ability-prototype' },
+];
 
 interface SettingsViewProps {
   palette: any;
@@ -83,6 +100,73 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [deckBoxFlair, setDeckBoxFlair] = useState(() => {
     return localStorage.getItem('deckBoxFlair') !== 'false';
   });
+
+  // Background mode & presets
+  const [bgMode, setBgMode] = useState<'random' | 'preset' | 'none'>(() => {
+    return (localStorage.getItem('bgMode') as 'random' | 'preset' | 'none') || 'random';
+  });
+  const [bgPresets, setBgPresets] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('bgPresets') || '{}'); }
+    catch { return {}; }
+  });
+  const [bgSearchOpen, setBgSearchOpen] = useState(false);
+  const [bgSearchTab, setBgSearchTab] = useState('');
+  const [bgSearchQuery, setBgSearchQuery] = useState('');
+  const [bgSearchResults, setBgSearchResults] = useState<any[]>([]);
+  const [bgSearchSelected, setBgSearchSelected] = useState<any>(null);
+  const bgSearchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSetBgMode = (mode: 'random' | 'preset' | 'none') => {
+    setBgMode(mode);
+    localStorage.setItem('bgMode', mode);
+    window.dispatchEvent(new Event('rhystic_settings_changed'));
+  };
+
+  const handleOpenBgSearch = (tabId: string) => {
+    setBgSearchTab(tabId);
+    setBgSearchQuery('');
+    setBgSearchResults([]);
+    setBgSearchSelected(null);
+    setBgSearchOpen(true);
+  };
+
+  const handleBgSearchChange = (q: string) => {
+    setBgSearchQuery(q);
+    setBgSearchSelected(null);
+    if (bgSearchTimerRef.current) clearTimeout(bgSearchTimerRef.current);
+    if (!q.trim()) { setBgSearchResults([]); return; }
+    bgSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await invoke<any>('get_collection', {
+          filters: { search: q.trim(), sort: 'name', sort_dir: 'asc' }
+        });
+        const cards = (res?.cards || []).slice(0, 20);
+        // Dedupe by name (keep lowest grp_id for consistent art lookup)
+        const seen = new Map<string, any>();
+        for (const c of cards) {
+          const name = c.name as string;
+          if (name && !seen.has(name)) seen.set(name, c);
+        }
+        setBgSearchResults(Array.from(seen.values()));
+      } catch { setBgSearchResults([]); }
+    }, 250);
+  };
+
+  const handleConfirmBgPreset = (cardName: string) => {
+    const updated = { ...bgPresets, [bgSearchTab]: cardName };
+    setBgPresets(updated);
+    localStorage.setItem('bgPresets', JSON.stringify(updated));
+    window.dispatchEvent(new Event('rhystic_settings_changed'));
+    setBgSearchOpen(false);
+  };
+
+  const handleRemoveBgPreset = (tabId: string) => {
+    const updated = { ...bgPresets };
+    delete updated[tabId];
+    setBgPresets(updated);
+    localStorage.setItem('bgPresets', JSON.stringify(updated));
+    window.dispatchEvent(new Event('rhystic_settings_changed'));
+  };
 
   // Cache stats & actions
   const [cacheStats, setCacheStats] = useState<{ size_bytes: number; file_count: number } | null>(null);
@@ -465,7 +549,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border-t border-l border-r ${
                   isActive
-                    ? 'border-white/20 bg-neutral-950 text-white -mb-px relative z-10'
+                    ? 'border-white/20 bg-neutral-950/80 text-white -mb-px relative z-10'
                     : 'border-transparent text-neutral-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -478,7 +562,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Main Settings Tab Content Body */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar min-h-0 bg-neutral-950">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar min-h-0 bg-neutral-950/60 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto space-y-6">
 
           {/* ========================================================================= */}
@@ -746,6 +830,83 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Background Settings */}
+              <div className="border border-white/10 bg-black/40 p-5 space-y-4">
+                <div className="border-b border-white/10 pb-2">
+                  <h3 className="text-sm font-display font-bold uppercase tracking-wide text-white">
+                    Background
+                  </h3>
+                  <p className="text-xs font-sans text-neutral-400 mt-0.5">
+                    Card art backgrounds behind page content. Random uses cards from your tracked decks.
+                  </p>
+                </div>
+
+                {/* Mode selector */}
+                <div className="flex gap-1.5">
+                  {[
+                    { id: 'random' as const, label: 'Random', icon: <Shuffle className="w-3.5 h-3.5" /> },
+                    { id: 'preset' as const, label: 'Preset', icon: <ImageIcon className="w-3.5 h-3.5" /> },
+                    { id: 'none' as const, label: 'No Image', icon: <ImageOff className="w-3.5 h-3.5" /> },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => handleSetBgMode(opt.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer border ${
+                        bgMode === opt.id
+                          ? 'border-white/40 bg-white/10 text-white font-bold'
+                          : 'border-white/10 bg-black/40 text-neutral-400 hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      {opt.icon}
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Preset list */}
+                {bgMode === 'preset' && (
+                  <div className="space-y-1">
+                    {BG_WINDOWS.map((win) => {
+                      const cardName = bgPresets[win.id];
+                      return (
+                        <div
+                          key={win.id}
+                          className="flex items-center justify-between px-3 py-2 border border-white/5 bg-black/20 hover:bg-white/[0.03] transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className={`${win.iconClass} text-sm shrink-0 text-neutral-400`} />
+                            <span className="text-xs font-sans text-neutral-300">{win.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {cardName ? (
+                              <span className="text-[11px] font-mono text-neutral-200 truncate max-w-[140px]">
+                                {cardName}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono text-neutral-500 italic">Random</span>
+                            )}
+                            <button
+                              onClick={() => handleOpenBgSearch(win.id)}
+                              className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 border border-white/10 bg-black/40 text-neutral-400 hover:text-white hover:border-white/25 transition-colors cursor-pointer"
+                            >
+                              {cardName ? 'Change' : 'Set'}
+                            </button>
+                            {cardName && (
+                              <button
+                                onClick={() => handleRemoveBgPreset(win.id)}
+                                className="text-[10px] font-mono text-red-400/70 hover:text-red-400 transition-colors cursor-pointer px-1"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1088,6 +1249,98 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               >
                 Launch Setup Wizard
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Background Card Search Modal */}
+      {bgSearchOpen && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          onClick={() => setBgSearchOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[80vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <h3 className="text-sm font-sans font-bold uppercase tracking-wide text-white">
+                Set Background — {BG_WINDOWS.find(w => w.id === bgSearchTab)?.label}
+              </h3>
+              <button
+                onClick={() => setBgSearchOpen(false)}
+                className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search input */}
+            <div className="px-4 py-3 border-b border-white/10">
+              <div className="relative h-8 flex items-center">
+                <Search className="w-3.5 h-3.5 absolute left-3 text-neutral-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search full card library..."
+                  value={bgSearchQuery}
+                  onChange={(e) => handleBgSearchChange(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {bgSearchResults.length === 0 && bgSearchQuery.length > 0 && (
+                <div className="py-12 text-center text-xs font-mono text-neutral-500">
+                  No cards found for "{bgSearchQuery}"
+                </div>
+              )}
+              {bgSearchResults.map((card: any) => (
+                <button
+                  key={card.grp_id || card.name}
+                  onClick={() => setBgSearchSelected(card)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-white/5 transition-colors cursor-pointer ${
+                    bgSearchSelected?.name === card.name
+                      ? 'bg-white/[0.1] border-white/20'
+                      : 'hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="w-8 h-8 border border-white/10 bg-neutral-900 overflow-hidden shrink-0">
+                    <CardImage
+                      name={card.name}
+                      version="art_crop"
+                      className="w-full h-full"
+                      alt=""
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-sans font-semibold text-neutral-100 truncate">{card.name}</p>
+                    <p className="text-[10px] font-mono text-neutral-500 truncate">{card.set_name || card.set_code || ''}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Footer: Confirm */}
+            <div className="p-4 border-t border-white/10 flex justify-end gap-2 bg-neutral-900/60">
+              <button
+                onClick={() => setBgSearchOpen(false)}
+                className="px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              {bgSearchSelected && (
+                <button
+                  onClick={() => handleConfirmBgPreset(bgSearchSelected.name)}
+                  className="px-4 py-1.5 text-xs font-mono uppercase tracking-wider font-bold text-white border border-white/30 bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+                >
+                  Confirm
+                </button>
+              )}
             </div>
           </div>
         </div>

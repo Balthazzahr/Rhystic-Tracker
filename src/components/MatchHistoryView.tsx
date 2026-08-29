@@ -1093,7 +1093,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
           onClick={() => setShowAdvModal(false)}
         >
           <div
-            className="w-[850px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-[850px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1124,7 +1124,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
             {/* Modal Body: 2 Columns */}
             <div className="flex-1 min-h-0 flex overflow-hidden">
               {/* Left Column: Format & Time Periods */}
-              <div className="w-1/2 shrink-0 border-r border-white/10 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950">
+              <div className="w-1/2 shrink-0 border-r border-white/10 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950/60">
                 {/* Format Selection */}
                 <div>
                   <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
@@ -1200,37 +1200,64 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                 </div>
               </div>
 
-              {/* Right Column: Result & Position Filters */}
-              <div className="w-1/2 shrink-0 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950">
-                {/* Result / Outcome */}
+              {/* Right Column: Hero Deck & Result */}
+              <div className="w-1/2 shrink-0 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950/60">
+                {/* Deck Selection */}
                 <div>
                   <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
-                    MATCH OUTCOME
+                    DECK PLAYED
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                    <button
+                      onClick={() => setDeckFilter('ALL')}
+                      className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer border ${
+                        deckFilter === 'ALL'
+                          ? 'border-white/40 bg-white/10 text-white font-bold'
+                          : 'border-white/10 bg-black/40 text-neutral-400 hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      All Decks
+                    </button>
+                    {deckOptions.map((deck) => (
+                      <button
+                        key={deck}
+                        onClick={() => setDeckFilter(deck)}
+                        className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer border truncate max-w-[200px] ${
+                          deckFilter === deck
+                            ? 'border-white/40 bg-white/10 text-white font-bold'
+                            : 'border-white/10 bg-black/40 text-neutral-400 hover:text-white hover:border-white/20'
+                        }`}
+                        title={deck}
+                      >
+                        {deck}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Match Result */}
+                <div>
+                  <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2.5">
+                    MATCH RESULT
+                  </p>
+                  <div className="flex items-center gap-2">
                     {[
                       { id: 'ALL', label: 'All Results' },
                       { id: 'win', label: 'Wins Only' },
                       { id: 'loss', label: 'Losses Only' },
-                    ].map((r) => {
-                      const active = resultFilter === r.id;
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => setResultFilter(r.id as any)}
-                          className={`px-3 py-2 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer text-center ${
-                            active
-                              ? 'border-white/40 bg-white/[0.08] text-white font-bold shadow-sm'
-                              : 'border-white/10 bg-white/[0.02] text-neutral-400 hover:text-white'
-                          }`}
-                          style={{
-                            color: active ? (r.id === 'win' ? '#34D399' : r.id === 'loss' ? '#F87171' : accentColor) : undefined,
-                          }}
-                        >
-                          {r.label}
-                        </button>
-                      );
-                    })}
+                    ].map((res) => (
+                      <button
+                        key={res.id}
+                        onClick={() => setResultFilter(res.id)}
+                        className={`flex-1 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer border text-center ${
+                          resultFilter === res.id
+                            ? 'border-white/40 bg-white/10 text-white font-bold'
+                            : 'border-white/10 bg-black/40 text-neutral-400 hover:text-white hover:border-white/20'
+                        }`}
+                      >
+                        {res.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1294,7 +1321,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">

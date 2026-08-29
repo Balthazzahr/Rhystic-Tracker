@@ -555,7 +555,6 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-3 px-8 py-4 overflow-hidden">
-      <DeckBoxClipDef />
       {/* 1. HEADER */}
       <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -1042,7 +1041,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-[800px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-[800px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
@@ -1185,7 +1184,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
@@ -1338,6 +1337,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
           </div>
         </div>
       )}
+      <DeckBoxClipDef />
     </div>
   );
 };

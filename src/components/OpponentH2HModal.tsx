@@ -69,8 +69,8 @@ export function OpponentH2HModal({
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl h-[75vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative"
-        style={{ backgroundColor: palette?.mantle || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
+        className="w-full max-w-4xl h-[75vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative backdrop-blur-md"
+        style={{ backgroundColor: `${palette?.mantle || '#12141A'}E6`, borderColor: palette?.border || '#2A2F3D' }}
       >
         {/* Header Bar */}
         <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>

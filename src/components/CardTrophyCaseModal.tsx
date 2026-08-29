@@ -40,8 +40,8 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl max-h-[85vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-        style={{ backgroundColor: palette?.surface || '#12141A', borderColor: palette?.border || '#2A2F3D' }}
+        className="w-full max-w-2xl max-h-[85vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
+        style={{ backgroundColor: `${palette?.surface || '#12141A'}E6`, borderColor: palette?.border || '#2A2F3D' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Centered Trophy Header */}

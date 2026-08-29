@@ -381,12 +381,12 @@ export function DeckDetailView({
   return (
     <div 
       onClick={onBack}
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 animate-fade-in select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none"
       style={{ transform: 'translateZ(0)' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[95vw] max-w-[1520px] h-[97vh] max-h-[1150px] border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden relative"
+        className="w-[95vw] max-w-[1520px] h-[97vh] max-h-[1150px] border border-white/20 bg-neutral-950/92 backdrop-blur-md shadow-2xl flex flex-col overflow-hidden relative"
       >
         {/* Header bar */}
         <div className="p-3.5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">

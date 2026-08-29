@@ -2,6 +2,27 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.6] - 2026-08-29
+
+### 🎨 App-Wide Ambient Card-Art Backgrounds, UI Glassmorphism & Leaderboard Polish
+
+- **Ambient Card-Art Background Engine**:
+  - Direct hardware-accelerated local asset rendering pipeline (`ensureLocalImage` via `convertFileSrc`), completely eliminating WebKitGTK off-screen canvas tainting and security errors.
+  - Three background modes configured under **Settings > Appearance & Themes**:
+    - **Random**: Automatically selects and pre-warms a random prominent commander or key card from your library on every tab navigation.
+    - **Preset**: Customize individual card art per tab (`Dashboard`, `Matches`, `Decks`, `Collection`, `Achievements`, `Leaderboards`, `Live HUD`, `Settings`) with real-time card search.
+    - **None**: Clean solid base background without card artwork.
+  - Native visual treatment: `saturate(0.55)`, `brightness(0.5)`, top-focus vertical framing (`objectPosition: center 30%`), and dual-layer base/accent washes.
+  - Zero-latency tab swapping via memory pre-decoding and deduplicated in-flight cache.
+- **Glassmorphism & Subtle UI Transparency**:
+  - Applied subtle transparency (`~90%` opacity) paired with `backdrop-blur-md` across the left sidebar, Settings tab content body, Deck Inspector, Match Inspector, Card Inspector, and all filter/column customizer dialogs.
+- **Leaderboards Polish**:
+  - Fixed rank numbering logic in the 9-leaderboard grid where entries beyond 3rd place displayed `#3` instead of `#4` through `#10`.
+  - Replaced 1st place wreath icon with a crisp gold `#1`.
+  - Transformed leaderboard entries into clean floating rows with color-coded podium numbers and values.
+
+---
+
 ## [1.3.5] - 2026-08-29
 
 ### 🐛 Minor Bug Fixes, Filter Polish & Miscellaneous Issues Pass

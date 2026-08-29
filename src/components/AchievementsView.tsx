@@ -678,7 +678,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
           <div className="flex flex-col items-center justify-center max-w-5xl w-full my-auto">
             {/* Modal Frame */}
             <div
-              className="w-full max-h-[78vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+              className="w-full max-h-[78vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
@@ -948,7 +948,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">

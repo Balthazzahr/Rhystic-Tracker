@@ -54,6 +54,7 @@ import { DeckLibraryView } from './components/DeckLibraryView';
 import { LiveHUDView } from './components/LiveHUDView';
 import { CardInspectorModal } from './components/CardInspectorModal';
 import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
+import { BlurredCardBackground } from './components/BlurredCardBackground';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
 import { APP_VERSION } from './version';
@@ -1438,11 +1439,18 @@ export default function App() {
         ['--rt-track' as any]: palette?.surface || '#1D1D22',
       }}
     >
+      {/* Blurred card-art background (always mounted, pre-warms across tabs) */}
+      <BlurredCardBackground
+        deckOverview={deckOverview}
+        palette={palette}
+        activeTab={activeTab}
+      />
+
       {/* COLUMN 1: Left Sidebar (in-flow bar) */}
       <aside 
-        className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-all duration-300 ease-in-out z-20"
+        className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-all duration-300 ease-in-out z-20 backdrop-blur-md"
         style={{ 
-          backgroundColor: palette?.mantle || '#12141A', 
+          backgroundColor: `${palette?.mantle || '#12141A'}E6`, 
           borderColor: palette?.border || '#2A2F3D',
           width: isSidebarCollapsed ? '72px' : '220px'
         }}
@@ -1585,7 +1593,7 @@ export default function App() {
       </aside>
 
       {/* COLUMN 2: Main Workspace Container */}
-      <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 transition-all duration-300 relative">
+      <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 transition-all duration-300 relative z-10">
         
         {/* VIEW 1: Dashboard (default landing view) */}
         {activeTab === 'dashboard' && (

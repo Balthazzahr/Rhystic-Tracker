@@ -196,7 +196,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
           {/* ========================================================================= */}
           <div className="hidden min-[920px]:flex w-[390px] max-w-full max-h-[720px] overflow-y-auto custom-scrollbar flex-col gap-3 shrink-0">
             {/* Metadata & Oracle Box */}
-            <div className="border border-white/15 bg-neutral-950 p-4 space-y-3.5 shrink-0 flex flex-col shadow-xl">
+            <div className="border border-white/15 bg-neutral-950/90 backdrop-blur-md p-4 space-y-3.5 shrink-0 flex flex-col shadow-xl">
               <div className="space-y-2.5">
                 {/* Title & Mana Cost */}
                 <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2.5">
@@ -403,7 +403,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
 
             {/* Standalone Card Achievements Box (Below Metadata) */}
             {overlayStats?.lifetime_titles && Object.keys(overlayStats.lifetime_titles).length > 0 && (
-              <div className="border border-white/15 bg-neutral-950 p-3.5 space-y-2.5 shrink-0 shadow-xl">
+              <div className="border border-white/15 bg-neutral-950/90 backdrop-blur-md p-3.5 space-y-2.5 shrink-0 shadow-xl">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
                   <p className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                     <span className="ms ms-ability-duels-renowned" />
@@ -437,7 +437,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
           {/* ========================================================================= */}
           {/* PANEL 3: Persistent Card Combat Analytics                                 */}
           {/* ========================================================================= */}
-          <div className="hidden min-[1320px]:flex w-[390px] max-w-full max-h-[720px] overflow-y-auto custom-scrollbar border border-white/15 bg-neutral-950 p-4 space-y-3.5 shrink-0 flex-col shadow-xl">
+          <div className="hidden min-[1320px]:flex w-[390px] max-w-full max-h-[720px] overflow-y-auto custom-scrollbar border border-white/15 bg-neutral-950/90 backdrop-blur-md p-4 space-y-3.5 shrink-0 flex-col shadow-xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
                 Card Combat Analytics

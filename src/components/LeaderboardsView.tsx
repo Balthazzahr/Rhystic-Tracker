@@ -180,23 +180,23 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
       </div>
 
       {/* 2. TOP FILTER / SEARCH TOOLBAR */}
-      <div className="shrink-0 border border-white/10 bg-white/[0.02] p-2 flex items-center justify-between gap-2.5 flex-wrap">
-        <div className="relative w-80">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+      <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
+        <div className="relative w-64 shrink-0 h-8 flex items-center">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Search for card..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs font-mono border border-white/10 bg-black/40 text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30"
+            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
           />
           {isSearchActive && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
               title="Clear search"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -234,65 +234,63 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                     return (
                       <div
                         key={cat.id}
-                        className="border border-white/10 bg-neutral-950 shadow-xl flex flex-col overflow-hidden"
+                        className="flex flex-col overflow-hidden"
                       >
-                        {/* Leaderboard Card Header */}
-                        <div className="px-3 py-2.5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-                          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                            <span className={`${cat.iconClass} text-base shrink-0`} style={{ color: cat.color }} />
-                            <h3 className="text-sm font-bold font-display uppercase tracking-wide text-white truncate">
+                        {/* Floating Header Row */}
+                        <div className="flex items-center h-[34px] px-3 shrink-0 select-none text-xs font-sans font-bold text-white">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span className={`${cat.iconClass} text-sm shrink-0`} style={{ color: cat.color }} />
+                            <span className="font-sans font-bold uppercase tracking-wide text-neutral-100 truncate">
                               {cat.title}
-                            </h3>
+                            </span>
                           </div>
                           <button
                             onClick={() => {
                               setExpandedCategory(cat);
                               setExpandedSearchQuery('');
                             }}
-                            className="p-1 text-neutral-400 hover:text-white border border-transparent hover:border-white/10 hover:bg-white/5 transition-colors shrink-0 ml-1 cursor-pointer"
+                            className="ml-1 p-1 text-neutral-400 hover:text-white bg-transparent hover:bg-white/[0.08] active:scale-95 transition-all shrink-0 cursor-pointer"
                             title="Expand Leaderboard (Top 25)"
                           >
                             <Maximize2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        {/* List items with exact h-[343px] container and h-[63px] item rows */}
-                        <div className="p-2 space-y-1 h-[343px] overflow-y-auto custom-scrollbar flex flex-col justify-start">
-                          {allItems.length === 0 ? (
-                            <div className="py-24 text-center text-xs font-mono uppercase tracking-wider text-neutral-500 my-auto">
-                              No match records logged yet
-                            </div>
-                          ) : !isSearchActive ? (
-                            displayItems.map((item: any) => {
-                              const isTop3 = item.rank <= 3;
-                              const isFirst = item.rank === 1;
-                              const isSecond = item.rank === 2;
+                        {/* Table Body */}
+                        <div className="h-[343px] border border-white/10 bg-black/20 flex flex-col overflow-hidden">
+                          <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            {allItems.length === 0 ? (
+                              <div className="py-24 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
+                                No match records logged yet
+                              </div>
+                            ) : !isSearchActive ? (
+                              displayItems.map((item: any) => {
+                                const isFirst = item.rank === 1;
+                                const isSecond = item.rank === 2;
+                                const isThird = item.rank === 3;
 
-                              if (isTop3) {
                                 return (
                                   <div
                                     key={`${cat.id}-${item.grp_id}-${item.rank}`}
                                     onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                    className={`flex items-center justify-between px-2.5 h-[63px] border transition-colors cursor-pointer group shrink-0 ${
-                                      isFirst
-                                        ? 'bg-amber-500/[0.03] border-amber-500/25 hover:border-amber-500/40'
-                                        : isSecond
-                                        ? 'bg-slate-400/[0.02] border-slate-400/20 hover:border-slate-400/35'
-                                        : 'bg-amber-900/[0.03] border-amber-800/20 hover:border-amber-800/35'
-                                    }`}
+                                    className="flex items-center justify-between px-2.5 h-[63px] transition-colors cursor-pointer group shrink-0 hover:bg-white/[0.04]"
                                     title="Click to view card details"
                                   >
                                     <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                                      <div className="w-5 shrink-0 flex items-center justify-center">
-                                        {isFirst ? (
-                                          <span className="ms ms-ability-duels-renowned text-amber-400 text-xs" />
-                                        ) : isSecond ? (
-                                          <span className="text-[10.5px] font-mono font-bold text-slate-300">#2</span>
-                                        ) : (
-                                          <span className="text-[10.5px] font-mono font-bold text-amber-600">#3</span>
-                                        )}
+                                      <div className="w-6 shrink-0 flex items-center justify-center">
+                                        <span className={`text-xs font-mono font-bold ${
+                                          isFirst
+                                            ? 'text-amber-400'
+                                            : isSecond
+                                            ? 'text-slate-300'
+                                            : isThird
+                                            ? 'text-amber-600'
+                                            : 'text-neutral-500'
+                                        }`}>
+                                          #{item.rank}
+                                        </span>
                                       </div>
-                                      <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
+                                      <div className="w-10 h-10 border border-white/10 overflow-hidden shrink-0 bg-neutral-900">
                                         <CardImage
                                           name={item.card_name}
                                           version="art_crop"
@@ -301,7 +299,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                         />
                                       </div>
                                       <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-bold font-display uppercase tracking-wide truncate group-hover:underline leading-tight text-white">
+                                        <p className="text-xs font-sans font-semibold uppercase tracking-wide truncate group-hover:underline leading-tight text-neutral-100 group-hover:text-white">
                                           {item.card_name}
                                         </p>
                                         {item.mana_cost && (
@@ -312,178 +310,151 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                                       </div>
                                     </div>
                                     <div className="shrink-0 flex items-center gap-2 text-right">
-                                      <span className={`text-xs font-mono font-bold px-2 py-0.5 border ${
+                                      <span className={`text-xs font-mono font-bold tabular-nums ${
                                         isFirst
-                                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/25'
+                                          ? 'text-amber-300'
                                           : isSecond
-                                          ? 'bg-slate-400/10 text-slate-200 border-slate-400/25'
-                                          : 'bg-amber-900/20 text-amber-200 border-amber-800/25'
+                                          ? 'text-slate-200'
+                                          : isThird
+                                          ? 'text-amber-500'
+                                          : 'text-neutral-300'
                                       }`}>
                                         {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
                                       </span>
                                     </div>
                                   </div>
                                 );
-                              }
-
-                              return (
-                                <div
-                                  key={`${cat.id}-${item.grp_id}-${item.rank}`}
-                                  onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                  className="flex items-center justify-between px-2.5 h-[63px] border border-white/5 bg-white/[0.015] hover:bg-white/[0.04] transition-colors cursor-pointer group shrink-0"
-                                  title="Click to view card details"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                                    <div className="w-5 shrink-0 flex items-center justify-center">
-                                      <span className="text-[10px] font-mono text-neutral-500">#{item.rank}</span>
-                                    </div>
-                                    <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
-                                      <CardImage
-                                        name={item.card_name}
-                                        version="art_crop"
-                                        alt={item.card_name}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                      />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-bold font-display uppercase tracking-wide truncate group-hover:underline leading-tight text-neutral-200 hover:text-white">
-                                        {item.card_name}
-                                      </p>
-                                      {item.mana_cost && (
-                                        <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
-                                          {parseMtgaManaCost(item.mana_cost).slice(0, 4).map((s, i) => <ManaFontPip key={i} symbol={s} size={10} />)}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="shrink-0 text-right">
-                                    <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/10 bg-black/40 text-neutral-300">
-                                      {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
-                                    </span>
-                                  </div>
+                              })
+                            ) : (
+                              <div className="space-y-0 flex-1">
+                                <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-neutral-500 px-2 pt-1">
+                                  Top 3 Podium Benchmark
                                 </div>
-                              );
-                            })
-                          ) : (
-                            <div className="space-y-1 flex-1">
-                              <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-neutral-500 px-1 pt-0.5">
-                                Top 3 Podium Benchmark
+                                {top3.map((item: any) => {
+                                  const isMatch = item.card_name.toLowerCase().includes(cleanQuery);
+                                  const isFirst = item.rank === 1;
+                                  const isSecond = item.rank === 2;
+                                  const isThird = item.rank === 3;
+                                  return (
+                                    <div
+                                      key={`${cat.id}-top3-${item.grp_id}-${item.rank}`}
+                                      onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
+                                      className={`flex items-center justify-between px-2.5 h-[63px] transition-colors cursor-pointer group shrink-0 ${
+                                        isMatch
+                                          ? 'bg-sky-500/15 hover:bg-sky-500/25'
+                                          : 'hover:bg-white/[0.04]'
+                                      }`}
+                                      title="Click to view card details"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                                        <div className="w-6 shrink-0 flex items-center justify-center">
+                                          <span className={`text-xs font-mono font-bold ${
+                                            isFirst
+                                              ? 'text-amber-400'
+                                              : isSecond
+                                              ? 'text-slate-300'
+                                              : isThird
+                                              ? 'text-amber-600'
+                                              : 'text-neutral-500'
+                                          }`}>
+                                            #{item.rank}
+                                          </span>
+                                        </div>
+                                        <div className="w-10 h-10 border border-white/10 overflow-hidden shrink-0 bg-neutral-900">
+                                          <CardImage
+                                            name={item.card_name}
+                                            version="art_crop"
+                                            alt={item.card_name}
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                          />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <p className={`text-xs font-sans font-semibold uppercase tracking-wide truncate group-hover:underline leading-tight ${isMatch ? 'text-sky-300' : 'text-neutral-100 group-hover:text-white'}`}>
+                                            {item.card_name}
+                                          </p>
+                                          {item.mana_cost && (
+                                            <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
+                                              {parseMtgaManaCost(item.mana_cost).slice(0, 4).map((s, i) => <ManaFontPip key={i} symbol={s} size={10} />)}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="shrink-0 flex items-center gap-2 text-right">
+                                        <span className={`text-xs font-mono font-bold tabular-nums ${
+                                          isFirst
+                                            ? 'text-amber-300'
+                                            : isSecond
+                                            ? 'text-slate-200'
+                                            : isThird
+                                            ? 'text-amber-500'
+                                            : 'text-neutral-300'
+                                        }`}>
+                                          {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {matchedBeyondTop3.length > 0 && (
+                                  <>
+                                    <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 px-2 pt-2 flex items-center justify-between">
+                                      <span>Search Matches ({matchedBeyondTop3.length})</span>
+                                      <span className="text-[9px] opacity-70 font-normal">Diff to #3 Podium</span>
+                                    </div>
+                                    {matchedBeyondTop3.map((item: any) => {
+                                      const diff = item.value - rank3Value;
+                                      const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+                                      return (
+                                        <div
+                                          key={`${cat.id}-match-${item.grp_id}-${item.rank}`}
+                                          onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
+                                          className="flex items-center justify-between px-2.5 h-[63px] bg-sky-500/10 hover:bg-sky-500/20 transition-colors cursor-pointer group shrink-0"
+                                          title="Click to view card details"
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                                            <div className="w-6 shrink-0 text-center">
+                                              <span className="text-xs font-mono font-bold text-sky-300">#{item.rank}</span>
+                                            </div>
+                                            <div className="w-10 h-10 border border-white/10 overflow-hidden shrink-0 bg-neutral-900">
+                                              <CardImage
+                                                name={item.card_name}
+                                                version="art_crop"
+                                                alt={item.card_name}
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                              />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <p className="text-xs font-sans font-semibold uppercase tracking-wide truncate group-hover:underline leading-tight text-sky-300">
+                                                {item.card_name}
+                                              </p>
+                                              {item.mana_cost && (
+                                                <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
+                                                  {parseMtgaManaCost(item.mana_cost).slice(0, 4).map((s, i) => <ManaFontPip key={i} symbol={s} size={10} />)}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="shrink-0 flex items-center gap-1.5 text-right">
+                                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border border-rose-500/30 bg-rose-500/20 text-rose-300">
+                                              {diffStr} to #3
+                                            </span>
+                                            <span className="text-xs font-mono font-bold text-neutral-300 tabular-nums">
+                                              {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </>
+                                )}
+                                {!hasSearchMatch && (
+                                  <div className="py-4 text-center text-xs font-mono text-neutral-500">
+                                    No match in this category
+                                  </div>
+                                )}
                               </div>
-                              {top3.map((item: any) => {
-                                const isMatch = item.card_name.toLowerCase().includes(cleanQuery);
-                                const isFirst = item.rank === 1;
-                                const isSecond = item.rank === 2;
-                                return (
-                                  <div
-                                    key={`${cat.id}-top3-${item.grp_id}-${item.rank}`}
-                                    onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                    className={`flex items-center justify-between px-2.5 h-[63px] border transition-colors cursor-pointer group shrink-0 ${
-                                      isMatch
-                                        ? 'border-sky-400 bg-sky-500/20 shadow-md shadow-sky-500/20'
-                                        : isFirst
-                                        ? 'bg-amber-500/[0.03] border-amber-500/25'
-                                        : isSecond
-                                        ? 'bg-slate-400/[0.02] border-slate-400/20'
-                                        : 'bg-amber-900/[0.03] border-amber-800/20'
-                                    }`}
-                                    title="Click to view card details"
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                                      <div className="w-5 shrink-0 flex items-center justify-center">
-                                        {isFirst ? (
-                                          <span className="ms ms-ability-duels-renowned text-amber-400 text-xs" />
-                                        ) : isSecond ? (
-                                          <span className="text-[10.5px] font-mono font-bold text-slate-300">#2</span>
-                                        ) : (
-                                          <span className="text-[10.5px] font-mono font-bold text-amber-600">#3</span>
-                                        )}
-                                      </div>
-                                      <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
-                                        <CardImage
-                                          name={item.card_name}
-                                          version="art_crop"
-                                          alt={item.card_name}
-                                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                        />
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-bold font-display uppercase tracking-wide truncate group-hover:underline leading-tight text-white">
-                                          {item.card_name}
-                                        </p>
-                                        {item.mana_cost && (
-                                          <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
-                                            {parseMtgaManaCost(item.mana_cost).slice(0, 4).map((s, i) => <ManaFontPip key={i} symbol={s} size={10} />)}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="shrink-0 flex items-center gap-2 text-right">
-                                      <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/10 bg-black/40 text-neutral-300">
-                                        {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {matchedBeyondTop3.length > 0 && (
-                                <>
-                                  <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 px-1 pt-1 flex items-center justify-between">
-                                    <span>Search Matches ({matchedBeyondTop3.length})</span>
-                                    <span className="text-[9px] opacity-70 font-normal">Diff to #3 Podium</span>
-                                  </div>
-                                  {matchedBeyondTop3.map((item: any) => {
-                                    const diff = item.value - rank3Value;
-                                    const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
-                                    return (
-                                      <div
-                                        key={`${cat.id}-match-${item.grp_id}-${item.rank}`}
-                                        onClick={() => onShowCard && onShowCard({ name: item.card_name, grp_id: item.grp_id }, false)}
-                                        className="flex items-center justify-between px-2.5 h-[63px] border border-sky-400/80 bg-sky-500/15 hover:bg-sky-500/25 transition-colors cursor-pointer group shrink-0"
-                                        title="Click to view card details"
-                                      >
-                                        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                                          <div className="w-7 shrink-0 text-center">
-                                            <span className="text-xs font-mono font-bold text-sky-300">#{item.rank}</span>
-                                          </div>
-                                          <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
-                                            <CardImage
-                                              name={item.card_name}
-                                              version="art_crop"
-                                              alt={item.card_name}
-                                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                            />
-                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-bold font-display uppercase tracking-wide truncate group-hover:underline leading-tight text-sky-300">
-                                              {item.card_name}
-                                            </p>
-                                            {item.mana_cost && (
-                                              <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
-                                                {parseMtgaManaCost(item.mana_cost).slice(0, 4).map((s, i) => <ManaFontPip key={i} symbol={s} size={10} />)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <div className="shrink-0 flex items-center gap-1.5 text-right">
-                                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border border-rose-500/30 bg-rose-500/20 text-rose-300">
-                                            {diffStr} to #3
-                                          </span>
-                                          <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/10 bg-black/40 text-neutral-300">
-                                            {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
-                                          </span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </>
-                              )}
-                              {!hasSearchMatch && (
-                                <div className="py-4 text-center text-xs font-mono text-neutral-500">
-                                  No match in this category
-                                </div>
-                              )}
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -502,7 +473,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
           onClick={() => setExpandedCategory(null)}
         >
           <div
-            className="w-full max-w-3xl lg:max-w-4xl h-[90vh] max-h-[900px] border border-white/20 bg-neutral-950 flex flex-col overflow-hidden shadow-2xl"
+            className="w-full max-w-3xl lg:max-w-4xl h-[90vh] max-h-[900px] border border-white/20 bg-neutral-950/92 backdrop-blur-md flex flex-col overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -511,21 +482,21 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
                 <span className={`${expandedCategory.iconClass} text-xl shrink-0`} style={{ color: expandedCategory.color }} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
-                    <h2 className="text-lg font-bold font-display uppercase tracking-wide text-white truncate">
+                    <h2 className="text-lg font-sans font-bold uppercase tracking-wide text-white truncate">
                       {expandedCategory.title}
                     </h2>
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/10 text-neutral-300 uppercase">
                       Top 25
                     </span>
                   </div>
-                  <p className="text-xs font-mono text-neutral-400 truncate mt-0.5">
+                  <p className="text-xs font-sans text-neutral-400 truncate mt-0.5">
                     {expandedCategory.subtitle}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setExpandedCategory(null)}
-                className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors shrink-0 cursor-pointer"
+                className="p-1.5 text-neutral-400 hover:text-white bg-transparent hover:bg-white/[0.08] active:scale-95 transition-all shrink-0 cursor-pointer"
                 title="Close (Esc)"
               >
                 <X className="w-4 h-4" />
@@ -533,180 +504,184 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
             </div>
 
             {/* Modal Search Bar */}
-            <div className="px-5 py-2.5 border-b border-white/10 shrink-0 flex items-center gap-3 bg-neutral-900/30">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+            <div className="px-5 py-2.5 border-b border-white/10 shrink-0 flex items-center gap-3">
+              <div className="relative flex-1 h-8 flex items-center">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder={`Search cards in ${expandedCategory.title}...`}
                   value={expandedSearchQuery}
                   onChange={(e) => setExpandedSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-1.5 text-xs font-mono border border-white/10 bg-black/40 text-white placeholder:text-neutral-500 focus:outline-none focus:border-white/30"
+                  className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
                   autoFocus
                 />
                 {expandedSearchQuery && (
                   <button
                     onClick={() => setExpandedSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
-              <div className="text-xs font-mono text-neutral-400 shrink-0 font-bold tabular-nums">
+              <div className="text-xs font-sans text-neutral-400 shrink-0 font-bold tabular-nums">
                 {expAllItems.length} Total Cards
               </div>
             </div>
 
             {/* Modal Card List */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-1.5 min-h-0">
-              {expAllItems.length === 0 ? (
-                <div className="py-36 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
-                  No match records logged yet
-                </div>
-              ) : !expHasMatches ? (
-                <div className="py-28 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
-                  No cards found matching "{expandedSearchQuery}"
-                </div>
-              ) : (
-                <>
-                  {expTop25.map((item: any) => {
-                    const isTop3 = item.rank <= 3;
-                    const isMatch = isExpSearchActive && item.card_name.toLowerCase().includes(expCleanQuery);
-                    const isFirst = item.rank === 1;
-                    const isSecond = item.rank === 2;
-                    const isThird = item.rank === 3;
-                    return (
-                      <div
-                        key={`exp-${expandedCategory.id}-${item.grp_id}-${item.rank}`}
-                        onClick={() => {
-                          setExpandedCategory(null);
-                          if (onShowCard) onShowCard({ name: item.card_name, grp_id: item.grp_id }, false);
-                        }}
-                        className={`flex items-center justify-between px-3 h-[64px] border transition-colors cursor-pointer group shrink-0 ${
-                          isMatch
-                            ? 'border-sky-400 bg-sky-500/20 shadow-md shadow-sky-500/20'
-                            : isFirst
-                            ? 'bg-amber-500/[0.03] border-amber-500/25'
-                            : isSecond
-                            ? 'bg-slate-400/[0.02] border-slate-400/20'
-                            : isThird
-                            ? 'bg-amber-900/[0.03] border-amber-800/20'
-                            : 'border-white/5 bg-white/[0.015] hover:bg-white/[0.04]'
-                        }`}
-                        title="Click to view card details"
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
-                          <div className="w-8 shrink-0 flex items-center justify-center">
-                            {isFirst ? (
-                              <span className="ms ms-ability-duels-renowned text-amber-400 text-sm" />
-                            ) : isSecond ? (
-                              <span className="text-xs font-mono font-bold text-slate-300">#2</span>
-                            ) : isThird ? (
-                              <span className="text-xs font-mono font-bold text-amber-600">#3</span>
-                            ) : (
-                              <span className="text-xs font-mono text-neutral-500 font-bold">#{item.rank}</span>
-                            )}
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 border border-white/10 bg-black/20 mx-5 my-3 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-white/5">
+                {expAllItems.length === 0 ? (
+                  <div className="py-36 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
+                    No match records logged yet
+                  </div>
+                ) : !expHasMatches ? (
+                  <div className="py-28 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
+                    No cards found matching "{expandedSearchQuery}"
+                  </div>
+                ) : (
+                  <>
+                    {expTop25.map((item: any) => {
+                      const isTop3 = item.rank <= 3;
+                      const isMatch = isExpSearchActive && item.card_name.toLowerCase().includes(expCleanQuery);
+                      const isFirst = item.rank === 1;
+                      const isSecond = item.rank === 2;
+                      const isThird = item.rank === 3;
+                      return (
+                        <div
+                          key={`exp-${expandedCategory.id}-${item.grp_id}-${item.rank}`}
+                          onClick={() => {
+                            setExpandedCategory(null);
+                            if (onShowCard) onShowCard({ name: item.card_name, grp_id: item.grp_id }, false);
+                          }}
+                          className={`flex items-center justify-between px-3 h-[64px] transition-colors cursor-pointer group shrink-0 ${
+                            isMatch
+                              ? 'bg-sky-500/15 hover:bg-sky-500/25'
+                              : isFirst
+                              ? 'bg-amber-500/[0.04] hover:bg-amber-500/[0.07]'
+                              : isSecond
+                              ? 'bg-slate-400/[0.03] hover:bg-slate-400/[0.06]'
+                              : isThird
+                              ? 'bg-amber-900/[0.04] hover:bg-amber-900/[0.07]'
+                              : 'hover:bg-white/[0.04]'
+                          }`}
+                          title="Click to view card details"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
+                            <div className="w-8 shrink-0 flex items-center justify-center">
+                              <span className={`text-xs font-mono font-bold ${
+                                isFirst
+                                  ? 'text-amber-400'
+                                  : isSecond
+                                  ? 'text-slate-300'
+                                  : isThird
+                                  ? 'text-amber-600'
+                                  : 'text-neutral-500'
+                              }`}>
+                                #{item.rank}
+                              </span>
+                            </div>
+                            <div className="w-10 h-10 border border-white/10 overflow-hidden shrink-0 bg-neutral-900">
+                              <CardImage
+                                name={item.card_name}
+                                version="art_crop"
+                                alt={item.card_name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-sm font-sans font-semibold uppercase tracking-wide truncate group-hover:underline leading-tight ${
+                                isMatch ? 'text-sky-300' : 'text-neutral-100 group-hover:text-white'
+                              }`}>
+                                {item.card_name}
+                              </p>
+                              {!isTop3 && item.mana_cost && (
+                                <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
+                                  {parseMtgaManaCost(item.mana_cost).slice(0, 5).map((s, i) => <ManaFontPip key={i} symbol={s} size={11} />)}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
-                            <CardImage
-                              name={item.card_name}
-                              version="art_crop"
-                              alt={item.card_name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-bold font-display uppercase tracking-wide truncate group-hover:underline leading-tight ${
-                              isMatch ? 'text-sky-300' : 'text-white'
-                            }`}>
-                              {item.card_name}
-                            </p>
-                            {!isTop3 && item.mana_cost && (
-                              <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
+                          <div className="shrink-0 flex items-center gap-2.5 text-right">
+                            {isTop3 && item.mana_cost && (
+                              <div className="flex items-center gap-0.5 opacity-80">
                                 {parseMtgaManaCost(item.mana_cost).slice(0, 5).map((s, i) => <ManaFontPip key={i} symbol={s} size={11} />)}
                               </div>
                             )}
+                            <span className={`text-xs font-mono font-bold px-3 py-1 border tabular-nums ${
+                              isFirst
+                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/25'
+                                : isSecond
+                                ? 'bg-slate-400/10 text-slate-200 border-slate-400/25'
+                                : isThird
+                                ? 'bg-amber-900/20 text-amber-200 border-amber-800/25'
+                                : 'border-white/10 bg-white/[0.04] text-neutral-200'
+                            }`}>
+                              {item.value} <span className="text-[10px] font-normal opacity-75">{item.unit}</span>
+                            </span>
                           </div>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2.5 text-right">
-                          {isTop3 && item.mana_cost && (
-                            <div className="flex items-center gap-0.5 opacity-80">
-                              {parseMtgaManaCost(item.mana_cost).slice(0, 5).map((s, i) => <ManaFontPip key={i} symbol={s} size={11} />)}
-                            </div>
-                          )}
-                          <span className={`text-xs font-mono font-bold px-3 py-1 border ${
-                            isFirst
-                              ? 'bg-amber-500/10 text-amber-300 border-amber-500/25'
-                              : isSecond
-                              ? 'bg-slate-400/10 text-slate-200 border-slate-400/25'
-                              : isThird
-                              ? 'bg-amber-900/20 text-amber-200 border-amber-800/25'
-                              : 'bg-black/40 text-neutral-300 border-white/10'
-                          }`}>
-                            {item.value} <span className="text-[10px] font-normal opacity-75">{item.unit}</span>
-                          </span>
+                      );
+                    })}
+                    {expMatchesBeyond25.length > 0 && (
+                      <>
+                        <div className="text-xs font-mono font-bold uppercase tracking-wider text-sky-400 px-3 pt-3 pb-1 flex items-center justify-between">
+                          <span>Matches Beyond Rank 25 ({expMatchesBeyond25.length})</span>
+                          <span className="text-xs opacity-70 font-normal">Diff to #3 Podium</span>
                         </div>
-                      </div>
-                    );
-                  })}
-                  {expMatchesBeyond25.length > 0 && (
-                    <>
-                      <div className="text-xs font-mono font-bold uppercase tracking-wider text-sky-400 px-1 pt-3 pb-1 flex items-center justify-between border-t border-white/10 mt-3">
-                        <span>Matches Beyond Rank 25 ({expMatchesBeyond25.length})</span>
-                        <span className="text-xs opacity-70 font-normal">Diff to #3 Podium</span>
-                      </div>
-                      {expMatchesBeyond25.map((item: any) => {
-                        const diff = item.value - expRank3Value;
-                        const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
-                        return (
-                          <div
-                            key={`exp-match-${expandedCategory.id}-${item.grp_id}-${item.rank}`}
-                            onClick={() => {
-                              setExpandedCategory(null);
-                              if (onShowCard) onShowCard({ name: item.card_name, grp_id: item.grp_id }, false);
-                            }}
-                            className="flex items-center justify-between px-3 h-[64px] border border-sky-400/80 bg-sky-500/15 hover:bg-sky-500/25 transition-colors cursor-pointer group shrink-0"
-                            title="Click to view card details"
-                          >
-                            <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
-                              <div className="w-8 shrink-0 text-center">
-                                <span className="text-xs font-mono font-bold text-sky-300">#{item.rank}</span>
+                        {expMatchesBeyond25.map((item: any) => {
+                          const diff = item.value - expRank3Value;
+                          const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+                          return (
+                            <div
+                              key={`exp-match-${expandedCategory.id}-${item.grp_id}-${item.rank}`}
+                              onClick={() => {
+                                setExpandedCategory(null);
+                                if (onShowCard) onShowCard({ name: item.card_name, grp_id: item.grp_id }, false);
+                              }}
+                              className="flex items-center justify-between px-3 h-[64px] bg-sky-500/10 hover:bg-sky-500/20 transition-colors cursor-pointer group shrink-0"
+                              title="Click to view card details"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1 mr-3">
+                                <div className="w-8 shrink-0 text-center">
+                                  <span className="text-xs font-mono font-bold text-sky-300">#{item.rank}</span>
+                                </div>
+                                <div className="w-10 h-10 border border-white/10 overflow-hidden shrink-0 bg-neutral-900">
+                                  <CardImage
+                                    name={item.card_name}
+                                    version="art_crop"
+                                    alt={item.card_name}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-sans font-semibold uppercase tracking-wide truncate group-hover:underline leading-tight text-sky-300">
+                                    {item.card_name}
+                                  </p>
+                                  {item.mana_cost && (
+                                    <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
+                                      {parseMtgaManaCost(item.mana_cost).slice(0, 5).map((s, i) => <ManaFontPip key={i} symbol={s} size={11} />)}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="w-10 h-10 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
-                                <CardImage
-                                  name={item.card_name}
-                                  version="art_crop"
-                                  alt={item.card_name}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold font-display uppercase tracking-wide truncate group-hover:underline leading-tight text-sky-300">
-                                  {item.card_name}
-                                </p>
-                                {item.mana_cost && (
-                                  <div className="flex items-center gap-0.5 mt-0.5 opacity-80">
-                                    {parseMtgaManaCost(item.mana_cost).slice(0, 5).map((s, i) => <ManaFontPip key={i} symbol={s} size={11} />)}
-                                  </div>
-                                )}
+                              <div className="shrink-0 flex items-center gap-2 text-right">
+                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-rose-500/30 bg-rose-500/20 text-rose-300">
+                                  {diffStr} to #3
+                                </span>
+                                <span className="text-xs font-mono font-bold px-3 py-1 border border-white/10 bg-white/[0.04] text-neutral-200 tabular-nums">
+                                  {item.value} <span className="text-[10px] font-normal opacity-75">{item.unit}</span>
+                                </span>
                               </div>
                             </div>
-                            <div className="shrink-0 flex items-center gap-2 text-right">
-                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-rose-500/30 bg-rose-500/20 text-rose-300">
-                                {diffStr} to #3
-                              </span>
-                              <span className="text-xs font-mono font-bold px-3 py-1 border border-white/10 bg-black/40 text-neutral-300">
-                                {item.value} <span className="text-[10px] font-normal opacity-75">{item.unit}</span>
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
-                </>
-              )}
+                          );
+                        })}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

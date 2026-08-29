@@ -1398,7 +1398,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           onClick={() => setShowAdvModal(false)}
         >
           <div
-            className="w-[900px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-[900px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1429,7 +1429,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
             {/* Modal Body: Two Columns */}
             <div className="flex-1 min-h-0 flex overflow-hidden">
               {/* Left Column: Colors / Mana Value / Collected / Copies / Rarity / Type */}
-              <div className="w-[55%] shrink-0 border-r border-white/10 overflow-y-auto custom-scrollbar p-6 space-y-5 bg-neutral-950">
+              <div className="w-[55%] shrink-0 border-r border-white/10 overflow-y-auto custom-scrollbar p-6 space-y-5 bg-neutral-950/60">
                 {/* 1. Mana Cost / Color Identity */}
                 <div>
                   <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
@@ -1643,7 +1643,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
               </div>
 
               {/* Right Column: Set Filter */}
-              <div className="flex-1 min-w-0 flex flex-col p-6 bg-neutral-950">
+              <div className="flex-1 min-w-0 flex flex-col p-6 bg-neutral-950/60">
                 <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75 mb-2">
                   EXPANSION SET <span className="normal-case opacity-50">({selectedSets.length} selected)</span>
                 </p>
@@ -1721,7 +1721,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
