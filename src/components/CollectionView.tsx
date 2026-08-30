@@ -1308,7 +1308,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           </div>
 
           {/* Table Rows Body Container with Scrollbar */}
-          <div className="border border-white/10 bg-black/20 overflow-hidden flex flex-col flex-1 min-h-0">
+          <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0">
             <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
               {displayedCards.map((card) => (
                 <div

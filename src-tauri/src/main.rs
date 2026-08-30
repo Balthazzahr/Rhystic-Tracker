@@ -4185,6 +4185,7 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "name": name,
                     "card_type": card_type,
                     "grp_id": e.grp_id,
+                    "turn": e.turn_number,
                 })));
             }
 
@@ -4228,6 +4229,7 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "amount": dmg.amount,
                     "damage_type": if dmg.damage_type == 1 { "Combat" } else if dmg.damage_type == 3 { "Fight" } else { "Spell" },
                     "grp_id": src_grp,
+                    "turn": assembler.current_turn,
                 })));
             }
 

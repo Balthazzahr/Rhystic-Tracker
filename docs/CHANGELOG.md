@@ -2,6 +2,32 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.7] - 2026-08-30
+
+### ⚔️ Live Match HUD Visual Overhaul & Synchronized Combat Timeline
+
+- **Synchronized Combat Board & Full-Width Round Separators**:
+  - Replaced split timeline boxes with a single unified combat workspace container (`bg-neutral-950/50 backdrop-blur-md border border-white/10`).
+  - Full-width `ROUND N` headers spanning 100% across the table ensure rounds are vertically aligned across both players.
+  - 2-column turn layout (Left = Turn $2N - 1$, Right = Turn $2N$) separated by a subtle divider line (`border-r border-white/5`), with strictly chronological top-to-bottom action flow.
+- **Dynamic Play / Draw Positioning**:
+  - The player who went first (Play) is dynamically positioned in the left column; second player (Draw) in the right column.
+  - Colors remain consistent across positions: Hero is always **MTG Green** (`#22C55E` / `#16A34A`), Opponent is always **MTG Red** (`#EF4444` / `#DC2626`).
+- **Unboxed Command Station Metrics**:
+  - Completely removed outer wrapper boxes and nested sub-panels ('box-in-a-box' anti-pattern).
+  - Deck name, cards seen, health bars, mini commander art crop (`version="art_crop"`), and color identity mana pips (`size={22}`) float directly on the ambient background.
+  - High-contrast typography ensures crisp legibility directly against ambient artwork.
+- **Dynamic Health Bars & Life Change Indicators**:
+  - Full-width gauge bars with smooth gradient fills and centered life totals.
+  - Pulsing in-turn life change delta badges (e.g. `+2 HP` / `-4 HP`) positioned next to life values.
+- **Top Toolbar & Search Filter**:
+  - Left-aligned search input filtering cards, types, actions, and targets in real time.
+  - Right-justified metrics cluster (`[Match in Progress] [Format Badge] [Elapsed Time] [Turn | Round]`).
+- **App-Wide Transparency Standardization**:
+  - Standardized all major table bodies and workspaces (**Match History**, **Card Library**, **Deck Library**, **Achievements**, **Live Match HUD**) to **`bg-neutral-950/50 backdrop-blur-md border border-white/10`** for a uniform glassmorphic aesthetic.
+
+---
+
 ## [1.3.6] - 2026-08-29
 
 ### 🎨 App-Wide Ambient Card-Art Backgrounds, UI Glassmorphism & Leaderboard Polish

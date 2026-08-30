@@ -801,8 +801,8 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
             })}
           </div>
 
-          {/* Table Rows Body Container */}
-          <div className="border border-white/10 bg-black/20 overflow-hidden flex flex-col flex-1 min-h-0">
+          {/* Table Body */}
+          <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0">
             <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
               {displayedDecks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 text-neutral-500 font-sans italic">

@@ -510,7 +510,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                 ))}
               </div>
               {/* Main Data Table Body */}
-              <div className="flex-1 min-h-0 border border-white/10 bg-black/20 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md flex flex-col overflow-hidden">
                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-white/5">
                   {displayedCards.map((ach: any) => {
                     const meta = getAchievementMeta(ach.achievement);
