@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { ManaPip, MANA_TEXT_COLORS } from './ManaPip';
 
 interface ManaFontPipProps {
   symbol: string;
   size?: number;
   className?: string;
+  colorOverride?: string;
 }
 
 const MS_CLASSES: Record<string, string> = {
@@ -17,8 +19,6 @@ const MS_CLASSES: Record<string, string> = {
 function hybridClass(sym: string): string | null {
   const inner = sym.replace(/[()]/g, '');
   const hyb = inner.toLowerCase().replace('/', '');
-  // Only treat 2-3 char combos made of mana letters (incl phyrexian P suffix)
-  // as a mana-font hybrid glyph; otherwise fall back to rendering parts.
   if (!/^[wubrgcp0-9]{2,3}$/.test(hyb)) return null;
   const known = [
     'wu','wb','ub','ur','br','bg','rw','rg','gw','gu',
@@ -29,15 +29,54 @@ function hybridClass(sym: string): string | null {
   return null;
 }
 
-export const ManaFontPip: React.FC<ManaFontPipProps> = ({ symbol, size = 16, className = '' }) => {
+export const ManaFontPip: React.FC<ManaFontPipProps> = ({ symbol, size = 16, className = '', colorOverride }) => {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return null;
 
+  const [manaPipStyle, setManaPipStyle] = useState<string>(() => {
+    return localStorage.getItem('manaPipStyle') || 'graphic';
+  });
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setManaPipStyle(localStorage.getItem('manaPipStyle') || 'graphic');
+    };
+    window.addEventListener('rhystic_settings_changed', handleSettingsChanged);
+    return () => window.removeEventListener('rhystic_settings_changed', handleSettingsChanged);
+  }, []);
+
+  const cleanSym = sym.replace(/[{}]/g, '');
+
+  // 1. Text Style: Always colored with authentic mana colors
+  if (manaPipStyle === 'text') {
+    const textColor = colorOverride || MANA_TEXT_COLORS[cleanSym] || '#94A3B8';
+    return (
+      <span 
+        className={`inline-flex items-center justify-center font-mono font-bold tracking-tighter ${className}`}
+        style={{
+          fontSize: Math.max(9, Math.round(size * 0.7)),
+          color: textColor,
+          lineHeight: 1,
+        }}
+        title={`Mana {${cleanSym}}`}
+      >
+        {`{${cleanSym}}`}
+      </span>
+    );
+  }
+
+  // 2. Graphic Style (Default)
+  if (manaPipStyle === 'graphic') {
+    const isStandard = /^[WUBRGCX\d]+$/.test(cleanSym);
+    if (isStandard) {
+      return <ManaPip symbol={cleanSym} size={size} className={className} colorOverride={colorOverride} />;
+    }
+  }
+
+  // 3. Vector Style (or fallback for complex symbols/hybrids)
   const hc = hybridClass(sym);
   const cls = hc || MS_CLASSES[sym] || `ms-${sym.toLowerCase()}`;
 
-  // .ms-cost draws a 1.3em circle and 0.95em glyph. Back-compute the font-size
-  // so the visible pip diameter matches `size` (avoids clipping top/bottom).
   return (
     <span
       className={`ms ms-cost ${cls} inline-block shrink-0 leading-none ${className}`}

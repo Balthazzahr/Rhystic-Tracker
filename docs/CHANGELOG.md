@@ -2,6 +2,36 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.8] - 2026-08-30
+
+### ⚙️ Settings Overhaul, Match Deletion & Universal Mana Pip Customization
+
+- **Settings Visual Overhaul & Universal Search Filter**:
+  - Aligned the Settings view to the application design standard with left-justified glass surfaces and floating segmented category tabs (`General`, `Appearance`, `Connection`, `Storage`, `About`).
+  - Integrated universal real-time search engine with keyword matching across all settings.
+- **Two-Step Permanent Match Deletion & Blacklisting**:
+  - Added "Enable Match Deletion in History" toggle with a 2-step confirmation modal (match summary check followed by irreversible delete warning).
+  - Cascading SQLite removal across matches, card audits, and turn timeline events, with automatic registration into `deleted_matches` blacklist preventing log tailer re-ingestion.
+- **Universal Mana Pip Representation Styles**:
+  - Added real-time switchable Mana Pip rendering across the entire application:
+    - **Graphic Pips (Default)**: Authentic circular color-filled badges with embedded Magic iconography.
+    - **High-Contrast Vector Glyphs**: Pure vector font icons rendered directly via Magic's vectorized glyph library (`ms-cost`).
+    - **Text Mana Codes (`{W}{U}{B}{R}{G}`)**: Compact monospace notation badges formatted as raw MTG syntax, always colored to their respective Magic mana identity.
+  - Applied reactively to Card Library table rows, Deck Library, Match History, Leaderboards, and Card Inspector overlays.
+- **Expanded Application & Behaviour Settings**:
+  - **Exclude Sparky & Tutorial Matches**: Automatic filtering of bot matches and color challenge tutorials from match records and win-rate statistics.
+  - **Sound Effects & Audio Cues**: Optional subtle system audio cues on match start, win/loss, or achievement unlock.
+  - **Live HUD Window Pinning**: Native `set_always_on_top` Tauri window pinning for borderless gameplay overlays.
+  - **Auto-Export Matches**: Auto-exporting of completed match records to JSON archive or CSV spreadsheet.
+  - **Automated Weekly Backups**: Startup automated timestamped SQLite database backups.
+  - **Scryfall Image Cache Disk Quota**: Storage quota management (500 MB, 1.0 GB, 2.0 GB, Unlimited).
+  - **Best-of-Three Sideboard Segregation**: Post-sideboard card isolation for Bo3 games 2 & 3.
+- **Theme Palette & Glassmorphic Contrast Tuning**:
+  - Corrected Black theme palette to traditional charcoal obsidian and dark slate (`#6B7280` / `#9CA3AF`).
+  - Tuned Subtle Glass (30% tint) background opacity in `BlurredCardBackground` to preserve rich ambient artwork while guaranteeing high contrast and text readability.
+
+---
+
 ## [1.3.7] - 2026-08-30
 
 ### ⚔️ Live Match HUD Visual Overhaul & Synchronized Combat Timeline

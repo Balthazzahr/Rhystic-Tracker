@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface ManaPipProps {
   symbol: 'W' | 'U' | 'B' | 'R' | 'G' | string;
@@ -8,6 +8,25 @@ interface ManaPipProps {
   grayscale?: boolean;
 }
 
+export const MANA_TEXT_COLORS: Record<string, string> = {
+  W: '#F5F0E1', // Ivory White
+  U: '#38BDF8', // Steel Sapphire Blue
+  B: '#A1A1AA', // Traditional Charcoal / Slate Grey
+  R: '#F87171', // Brick / Flame Red
+  G: '#4ADE80', // Forest Green
+  C: '#94A3B8', // Colorless Slate
+  X: '#CBD5E1', // Variable X
+};
+
+export const MANA_GRAPHIC_COLORS: Record<string, string> = {
+  W: '#E8E2CC', // Warm Ivory / Parchment
+  U: '#4A7FA3', // Steel Sapphire Blue
+  B: '#374151', // Traditional Charcoal / Dark Slate
+  R: '#B8503A', // Brick / Ember Red
+  G: '#4A7856', // Forest Moss Green
+  C: '#94A3B8', // Colorless Slate
+};
+
 export const ManaPip: React.FC<ManaPipProps> = ({ 
   symbol, 
   size = 20, 
@@ -15,23 +34,61 @@ export const ManaPip: React.FC<ManaPipProps> = ({
   colorOverride,
   grayscale = false
 }) => {
-  const sym = symbol.toUpperCase();
+  const sym = symbol.replace(/[{}]/g, '').trim().toUpperCase();
+
+  const [manaPipStyle, setManaPipStyle] = useState<string>(() => {
+    return localStorage.getItem('manaPipStyle') || 'graphic';
+  });
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setManaPipStyle(localStorage.getItem('manaPipStyle') || 'graphic');
+    };
+    window.addEventListener('rhystic_settings_changed', handleSettingsChanged);
+    return () => window.removeEventListener('rhystic_settings_changed', handleSettingsChanged);
+  }, []);
 
   const isNumber = /^\d+$/.test(sym);
   const isX = sym === 'X';
 
-  const defaultColors: Record<string, string> = {
-    W: '#E8E2CC', // Warm Ivory / Parchment
-    U: '#4A7FA3', // Steel Sapphire Blue
-    B: '#8a719d', // Obsidian / Deep Violet
-    R: '#B8503A', // Brick / Ember Red
-    G: '#4A7856', // Forest Moss Green
-    C: '#94A3B8', // Colorless Slate
-  };
-
-  const rawFill = colorOverride || defaultColors[sym] || '#94A3B8';
+  const textColor = colorOverride || MANA_TEXT_COLORS[sym] || '#94A3B8';
+  const rawFill = colorOverride || MANA_GRAPHIC_COLORS[sym] || '#94A3B8';
   const bgFill = grayscale ? '#475569' : rawFill;
 
+  // 1. Text Style: Always colored so {U} is blue, {R} is red, {G} is green, {W} is ivory, {B} is charcoal, etc.
+  if (manaPipStyle === 'text') {
+    return (
+      <span 
+        className={`inline-flex items-center justify-center font-mono font-bold tracking-tighter ${className}`}
+        style={{
+          fontSize: Math.max(10, Math.round(size * 0.7)),
+          color: textColor,
+          lineHeight: 1,
+        }}
+        title={`Mana {${sym}}`}
+      >
+        {`{${sym}}`}
+      </span>
+    );
+  }
+
+  // 2. Vector Style: Classic High-Contrast Vector Glyphs
+  if (manaPipStyle === 'vector') {
+    const msClass = `ms ms-${sym.toLowerCase()} ms-cost`;
+    return (
+      <span
+        className={`${msClass} inline-block shrink-0 leading-none ${className}`} 
+        style={{ 
+          fontSize: `${Math.round(size * 0.8)}px`,
+          verticalAlign: 'middle',
+          color: colorOverride || undefined 
+        }} 
+        title={`Mana {${sym}}`}
+      />
+    );
+  }
+
+  // 3. Graphic Style: Full Color Circular Badges
   if (isNumber || isX) {
     return (
       <svg 

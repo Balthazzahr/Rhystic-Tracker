@@ -71,6 +71,23 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
     try { return JSON.parse(localStorage.getItem(BG_PRESETS_KEY) || '{}'); }
     catch { return {}; }
   });
+  const [glassOpacity, setGlassOpacity] = useState<string>(() => {
+    return localStorage.getItem('glassOpacity') || 'standard';
+  });
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setBgMode((localStorage.getItem(BG_MODE_KEY) as BgMode) || 'random');
+      try {
+        setBgPresets(JSON.parse(localStorage.getItem(BG_PRESETS_KEY) || '{}'));
+      } catch {
+        setBgPresets({});
+      }
+      setGlassOpacity(localStorage.getItem('glassOpacity') || 'standard');
+    };
+    window.addEventListener('rhystic_settings_changed', handleSettingsChanged);
+    return () => window.removeEventListener('rhystic_settings_changed', handleSettingsChanged);
+  }, []);
 
   // --- Display state ---
   const [displayed, setDisplayed] = useState<{ url: string; name: string | null } | null>(null);
@@ -271,6 +288,20 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
     }
   }, [bgPresets]);
 
+  const opacityConfig = useMemo(() => {
+    switch (glassOpacity) {
+      case 'subtle':
+        return { baseOpacity: 0.65, brightness: 0.50, saturate: 0.65 };
+      case 'high':
+        return { baseOpacity: 0.88, brightness: 0.35, saturate: 0.40 };
+      case 'opaque':
+        return { baseOpacity: 0.97, brightness: 0.15, saturate: 0.20 };
+      case 'standard':
+      default:
+        return { baseOpacity: 0.78, brightness: 0.45, saturate: 0.50 };
+    }
+  }, [glassOpacity]);
+
   if (bgMode === 'none') return null;
 
   return (
@@ -279,21 +310,21 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
         <img
           src={displayed.url}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-300"
           style={{
             objectPosition: 'center 30%',
-            filter: `saturate(${SATURATE}) brightness(${BRIGHTNESS})`,
+            filter: `saturate(${opacityConfig.saturate}) brightness(${opacityConfig.brightness})`,
           }}
           draggable={false}
         />
       )}
 
       <div
-        className="absolute inset-0"
-        style={{ backgroundColor: palette?.base || '#0E0E10', opacity: BASE_OVERLAY_OPACITY }}
+        className="absolute inset-0 transition-opacity duration-300"
+        style={{ backgroundColor: palette?.base || '#0E0E10', opacity: opacityConfig.baseOpacity }}
       />
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 transition-opacity duration-300"
         style={{
           backgroundColor: palette?.accent || '#4A7FA3',
           opacity: ACCENT_OVERLAY_OPACITY,

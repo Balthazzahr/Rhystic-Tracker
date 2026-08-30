@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   Home,
   Swords,
+  Trash2,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ManaPip } from './ManaPip';
 import { CardNameTooltip } from './CardNameTooltip';
@@ -151,6 +153,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'end_reason', label: 'End Reason', description: 'Victory/defeat condition', visible: false, width: 'w-[110px]', align: 'center' },
   { key: 'opp_colors', label: 'Opp Colors', description: 'Detected opponent deck colors', visible: false, width: 'w-[95px]', align: 'center' },
   { key: 'commanders', label: 'Commanders', description: 'Brawl Commander portraits', visible: false, width: 'w-[120px]', align: 'center' },
+  { key: 'delete', label: 'Delete', description: 'Permanently remove match from database', visible: true, width: 'w-[70px]', align: 'center' },
 ];
 
 interface MatchHistoryViewProps {
@@ -162,6 +165,7 @@ interface MatchHistoryViewProps {
   onSelectDeck?: (deckName: string) => void;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
   initialSearch?: string;
+  onDeleteMatch?: (matchId: string) => void;
 }
 
 export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
@@ -173,6 +177,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   onSelectDeck,
   onShowCard,
   initialSearch,
+  onDeleteMatch,
 }) => {
   const accentColor = palette?.accent || '#A855F7';
 
@@ -184,6 +189,55 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   const [resultFilter, setResultFilter] = useState<'ALL' | 'win' | 'loss'>('ALL');
   const [positionFilter, setPositionFilter] = useState<'ALL' | 'play' | 'draw'>('ALL');
   const [showAdvModal, setShowAdvModal] = useState(false);
+
+  // Match Deletion state
+  const [allowMatchDeletion, setAllowMatchDeletion] = useState(() => {
+    return localStorage.getItem('allowMatchDeletion') === 'true';
+  });
+  const [excludeSparkyMatches, setExcludeSparkyMatches] = useState(() => {
+    return localStorage.getItem('excludeSparkyMatches') === 'true';
+  });
+  const [matchToDelete, setMatchToDelete] = useState<MatchRecord | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [deletedMatchIds, setDeletedMatchIds] = useState<Set<string>>(new Set());
+  const [isDeletingMatch, setIsDeletingMatch] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setAllowMatchDeletion(localStorage.getItem('allowMatchDeletion') === 'true');
+      setExcludeSparkyMatches(localStorage.getItem('excludeSparkyMatches') === 'true');
+    };
+    window.addEventListener('rhystic_settings_changed', handleSettingsChanged);
+    return () => window.removeEventListener('rhystic_settings_changed', handleSettingsChanged);
+  }, []);
+
+  const handleOpenDelete = (m: MatchRecord) => {
+    setMatchToDelete(m);
+    setDeleteStep(1);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDeleteMatch = async () => {
+    if (!matchToDelete) return;
+    setIsDeletingMatch(true);
+    setDeleteError(null);
+    try {
+      const id = matchToDelete.match_id;
+      await invoke('delete_match', { matchId: id });
+      setDeletedMatchIds((prev) => new Set(prev).add(id));
+      if (onDeleteMatch) {
+        onDeleteMatch(id);
+      }
+      setMatchToDelete(null);
+      setDeleteStep(1);
+    } catch (e: any) {
+      console.error('Failed to delete match:', e);
+      setDeleteError(e?.toString() || 'Failed to delete match');
+    } finally {
+      setIsDeletingMatch(false);
+    }
+  };
 
   useEffect(() => {
     if (initialSearch !== undefined && initialSearch !== '') setSearchTerm(initialSearch);
@@ -374,6 +428,18 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     const cleanSearch = searchTerm.trim().toLowerCase();
 
     return matches.filter((m) => {
+      // 0. Exclude locally deleted matches immediately
+      if (deletedMatchIds.has(m.match_id)) return false;
+
+      // Exclude Sparky / Bot / Tutorial matches if enabled
+      if (excludeSparkyMatches) {
+        const opp = (m.opponent_name || '').toLowerCase();
+        const fmt = (m.format_name || '').toLowerCase();
+        if (opp.includes('sparky') || opp.includes('bot') || fmt.includes('bot') || fmt.includes('challenge') || fmt.includes('tutorial')) {
+          return false;
+        }
+      }
+
       // 1. Result filter
       if (resultFilter !== 'ALL' && m.result !== resultFilter) return false;
 
@@ -505,7 +571,10 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     overscan: 12,
   });
 
-  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
+  const visibleColumns = useMemo(
+    () => columns.filter((c) => c.visible && (c.key !== 'delete' || allowMatchDeletion)),
+    [columns, allowMatchDeletion]
+  );
 
   // Mini mana histogram renderer
   const renderMiniHistogram = (curve?: number[]) => {
@@ -709,11 +778,12 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
           <div className="flex items-center justify-center w-full">
             {m.going_first !== undefined ? (
               <span
-                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 border ${
+                style={
                   m.going_first
-                    ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                    : 'bg-blue-500/10 text-blue-300 border-blue-500/30'
-                }`}
+                    ? { backgroundColor: 'rgba(197, 160, 89, 0.15)', borderColor: 'rgba(197, 160, 89, 0.4)', color: '#E5C678' }
+                    : { backgroundColor: 'rgba(74, 127, 163, 0.15)', borderColor: 'rgba(74, 127, 163, 0.4)', color: '#7FAAC9' }
+                }
+                className="text-[10px] font-mono font-bold px-1.5 py-0.5 border"
               >
                 {m.going_first ? 'PLAY' : 'DRAW'}
               </span>
@@ -842,6 +912,22 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
           </div>
         );
       }
+
+      case 'delete':
+        return (
+          <div className="flex items-center justify-center w-full">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenDelete(m);
+              }}
+              className="p-1.5 text-neutral-400 hover:text-white transition-all cursor-pointer bg-transparent hover:bg-white/[0.08] active:scale-95"
+              title="Delete this match permanently"
+            >
+              <Trash2 className="w-3.5 h-3.5" style={{ color: '#D57C69' }} />
+            </button>
+          </div>
+        );
 
       default:
         return null;
@@ -1346,7 +1432,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
             {/* Scrollable Column List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
-              {columns.map((col, idx) => {
+              {columns
+                .filter((col) => col.key !== 'delete' || allowMatchDeletion)
+                .map((col, idx) => {
                 const isDragging = draggedIndex === idx;
                 const isTarget = dragOverIndex === idx && draggedIndex !== null && draggedIndex !== idx;
 
@@ -1464,6 +1552,117 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
               >
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. DELETE MATCH CONFIRMATION MODAL (2-Step Safety Verification)          */}
+      {/* ========================================================================= */}
+      {matchToDelete && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none"
+          onClick={() => setMatchToDelete(null)}
+        >
+          <div 
+            className="w-full max-w-md bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <div className="flex items-center gap-2.5" style={{ color: '#D57C69' }}>
+                <Trash2 className="w-5 h-5" />
+                <h3 className="text-sm font-sans font-bold uppercase tracking-wide text-white">
+                  {deleteStep === 1 ? 'Delete Match' : 'Are You Sure?'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setMatchToDelete(null)}
+                className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            {/* Body: Step 1 */}
+            {deleteStep === 1 && (
+              <div className="p-5 space-y-3">
+                <p className="text-xs text-neutral-300 leading-relaxed font-sans">
+                  Confirm that you wish to delete this match from the match history database:
+                </p>
+                <div className="p-3 border border-white/10 bg-white/[0.02] space-y-1 font-mono text-xs">
+                  <p className="text-white font-bold">
+                    {matchToDelete.player_deck_name}{' '}
+                    <span className="text-neutral-500 font-normal">vs</span>{' '}
+                    {matchToDelete.opponent_name || 'Opponent'}
+                  </p>
+                  <p className="text-[11px] text-neutral-400">
+                    {formatDateShort(matchToDelete.timestamp)} · {matchToDelete.format_name || 'Constructed'} · {matchToDelete.result === 'win' ? 'Victory' : 'Defeat'}
+                  </p>
+                </div>
+                <p className="text-[11px] font-sans italic" style={{ color: '#D57C69' }}>
+                  This will remove all combat stats and turn events associated with this match.
+                </p>
+              </div>
+            )}
+
+            {/* Body: Step 2 */}
+            {deleteStep === 2 && (
+              <div className="p-5 space-y-3">
+                <div className="p-3 border border-red-500/30 bg-red-500/10 space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#D57C69' }}>
+                    Permanent & Irreversible Deletion
+                  </p>
+                  <p className="text-xs text-neutral-300 font-sans leading-relaxed">
+                    Are you sure you want to permanently delete this match? The match record will be blacklisted to prevent it from ever being re-imported from past log files.
+                  </p>
+                </div>
+                {deleteError && (
+                  <p className="text-xs font-mono text-red-400 p-2 border border-red-500/40 bg-red-950/40">
+                    Error: {deleteError}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10 flex items-center justify-end gap-2.5 bg-neutral-900/60">
+              <button
+                onClick={() => {
+                  if (deleteStep === 2) {
+                    setDeleteStep(1);
+                  } else {
+                    setMatchToDelete(null);
+                  }
+                }}
+                className="px-4 py-1.5 border border-white/10 hover:border-white/20 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              >
+                {deleteStep === 2 ? 'Back' : 'Cancel'}
+              </button>
+
+              {deleteStep === 1 && (
+                <button
+                  onClick={() => setDeleteStep(2)}
+                  style={{ backgroundColor: 'rgba(184, 80, 58, 0.25)', borderColor: 'rgba(184, 80, 58, 0.6)', color: '#FFFFFF' }}
+                  className="px-4 py-1.5 border text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer hover:brightness-125 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Match
+                </button>
+              )}
+
+              {deleteStep === 2 && (
+                <button
+                  onClick={handleConfirmDeleteMatch}
+                  disabled={isDeletingMatch}
+                  style={{ backgroundColor: '#B8503A', borderColor: '#B8503A', color: '#FFFFFF' }}
+                  className="px-4 py-1.5 border text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5 shadow-lg"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {isDeletingMatch ? 'Deleting…' : 'Yes, Delete Permanently'}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -66,20 +66,20 @@ impl ManaTheme {
         }
     }
 
-    /// 3. Black (Swamp / Ambition — Deep Obsidian Violet Accent)
+    /// 3. Black (Swamp / Ambition — Traditional Charcoal & Obsidian Accent)
     pub fn black() -> Self {
         Self {
             id: "black".to_string(),
             name: "Black (Ambition)".to_string(),
             is_dark: true,
-            base: "#0E0D10".to_string(),
-            mantle: "#141217".to_string(),
-            surface: "#1D1922".to_string(),
-            border: "#2C2534".to_string(),
+            base: "#0D0E10".to_string(),
+            mantle: "#131417".to_string(),
+            surface: "#1A1C20".to_string(),
+            border: "#282B32".to_string(),
             text: "#F4F4F6".to_string(),
-            subtext: "#928E99".to_string(),
-            accent: "#8a719d".to_string(),
-            accent_hover: "#a28bb5".to_string(),
+            subtext: "#8E9299".to_string(),
+            accent: "#6B7280".to_string(),
+            accent_hover: "#9CA3AF".to_string(),
             green: "#4A7856".to_string(),
             red: "#B8503A".to_string(),
             yellow: "#D4A237".to_string(),

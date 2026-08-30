@@ -1679,6 +1679,7 @@ export default function App() {
             }}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
             initialSearch={matchHistorySearch}
+            onDeleteMatch={() => loadData()}
           />
         )}
 

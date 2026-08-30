@@ -3648,9 +3648,24 @@ async fn delete_deck(deck_name: String, delete_matches: bool) -> Result<serde_js
 /// Permanently deletes a single match and blacklists its match_id from future log ingestion.
 #[tauri::command]
 async fn delete_match(match_id: String) -> Result<serde_json::Value, String> {
-    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
-    db.delete_match(&match_id).await.map_err(|e| e.to_string())?;
+    println!("[DELETE_MATCH] Received delete request for match_id: '{}'", match_id);
+    let db = DatabaseManager::init().await.map_err(|e| {
+        eprintln!("[DELETE_MATCH] Error initializing DB: {}", e);
+        e.to_string()
+    })?;
+    db.delete_match(&match_id).await.map_err(|e| {
+        eprintln!("[DELETE_MATCH] Error deleting match: {}", e);
+        e.to_string()
+    })?;
+    println!("[DELETE_MATCH] Successfully deleted and blacklisted match_id: '{}'", match_id);
     Ok(serde_json::json!({ "success": true, "match_id": match_id }))
+}
+
+/// Sets the window always-on-top state.
+#[tauri::command]
+async fn set_always_on_top(window: tauri::Window, enabled: bool) -> Result<(), String> {
+    window.set_always_on_top(enabled).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Returns the stored True Decklist for a deck (resolved grp_ids), with card
@@ -4954,7 +4969,8 @@ fn main() {
             get_global_leaderboards,
             set_deck_custom_art,
             reset_deck_custom_art,
-            delete_match
+            delete_match,
+            set_always_on_top
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
