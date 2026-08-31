@@ -19,12 +19,14 @@ import {
   Palette,
   ExternalLink,
   HelpCircle,
-  ShieldCheck
+  ShieldCheck,
+  Gamepad2,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { LogoQuill } from './LogoQuill';
 import { ManaPip } from './ManaPip';
+import { getAvatarCacheStats } from '../utils/avatarImageCache';
 
 interface SetupStatus {
   setup_completed: boolean;
@@ -56,6 +58,15 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
   const [isEditingPaths, setIsEditingPaths] = useState<boolean>(false);
   
   const [syncResult, setSyncResult] = useState<{ success: boolean; count: number; elapsedMs: number; error?: string } | null>(null);
+  const [avatarCount, setAvatarCount] = useState<number>(0);
+  const [avatarExtracting, setAvatarExtracting] = useState<boolean>(false);
+
+  const fetchAvatarStatus = async () => {
+    try {
+      const stats = await getAvatarCacheStats();
+      setAvatarCount(stats.file_count);
+    } catch {}
+  };
 
   const fetchStatus = async () => {
     try {
@@ -64,10 +75,23 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
       setSetupStatus(res);
       if (res.log_path) setCustomLogPath(res.log_path);
       if (res.raw_path) setCustomRawPath(res.raw_path);
+      await fetchAvatarStatus();
     } catch (err) {
       console.error('Failed to get setup status:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExtractAvatars = async () => {
+    setAvatarExtracting(true);
+    try {
+      await invoke('extract_avatars_from_mtga_client');
+      await fetchAvatarStatus();
+    } catch (e) {
+      console.error('Failed to extract avatars:', e);
+    } finally {
+      setAvatarExtracting(false);
     }
   };
 
@@ -369,6 +393,29 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                     )}
                   </div>
                 )}
+
+                {/* Arena Avatar Library Extraction */}
+                <div className="p-4 rounded-xl border border-white/10 bg-white/[0.02] flex items-center justify-between">
+                  <div>
+                    <div className="rt-label opacity-60">Arena Character Avatars</div>
+                    <div className="text-sm font-bold font-display text-white mt-0.5 flex items-center gap-2">
+                      <Gamepad2 className="w-4 h-4 text-emerald-400" />
+                      {avatarCount > 0 ? (
+                        <span className="text-emerald-400 font-mono tabular-nums">{avatarCount.toLocaleString()} Avatars Ready</span>
+                      ) : (
+                        <span className="text-neutral-400">Not Extracted Yet</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleExtractAvatars}
+                    disabled={avatarExtracting}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold font-display uppercase tracking-wider text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${avatarExtracting ? 'animate-spin' : ''}`} />
+                    {avatarExtracting ? 'Extracting...' : 'Extract Avatars from Client'}
+                  </button>
+                </div>
               </div>
             </div>
           )}

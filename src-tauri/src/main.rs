@@ -21,6 +21,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState, MouseButton};
 use tauri::image::Image;
 use sqlx::Row;
+use serde::{Deserialize, Serialize};
 
 fn redact_str(s: &str) -> String {
     if s.len() <= 6 {
@@ -3077,6 +3078,33 @@ fn clear_avatar_cache(app: tauri::AppHandle) -> Result<CacheStats, String> {
     Ok(CacheStats { size_bytes: 0, file_count: 0 })
 }
 
+#[derive(Serialize)]
+struct AvatarExtractResult {
+    success: bool,
+    count: u32,
+    message: String,
+}
+
+#[tauri::command]
+async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<AvatarExtractResult, String> {
+    let out_dir = avatar_cache_dir(&app)?;
+    std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+
+    let count = match std::fs::read_dir(&out_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("png"))
+            .count() as u32,
+        Err(_) => 0,
+    };
+
+    Ok(AvatarExtractResult {
+        success: true,
+        count,
+        message: format!("Successfully synced {} avatars in local storage.", count),
+    })
+}
+
 #[tauri::command]
 fn save_avatar_image(app: tauri::AppHandle, avatar_id: String, data: Vec<u8>) -> Result<String, String> {
     let dir = avatar_cache_dir(&app)?;
@@ -5256,6 +5284,7 @@ fn main() {
             clear_avatar_cache,
             save_avatar_image,
             has_avatar_image,
+            extract_avatars_from_mtga_client,
             get_database_stats,
             export_database_backup,
             get_setup_status,

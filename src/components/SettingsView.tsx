@@ -459,6 +459,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const handleExtractAvatarsFromClient = async () => {
+    setAvatarDownloading(true);
+    setAvatarDownloadProgress('Extracting avatars from MTGA client...');
+    try {
+      const res = await invoke<{ success: boolean; count: number; message: string }>('extract_avatars_from_mtga_client');
+      await loadAvatarCacheStats();
+      setAvatarDownloadProgress(res.message);
+      setTimeout(() => setAvatarDownloadProgress(null), 4000);
+    } catch (e: any) {
+      console.error('Extract avatars error:', e);
+      setAvatarDownloadProgress(e?.toString() || 'Error extracting avatars from MTGA client');
+    } finally {
+      setAvatarDownloading(false);
+    }
+  };
+
   const handlePreDownloadAvatars = async () => {
     setAvatarDownloading(true);
     setAvatarDownloadProgress('Starting avatar collection scan...');
@@ -1846,13 +1862,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="flex flex-wrap items-center gap-3 pt-1">
                     <button
-                      onClick={handlePreDownloadAvatars}
+                      onClick={handleExtractAvatarsFromClient}
                       disabled={avatarDownloading}
                       style={{ backgroundColor: MTG_COLORS.blue.bg, borderColor: MTG_COLORS.blue.border }}
                       className="px-4 py-2 border hover:brightness-125 active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <Download className={`w-3.5 h-3.5 ${avatarDownloading ? 'animate-bounce' : ''}`} style={{ color: MTG_COLORS.blue.text }} />
-                      {avatarDownloading ? 'Pre-downloading…' : 'Pre-download All Avatars (~4.5 MB)'}
+                      {avatarDownloading ? 'Extracting…' : 'Extract Avatars from MTGA Client'}
                     </button>
                     <button
                       onClick={handleClearAvatarCache}

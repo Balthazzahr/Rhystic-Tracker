@@ -54,6 +54,7 @@ import { DeckLibraryView } from './components/DeckLibraryView';
 import { LiveHUDView } from './components/LiveHUDView';
 import { CardInspectorModal } from './components/CardInspectorModal';
 import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
+import { AvatarOnboardingModal } from './components/AvatarOnboardingModal';
 import { BlurredCardBackground } from './components/BlurredCardBackground';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
@@ -251,6 +252,15 @@ export default function App() {
       setShowSplash(false);
     }, 2000);
     return () => clearTimeout(t);
+  }, []);
+
+  // One-time Avatar Feature Onboarding Modal
+  const [showAvatarOnboarding, setShowAvatarOnboarding] = useState(false);
+  useEffect(() => {
+    const dismissed = localStorage.getItem('rhystic_avatar_onboarding_dismissed');
+    if (!dismissed) {
+      setShowAvatarOnboarding(true);
+    }
   }, []);
 
   // Listen for navigation events from the system tray menu
@@ -1874,6 +1884,11 @@ export default function App() {
             setCollectionRefreshTrigger(prev => prev + 1);
           }}
         />
+      )}
+
+      {/* ONE-TIME AVATAR ONBOARDING MODAL */}
+      {showAvatarOnboarding && !showSplash && !showSetupWizard && (
+        <AvatarOnboardingModal onClose={() => setShowAvatarOnboarding(false)} />
       )}
 
       {/* SPLASH SCREEN */}
