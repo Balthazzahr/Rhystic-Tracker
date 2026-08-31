@@ -464,7 +464,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     ? Math.max(1, Math.floor((cardArea.w - 0.5 + DECK_COL_GAP) / (deckCardW + DECK_COL_GAP)))
     : 1;
   const gridPageSize = deckCols * deckRows;
-  const tablePageSize = 25;
+  const tablePageSize = 30;
   const activePageSize = deckView === 'cards' ? gridPageSize : tablePageSize;
 
   const [deckPage, setDeckPage] = useState(1);
@@ -1037,7 +1037,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       {showAdvModal && (
         <div
           onClick={() => setShowAdvModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1180,7 +1180,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       {showColumnModal && (
         <div
           onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}

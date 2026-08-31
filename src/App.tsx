@@ -703,6 +703,7 @@ export default function App() {
             turn: liveState.turn || 1,
             round: liveState.round || 1,
             format: liveState.format,
+            going_first: liveState.going_first,
             player_life: liveState.player_life ?? 20,
             opponent_life: liveState.opponent_life ?? 20,
             opponent_name: liveState.opponent_name,
@@ -718,16 +719,19 @@ export default function App() {
           });
         } else if (liveState && liveState.just_completed) {
           // Keep the HUD up showing the result overlay instead of blanking.
-          setLiveMatchState({
+          setLiveMatchState((prev: any) => ({
             status: 'COMPLETED',
             match_id: liveState.match_id,
             format: liveState.format,
+            going_first: liveState.going_first ?? prev?.going_first,
             player_deck_name: liveState.player_deck_name,
             opponent_name: liveState.opponent_name,
             player_life: liveState.player_life,
             opponent_life: liveState.opponent_life,
             duration_seconds: liveState.duration_seconds,
             turns: liveState.turns,
+            turn: liveState.turns,
+            round: Math.ceil((liveState.turns || 1) / 2),
             timestamp: liveState.timestamp,
             impactful_cards: (liveState.impactful_cards || []).filter((c: any) => c.max_hit > 8 || c.total_damage > 12),
             earned_achievements: liveState.earned_achievements || [],
@@ -735,14 +739,29 @@ export default function App() {
             result: liveState.result,
             result_reason: liveState.result_reason,
             reason_label: liveState.reason_label,
-            recent_events: [],
-          });
+            player_commander: prev?.player_commander,
+            opponent_commander: prev?.opponent_commander,
+            player_colors: prev?.player_colors || [],
+            opponent_colors: prev?.opponent_colors || [],
+            player_cards_seen: prev?.player_cards_seen || 0,
+            opponent_cards_seen: prev?.opponent_cards_seen || 0,
+            recent_events: (liveState.recent_events && liveState.recent_events.length > 0)
+              ? liveState.recent_events
+              : (prev?.match_id === liveState.match_id ? prev.recent_events || [] : []),
+          }));
           if (wasActive) {
             wasActive = false;
             await loadData(true);
           }
         } else {
-          setLiveMatchState(null);
+          // Keep completed match permanently visible on screen until user explicitly closes it,
+          // navigates away to another UI view, or a new match begins.
+          setLiveMatchState((prev: any) => {
+            if (prev && prev.status === 'COMPLETED') {
+              return prev;
+            }
+            return null;
+          });
           if (wasActive) {
             wasActive = false;
             await loadData(true);
@@ -1448,9 +1467,9 @@ export default function App() {
 
       {/* COLUMN 1: Left Sidebar (in-flow bar) */}
       <aside 
-        className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-all duration-300 ease-in-out z-20 backdrop-blur-md"
+        className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-all duration-300 ease-in-out z-10 backdrop-blur-md"
         style={{ 
-          backgroundColor: `${palette?.mantle || '#12141A'}E6`, 
+          backgroundColor: `${palette?.mantle || '#12141A'}C0`, 
           borderColor: palette?.border || '#2A2F3D',
           width: isSidebarCollapsed ? '72px' : '220px'
         }}
@@ -1511,11 +1530,16 @@ export default function App() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id as any)}
+                  onClick={() => {
+                    if (item.id !== 'live' && liveMatchState?.status === 'COMPLETED') {
+                      setLiveMatchState(null);
+                    }
+                    setActiveTab(item.id as any);
+                  }}
                   title={isSidebarCollapsed ? item.label : undefined}
                   className={`w-full flex items-center py-2.5 rounded-none font-medium text-sm transition-all cursor-pointer hover:bg-white/[0.04] ${
-                    isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3.5'
-                  } ${isLiveMatchActive ? 'animate-pulse font-bold' : ''}`}
+                    isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-3.5'
+                  }`}
                   style={{
                     backgroundColor: itemBg,
                     color: itemColor,
@@ -1531,11 +1555,6 @@ export default function App() {
                       <span className="truncate tracking-wide">{item.label}</span>
                     )}
                   </div>
-                  {!isSidebarCollapsed && !isLiveMatchActive && (item as any).badge && (
-                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-none bg-black/40 text-amber-300 border border-amber-500/30">
-                      {(item as any).badge}
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -1593,7 +1612,7 @@ export default function App() {
       </aside>
 
       {/* COLUMN 2: Main Workspace Container */}
-      <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 transition-all duration-300 relative z-10">
+      <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 transition-all duration-300 relative">
         
         {/* VIEW 1: Dashboard (default landing view) */}
         {activeTab === 'dashboard' && (
@@ -1640,6 +1659,7 @@ export default function App() {
             liveMatchState={liveMatchState}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
             formatChipColor={formatChipColor}
+            onCloseMatch={() => setLiveMatchState(null)}
           />
         )}
 
@@ -1799,7 +1819,7 @@ export default function App() {
       {/* Delete-deck confirmation modal */}
       {deckToDelete && (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
           onClick={() => setDeckToDelete(null)}
         >
           <div

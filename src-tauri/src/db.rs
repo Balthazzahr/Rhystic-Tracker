@@ -1844,11 +1844,11 @@ mod tests {
             MatchCardRecord { grp_id: 200, is_opponent: true, count: 1 },
         ];
         let turn_events = vec![
-            MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "draw".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:01Z".to_string() },
-            MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "play".to_string(), grp_id: 100, timestamp: "2026-08-19T12:00:05Z".to_string() },
+            MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "draw".to_string(), grp_id: 100, instance_id: None, timestamp: "2026-08-19T12:00:01Z".to_string() },
+            MatchTurnEventRecord { turn_number: 1, seat_id: 1, event_type: "play".to_string(), grp_id: 100, instance_id: None, timestamp: "2026-08-19T12:00:05Z".to_string() },
         ];
         let impactful = vec![
-            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, max_hit_combat: 5, max_hit_spell: 0, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![], cards_drawn: 0 },
+            MatchImpactfulRecord { grp_id: 100, seat_id: 1, total_damage: 5, max_hit: 5, max_hit_combat: 5, max_hit_spell: 0, damage_to_player: 5, damage_to_permanents: 0, damage_combat: 5, damage_spell: 0, titles: vec![], cards_drawn: 0, counters_added: 0 },
         ];
 
         // Call upsert_match once

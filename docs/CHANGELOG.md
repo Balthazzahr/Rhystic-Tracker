@@ -2,6 +2,28 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.9] - 2026-08-31
+
+### ⚔️ Live Match HUD & Match Timeline Overhaul, Mulligan Parity & Layout Refinements
+
+- **Live Match HUD First-Player Dynamic Layout**:
+  - Dynamically aligns the player who went first (Play) to the Left Column (Turn $2r - 1$) and the second player (Draw) to the Right Column (Turn $2r$).
+  - Top player/opponent dashboard stations, turn headers, and life feeds dynamically reposition to match the first-player perspective.
+- **Match Inspector Timeline Synchronization**:
+  - Brought historical match play inspection in `MatchTimeline.tsx` into 1:1 visual parity with the Live Match HUD.
+  - Standardized badges across `[PLAY]`, `[DRAW]`, `[KEPT]`, `[MULLIGAN]`, `[BOTTOM]`, `[DIES]`, `[EXILE]`, `[TOKEN]`, `[DMG]`, `[LIFE]`, `[OPP LIFE]`, and counters.
+  - Removed match-level achievement title tags from repeating on every inline turn event row, keeping the play sequence uncluttered while preserving achievements in dedicated showcase cards.
+- **Opening Hand & Mulligan Processing**:
+  - Fixed duplicate mulligan consumption caused by GRE server prompt processing (`PromptReq` `promptId: 36`).
+  - Added support for London mulligan card bottoming tracking and kept opening hand finalization on Turn 1 start.
+- **Table Pagination Standardization**:
+  - Standardized table views across Match History, Card Library, Deck Library, and Achievements to 30 entries per page.
+- **Modal Stacking & Visual Glitch Fixes**:
+  - Fixed header transparent backdrop glitches in Card Library during initial load.
+  - Standardized modal stacking context layers (`z-[100]`) and tuned sidebar background alpha.
+
+---
+
 ## [1.3.8] - 2026-08-30
 
 ### ⚙️ Settings Overhaul, Match Deletion & Universal Mana Pip Customization

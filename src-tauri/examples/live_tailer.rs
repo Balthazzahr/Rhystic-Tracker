@@ -72,26 +72,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     assembler.register_deck_catalog(decks);
                     println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog", count);
                 }
-                ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, draw_events, diff_deleted_ids, mulligan_events, ability_associations } => {
-                    for (m_seat, is_mul, num_cards) in mulligan_events {
-                        assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
+                ParsedEvent::GameStateUpdates { steps } => {
+                    for step in steps {
+                        if step.turn_number > 0 {
+                            assembler.update_game_state(step.msg_id, step.turn_number, &step.life_by_seat, step.active_seat);
+                        } else if !step.life_by_seat.is_empty() {
+                            assembler.update_game_state(step.msg_id, assembler.current_turn, &step.life_by_seat, step.active_seat);
+                        }
+                        for (m_seat, is_mul, num_cards) in step.mulligan_events {
+                            assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
+                        }
+                        if !step.diff_deleted_ids.is_empty() {
+                            assembler.handle_deleted_instances(&step.diff_deleted_ids);
+                        }
+                        for (ability_id, parent_id) in step.ability_associations {
+                            assembler.register_ability_parent(ability_id, parent_id);
+                        }
+                        for (instance_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name) in step.objects {
+                            assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name);
+                        }
+                        for (ann_id, instance_id, target_id, amount, dtype) in step.damage_events {
+                            assembler.process_damage_event(ann_id, instance_id, target_id, amount, dtype);
+                        }
+                        for (target_id, counter_type, amount) in step.counter_events {
+                            assembler.process_counter_event(target_id, counter_type, amount);
+                        }
+                        for (affector_id, count) in step.draw_events {
+                            assembler.process_draw_event(affector_id, count);
+                        }
                     }
-                    if !diff_deleted_ids.is_empty() {
-                        assembler.handle_deleted_instances(&diff_deleted_ids);
-                    }
-                    for (ability_id, parent_id) in ability_associations {
-                        assembler.register_ability_parent(ability_id, parent_id);
-                    }
-                    for (instance_id, grp_id, owner_seat, zone_id, is_card) in objects {
-                        assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card);
-                    }
-                    for (instance_id, target_id, amount, dtype) in damage_events {
-                        assembler.process_damage_event(instance_id, target_id, amount, dtype);
-                    }
-                    for (affector_id, count) in draw_events {
-                        assembler.process_draw_event(affector_id, count);
-                    }
-                    assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
                 }
                 ParsedEvent::MulliganEvent { seat_id, is_mulligan, num_cards } => {
                     assembler.handle_mulligan_decision(seat_id, is_mulligan, num_cards);

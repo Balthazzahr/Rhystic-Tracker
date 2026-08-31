@@ -469,7 +469,7 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
       {/* 4. EXPANDED MODAL (TOP 25) */}
       {expandedCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md select-none"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md select-none"
           onClick={() => setExpandedCategory(null)}
         >
           <div

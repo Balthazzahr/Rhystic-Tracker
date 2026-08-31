@@ -36,7 +36,7 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-2xl animate-fade-in select-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-2xl animate-fade-in select-none"
       onClick={onClose}
     >
       <div

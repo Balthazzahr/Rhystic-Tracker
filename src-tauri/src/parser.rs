@@ -8,23 +8,31 @@ pub struct AuthPayload {
     pub screen_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GameStateStep {
+    pub msg_id: Option<u64>,
+    pub turn_number: u32,
+    pub active_seat: u32,
+    pub objects: Vec<(u32, Option<u32>, Option<u32>, u32, bool, bool, Option<String>)>, // (inst_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name)
+    pub diff_deleted_ids: Vec<u32>,
+    pub ability_associations: Vec<(u32, u32)>,
+    pub object_id_changes: Vec<(u32, u32)>, // (orig_id, new_id)
+    pub damage_events: Vec<(u32, u32, u32, i32, u32)>, // (ann_id, affector_id, target_id, amount, dtype)
+    pub counter_events: Vec<(u32, u32, i32)>, // (target_instance_id, counter_type, amount)
+    pub life_by_seat: Vec<(u32, i32)>,
+    pub life_modifications: Vec<(u32, u32, i32)>, // (affector_id, target_seat, delta)
+    pub draw_events: Vec<(u32, u32)>,
+    pub mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
+}
+
 #[derive(Debug, Clone)]
 pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
     MatchCreated { match_id: String, format_name: String, assigned_deck_event: bool, reserved_players: serde_json::Value },
     DeckSubmitted { deck_name: String, total_cards: usize, main_deck: Vec<u32>, commander_id: Option<u32>, deck_id: Option<String> },
     DeckCatalogBatch { decks: Vec<(String, String, Option<u32>, Vec<u32>)> },
-    GameStateUpdateCombined {
-        msg_id: Option<u64>,
-        objects: Vec<(u32, Option<u32>, Option<u32>, u32, bool)>, // (inst_id, grp_id, owner_seat, zone_id, is_card)
-        turn_number: u32,
-        life_by_seat: Vec<(u32, i32)>,
-        active_seat: u32,
-        damage_events: Vec<(u32, u32, i32, u32)>,
-        draw_events: Vec<(u32, u32)>,
-        diff_deleted_ids: Vec<u32>,
-        mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
-        ability_associations: Vec<(u32, u32)>,    // (ability_instance_id, parent_instance_id)
+    GameStateUpdates {
+        steps: Vec<GameStateStep>,
     },
     MulliganEvent { seat_id: u32, is_mulligan: bool, num_cards: Option<u32> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
@@ -244,27 +252,51 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     .and_then(|m| m.as_array());
 
                 if let Some(msgs) = messages {
-                    let mut batch: Vec<(u32, Option<u32>, Option<u32>, u32, bool)> = Vec::new();
-                    let mut last_turn: u32 = 0;
-                    let mut life_by_seat: Vec<(u32, i32)> = Vec::new();
-                    let mut last_active: u32 = 1;
-                    let mut damage_events: Vec<(u32, u32, i32, u32)> = Vec::new();
-                    let mut draw_events: Vec<(u32, u32)> = Vec::new();
-                    let mut diff_deleted_ids: Vec<u32> = Vec::new();
-                    let mut mulligan_events: Vec<(u32, bool, Option<u32>)> = Vec::new();
-                    let mut ability_associations: Vec<(u32, u32)> = Vec::new();
-                    let mut any_content = false;
+                    let mut steps: Vec<GameStateStep> = Vec::new();
 
                     for msg in msgs {
                         let mtype = msg.get("type").and_then(|t| t.as_str()).unwrap_or("");
                         if mtype == "GREMessageType_GameStateMessage" {
-                            let msg_id = msg.get("msgId").and_then(|m| m.as_u64());
+                            let mut step = GameStateStep::default();
+                            step.msg_id = msg.get("msgId").and_then(|m| m.as_u64());
                             if let Some(gsm) = msg.get("gameStateMessage") {
                                 if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
                                     for obj in objs {
                                         let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                                        let is_ability = obj_type.contains("Ability") || obj_type.contains("Trigger") || obj.get("objectSourceGrpId").is_some();
-                                        let is_card = !is_ability;
+                                        let parent_id = obj.get("parentId").and_then(|p| p.as_u64()).map(|p| p as u32);
+                                        let is_token = obj_type.contains("Token") || obj.get("isToken").and_then(|b| b.as_bool()).unwrap_or(false);
+                                        let is_ability = (obj_type.contains("Ability") || obj_type.contains("Trigger")) && !is_token;
+                                        let is_back_face = (obj_type.ends_with("Back") || obj_type.contains("Back")) && parent_id.is_some();
+                                        let is_card = !is_ability && !is_back_face;
+
+                                        let token_name = if is_token {
+                                            let mut names: Vec<String> = Vec::new();
+                                            if let Some(subtypes) = obj.get("subtypes").and_then(|s| s.as_array()) {
+                                                for s in subtypes.iter().filter_map(|s| s.as_str()) {
+                                                    let clean = s.strip_prefix("SubType_").unwrap_or(s).trim();
+                                                    if !clean.is_empty() {
+                                                        names.push(clean.to_string());
+                                                    }
+                                                }
+                                            }
+                                            if names.is_empty() {
+                                                if let Some(ctypes) = obj.get("cardTypes").and_then(|c| c.as_array()) {
+                                                    for c in ctypes.iter().filter_map(|c| c.as_str()) {
+                                                        let clean = c.strip_prefix("CardType_").unwrap_or(c).trim();
+                                                        if !clean.is_empty() {
+                                                            names.push(clean.to_string());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if !names.is_empty() {
+                                                Some(format!("{} Token", names.join(" ")))
+                                            } else {
+                                                Some("Token".to_string())
+                                            }
+                                        } else {
+                                            None
+                                        };
 
                                         if let Some(inst_id) = obj.get("instanceId").and_then(|i| i.as_u64()) {
                                             let zone_id = obj.get("zoneId").and_then(|z| z.as_u64()).map(|z| z as u32).unwrap_or(0);
@@ -282,12 +314,12 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                                     .map(|g| g as u32)
                                             };
                                             let owner_seat = obj.get("ownerSeatId").or_else(|| obj.get("controllerSeatId")).and_then(|s| s.as_u64()).map(|s| s as u32);
-                                            if let Some(pid) = obj.get("parentId").and_then(|p| p.as_u64()).map(|p| p as u32) {
+                                            if let Some(pid) = parent_id {
                                                 if pid > 0 {
-                                                    ability_associations.push((inst_id as u32, pid));
+                                                    step.ability_associations.push((inst_id as u32, pid));
                                                 }
                                             }
-                                            batch.push((inst_id as u32, grp_id, owner_seat, zone_id, is_card));
+                                            step.objects.push((inst_id as u32, grp_id, owner_seat, zone_id, is_card, is_token, token_name));
                                         }
                                     }
                                 }
@@ -295,7 +327,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                 if let Some(dels) = gsm.get("diffDeletedInstanceIds").and_then(|d| d.as_array()) {
                                     for d in dels {
                                         if let Some(did) = d.as_u64() {
-                                            diff_deleted_ids.push(did as u32);
+                                            step.diff_deleted_ids.push(did as u32);
                                         }
                                     }
                                 }
@@ -303,12 +335,12 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                 let turn_info = gsm.get("turnInfo");
                                 let turn_number = turn_info.and_then(|t| t.get("turnNumber")).and_then(|n| n.as_u64()).unwrap_or(0) as u32;
                                 if turn_number > 0 {
-                                    last_turn = turn_number;
+                                    step.turn_number = turn_number;
                                     let active_seat = turn_info
                                         .and_then(|t| t.get("activeSeatId").or_else(|| t.get("activePlayer")))
                                         .and_then(|s| s.as_u64())
                                         .unwrap_or(1) as u32;
-                                    last_active = active_seat;
+                                    step.active_seat = active_seat;
                                 }
 
                                 if let Some(players) = gsm.get("players").and_then(|p| p.as_array()) {
@@ -320,15 +352,16 @@ pub fn parse_line(line: &str) -> ParsedEvent {
 
                                         if let Some(life) = p.get("lifeTotal").and_then(|l| l.as_i64()).map(|l| l as i32) {
                                             if seat_id > 0 {
-                                                life_by_seat.push((seat_id as u32, life));
+                                                step.life_by_seat.push((seat_id as u32, life));
                                             }
                                         }
                                     }
                                 }
 
-                                // Extract annotations for damage attribution, ability parent links, and extra card draw tracking.
+                                // Extract annotations for damage attribution, ability parent links, extra card draw tracking, counters, life mods, and object IDs.
                                 if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
                                     for a in anns {
+                                        let ann_id = a.get("id").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
                                         let ann_type = a.get("type").and_then(|t| t.as_array())
                                             .and_then(|arr| arr.first())
                                             .and_then(|t| t.as_str())
@@ -366,11 +399,82 @@ pub fn parse_line(line: &str) -> ParsedEvent {
 
                                             if amount != 0 {
                                                 if affected_ids.is_empty() {
-                                                    damage_events.push((affector_id, 0, amount, dtype));
+                                                    step.damage_events.push((ann_id, affector_id, 0, amount, dtype));
                                                 } else {
                                                     for target_id in affected_ids {
-                                                        damage_events.push((affector_id, target_id, amount, dtype));
+                                                        step.damage_events.push((ann_id, affector_id, target_id, amount, dtype));
                                                     }
+                                                }
+                                            }
+                                        } else if ann_type.contains("ModifiedLife") {
+                                            let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                            let affected_ids: Vec<u32> = a.get("affectedIds")
+                                                .and_then(|arr| arr.as_array())
+                                                .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
+                                                .unwrap_or_default();
+                                            let mut life_delta = 0i32;
+                                            if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                                for d in details {
+                                                    let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                    if key == "life" {
+                                                        if let Some(l) = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()) {
+                                                            life_delta = l as i32;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            for target_seat in affected_ids {
+                                                step.life_modifications.push((affector_id, target_seat, life_delta));
+                                            }
+                                        } else if ann_type.contains("ObjectIdChanged") {
+                                            let mut orig_id = 0u32;
+                                            let mut new_id = 0u32;
+                                            if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                                for d in details {
+                                                    let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                    if key == "orig_id" {
+                                                        orig_id = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()).unwrap_or(0) as u32;
+                                                    } else if key == "new_id" {
+                                                        new_id = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()).unwrap_or(0) as u32;
+                                                    }
+                                                }
+                                            }
+                                            if orig_id > 0 && new_id > 0 {
+                                                step.object_id_changes.push((orig_id, new_id));
+                                            }
+                                        } else if ann_type.contains("CounterAdded") || ann_type.contains("CounterRemoved") || ann_type.contains("Counter") {
+                                            let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                            let affected_ids: Vec<u32> = a.get("affectedIds")
+                                                .and_then(|arr| arr.as_array())
+                                                .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
+                                                .unwrap_or_default();
+
+                                            let mut counter_type = 1u32; // 1 = +1/+1 counter
+                                            let mut amount = 1i32;
+                                            let is_removed = ann_type.contains("CounterRemoved");
+
+                                            if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                                for d in details {
+                                                    let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                    if key == "counter_type" {
+                                                        if let Some(ct) = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()) {
+                                                            counter_type = ct as u32;
+                                                        }
+                                                    } else if key == "transaction_amount" {
+                                                        if let Some(amt) = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()) {
+                                                            amount = amt.abs() as i32;
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            let signed_amount = if is_removed { -amount } else { amount };
+
+                                            if affected_ids.is_empty() && affector_id > 0 {
+                                                step.counter_events.push((affector_id, counter_type, signed_amount));
+                                            } else {
+                                                for target_id in affected_ids {
+                                                    step.counter_events.push((target_id, counter_type, signed_amount));
                                                 }
                                             }
                                         } else if ann_type.contains("AbilityInstanceCreated") || ann_type.contains("AbilityInstanceDeleted") {
@@ -378,7 +482,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                             if affector_id > 0 {
                                                 if let Some(affected_ids) = a.get("affectedIds").and_then(|arr| arr.as_array()) {
                                                     for aff_id in affected_ids.iter().filter_map(|x| x.as_u64().map(|v| v as u32)) {
-                                                        ability_associations.push((aff_id, affector_id));
+                                                        step.ability_associations.push((aff_id, affector_id));
                                                     }
                                                 }
                                             }
@@ -409,59 +513,25 @@ pub fn parse_line(line: &str) -> ParsedEvent {
 
                                                 if is_draw {
                                                     let count = if affected_ids.is_empty() { 1 } else { affected_ids.len() as u32 };
-                                                    draw_events.push((affector_id, count));
+                                                    step.draw_events.push((affector_id, count));
                                                 }
                                             }
                                         }
                                     }
                                 }
 
-                                if !batch.is_empty() || last_turn > 0 || !life_by_seat.is_empty() || !damage_events.is_empty() || !draw_events.is_empty() || !diff_deleted_ids.is_empty() || !ability_associations.is_empty() {
-                                    any_content = true;
+                                if !step.objects.is_empty() || step.turn_number > 0 || !step.life_by_seat.is_empty() || !step.damage_events.is_empty() || !step.counter_events.is_empty() || !step.draw_events.is_empty() || !step.diff_deleted_ids.is_empty() || !step.ability_associations.is_empty() || !step.object_id_changes.is_empty() || !step.life_modifications.is_empty() {
+                                    steps.push(step);
                                 }
-                                let _ = msg_id;
                             }
                         } else if mtype == "GREMessageType_PromptReq" {
-                            if let Some(prompt) = msg.get("prompt") {
-                                let prompt_id = prompt.get("promptId").and_then(|p| p.as_u64()).unwrap_or(0);
-                                let mut player_id = 0u32;
-                                let mut num_cards = None;
-                                if let Some(params) = prompt.get("parameters").and_then(|p| p.as_array()) {
-                                    for param in params {
-                                        let pname = param.get("parameterName").and_then(|p| p.as_str()).unwrap_or("");
-                                        if pname == "PlayerId" {
-                                            if let Some(ref_obj) = param.get("reference") {
-                                                player_id = ref_obj.get("id").and_then(|i| i.as_u64()).unwrap_or(0) as u32;
-                                            }
-                                        } else if pname == "NumberOfCards" {
-                                            num_cards = param.get("numberValue").and_then(|n| n.as_u64()).map(|n| n as u32);
-                                        }
-                                    }
-                                }
-                                if prompt_id == 36 && player_id > 0 {
-                                    mulligan_events.push((player_id, true, num_cards));
-                                    any_content = true;
-                                } else if prompt_id == 37 && player_id > 0 {
-                                    mulligan_events.push((player_id, false, None));
-                                    any_content = true;
-                                }
-                            }
+                            // PromptReq prompts the client to make a choice (e.g. Prompt 36 = Mulligan or Keep).
+                            // The actual user decision is reported via ClientMessageType_MulliganResp (or mulliganResp).
                         }
                     }
 
-                    if any_content {
-                        return ParsedEvent::GameStateUpdateCombined {
-                            msg_id: None,
-                            objects: batch,
-                            turn_number: last_turn,
-                            life_by_seat,
-                            active_seat: last_active,
-                            damage_events,
-                            draw_events,
-                            diff_deleted_ids,
-                            mulligan_events,
-                            ability_associations,
-                        };
+                    if !steps.is_empty() {
+                        return ParsedEvent::GameStateUpdates { steps };
                     }
                 }
             }
@@ -679,22 +749,19 @@ mod tests {
 
     #[test]
     fn test_game_state_accumulates_objects_across_messages_on_one_line() {
-        // A single MTGA log line can contain many GameStateMessage entries. The parser
-        // must accumulate objects from ALL of them (not return on the first one) so that
-        // per-turn draws/plays that appear in later messages on the same line are kept.
         let line = r#"[UnityCrossThreadLogger]==> {"greToClientEvent":{"greToClientMessages":[
             {"type":"GREMessageType_GameStateMessage","msgId":1,"gameStateMessage":{"type":"GameStateType_Diff","gameObjects":[{"instanceId":100,"grpId":83677,"type":"GameObjectType_Card","zoneId":35,"ownerSeatId":2}]}},
             {"type":"GREMessageType_GameStateMessage","msgId":2,"gameStateMessage":{"type":"GameStateType_Diff","turnInfo":{"turnNumber":3,"activePlayer":2},"gameObjects":[{"instanceId":200,"grpId":91549,"type":"GameObjectType_Card","zoneId":35,"ownerSeatId":2}]}}
         ]}}"#;
 
         match parse_line(line) {
-            ParsedEvent::GameStateUpdateCombined { objects, turn_number, .. } => {
-                assert_eq!(objects.len(), 2, "should accumulate objects from both messages");
-                assert_eq!(turn_number, 3, "should use the turn from the latest message");
-                assert!(objects.iter().any(|(inst, _, _, _, _)| *inst == 200));
-                assert!(objects.iter().any(|(inst, _, _, _, _)| *inst == 100));
+            ParsedEvent::GameStateUpdates { steps } => {
+                assert_eq!(steps.len(), 2, "should yield 2 discrete steps");
+                assert_eq!(steps[0].objects[0].0, 100);
+                assert_eq!(steps[1].objects[0].0, 200);
+                assert_eq!(steps[1].turn_number, 3);
             }
-            other => panic!("expected GameStateUpdateCombined, got {:?}", other),
+            other => panic!("expected GameStateUpdates, got {:?}", other),
         }
     }
 
@@ -751,13 +818,14 @@ mod tests {
         ]}}"#;
 
         match parse_line(line) {
-            ParsedEvent::GameStateUpdateCombined { draw_events, objects, .. } => {
-                assert_eq!(objects.len(), 1);
-                assert_eq!(draw_events.len(), 1);
-                assert_eq!(draw_events[0].0, 870, "affectorId should match");
-                assert_eq!(draw_events[0].1, 2, "affectedIds count should match");
+            ParsedEvent::GameStateUpdates { steps } => {
+                assert_eq!(steps.len(), 1);
+                assert_eq!(steps[0].objects.len(), 1);
+                assert_eq!(steps[0].draw_events.len(), 1);
+                assert_eq!(steps[0].draw_events[0].0, 870, "affectorId should match");
+                assert_eq!(steps[0].draw_events[0].1, 2, "affectedIds count should match");
             }
-            other => panic!("expected GameStateUpdateCombined, got {:?}", other),
+            other => panic!("expected GameStateUpdates, got {:?}", other),
         }
     }
 
@@ -773,11 +841,30 @@ mod tests {
         ]}}"#;
 
         match parse_line(line) {
-            ParsedEvent::GameStateUpdateCombined { ability_associations, objects, .. } => {
-                assert_eq!(objects.len(), 1);
-                assert!(ability_associations.contains(&(327, 324)));
+            ParsedEvent::GameStateUpdates { steps } => {
+                assert_eq!(steps.len(), 1);
+                assert_eq!(steps[0].objects.len(), 1);
+                assert!(steps[0].ability_associations.contains(&(327, 324)));
             }
-            other => panic!("expected GameStateUpdateCombined, got {:?}", other),
+            other => panic!("expected GameStateUpdates, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_counter_added_annotation_parsing() {
+        let line = r#"{"greToClientEvent":{"greToClientMessages":[
+            {"type":"GREMessageType_GameStateMessage","msgId":12,"gameStateMessage":{"type":"GameStateType_Diff","annotations":[
+                {"id":221,"affectorId":552,"affectedIds":[548],"type":["AnnotationType_CounterAdded"],"details":[{"key":"counter_type","type":"KeyValuePairValueType_int32","valueInt32":[1]},{"key":"transaction_amount","type":"KeyValuePairValueType_int32","valueInt32":[1]}]}
+            ]}}
+        ]}}"#;
+
+        match parse_line(line) {
+            ParsedEvent::GameStateUpdates { steps } => {
+                assert_eq!(steps.len(), 1);
+                assert_eq!(steps[0].counter_events.len(), 1);
+                assert_eq!(steps[0].counter_events[0], (548, 1, 1));
+            }
+            other => panic!("expected GameStateUpdates with counter event, got {:?}", other),
         }
     }
 }

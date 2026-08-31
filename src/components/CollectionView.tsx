@@ -338,7 +338,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   const cols = gridSize.w > 0 ? Math.max(1, Math.floor((gridSize.w + GRID_GAP) / (cardW + GRID_GAP))) : 1;
   const rows = gridSize.h > 0 ? Math.max(1, Math.floor((gridSize.h + GRID_GAP) / (cardH + GRID_GAP))) : 1;
   // Page size is client-side only; the backend fetch is decoupled from it.
-  const pageSize = view === 'table' ? 100 : cols * rows;
+  const pageSize = view === 'table' ? 30 : cols * rows;
 
   useEffect(() => {
     localStorage.setItem('collectionView', view);
@@ -1308,7 +1308,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           </div>
 
           {/* Table Rows Body Container with Scrollbar */}
-          <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0">
+          <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0 relative">
             <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
               {displayedCards.map((card) => (
                 <div
@@ -1332,17 +1332,17 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
                 </div>
               ))}
             </div>
-          </div>
 
-          {loading && displayedCards.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
-              <span className="text-xs font-mono opacity-70">Loading collection…</span>
-            </div>
-          ) : cards.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xs font-mono opacity-40">No cards match the current filters</span>
-            </div>
-          ) : null}
+            {loading && displayedCards.length === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+                <span className="text-xs font-mono opacity-70">Loading collection…</span>
+              </div>
+            ) : cards.length === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs font-mono opacity-40">No cards match the current filters</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 
@@ -1717,7 +1717,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       {showColumnModal && (
         <div
           onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}

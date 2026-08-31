@@ -547,9 +547,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     return chips;
   }, [formatFilter, timeFilter, resultFilter, positionFilter, normalizedFormatOptions]);
 
-  // --- Pagination (50 matches per page) ---
+  // --- Pagination (30 matches per page) ---
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 30;
 
   useEffect(() => {
     setPage(1);
@@ -1175,7 +1175,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* ========================================================================= */}
       {showAdvModal && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
           onClick={() => setShowAdvModal(false)}
         >
           <div
@@ -1403,7 +1403,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {showColumnModal && (
         <div
           onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1562,7 +1562,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* ========================================================================= */}
       {matchToDelete && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none"
           onClick={() => setMatchToDelete(null)}
         >
           <div 

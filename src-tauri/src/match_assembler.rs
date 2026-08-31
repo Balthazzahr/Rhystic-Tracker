@@ -39,6 +39,7 @@ pub struct MatchTurnEventRecord {
     pub seat_id: u32,
     pub event_type: String,
     pub grp_id: u32,
+    pub instance_id: Option<u32>,
     pub timestamp: String,
 }
 
@@ -56,6 +57,7 @@ pub struct MatchImpactfulRecord {
     pub damage_spell: i32,
     pub titles: Vec<String>,
     pub cards_drawn: i64,
+    pub counters_added: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -71,6 +73,7 @@ pub struct CardDamageStats {
     pub damage_spell: i32,
     pub titles: Vec<String>,
     pub cards_drawn: i64,
+    pub counters_added: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +82,7 @@ pub struct LiveDamageFeedEvent {
     pub target_instance_id: u32,
     pub amount: i32,
     pub damage_type: u32, // 1 = combat, 2 = non-combat/spell
+    pub turn_number: u32,
 }
 
 /// Placeholder deck name for assigned-deck events (Welcome Deck Duels, Jump In)
@@ -91,6 +95,7 @@ pub struct MatchAssembler {
     pub active_match: Option<MatchRecord>,
     pub player_seat_id: u32,
     pub player_user_id: Option<String>,
+    pub player_screen_name: Option<String>,
     pub cached_deck_name: Option<String>,
     pub cached_deck_id: Option<String>,
     pub cached_commander_id: Option<u32>,
@@ -118,11 +123,14 @@ pub struct MatchAssembler {
     pub instance_zone_map: HashMap<u32, u32>, // instanceId -> current zoneId
     pub instance_owner_map: HashMap<u32, u32>, // instanceId -> ownerSeatId
     pub ability_parent_map: HashMap<u32, u32>, // abilityInstanceId -> parentInstanceId
+    pub token_instance_names: HashMap<u32, String>, // instanceId -> token name
     pub recorded_actions: HashSet<(u32, u32, String)>, // (turn_number, instance_id, event_type)
     pub turn_events: Vec<MatchTurnEventRecord>,
     pub turn_event_seqs: Vec<u64>,
-    pub life_events: Vec<(u32, i32, i32, u32, u64)>, // (turn, old_life, new_life, seat_id, seq)
+    pub life_events: Vec<(u32, i32, i32, u32, Option<u32>, u64)>, // (turn, old_life, new_life, seat_id, source_grp_id, seq)
     pub damage_feed_events: Vec<(LiveDamageFeedEvent, u64)>, // (damage_event, seq)
+    pub seen_damage_annotation_ids: HashSet<u32>,
+    pub active_life_sources: HashMap<u32, u32>, // target_seat -> source_instance_id
     pub feed_seq: u64,
     pub current_turn: u32,
     pub turn_1_active_seat: Option<u32>,
@@ -142,6 +150,7 @@ impl MatchAssembler {
             active_match: None,
             player_seat_id: 1,
             player_user_id: None,
+            player_screen_name: None,
             cached_deck_name: None,
             cached_deck_id: None,
             cached_commander_id: None,
@@ -161,11 +170,14 @@ impl MatchAssembler {
             instance_zone_map: HashMap::new(),
             instance_owner_map: HashMap::new(),
             ability_parent_map: HashMap::new(),
+            token_instance_names: HashMap::new(),
             recorded_actions: HashSet::new(),
             turn_events: Vec::new(),
             turn_event_seqs: Vec::new(),
             life_events: Vec::new(),
             damage_feed_events: Vec::new(),
+            seen_damage_annotation_ids: HashSet::new(),
+            active_life_sources: HashMap::new(),
             feed_seq: 0,
             current_turn: 0,
             turn_1_active_seat: None,
@@ -182,6 +194,11 @@ impl MatchAssembler {
 
     pub fn set_player_user_id(&mut self, user_id: String) {
         self.player_user_id = Some(user_id);
+    }
+
+    pub fn set_player_info(&mut self, user_id: String, screen_name: String) {
+        self.player_user_id = Some(user_id);
+        self.player_screen_name = Some(screen_name);
     }
 
     pub fn register_deck_catalog(&mut self, decks: Vec<(String, String, Option<u32>, Vec<u32>)>) {
@@ -227,11 +244,14 @@ impl MatchAssembler {
         self.instance_zone_map.clear();
         self.instance_owner_map.clear();
         self.ability_parent_map.clear();
+        self.token_instance_names.clear();
         self.recorded_actions.clear();
         self.turn_events.clear();
         self.turn_event_seqs.clear();
         self.life_events.clear();
         self.damage_feed_events.clear();
+        self.seen_damage_annotation_ids.clear();
+        self.active_life_sources.clear();
         self.impactful_cards.clear();
         self.processed_msg_ids.clear();
         self.current_turn = 0;
@@ -310,20 +330,95 @@ impl MatchAssembler {
 
     pub fn update_reserved_players(&mut self, players: &serde_json::Value) {
         if let Some(arr) = players.as_array() {
+            // First pass: identify hero seat ID by matching userId or screen_name
             for p in arr {
                 let uid = p.get("userId").and_then(|v| v.as_str()).unwrap_or("");
-                let name = p.get("playerName").and_then(|v| v.as_str()).unwrap_or("");
-                let team_id = p.get("teamId").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                let seat_id = p.get("systemSeatId").and_then(|v| v.as_u64()).unwrap_or(team_id as u64) as u32;
+                let pname = p.get("playerName").and_then(|v| v.as_str()).unwrap_or("");
+                let system_seat = p.get("systemSeatId").or_else(|| p.get("seatId")).and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
-                if Some(uid) == self.player_user_id.as_deref() {
-                    self.player_seat_id = seat_id;
+                let is_hero = if let Some(my_uid) = &self.player_user_id {
+                    uid == my_uid || (uid.is_empty() && system_seat == 1)
+                } else if let Some(my_name) = &self.player_screen_name {
+                    pname == my_name
+                } else {
+                    false
+                };
+
+                if is_hero && system_seat > 0 {
+                    self.player_seat_id = system_seat;
                     if let Some(m) = &mut self.active_match {
-                        m.hero_seat_id = seat_id;
+                        m.hero_seat_id = system_seat;
                     }
-                } else if !name.is_empty() {
+                }
+            }
+
+            // Second pass: identify opponent name for the seat that is not hero
+            for p in arr {
+                let pname = p.get("playerName").and_then(|v| v.as_str()).unwrap_or("");
+                let system_seat = p.get("systemSeatId").or_else(|| p.get("seatId")).and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+
+                if system_seat != self.player_seat_id && !pname.is_empty() {
                     if let Some(m) = &mut self.active_match {
-                        m.opponent_name = Some(name.to_string());
+                        m.opponent_name = Some(pname.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn handle_object_id_changed(&mut self, orig_id: u32, new_id: u32) {
+        if let Some(gid) = self.instance_map.get(&orig_id).copied() {
+            self.instance_map.insert(new_id, gid);
+        }
+        if let Some(seat) = self.instance_owner_map.get(&orig_id).copied() {
+            self.instance_owner_map.insert(new_id, seat);
+        }
+        if let Some(zone) = self.instance_zone_map.get(&orig_id).copied() {
+            self.instance_zone_map.insert(new_id, zone);
+        }
+    }
+
+    pub fn handle_deleted_instances(&mut self, deleted_ids: &[u32]) {
+        if self.current_turn == 0 && !self.opening_hand_finalized && !self.player_opening_hand.is_empty() {
+            let deleted_hand_count = self.player_opening_hand.iter().filter(|(i, _)| deleted_ids.contains(i)).count();
+            if deleted_hand_count > 0 && deleted_hand_count < 5 {
+                // Individual cards deleted before turn 1 -> London mulligan put on bottom of library
+                for inst_id in deleted_ids {
+                    if let Some(pos) = self.player_opening_hand.iter().position(|(i, _)| i == inst_id) {
+                        let (_, gid) = self.player_opening_hand.remove(pos);
+                        self.turn_events.push(MatchTurnEventRecord {
+                            turn_number: 0,
+                            seat_id: self.player_seat_id,
+                            event_type: "bottom".to_string(),
+                            grp_id: gid,
+                            instance_id: Some(*inst_id),
+                            timestamp: Utc::now().to_rfc3339(),
+                        });
+                        self.turn_event_seqs.push(self.feed_seq);
+                        self.feed_seq += 1;
+                    }
+                }
+            }
+        }
+
+        // Check if any deleted instance was on the Battlefield (Zone 28)
+        for inst_id in deleted_ids {
+            if self.instance_zone_map.get(inst_id) == Some(&28) {
+                self.instance_zone_map.insert(*inst_id, 33);
+                if let Some(resolved_grp_id) = self.instance_map.get(inst_id).copied() {
+                    let seat_id = self.instance_owner_map.get(inst_id).copied().unwrap_or(self.player_seat_id);
+                    if !self.recorded_actions.iter().any(|(_, i, t)| *i == *inst_id && t == "dies") {
+                        self.recorded_actions.insert((self.current_turn, *inst_id, "dies".to_string()));
+                        self.turn_events.push(MatchTurnEventRecord {
+                            turn_number: self.current_turn,
+                            seat_id,
+                            event_type: "dies".to_string(),
+                            grp_id: resolved_grp_id,
+                            instance_id: Some(*inst_id),
+                            timestamp: Utc::now().to_rfc3339(),
+                        });
+                        self.turn_event_seqs.push(self.feed_seq);
+                        self.feed_seq += 1;
                     }
                 }
             }
@@ -388,6 +483,7 @@ impl MatchAssembler {
                         seat_id: self.player_seat_id,
                         event_type: "mulligan".to_string(),
                         grp_id: gid,
+                        instance_id: None,
                         timestamp: Utc::now().to_rfc3339(),
                     });
                     self.turn_event_seqs.push(self.feed_seq);
@@ -403,41 +499,18 @@ impl MatchAssembler {
                     seat_id,
                     event_type: "mulligan".to_string(),
                     grp_id: 0,
+                    instance_id: None,
                     timestamp: Utc::now().to_rfc3339(),
                 });
                 self.turn_event_seqs.push(self.feed_seq);
                 self.feed_seq += 1;
             }
         } else {
-            // Hand kept
-            if is_player {
+            // Hand kept: if no mulligans taken, finalize immediately.
+            // If mulligans were taken, keep opening hand active so bottomed cards can be recorded,
+            // then finalize remaining kept cards when turn 1 begins.
+            if is_player && self.player_mulligans == 0 {
                 self.finalize_opening_hand();
-            }
-        }
-    }
-
-    pub fn handle_deleted_instances(&mut self, deleted_ids: &[u32]) {
-        if self.current_turn == 0 && !self.opening_hand_finalized && !self.player_opening_hand.is_empty() {
-            let deleted_hand_count = self.player_opening_hand.iter().filter(|(i, _)| deleted_ids.contains(i)).count();
-            if deleted_hand_count >= 5 {
-                // Full opening hand was deleted -> Mulligan taken
-                self.handle_mulligan_decision(self.player_seat_id, true, None);
-            } else if deleted_hand_count > 0 {
-                // Individual cards deleted before turn 1 -> London mulligan put on bottom of library
-                for inst_id in deleted_ids {
-                    if let Some(pos) = self.player_opening_hand.iter().position(|(i, _)| i == inst_id) {
-                        let (_, gid) = self.player_opening_hand.remove(pos);
-                        self.turn_events.push(MatchTurnEventRecord {
-                            turn_number: 0,
-                            seat_id: self.player_seat_id,
-                            event_type: "bottom".to_string(),
-                            grp_id: gid,
-                            timestamp: Utc::now().to_rfc3339(),
-                        });
-                        self.turn_event_seqs.push(self.feed_seq);
-                        self.feed_seq += 1;
-                    }
-                }
             }
         }
     }
@@ -458,6 +531,7 @@ impl MatchAssembler {
                 seat_id: self.player_seat_id,
                 event_type: "draw".to_string(),
                 grp_id: gid,
+                instance_id: None,
                 timestamp: Utc::now().to_rfc3339(),
             });
             self.turn_event_seqs.push(self.feed_seq);
@@ -465,8 +539,11 @@ impl MatchAssembler {
         }
     }
 
-    pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32, is_card: bool) -> Option<(u32, u32, String)> {
+    pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32, is_card: bool, is_token: bool, token_name: Option<String>) -> Option<(u32, u32, String)> {
         let mut learning_grp_now = false;
+        if let Some(tname) = token_name {
+            self.token_instance_names.insert(instance_id, tname);
+        }
         if let Some(gid) = grp_id {
             if gid > 0 {
                 if !self.instance_map.contains_key(&instance_id) {
@@ -493,7 +570,7 @@ impl MatchAssembler {
             }
         }
 
-        if !is_card {
+        if !is_card && !is_token {
             return None;
         }
 
@@ -526,27 +603,38 @@ impl MatchAssembler {
         }
 
         let from_non_draw = previous_zone.map(|p| NON_DRAW_SOURCE_ZONES.contains(&p)).unwrap_or(false);
-        let is_play_zone = zone_id == 27 || zone_id == 28;
 
         let mut event_type = None;
+        if zone_id == 28 {
+            self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "dies" || act == "exile")));
+        }
+
         if is_hand && (previous_zone != Some(zone_id) || learning_grp_now) {
+            // Card returned to hand -> clear previous play history for recastability
+            self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "play" || act == "dies" || act == "exile")));
             if !from_non_draw {
                 event_type = Some("draw".to_string());
             }
-        } else if zone_id == 28 && previous_zone.is_none() && !learning_grp_now {
-            // New object appearing directly on the battlefield without having passed through hand or stack
+        } else if is_token && zone_id == 28 {
+            // Token created directly on the battlefield
             event_type = Some("token".to_string());
-        } else if is_play_zone && previous_zone != Some(zone_id) {
+        } else if (zone_id == 27 || (zone_id == 28 && previous_zone != Some(27))) && previous_zone != Some(zone_id) {
+            // Entered stack (cast), or entered battlefield directly without passing through stack (lands, puts, non-token creatures)
             event_type = Some("play".to_string());
-        } else if previous_zone == Some(28) && zone_id == 33 {
-            // Battlefield -> Graveyard = Dies / Destroyed / Sacrificed
+        } else if previous_zone == Some(28) && (zone_id == 33 || zone_id == 37) {
+            // Battlefield -> Graveyard (33) or Pending (37) = Dies / Destroyed / Sacrificed
             event_type = Some("dies".to_string());
         } else if previous_zone == Some(28) && zone_id == 29 {
-            // Battlefield -> Exile = Exiled
+            // Battlefield -> Exile (29) = Exiled
             event_type = Some("exile".to_string());
         }
 
         if let Some(etype) = event_type {
+            if (etype == "play" || etype == "dies" || etype == "exile" || etype == "token")
+                && self.recorded_actions.iter().any(|(_, i, t)| *i == instance_id && *t == etype)
+            {
+                return None;
+            }
             let key = (self.current_turn, instance_id, etype.clone());
             if !self.recorded_actions.contains(&key) {
                 self.recorded_actions.insert(key);
@@ -564,6 +652,7 @@ impl MatchAssembler {
                     seat_id,
                     event_type: etype.clone(),
                     grp_id: resolved_grp_id,
+                    instance_id: Some(instance_id),
                     timestamp: Utc::now().to_rfc3339(),
                 });
                 self.turn_event_seqs.push(self.feed_seq);
@@ -580,11 +669,16 @@ impl MatchAssembler {
     /// Aggregates total impact, biggest single swing, and face vs permanent splits.
     pub fn process_damage_event(
         &mut self,
+        ann_id: u32,
         instance_id: u32,
         target_instance_id: u32,
         amount: i32,
         damage_type: u32, // 1 = combat, 2 = non-combat/spell
     ) {
+        if ann_id > 0 && !self.seen_damage_annotation_ids.insert(ann_id) {
+            // Already processed this exact damage annotation -> avoid duplicate entry
+            return;
+        }
         let grp_id = self.instance_map.get(&instance_id).copied().unwrap_or(0);
         if grp_id == 0 {
             return;
@@ -660,6 +754,7 @@ impl MatchAssembler {
                 target_instance_id,
                 amount: magnitude,
                 damage_type,
+                turn_number: self.current_turn,
             },
             self.feed_seq,
         ));
@@ -675,6 +770,7 @@ impl MatchAssembler {
             seat_id,
             event_type: dmg_event_type,
             grp_id,
+            instance_id: Some(instance_id),
             timestamp: Utc::now().to_rfc3339(),
         });
         self.turn_event_seqs.push(self.feed_seq);
@@ -755,6 +851,77 @@ impl MatchAssembler {
         }
     }
 
+    /// Process counters placed on permanents (+1/+1 counters, loyalty, etc.).
+    /// Evaluates Hardened and Ozolithic! achievements.
+    pub fn process_counter_event(&mut self, target_instance_id: u32, counter_type: u32, amount: i32) {
+        if target_instance_id == 0 || amount == 0 {
+            return;
+        }
+        let grp_id = self.instance_map.get(&target_instance_id).copied().unwrap_or(0);
+        if grp_id == 0 {
+            return;
+        }
+        let seat_id = self.instance_owner_map.get(&target_instance_id).copied().unwrap_or(self.player_seat_id);
+
+        let counter_name = if counter_type == 1 { "+1/+1" } else { "counter" };
+        let event_type = format!("counter:{}:{}", counter_name, amount);
+
+        self.turn_events.push(MatchTurnEventRecord {
+            turn_number: self.current_turn,
+            seat_id,
+            event_type,
+            grp_id,
+            instance_id: Some(target_instance_id),
+            timestamp: Utc::now().to_rfc3339(),
+        });
+        self.turn_event_seqs.push(self.feed_seq);
+        self.feed_seq += 1;
+
+        if amount > 0 {
+            let entry = self.impactful_cards.entry(grp_id).or_default();
+            if entry.seat_id == 0 {
+                entry.seat_id = seat_id;
+            }
+            entry.counters_added += amount as i64;
+
+            if seat_id == self.player_seat_id {
+                // Hardened: 7+ (Bronze), 12+ (Silver), 20+ (Gold)
+                if entry.counters_added >= 7 {
+                    let h_tier = if entry.counters_added >= 20 {
+                        "Gold"
+                    } else if entry.counters_added >= 12 {
+                        "Silver"
+                    } else {
+                        "Bronze"
+                    };
+                    let h_title = format!("Hardened ({})", h_tier);
+                    entry.titles.retain(|t| !t.starts_with("Hardened"));
+                    entry.titles.push(h_title);
+                }
+
+                // Ozolithic!: 25+ (Bronze), 50+ (Silver), 75+ (Gold)
+                if entry.counters_added >= 25 {
+                    let o_tier = if entry.counters_added >= 75 {
+                        "Gold"
+                    } else if entry.counters_added >= 50 {
+                        "Silver"
+                    } else {
+                        "Bronze"
+                    };
+                    let o_title = format!("Ozolithic! ({})", o_tier);
+                    entry.titles.retain(|t| !t.starts_with("Ozolithic!"));
+                    entry.titles.push(o_title);
+                }
+            }
+        }
+    }
+
+    pub fn process_life_modification(&mut self, affector_id: u32, target_seat: u32, _delta: i32) {
+        if affector_id > 0 && target_seat > 0 {
+            self.active_life_sources.insert(target_seat, affector_id);
+        }
+    }
+
     pub fn update_game_state(&mut self, msg_id: Option<u64>, turn: u32, life_by_seat: &[(u32, i32)], active_seat: u32) {
         if let Some(mid) = msg_id {
             if self.processed_msg_ids.contains(&mid) {
@@ -780,20 +947,45 @@ impl MatchAssembler {
         }
 
         for (seat, life) in life_by_seat {
-            if *seat == self.player_seat_id {
-                let old = self.current_player_life;
-                if old != *life {
-                    self.life_events.push((self.current_turn, old, *life, *seat, self.feed_seq));
+            let source_inst = self.active_life_sources.remove(seat);
+            let source_grp = source_inst.and_then(|inst| self.instance_map.get(&inst).copied());
+            let is_hero = *seat == self.player_seat_id;
+            let current_life = if is_hero { self.current_player_life } else { self.current_opp_life };
+
+            if current_life != *life {
+                let delta = *life - current_life;
+                // If life decreased due to a combat damage event to this seat on this turn,
+                // the damage event already documents the hit in the HUD feed.
+                let was_combat_damage = delta < 0 && self.damage_feed_events.iter().any(|(dmg, _)| {
+                    dmg.turn_number == self.current_turn
+                        && dmg.target_instance_id == *seat
+                        && dmg.amount == delta.abs()
+                        && (dmg.damage_type == 1 || dmg.damage_type == 3)
+                });
+
+                if !was_combat_damage {
+                    self.life_events.push((self.current_turn, current_life, *life, *seat, source_grp, self.feed_seq));
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: self.current_turn,
+                        seat_id: *seat,
+                        event_type: if let Some(grp) = source_grp {
+                            format!("life:{}:{}:{}", delta, *life, grp)
+                        } else {
+                            format!("life:{}:{}", delta, *life)
+                        },
+                        grp_id: source_grp.unwrap_or(0),
+                        instance_id: source_inst,
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
                     self.feed_seq += 1;
                 }
-                self.current_player_life = *life;
-            } else if *seat > 0 {
-                let old = self.current_opp_life;
-                if old != *life {
-                    self.life_events.push((self.current_turn, old, *life, *seat, self.feed_seq));
-                    self.feed_seq += 1;
+
+                if is_hero {
+                    self.current_player_life = *life;
+                } else {
+                    self.current_opp_life = *life;
                 }
-                self.current_opp_life = *life;
             }
         }
     }
@@ -951,7 +1143,7 @@ impl MatchAssembler {
             let turn_events = std::mem::take(&mut self.turn_events);
 
             let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.iter()
-                .filter(|(_, stats)| stats.total_damage > 0 || stats.cards_drawn > 0 || !stats.titles.is_empty())
+                .filter(|(_, stats)| stats.total_damage > 0 || stats.cards_drawn > 0 || stats.counters_added > 0 || !stats.titles.is_empty())
                 .map(|(grp_id, stats)| MatchImpactfulRecord {
                     grp_id: *grp_id,
                     seat_id: stats.seat_id,
@@ -965,6 +1157,7 @@ impl MatchAssembler {
                     damage_spell: stats.damage_spell,
                     titles: stats.titles.clone(),
                     cards_drawn: stats.cards_drawn,
+                    counters_added: stats.counters_added,
                 })
                 .collect();
 
@@ -1121,7 +1314,7 @@ use super::*;
         let hand: [u32; 7] = [86715, 97964, 92090, 92081, 70001, 70002, 70003];
         for (i, gid) in hand.iter().enumerate() {
             let inst = (i + 1) as u32;
-            assembler.process_game_object(inst, Some(*gid), Some(1), 31, true);
+            assembler.process_game_object(inst, Some(*gid), Some(1), 31, true, false, None);
         }
         assembler.update_game_state(Some(10), 1, &[(1, 20), (2, 20)], 1);
 
@@ -1210,14 +1403,14 @@ use super::*;
 
         // 7 opening hand cards arrive at turn 0
         for i in 1..=7 {
-            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true); // Hand zone
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true, false, None); // Hand zone
         }
 
         // Turn 1 starts, active player seat 1
         assembler.update_game_state(Some(10), 1, &[(1, 20), (2, 20)], 1);
 
         // Turn 1 play: player casts card 1
-        assembler.process_game_object(1, Some(101), Some(1), 28, true); // Battlefield
+        assembler.process_game_object(1, Some(101), Some(1), 28, true, false, None); // Battlefield
 
         let (rec, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match should complete");
         assert_eq!(rec.player_mulligans, Some(0));
@@ -1238,7 +1431,7 @@ use super::*;
 
         // 1. Initial 7 cards dealt to Hero (inst 1..=7)
         for i in 1..=7 {
-            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true);
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true, false, None);
         }
 
         // 2. Opponent takes a mulligan (Prompt 36 for seat 2)
@@ -1249,7 +1442,7 @@ use super::*;
 
         // 4. Hero gets 7 new cards (inst 11..=17)
         for i in 11..=17 {
-            assembler.process_game_object(i, Some(200 + i), Some(1), 31, true);
+            assembler.process_game_object(i, Some(200 + i), Some(1), 31, true, false, None);
         }
 
         // 5. London mulligan bottoming: 1 card (inst 17) bottomed
@@ -1265,11 +1458,6 @@ use super::*;
         assert_eq!(rec.player_mulligans, Some(1));
         assert_eq!(rec.opponent_mulligans, Some(1));
 
-        // Check turn 0 event breakdown:
-        // - 1 opponent mulligan event
-        // - 7 hero mulligan events
-        // - 1 hero bottom event
-        // - 6 hero draw events (the kept cards)
         let opp_mulligans: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 2 && e.event_type == "mulligan").collect();
         let hero_mulligans: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 1 && e.event_type == "mulligan").collect();
         let hero_bottoms: Vec<_> = turn_events.iter().filter(|e| e.turn_number == 0 && e.seat_id == 1 && e.event_type == "bottom").collect();
@@ -1295,15 +1483,15 @@ use super::*;
 
         // Instance 1 = Grp 101 (deals 15 dmg -> Haymaker Bronze)
         // Instance 2 = Grp 102 (deals 25 dmg -> Haymaker Silver + Juggernaut Bronze + Executioner + Over-Killer)
-        assembler.process_game_object(1, Some(101), Some(1), 28, true);
-        assembler.process_game_object(2, Some(102), Some(1), 28, true);
+        assembler.process_game_object(1, Some(101), Some(1), 28, true, false, None);
+        assembler.process_game_object(2, Some(102), Some(1), 28, true, false, None);
 
         // Hit 1: 15 damage to opponent (Opp life 20 -> 5)
-        assembler.process_damage_event(1, 2, 15, 1);
+        assembler.process_damage_event(1, 1, 2, 15, 1);
         assembler.update_game_state(Some(2), 1, &[(1, 20), (2, 5)], 1);
 
         // Hit 2: 25 damage to opponent (Opp life 5 -> -20, killing blow with 20 overkill)
-        assembler.process_damage_event(2, 2, 25, 1);
+        assembler.process_damage_event(2, 2, 2, 25, 1);
         assembler.update_game_state(Some(3), 1, &[(1, 20), (2, -20)], 1);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
@@ -1332,7 +1520,7 @@ use super::*;
         assembler.update_game_state(Some(1), 4, &[(1, 20), (2, 25)], 1);
 
         // Hero casts a big bomb (Instance 10 -> Grp 999)
-        assembler.process_game_object(10, Some(999), Some(1), 28, true);
+        assembler.process_game_object(10, Some(999), Some(1), 28, true, false, None);
 
         // Opponent immediately concedes
         let (_, _, _, impactful) = assembler.complete_match(1, "ResultReason_Concede").expect("match should complete");
@@ -1354,7 +1542,7 @@ use super::*;
         assembler.update_game_state(Some(1), 1, &[(1, 40), (2, 40)], 1);
 
         // Instance 50 = Rhystic Study (Grp 12345)
-        assembler.process_game_object(50, Some(12345), Some(1), 28, true);
+        assembler.process_game_object(50, Some(12345), Some(1), 28, true, false, None);
 
         // Trigger draw 3 cards
         assembler.process_draw_event(50, 3);
@@ -1381,7 +1569,7 @@ use super::*;
         assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 2);
 
         // Instance 324 = Feather of Flight (Grp 91549), cast by Hero (seat 2)
-        assembler.process_game_object(324, Some(91549), Some(2), 28, true);
+        assembler.process_game_object(324, Some(91549), Some(2), 28, true, false, None);
 
         // Ability instance 327 created with parent 324
         assembler.register_ability_parent(327, 324);
@@ -1409,7 +1597,7 @@ use super::*;
         assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
 
         // Ability instance 999 (e.g. Equip ability id 1319) is placed on stack (zone 27) with is_card = false
-        assembler.process_game_object(999, Some(1319), Some(1), 27, false);
+        assembler.process_game_object(999, Some(1319), Some(1), 27, false, false, None);
 
         let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match should complete");
         let play_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "play").collect();
@@ -1449,12 +1637,12 @@ use super::*;
 
         // Instance 10 = Optimistic Scavenger (Grp 501, 10 DMG)
         // Instance 11 = Spellbook Vendor (Grp 502, 12 DMG)
-        assembler.process_game_object(10, Some(501), Some(1), 28, true);
-        assembler.process_game_object(11, Some(502), Some(1), 28, true);
+        assembler.process_game_object(10, Some(501), Some(1), 28, true, false, None);
+        assembler.process_game_object(11, Some(502), Some(1), 28, true, false, None);
 
         // Both swing in for 10 DMG and 12 DMG (total 22 DMG vs 17 Life)
-        assembler.process_damage_event(10, 2, 10, 1);
-        assembler.process_damage_event(11, 2, 12, 1);
+        assembler.process_damage_event(10, 10, 2, 10, 1);
+        assembler.process_damage_event(11, 11, 2, 12, 1);
         assembler.update_game_state(Some(2), 5, &[(1, 20), (2, 0)], 1);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match complete");
@@ -1484,13 +1672,13 @@ use super::*;
         // Instance 20 = Big Creature (Grp 601, 18 DMG -> 18 - 2 = 16 excess -> Gold Over-Killer)
         // Instance 21 = Med Creature (Grp 602, 9 DMG -> 9 - 2 = 7 excess -> Bronze Over-Killer)
         // Instance 22 = Small Chump (Grp 603, 3 DMG -> 3 - 2 = 1 excess -> No Over-Killer)
-        assembler.process_game_object(20, Some(601), Some(1), 28, true);
-        assembler.process_game_object(21, Some(602), Some(1), 28, true);
-        assembler.process_game_object(22, Some(603), Some(1), 28, true);
+        assembler.process_game_object(20, Some(601), Some(1), 28, true, false, None);
+        assembler.process_game_object(21, Some(602), Some(1), 28, true, false, None);
+        assembler.process_game_object(22, Some(603), Some(1), 28, true, false, None);
 
-        assembler.process_damage_event(20, 2, 18, 1);
-        assembler.process_damage_event(21, 2, 9, 1);
-        assembler.process_damage_event(22, 2, 3, 1);
+        assembler.process_damage_event(20, 20, 2, 18, 1);
+        assembler.process_damage_event(21, 21, 2, 9, 1);
+        assembler.process_damage_event(22, 22, 2, 3, 1);
         assembler.update_game_state(Some(2), 6, &[(1, 20), (2, -28)], 1);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match complete");
@@ -1502,5 +1690,334 @@ use super::*;
         assert!(imp_big.titles.iter().any(|t| t == "Over-Killer (Gold)"), "Big creature 18-2=16 excess -> Over-Killer (Gold)");
         assert!(imp_med.titles.iter().any(|t| t == "Over-Killer (Bronze)"), "Med creature 9-2=7 excess -> Over-Killer (Bronze)");
         assert!(!imp_small.titles.iter().any(|t| t.starts_with("Over-Killer")), "Small creature 3-2=1 excess must NOT receive Over-Killer");
+    }
+
+    #[test]
+    fn test_token_creation_events() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-tokens".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+
+        // Scute Swarm triggers and creates 3 insect tokens (grp 70000)
+        for i in 100..=102 {
+            let res = assembler.process_game_object(i, Some(70000), Some(1), 28, true, true, Some("Insect Token".to_string()));
+            assert_eq!(res, Some((70000, 1, "token".to_string())));
+        }
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match complete");
+        let token_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "token").collect();
+        assert_eq!(token_events.len(), 3, "Should record 3 token creation events");
+        assert_eq!(assembler.token_instance_names.get(&100), Some(&"Insect Token".to_string()));
+    }
+
+    #[test]
+    fn test_counter_event_and_hardened_ozolithic_achievements() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-counters".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 2, &[(1, 20), (2, 20)], 1);
+
+        // Instance 548 = Voice of the Blessed (Grp 78901)
+        assembler.process_game_object(548, Some(78901), Some(1), 28, true, false, None);
+
+        // Add 7 +1/+1 counters -> Hardened (Bronze)
+        for _ in 0..7 {
+            assembler.process_counter_event(548, 1, 1);
+        }
+
+        // Add 18 more counters (total 25) -> Hardened (Gold) + Ozolithic! (Bronze)
+        assembler.process_counter_event(548, 1, 18);
+
+        let (_, _, turn_events, impactful) = assembler.complete_match(1, "Concede").expect("match complete");
+
+        let counter_events: Vec<_> = turn_events.iter().filter(|e| e.event_type.starts_with("counter:")).collect();
+        assert_eq!(counter_events.len(), 8, "Should have 8 counter events");
+        assert_eq!(counter_events[0].grp_id, 78901);
+
+        let voice_entry = impactful.iter().find(|i| i.grp_id == 78901).expect("Voice should be impactful");
+        assert_eq!(voice_entry.counters_added, 25);
+        assert!(voice_entry.titles.iter().any(|t| t == "Hardened (Gold)"), "Should award Hardened (Gold)");
+        assert!(voice_entry.titles.iter().any(|t| t == "Ozolithic! (Bronze)"), "Should award Ozolithic! (Bronze)");
+    }
+
+    #[test]
+    fn test_life_events_persisted_to_turn_events() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-life".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+        // Life gain on Turn 2
+        assembler.update_game_state(Some(2), 2, &[(1, 21), (2, 19)], 1);
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match complete");
+        let life_events: Vec<_> = turn_events.iter().filter(|e| e.event_type.starts_with("life:")).collect();
+
+        assert_eq!(life_events.len(), 2, "Should record 2 life change events");
+        assert!(life_events.iter().any(|e| e.seat_id == 1 && e.event_type == "life:1:21"));
+        assert!(life_events.iter().any(|e| e.seat_id == 2 && e.event_type == "life:-1:19"));
+    }
+
+    #[test]
+    fn test_board_wipe_and_creature_death_not_repeated_across_rounds() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-boardwipe".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Turn 3: Hero plays 5 creatures
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+        for inst in 101..=105 {
+            assembler.process_game_object(inst, Some(inst * 10), Some(1), 28, true, false, None);
+        }
+
+        // Turn 4: Opponent casts Wrath of God -> 5 creatures move from 28 to 33 (Graveyard)
+        assembler.update_game_state(Some(2), 4, &[(1, 20), (2, 20)], 2);
+        for inst in 101..=105 {
+            let res = assembler.process_game_object(inst, Some(inst * 10), Some(1), 33, true, false, None);
+            assert_eq!(res, Some((inst * 10, 1, "dies".to_string())));
+        }
+
+        // Turn 5: New turn begins, game state messages continue
+        assembler.update_game_state(Some(3), 5, &[(1, 20), (2, 20)], 1);
+        for inst in 101..=105 {
+            // Processing graveyard instances on turn 5 must NOT re-emit 'dies'
+            let res = assembler.process_game_object(inst, Some(inst * 10), Some(1), 33, true, false, None);
+            assert_eq!(res, None, "Instance already died; must not emit duplicate dies event on turn 5");
+        }
+
+        // Turn 6: Next turn continues
+        assembler.update_game_state(Some(4), 6, &[(1, 20), (2, 20)], 2);
+        for inst in 101..=105 {
+            let res = assembler.process_game_object(inst, Some(inst * 10), Some(1), 33, true, false, None);
+            assert_eq!(res, None, "Instance already died; must not emit duplicate dies event on turn 6");
+        }
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match complete");
+        let dies_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "dies").collect();
+
+        assert_eq!(dies_events.len(), 5, "Exactly 5 dies events must be recorded in total");
+        for d in dies_events {
+            assert_eq!(d.turn_number, 4, "All deaths must be attributed to Turn 4");
+        }
+    }
+
+    #[test]
+    fn test_damage_annotation_deduplication() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-dmg-dedup".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 2, &[(1, 20), (2, 20)], 2);
+        // Opponent plays Phoenix Chick (Grp 701, Inst 552)
+        assembler.process_game_object(552, Some(701), Some(2), 28, true, false, None);
+
+        // Annotation ID 134 sends 1 combat damage to Player (Seat 1)
+        assembler.process_damage_event(134, 552, 1, 1, 1);
+        // Duplicate message containing the same annotation ID 134
+        assembler.process_damage_event(134, 552, 1, 1, 1);
+
+        assert_eq!(assembler.damage_feed_events.len(), 1, "Duplicate damage annotation must be skipped");
+        assert_eq!(assembler.damage_feed_events[0].0.amount, 1);
+    }
+
+    #[test]
+    fn test_lethal_damage_deletion_records_dies() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-lethal".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+        // Hero plays Lunarch Veteran (Grp 78354, Inst 547)
+        assembler.process_game_object(547, Some(78354), Some(1), 28, true, false, None);
+
+        // Opponent casts Cathartic Pyre dealing 3 damage to Lunarch Veteran on Turn 4
+        assembler.update_game_state(Some(2), 4, &[(1, 20), (2, 20)], 2);
+        assembler.process_damage_event(217, 560, 547, 3, 2);
+
+        // Arena deletes instance 547 from battlefield
+        assembler.handle_deleted_instances(&[547]);
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match complete");
+        let dies_event = turn_events.iter().find(|e| e.event_type == "dies").expect("Must record dies event");
+
+        assert_eq!(dies_event.grp_id, 78354);
+        assert_eq!(dies_event.turn_number, 4);
+        assert_eq!(dies_event.seat_id, 1);
+    }
+
+    #[test]
+    fn test_life_source_attribution() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-life-source".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+        // Hero plays Authority of the Consuls (Grp 87040, Inst 572)
+        assembler.process_game_object(572, Some(87040), Some(1), 28, true, false, None);
+
+        // Opponent enters a creature -> Authority modifies Hero's life by +1
+        assembler.process_life_modification(572, 1, 1);
+        assembler.update_game_state(Some(2), 3, &[(1, 21), (2, 20)], 1);
+
+        assert_eq!(assembler.life_events.len(), 1);
+        assert_eq!(assembler.life_events[0].4, Some(87040), "Source card grp_id should be Authority of the Consuls");
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("match complete");
+        let life_event = turn_events.iter().find(|e| e.event_type.starts_with("life:")).expect("Life event");
+        assert_eq!(life_event.grp_id, 87040);
+        assert_eq!(life_event.event_type, "life:1:21:87040");
+    }
+
+    #[test]
+    fn test_single_mulligan_records_exactly_seven_cards_mulliganed() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("m-mull-1".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Turn 0: Deal 7 initial cards to player hand (Zone 31)
+        for i in 1..=7 {
+            assembler.process_game_object(i, Some(100 + i), Some(1), 31, true, false, None);
+        }
+
+        // Hero takes 1 mulligan
+        assembler.handle_mulligan_decision(1, true, None);
+
+        // Arena sends diffDeletedInstanceIds for those 7 cards
+        assembler.handle_deleted_instances(&[1, 2, 3, 4, 5, 6, 7]);
+
+        // Draw new 7-card hand
+        for i in 8..=14 {
+            assembler.process_game_object(i, Some(200 + i), Some(1), 31, true, false, None);
+        }
+
+        // Hero keeps hand
+        assembler.handle_mulligan_decision(1, false, None);
+        // Bottom 1 card
+        assembler.handle_deleted_instances(&[14]);
+
+        // Turn 1 begins
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        let (m, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("complete");
+        assert_eq!(m.player_mulligans, Some(1), "Player mulligans should be exactly 1");
+
+        let mull_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "mulligan" && e.seat_id == 1).collect();
+        let draw_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "draw" && e.seat_id == 1).collect();
+        let bottom_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "bottom" && e.seat_id == 1).collect();
+
+        assert_eq!(mull_events.len(), 7, "Exactly 7 cards should be marked as mulliganed");
+        assert_eq!(bottom_events.len(), 1, "Exactly 1 card should be marked as bottomed");
+        assert_eq!(draw_events.len(), 6, "Kept hand contains 6 drawn cards");
+    }
+
+    #[test]
+    fn test_token_not_repeated_across_turns() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("m-token-repeat".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Turn 3: Overlord creates Land Token (Inst 880, Grp 999)
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+        let res1 = assembler.process_game_object(880, Some(999), Some(1), 28, false, true, Some("Forest Token".to_string()));
+        assert_eq!(res1, Some((999, 1, "token".to_string())));
+
+        // Turn 4: Game state continues on opponent turn
+        assembler.update_game_state(Some(2), 4, &[(1, 20), (2, 20)], 2);
+        let res2 = assembler.process_game_object(880, Some(999), Some(1), 28, false, true, Some("Forest Token".to_string()));
+        assert_eq!(res2, None, "Existing token must NOT re-emit on turn 4");
+
+        // Turn 5: Next round continues
+        assembler.update_game_state(Some(3), 5, &[(1, 20), (2, 20)], 1);
+        let res3 = assembler.process_game_object(880, Some(999), Some(1), 28, false, true, Some("Forest Token".to_string()));
+        assert_eq!(res3, None, "Existing token must NOT re-emit on turn 5");
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("complete");
+        let token_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "token").collect();
+        assert_eq!(token_events.len(), 1, "Exactly 1 token event must be recorded overall");
+    }
+
+    #[test]
+    fn test_counter_removed_negative_amount() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("m-counter-rem".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+        assembler.process_game_object(500, Some(81886), Some(1), 28, true, false, None);
+
+        // Counter added: 4 time counters
+        assembler.process_counter_event(500, 2, 4);
+        // Counter removed on turn 5: -1
+        assembler.update_game_state(Some(2), 5, &[(1, 20), (2, 20)], 1);
+        assembler.process_counter_event(500, 2, -1);
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("complete");
+        let c_events: Vec<_> = turn_events.iter().filter(|e| e.event_type.starts_with("counter:")).collect();
+        assert_eq!(c_events.len(), 2);
+        assert_eq!(c_events[0].event_type, "counter:counter:4");
+        assert_eq!(c_events[1].event_type, "counter:counter:-1");
+    }
+
+    #[test]
+    fn test_opponent_name_resolved_when_hero_is_seat_2() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("6E43B5C35F1E3AA7".to_string(), "Balthazzar".to_string());
+        assembler.start_match("m-seat2-opp".to_string(), "Brawl".to_string(), false);
+
+        // Opponent is Seat 1, Hero is Seat 2 (in order received from Arena)
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "ISLP2MPXWJH5HCW2ZJSQTWANLQ", "playerName": "ItsAviTime", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "6E43B5C35F1E3AA7", "playerName": "Balthazzar", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assert_eq!(assembler.player_seat_id, 2, "Hero seat should be 2");
+        assert_eq!(
+            assembler.active_match.as_ref().and_then(|m| m.opponent_name.as_deref()),
+            Some("ItsAviTime"),
+            "Opponent name must be ItsAviTime even when Hero is Seat 2"
+        );
     }
 }

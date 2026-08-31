@@ -1,7 +1,7 @@
 [package]
 name = "rhystic-tracker"
 default-run = "rhystic-tracker"
-version = "1.3.8"
+version = "1.3.9"
 description = "Rhystic Tracker Tauri Desktop Application"
 authors = ["Dave Pople"]
 edition = "2021"

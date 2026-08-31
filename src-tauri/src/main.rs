@@ -4042,6 +4042,16 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
         let mana_cost: Option<String> = r.get("mana_cost");
         let titles = titles_map.get(&grp_id).cloned().unwrap_or_default();
 
+        let display_name = if event_type.starts_with("life:") {
+            let parts: Vec<&str> = event_type.split(':').collect();
+            let delta = parts.get(1).unwrap_or(&"0");
+            let total = parts.get(2).unwrap_or(&"0");
+            let sign = if delta.starts_with('-') || delta.starts_with('+') { "" } else { "+" };
+            format!("Life Total: {} ({}{})", total, sign, delta)
+        } else {
+            name.unwrap_or_else(|| if grp_id == 0 { "Unknown Action".to_string() } else { format!("Unknown Card (#{})", grp_id) })
+        };
+
         events.push(serde_json::json!({
             "turn_number": turn_number,
             "seat_id": seat_id,
@@ -4049,7 +4059,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
             "event_type": event_type,
             "grp_id": grp_id,
             "timestamp": timestamp,
-            "name": name.unwrap_or_else(|| format!("Unknown Card (#{})", grp_id)),
+            "name": display_name,
             "card_type": card_type,
             "mana_cost": mana_cost,
             "titles": titles,
@@ -4185,14 +4195,43 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
             let mut merged: Vec<(u64, serde_json::Value)> = Vec::new();
 
             for (e, seq) in assembler.turn_events.iter().zip(assembler.turn_event_seqs.iter()) {
-                // Damage events are already formatted and provided via damage_feed_events.
-                // Skip damage records here so they aren't processed as 'play' actions in the HUD feed.
-                if e.event_type.starts_with("damage:") {
+                // Damage and life events are already formatted and provided via damage_feed_events & life_events.
+                // Skip them here so they aren't processed as duplicate or 'play' actions in the HUD feed.
+                if e.event_type.starts_with("damage:") || e.event_type.starts_with("life:") {
                     continue;
                 }
-                let meta = card_db::get_card_metadata(db_for_names.pool(), e.grp_id as i64).await.ok().flatten();
-                let name = meta.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", e.grp_id));
-                let card_type = meta.as_ref().and_then(|c| c.card_type.clone());
+                let (name, card_type) = if e.event_type == "token" {
+                    let tname = e.instance_id.and_then(|inst| assembler.token_instance_names.get(&inst)).cloned();
+                    if let Some(name) = tname {
+                        (name, Some("Token".to_string()))
+                    } else {
+                        let meta = card_db::get_card_metadata(db_for_names.pool(), e.grp_id as i64).await.ok().flatten();
+                        if let Some(ref m) = meta {
+                            if m.card_type.as_deref().map(|t| t.contains("Token")).unwrap_or(false) {
+                                (m.name.clone(), m.card_type.clone())
+                            } else {
+                                (format!("{} Token", m.name), Some("Token".to_string()))
+                            }
+                        } else {
+                            ("Token".to_string(), Some("Token".to_string()))
+                        }
+                    }
+                } else if e.grp_id == 0 {
+                    let default_name = if e.event_type == "mulligan" {
+                        "Mulligan".to_string()
+                    } else if e.event_type == "bottom" {
+                        "Card Bottomed".to_string()
+                    } else {
+                        "Unknown Action".to_string()
+                    };
+                    (default_name, None)
+                } else {
+                    let meta = card_db::get_card_metadata(db_for_names.pool(), e.grp_id as i64).await.ok().flatten();
+                    let name = meta.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", e.grp_id));
+                    let card_type = meta.as_ref().and_then(|c| c.card_type.clone());
+                    (name, card_type)
+                };
+
                 merged.push((*seq, serde_json::json!({
                     "type": e.event_type,
                     "seat_id": e.seat_id,
@@ -4204,16 +4243,34 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                 })));
             }
 
-            for (turn, old, new, seat, seq) in assembler.life_events.iter() {
+            for (turn, old, new, seat, src_grp, seq) in assembler.life_events.iter() {
                 let delta = new - old;
+                let source_name = if let Some(gid) = src_grp {
+                    if *gid > 0 {
+                        let meta = card_db::get_card_metadata(db_for_names.pool(), *gid as i64).await.ok().flatten();
+                        meta.map(|c| c.name)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let display_str = if let Some(ref sname) = source_name {
+                    format!("{} → {} ({} {}) ({})", old, new, if delta >= 0 { "+" } else { "" }, delta, sname)
+                } else {
+                    format!("{} → {} ({} {})", old, new, if delta >= 0 { "+" } else { "" }, delta)
+                };
+
                 merged.push((*seq, serde_json::json!({
                     "type": "life",
                     "seat_id": seat,
                     "is_player": *seat == assembler.player_seat_id,
-                    "name": format!("{} → {} ({} {})", old, new, if delta >= 0 { "+" } else { "" }, delta),
+                    "name": display_str,
+                    "source_name": source_name,
                     "delta": delta,
                     "turn": turn,
-                    "grp_id": 0,
+                    "grp_id": src_grp.unwrap_or(0),
                 })));
             }
 
@@ -4244,14 +4301,13 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "amount": dmg.amount,
                     "damage_type": if dmg.damage_type == 1 { "Combat" } else if dmg.damage_type == 3 { "Fight" } else { "Spell" },
                     "grp_id": src_grp,
-                    "turn": assembler.current_turn,
+                    "turn": dmg.turn_number,
                 })));
             }
 
             merged.sort_by_key(|(seq, _)| *seq);
-            // Keep only the most recent 30 entries.
-            let mstart = merged.len().saturating_sub(30);
-            recent_events = merged.into_iter().skip(mstart).map(|(_, ev)| ev).collect();
+            // Preserve all match action events across the entire match
+            recent_events = merged.into_iter().map(|(_, ev)| ev).collect();
         }
 
         // Resolve commander names and deck colors from the card cache so the HUD can
@@ -4313,12 +4369,15 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
             opp_colors = order.iter().filter(|c| os.contains(**c)).map(|c| c.to_string()).collect();
         }
 
+        let going_first = assembler.turn_1_active_seat.map(|seat| seat == assembler.player_seat_id).unwrap_or(active.going_first);
+
         Ok(serde_json::json!({
             "is_active": true,
             "match_id": active.match_id,
             "format": active.format_name,
             "turn": assembler.current_turn,
             "round": round,
+            "going_first": going_first,
             "player_life": assembler.current_player_life,
             "opponent_life": assembler.current_opp_life,
             "opponent_name": active.opponent_name.as_deref().unwrap_or("Opponent"),
@@ -4438,6 +4497,113 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                             }
                         }
                     }
+                    let event_rows = sqlx::query(
+                        r#"
+                        SELECT e.turn_number, e.seat_id, e.event_type, e.grp_id,
+                               c.name, c.card_type
+                        FROM match_turn_events e
+                        LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
+                        WHERE e.match_id = ?
+                        ORDER BY e.turn_number ASC, e.id ASC
+                        "#
+                    )
+                    .bind(&record.match_id)
+                    .fetch_all(pool)
+                    .await
+                    .unwrap_or_default();
+
+                    let mut completed_recent_events = Vec::new();
+                    for er in event_rows {
+                        let t_num: i64 = er.get("turn_number");
+                        let s_id: i64 = er.get("seat_id");
+                        let ev_type: String = er.get("event_type");
+                        let gid: i64 = er.get("grp_id");
+                        let name_opt: Option<String> = er.get("name");
+                        let card_type_opt: Option<String> = er.get("card_type");
+
+                        let is_hero = (s_id as u32) == record.hero_seat_id;
+
+                        if ev_type.starts_with("life:") {
+                            let parts: Vec<&str> = ev_type.split(':').collect();
+                            let delta: i32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                            let new_total: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                            let old_total = new_total - delta;
+                            let src_name = name_opt.clone();
+                            let display_str = if let Some(ref sn) = src_name {
+                                format!("{} → {} ({} {}) ({})", old_total, new_total, if delta >= 0 { "+" } else { "" }, delta, sn)
+                            } else {
+                                format!("{} → {} ({} {})", old_total, new_total, if delta >= 0 { "+" } else { "" }, delta)
+                            };
+                            completed_recent_events.push(serde_json::json!({
+                                "type": "life",
+                                "seat_id": s_id,
+                                "is_player": is_hero,
+                                "name": display_str,
+                                "source_name": src_name,
+                                "delta": delta,
+                                "turn": t_num,
+                                "grp_id": gid,
+                            }));
+                        } else if ev_type.starts_with("damage:") {
+                            let parts: Vec<&str> = ev_type.split(':').collect();
+                            let tgt_id: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                            let amount: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                            let target_name = if tgt_id == 1 || tgt_id == 2 {
+                                if tgt_id == record.hero_seat_id { "You".to_string() } else { record.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string()) }
+                            } else {
+                                format!("Target #{}", tgt_id)
+                            };
+                            completed_recent_events.push(serde_json::json!({
+                                "type": "damage",
+                                "seat_id": s_id,
+                                "is_player": is_hero,
+                                "name": name_opt.unwrap_or_else(|| format!("#{}", gid)),
+                                "target_name": target_name,
+                                "card_type": card_type_opt,
+                                "amount": amount,
+                                "turn": t_num,
+                                "grp_id": gid,
+                            }));
+                        } else {
+                            let default_name = if ev_type == "mulligan" {
+                                "Mulligan".to_string()
+                            } else if ev_type == "bottom" {
+                                "Card Bottomed".to_string()
+                            } else {
+                                "Unknown Action".to_string()
+                            };
+                            completed_recent_events.push(serde_json::json!({
+                                "type": ev_type,
+                                "seat_id": s_id,
+                                "is_player": is_hero,
+                                "name": name_opt.unwrap_or(default_name),
+                                "card_type": card_type_opt,
+                                "grp_id": gid,
+                                "turn": t_num,
+                            }));
+                        }
+                    }
+
+                    return Ok(serde_json::json!({
+                        "is_active": false,
+                        "just_completed": true,
+                        "result": record.result,
+                        "result_reason": record.result_reason,
+                        "reason_label": reason_label,
+                        "match_id": record.match_id,
+                        "format": record.format_name,
+                        "going_first": record.going_first,
+                        "player_deck_name": record.player_deck_name,
+                        "opponent_name": record.opponent_name,
+                        "player_life": record.player_life_end.unwrap_or(20),
+                        "opponent_life": record.opponent_life_end.unwrap_or(0),
+                        "duration_seconds": record.duration_seconds,
+                        "turns": record.turns,
+                        "timestamp": record.date_str,
+                        "impactful_cards": impactful_cards_arr,
+                        "earned_achievements": earned_achievements_arr,
+                        "recent_events": completed_recent_events,
+                    }));
                 }
 
                 return Ok(serde_json::json!({
@@ -4448,6 +4614,7 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     "reason_label": reason_label,
                     "match_id": record.match_id,
                     "format": record.format_name,
+                    "going_first": record.going_first,
                     "player_deck_name": record.player_deck_name,
                     "opponent_name": record.opponent_name,
                     "player_life": record.player_life_end.unwrap_or(20),
@@ -4485,8 +4652,6 @@ async fn run_tailer_supervisor(
         let tailer_task = tokio::spawn(tailer.run());
         let processing_task = tokio::spawn(process_tailer_events(rx, db_manager.clone(), assembler_ref.clone()));
 
-        // Wait for either a path change (restart) or the event stream to end.
-        // tokio::select! cancels the non-selected branches when one completes.
         tokio::select! {
             _ = path_rx.changed() => {
                 println!("[TAILER] Log path changed; restarting tailer");
@@ -4502,17 +4667,11 @@ async fn run_tailer_supervisor(
     }
 }
 
-/// Record the submitted deck for a completed match in the `match_decks` audit
-/// table (retained indefinitely). Used to detect preset decks that slip through
-/// the keyword rules.
 async fn record_match_deck_audit(
     db_manager: &DatabaseManager,
     assembler: &MatchAssembler,
     match_id: &str,
 ) {
-    // Assigned-deck events (Welcome Deck Duels, Jump In) never submit a deck;
-    // the cache would hold the previous queue's deck. Audit the event preset
-    // instead so this table stays a truthful detector for the bug class.
     if assembler.last_assigned_deck_event {
         let _ = db_manager
             .upsert_match_deck(
@@ -4544,7 +4703,7 @@ async fn dispatch_parsed_event(
 ) {
     match event {
         ParsedEvent::Auth { screen_name, client_id } => {
-            assembler.set_player_user_id(client_id.clone());
+            assembler.set_player_info(client_id.clone(), screen_name.clone());
             println!(
                 "[EVENT 1: AUTH] Authenticated User: screen_name = \"{}\", client_id = \"{}\"",
                 redact_str(&screen_name),
@@ -4587,26 +4746,41 @@ async fn dispatch_parsed_event(
             assembler.register_deck_catalog(decks);
             println!("[EVENT: DECK_CATALOG] Registered {} decks into memory catalog & saved decklists", count);
         }
-        ParsedEvent::GameStateUpdateCombined { msg_id, objects, turn_number, life_by_seat, active_seat, damage_events, draw_events, diff_deleted_ids, mulligan_events, ability_associations } => {
-            for (m_seat, is_mul, num_cards) in mulligan_events {
-                assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
+        ParsedEvent::GameStateUpdates { steps } => {
+            for step in steps {
+                for (orig_id, new_id) in step.object_id_changes {
+                    assembler.handle_object_id_changed(orig_id, new_id);
+                }
+                for (ability_id, parent_id) in step.ability_associations {
+                    assembler.register_ability_parent(ability_id, parent_id);
+                }
+                for (instance_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name) in step.objects {
+                    assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name);
+                }
+                for (ann_id, instance_id, target_id, amount, dtype) in step.damage_events {
+                    assembler.process_damage_event(ann_id, instance_id, target_id, amount, dtype);
+                }
+                for (affector_id, target_seat, delta) in step.life_modifications {
+                    assembler.process_life_modification(affector_id, target_seat, delta);
+                }
+                if step.turn_number > 0 {
+                    assembler.update_game_state(step.msg_id, step.turn_number, &step.life_by_seat, step.active_seat);
+                } else if !step.life_by_seat.is_empty() {
+                    assembler.update_game_state(step.msg_id, assembler.current_turn, &step.life_by_seat, step.active_seat);
+                }
+                for (m_seat, is_mul, num_cards) in step.mulligan_events {
+                    assembler.handle_mulligan_decision(m_seat, is_mul, num_cards);
+                }
+                if !step.diff_deleted_ids.is_empty() {
+                    assembler.handle_deleted_instances(&step.diff_deleted_ids);
+                }
+                for (target_id, counter_type, amount) in step.counter_events {
+                    assembler.process_counter_event(target_id, counter_type, amount);
+                }
+                for (affector_id, count) in step.draw_events {
+                    assembler.process_draw_event(affector_id, count);
+                }
             }
-            if !diff_deleted_ids.is_empty() {
-                assembler.handle_deleted_instances(&diff_deleted_ids);
-            }
-            for (ability_id, parent_id) in ability_associations {
-                assembler.register_ability_parent(ability_id, parent_id);
-            }
-            for (instance_id, grp_id, owner_seat, zone_id, is_card) in objects {
-                assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card);
-            }
-            for (instance_id, target_id, amount, dtype) in damage_events {
-                assembler.process_damage_event(instance_id, target_id, amount, dtype);
-            }
-            for (affector_id, count) in draw_events {
-                assembler.process_draw_event(affector_id, count);
-            }
-            assembler.update_game_state(msg_id, turn_number, &life_by_seat, active_seat);
             let draws = assembler.drain_collection_draws();
             if !draws.is_empty() {
                 for g in draws {
@@ -4619,7 +4793,6 @@ async fn dispatch_parsed_event(
         }
         ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
             if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
-                // If deck name is still "Selected Deck" or empty, resolve from database deck_lists
                 if record.player_deck_name.is_empty() || record.player_deck_name == "Selected Deck" {
                     let hero_gids: Vec<i64> = card_records.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
                     if let Ok(Some(resolved_name)) = db_manager.resolve_deck_for_cards(&hero_gids, record.player_commander_id.map(|c| c as i64)).await {

@@ -42,7 +42,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
       onClick={onClose}
     >
       <div

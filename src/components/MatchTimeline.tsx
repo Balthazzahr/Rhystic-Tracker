@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, AlertCircle, Play } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardItem } from './CardBreakdown';
-import { AchievementBadge } from './AchievementBadge';
 import { RenderManaCost } from '../utils/manaUtils';
 
 interface TurnEventItem {
@@ -65,147 +64,215 @@ export function MatchTimeline({
   }, [matchId, goingFirst]);
 
   const { openingEvents, eventsByRound } = React.useMemo(() => {
-    const opening: { player: TurnEventItem[]; opponent: TurnEventItem[] } = { player: [], opponent: [] };
-    const map: Record<number, { player: TurnEventItem[]; opponent: TurnEventItem[] }> = {};
+    const opening: { first: TurnEventItem[]; second: TurnEventItem[] } = { first: [], second: [] };
+    const map: Record<number, { first: TurnEventItem[]; second: TurnEventItem[]; firstTurn: number; secondTurn: number }> = {};
 
     for (const ev of turnEvents) {
       const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
+      const isFirst = goingFirst ? isPlayer : !isPlayer;
+
       if (ev.turn_number === 0) {
-        (isPlayer ? opening.player : opening.opponent).push(ev);
+        (isFirst ? opening.first : opening.second).push(ev);
       } else {
         const round = Math.ceil(ev.turn_number / 2);
         if (!map[round]) {
-          map[round] = { player: [], opponent: [] };
+          map[round] = {
+            first: [],
+            second: [],
+            firstTurn: round * 2 - 1,
+            secondTurn: round * 2,
+          };
         }
-        (isPlayer ? map[round].player : map[round].opponent).push(ev);
+        const isFirstTurn = ev.turn_number % 2 !== 0;
+        (isFirstTurn ? map[round].first : map[round].second).push(ev);
       }
     }
     return { openingEvents: opening, eventsByRound: map };
-  }, [turnEvents, heroSeatId]);
+  }, [turnEvents, heroSeatId, goingFirst]);
 
-  const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; border: string }> = {
-    Creature: { icon: 'ms-creature', color: '#34D399', bg: 'rgba(52, 211, 153, 0.1)', border: 'rgba(52, 211, 153, 0.25)' },
-    Instant: { icon: 'ms-instant', color: '#F87171', bg: 'rgba(248, 113, 113, 0.1)', border: 'rgba(248, 113, 113, 0.25)' },
-    Sorcery: { icon: 'ms-sorcery', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.25)' },
-    Artifact: { icon: 'ms-artifact', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.25)' },
-    Enchantment: { icon: 'ms-enchantment', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.1)', border: 'rgba(192, 132, 252, 0.25)' },
-    Planeswalker: { icon: 'ms-planeswalker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.25)' },
-    Battle: { icon: 'ms-battle', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.1)', border: 'rgba(244, 63, 94, 0.25)' },
-    Land: { icon: 'ms-land', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.25)' },
-    Token: { icon: 'ms-token', color: '#A1A1AA', bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.25)' },
-    Other: { icon: 'ms-multicolor', color: '#E2E8F0', bg: 'rgba(226, 232, 240, 0.1)', border: 'rgba(226, 232, 240, 0.25)' },
+  const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
+    Creature: { icon: 'ms-creature', color: '#22C55E' },
+    Instant: { icon: 'ms-instant', color: '#EF4444' },
+    Sorcery: { icon: 'ms-sorcery', color: '#F59E0B' },
+    Artifact: { icon: 'ms-artifact', color: '#94A3B8' },
+    Enchantment: { icon: 'ms-enchantment', color: '#A855F7' },
+    Planeswalker: { icon: 'ms-planeswalker', color: '#F97316' },
+    Battle: { icon: 'ms-battle', color: '#F43F5E' },
+    Land: { icon: 'ms-land', color: '#D97706' },
   };
 
   const getCardTypeBadge = (rawType?: string) => {
     if (!rawType) return null;
-    const lower = rawType.toLowerCase();
-    let category = 'Other';
-    if (lower.includes('token')) category = 'Token';
-    else {
-      for (const kw of ['planeswalker', 'battle', 'creature', 'land', 'enchantment', 'artifact', 'instant', 'sorcery']) {
-        if (lower.includes(kw)) {
-          category = kw[0].toUpperCase() + kw.slice(1);
-          break;
-        }
-      }
-    }
-    const conf = CARD_TYPE_CONFIG[category] || CARD_TYPE_CONFIG.Other;
+    const match = Object.entries(CARD_TYPE_CONFIG).find(([k]) =>
+      rawType.toLowerCase().includes(k.toLowerCase())
+    );
+    if (!match) return null;
+    const [typeName, info] = match;
     return (
-      <span
-        className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.2 border shrink-0"
-        style={{ color: conf.color, backgroundColor: conf.bg, borderColor: conf.border }}
-        title={rawType}
-      >
-        <span className={`ms ${conf.icon} text-[10px] leading-none`} style={{ color: conf.color }} />
-        <span>{category}</span>
+      <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 border shrink-0 border-white/10 bg-white/[0.04] text-neutral-300">
+        <i className={`ms ${info.icon} text-[10px]`} style={{ color: info.color }} />
+        <span>{rawType}</span>
       </span>
     );
   };
 
-  const renderEventRow = (ev: TurnEventItem, isPlayer: boolean) => {
+  const renderEventRow = (ev: TurnEventItem, columnIsFirst?: boolean) => {
+    const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
+    const activePlayerIsHero = columnIsFirst !== undefined ? (columnIsFirst ? goingFirst : !goingFirst) : isPlayer;
+    const isAcrossTurn = columnIsFirst !== undefined && isPlayer !== activePlayerIsHero;
+    const ownerTag = isAcrossTurn ? (isPlayer ? ' (You)' : ' (Opponent)') : '';
+
     const isDamage = ev.event_type.startsWith('damage:');
-    let dmgAmount = '';
     if (isDamage) {
       const parts = ev.event_type.split(':');
-      dmgAmount = parts[2] || '';
+      const tgtId = parseInt(parts[1] || '0', 10);
+      const amount = parts[2] || '0';
+      const targetName = tgtId === 1 || tgtId === 2
+        ? (tgtId === heroSeatId ? 'You' : (opponentName || 'Opponent'))
+        : `Target #${tgtId}`;
+
+      return (
+        <div
+          key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
+          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        >
+          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/50 text-amber-300 border-amber-500/30 shrink-0 tabular-nums">
+            {amount} DMG
+          </span>
+          <span
+            className="truncate font-sans font-semibold text-white hover:text-amber-300 hover:underline cursor-pointer transition-colors text-xs"
+            onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
+          >
+            {ev.name}{ownerTag}
+          </span>
+          {getCardTypeBadge(ev.card_type)}
+          <span className="text-neutral-500 text-[10px] shrink-0">→</span>
+          <span className="truncate text-amber-200/80 text-xs font-sans">
+            {targetName}
+          </span>
+        </div>
+      );
     }
 
-    const isMulligan = ev.event_type === 'mulligan';
-    const isBottom = ev.event_type === 'bottom';
-    const isHidden = ev.grp_id === 0;
+    const isLife = ev.event_type.startsWith('life:');
+    if (isLife) {
+      const parts = ev.event_type.split(':');
+      const d = parseInt(parts[1] || '0', 10);
+      const total = parseInt(parts[2] || '0', 10);
+      const oldTotal = total - d;
+      const positive = d >= 0;
+      const isOpponent = !isPlayer;
+      const sign = positive ? '+' : '';
+      const srcName = ev.grp_id > 0 && ev.name ? ` (${ev.name})` : '';
+      const displayStr = `${oldTotal} → ${total} (${sign}${d})${srcName}`;
 
+      return (
+        <div
+          key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
+          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        >
+          <span
+            className={`px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase shrink-0 tabular-nums ${
+              positive
+                ? 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30'
+                : 'bg-rose-950/50 text-rose-300 border-rose-500/30'
+            }`}
+          >
+            {isOpponent ? 'OPP LIFE ' : 'LIFE '}{positive ? `+${d}` : d}
+          </span>
+          <span className={`truncate font-sans font-medium text-xs ${positive ? 'text-emerald-300/90' : 'text-rose-300/90'}`}>
+            {displayStr}{ownerTag}
+          </span>
+        </div>
+      );
+    }
+
+    const isCounter = ev.event_type.startsWith('counter:');
+    if (isCounter) {
+      const parts = ev.event_type.split(':');
+      const counterName = parts[1] || '+1/+1';
+      const amount = parseInt(parts[2] || '1', 10);
+      let badgeText = '';
+      if (counterName === '+1/+1') {
+        badgeText = amount > 0 ? `+${amount} +1/+1` : `${amount} +1/+1`;
+      } else {
+        const cLabel = counterName === 'counter' ? 'COUNTER' : `${counterName.toUpperCase()} COUNTER`;
+        badgeText = amount > 0 ? `+${amount} ${cLabel}` : `${amount} ${cLabel}`;
+      }
+      return (
+        <div
+          key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
+          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        >
+          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/50 text-amber-300 border-amber-500/30 shrink-0 tabular-nums">
+            {badgeText}
+          </span>
+          <span
+            className="truncate font-sans font-medium text-neutral-100 hover:text-white hover:underline cursor-pointer transition-colors text-xs"
+            onClick={() => ev.grp_id > 0 && onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
+          >
+            {ev.name}{ownerTag}
+          </span>
+          {getCardTypeBadge(ev.card_type)}
+        </div>
+      );
+    }
+
+    let badgeText = 'PLAY';
+    let badgeStyle = 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30';
+    if (ev.event_type === 'mulligan') {
+      badgeText = 'MULLIGAN';
+      badgeStyle = 'bg-amber-950/50 text-amber-300 border-amber-500/30';
+    } else if (ev.event_type === 'bottom') {
+      badgeText = 'BOTTOM';
+      badgeStyle = 'bg-orange-950/50 text-orange-300 border-orange-500/30';
+    } else if (ev.event_type === 'draw') {
+      badgeText = ev.turn_number === 0 ? 'KEPT' : 'DRAW';
+      badgeStyle = ev.turn_number === 0 ? 'bg-indigo-950/50 text-indigo-300 border-indigo-500/30' : 'bg-sky-950/50 text-sky-300 border-sky-500/30';
+    } else if (ev.event_type === 'token') {
+      badgeText = 'TOKEN';
+      badgeStyle = 'bg-teal-950/50 text-teal-300 border-teal-500/30';
+    } else if (ev.event_type === 'dies') {
+      badgeText = 'DIES';
+      badgeStyle = 'bg-rose-950/50 text-rose-300 border-rose-500/30';
+    } else if (ev.event_type === 'exile') {
+      badgeText = 'EXILE';
+      badgeStyle = 'bg-purple-950/50 text-purple-300 border-purple-500/30';
+    }
+
+    const isHidden = ev.grp_id === 0;
     const displayName = isHidden
-      ? (isMulligan ? 'Mulligan taken (Hand shuffled back)' : 'Card bottomed')
+      ? (ev.event_type === 'mulligan' ? 'Mulligan taken (Hand shuffled back)' : 'Card bottomed')
       : ev.name;
 
     return (
       <div
         key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
-        onClick={() => {
-          if (!isHidden && onCardClick) {
-            onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number);
-          }
-        }}
-        className={`text-xs flex items-center justify-between p-1.5 border border-white/5 bg-white/[0.015] ${
-          isHidden ? 'opacity-70' : 'hover:bg-white/5 cursor-pointer'
-        } group`}
+        className="text-xs font-mono flex items-center justify-between py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
       >
-        <div className="flex items-center gap-1.5 min-w-0">
-          {isDamage ? (
-            <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">
-              {dmgAmount} DMG
-            </span>
-          ) : (
-            (() => {
-              let badgeText = 'PLAY';
-              let badgeStyle = 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
-              if (isMulligan) {
-                badgeText = 'MULLIGAN';
-                badgeStyle = 'bg-amber-500/15 text-amber-300 border-amber-500/30';
-              } else if (isBottom) {
-                badgeText = 'BOTTOM';
-                badgeStyle = 'bg-orange-500/15 text-orange-300 border-orange-500/30';
-              } else if (ev.event_type === 'draw') {
-                badgeText = ev.turn_number === 0 ? 'KEPT' : 'DRAW';
-                badgeStyle = ev.turn_number === 0 ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-purple-500/10 text-purple-300 border-purple-500/30';
-              } else if (ev.event_type === 'token') {
-                badgeText = 'TOKEN';
-                badgeStyle = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
-              } else if (ev.event_type === 'dies') {
-                badgeText = 'DIES';
-                badgeStyle = 'bg-rose-500/10 text-rose-300 border-rose-500/30';
-              } else if (ev.event_type === 'exile') {
-                badgeText = 'EXILE';
-                badgeStyle = 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30';
-              }
-              return (
-                <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 border shrink-0 ${badgeStyle}`}>
-                  {badgeText}
-                </span>
-              );
-            })()
-          )}
-          <span className={`font-display font-bold text-xs uppercase tracking-wide truncate ${isHidden ? 'italic opacity-60' : 'text-white group-hover:underline'}`}>
-            {displayName}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase shrink-0 ${badgeStyle}`}>
+            {badgeText}
+          </span>
+          <span
+            className={`truncate font-sans font-medium text-xs ${
+              isHidden ? 'italic text-neutral-400' : 'text-neutral-100 hover:text-white hover:underline cursor-pointer'
+            }`}
+            onClick={() => !isHidden && onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
+          >
+            {displayName}{ownerTag}
           </span>
           {!isHidden && getCardTypeBadge(ev.card_type)}
-          {!isHidden && ev.titles && ev.titles.length > 0 && (
-            <div className="flex items-center gap-1 shrink-0">
-              {ev.titles.map((t, ti) => (
-                <AchievementBadge
-                  key={ti}
-                  title={t}
-                  size="sm"
-                  showTooltip={true}
-                />
-              ))}
-            </div>
-          )}
         </div>
-        {!isHidden && <RenderManaCost costStr={ev.mana_cost} size={12} />}
+        {!isHidden && ev.mana_cost && <RenderManaCost costStr={ev.mana_cost} size={12} />}
       </div>
     );
   };
+
+  const leftLabel = goingFirst ? 'Your Timeline' : `${opponentName || 'Opponent'} Timeline`;
+  const rightLabel = goingFirst ? `${opponentName || 'Opponent'} Timeline` : 'Your Timeline';
+  const leftColor = goingFirst ? 'text-emerald-400' : 'text-rose-400';
+  const rightColor = goingFirst ? 'text-rose-400' : 'text-emerald-400';
 
   return (
     <div className="h-full flex flex-col space-y-3 p-3 border border-white/10 bg-neutral-950/80 min-h-0 overflow-hidden">
@@ -244,37 +311,35 @@ export function MatchTimeline({
         ) : (
           <>
             {/* Opening Hand & Mulligans Phase (Turn 0) */}
-            {(openingEvents.player.length > 0 || openingEvents.opponent.length > 0) && (
-              <div className="p-2.5 border border-white/10 bg-neutral-900/40 space-y-2">
-                <div className="flex items-center justify-between border-b border-white/10 pb-1">
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">
-                    Opening Phase & Mulligans
+            {(openingEvents.first.length > 0 || openingEvents.second.length > 0) && (
+              <div className="space-y-1.5">
+                <div className="text-[9.5px] font-mono uppercase font-bold tracking-wider text-amber-300/90 px-3 py-1 bg-amber-500/10 border-y border-amber-500/30 flex items-center justify-between">
+                  <span>Opening Phase · Turn 0</span>
+                  <span className="text-[9px] font-mono font-normal opacity-70">
+                    Mulligans & Opening Hands
                   </span>
-                  <span className="text-[9px] font-mono text-neutral-500">Pre-Game</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Player Opening Hand */}
-                  <div className="border border-white/5 bg-black/40 p-2 space-y-1">
-                    <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-emerald-400 border-b border-white/10 pb-1">
-                      You ({openingEvents.player.length})
-                    </div>
-                    {openingEvents.player.length === 0 ? (
-                      <div className="text-[10px] font-mono text-neutral-600 p-1">No opening cards recorded</div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left Column Opening Hand (First Player) */}
+                  <div className="space-y-1">
+                    {openingEvents.first.length === 0 ? (
+                      <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
+                        No actions
+                      </div>
                     ) : (
-                      openingEvents.player.map((ev) => renderEventRow(ev, true))
+                      openingEvents.first.map((ev) => renderEventRow(ev, true))
                     )}
                   </div>
 
-                  {/* Opponent Opening Hand */}
-                  <div className="border border-white/5 bg-black/40 p-2 space-y-1">
-                    <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-rose-400 border-b border-white/10 pb-1">
-                      {(opponentName || 'Opponent')} ({openingEvents.opponent.length})
-                    </div>
-                    {openingEvents.opponent.length === 0 ? (
-                      <div className="text-[10px] font-mono text-neutral-600 p-1">No mulligans taken</div>
+                  {/* Right Column Opening Hand (Second Player) */}
+                  <div className="space-y-1">
+                    {openingEvents.second.length === 0 ? (
+                      <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
+                        No actions
+                      </div>
                     ) : (
-                      openingEvents.opponent.map((ev) => renderEventRow(ev, false))
+                      openingEvents.second.map((ev) => renderEventRow(ev, false))
                     )}
                   </div>
                 </div>
@@ -284,46 +349,48 @@ export function MatchTimeline({
             {/* In-Game Rounds (Turn >= 1) */}
             {Object.entries(eventsByRound).map(([roundStr, cols]) => {
               const roundNum = parseInt(roundStr, 10);
-              const playerCount = cols.player.length;
-              const opponentCount = cols.opponent.length;
-              if (playerCount === 0 && opponentCount === 0) return null;
+              if (cols.first.length === 0 && cols.second.length === 0) return null;
 
               return (
-                <div
-                  key={roundNum}
-                  className="p-2.5 border border-white/10 bg-neutral-900/30 space-y-2"
-                >
-                  <div className="flex items-center justify-between border-b border-white/10 pb-1">
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white">
-                      Round {roundNum}
+                <div key={roundNum} className="space-y-1.5">
+                  {/* Round Header Bar */}
+                  <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-neutral-200 px-3 py-1 bg-white/[0.03] border-y border-white/10 flex items-center justify-between">
+                    <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                      ROUND {roundNum}
                     </span>
-                    <span className="text-[9px] font-mono text-neutral-500">
-                      {`Turn ${roundNum * 2 - 1} + ${roundNum * 2}`}
-                    </span>
+                    <div className="flex items-center gap-2 font-mono text-[9px] tracking-widest">
+                      <span className={`${leftColor} font-bold`}>
+                        TURN {cols.firstTurn} ({goingFirst ? 'YOU' : (opponentName || 'OPPONENT')})
+                      </span>
+                      <span className="text-neutral-600">|</span>
+                      <span className={`${rightColor} font-bold`}>
+                        TURN {cols.secondTurn} ({goingFirst ? (opponentName || 'OPPONENT') : 'YOU'})
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* Player Column */}
-                    <div className="border border-white/5 bg-black/40 p-2 space-y-1">
-                      <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-emerald-400 border-b border-white/10 pb-1">
-                        You ({playerCount})
-                      </div>
-                      {playerCount === 0 ? (
-                        <div className="text-[10px] font-mono text-neutral-600 p-1">No actions</div>
+                  {/* Two-Column Action Grid for the Round */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left Column (First Player: Turn 1, 3, 5...) */}
+                    <div className="space-y-1">
+                      {cols.first.length > 0 ? (
+                        cols.first.map((ev) => renderEventRow(ev, true))
                       ) : (
-                        cols.player.map((ev) => renderEventRow(ev, true))
+                        <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
+                          No actions recorded
+                        </div>
                       )}
                     </div>
 
-                    {/* Opponent Column */}
-                    <div className="border border-white/5 bg-black/40 p-2 space-y-1">
-                      <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-rose-400 border-b border-white/10 pb-1">
-                        {(opponentName || 'Opponent')} ({opponentCount})
-                      </div>
-                      {opponentCount === 0 ? (
-                        <div className="text-[10px] font-mono text-neutral-600 p-1">No actions</div>
+                    {/* Right Column (Second Player: Turn 2, 4, 6...) */}
+                    <div className="space-y-1">
+                      {cols.second.length > 0 ? (
+                        cols.second.map((ev) => renderEventRow(ev, false))
                       ) : (
-                        cols.opponent.map((ev) => renderEventRow(ev, false))
+                        <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
+                          No actions recorded
+                        </div>
                       )}
                     </div>
                   </div>

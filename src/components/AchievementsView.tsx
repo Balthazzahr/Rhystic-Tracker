@@ -203,7 +203,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
 
   // Pagination
   const [page, setPage] = useState(1);
-  const TABLE_PAGE_SIZE = 25;
+  const TABLE_PAGE_SIZE = 30;
   const CARD_W = 325;
   const CARD_H = 370;
   const CARD_GAP = 20; // gap-5
@@ -672,7 +672,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
       {/* 4. DRILL-DOWN MODAL & FLOATING FLAVOR QUOTE */}
       {selectedAchievement && (
         <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none overflow-y-auto custom-scrollbar"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none overflow-y-auto custom-scrollbar"
           onClick={() => setSelectedAchievement(null)}
         >
           <div className="flex flex-col items-center justify-center max-w-5xl w-full my-auto">
@@ -944,7 +944,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
       {showColumnModal && (
         <div
           onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}
