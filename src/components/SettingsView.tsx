@@ -42,6 +42,7 @@ import { ManaPip } from './ManaPip';
 import { CustomDropdown } from './CustomDropdown';
 import { CardImage } from './CardImage';
 import { APP_VERSION } from '../version';
+import mtgaAvatarCatalog from '../data/mtgaAvatars.json';
 
 // Authentic MTG Mana Theme Palettes (replacing fluorescent accents)
 const MTG_COLORS = {
@@ -256,6 +257,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [cacheDownloading, setCacheDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<string | null>(null);
 
+  // Avatar cache stats & actions
+  const [avatarCacheStats, setAvatarCacheStats] = useState<{ size_bytes: number; file_count: number } | null>(null);
+  const [avatarClearing, setAvatarClearing] = useState(false);
+  const [avatarClearSuccess, setAvatarClearSuccess] = useState(false);
+  const [avatarDownloading, setAvatarDownloading] = useState(false);
+  const [avatarDownloadProgress, setAvatarDownloadProgress] = useState<string | null>(null);
+
   // Database stats & backup
   const [dbStats, setDbStats] = useState<{ db_filename: string; db_path: string; size_bytes: number; match_count: number } | null>(null);
   const [dbExporting, setDbExporting] = useState(false);
@@ -402,6 +410,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const loadAvatarCacheStats = async () => {
+    try {
+      const res = await invoke<any>('get_avatar_cache_stats');
+      if (res) setAvatarCacheStats(res);
+    } catch (e) {
+      console.error('Failed to get avatar cache stats:', e);
+    }
+  };
+
   const loadDbStats = async () => {
     try {
       const res = await invoke<any>('get_database_stats');
@@ -422,9 +439,65 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   useEffect(() => {
     loadCacheStats();
+    loadAvatarCacheStats();
     loadDbStats();
     loadCardDbStatus();
   }, []);
+
+  const handleClearAvatarCache = async () => {
+    setAvatarClearing(true);
+    setAvatarClearSuccess(false);
+    try {
+      const res = await invoke<any>('clear_avatar_cache');
+      if (res) setAvatarCacheStats(res);
+      setAvatarClearSuccess(true);
+      setTimeout(() => setAvatarClearSuccess(false), 3000);
+    } catch (e) {
+      console.error('Failed to clear avatar cache:', e);
+    } finally {
+      setAvatarClearing(false);
+    }
+  };
+
+  const handlePreDownloadAvatars = async () => {
+    setAvatarDownloading(true);
+    setAvatarDownloadProgress('Starting avatar collection scan...');
+    try {
+      const avatarEntries = Object.entries(mtgaAvatarCatalog as Record<string, string>).filter(
+        ([_, name]) => name && !name.startsWith('$/') && name !== 'The Adventurer'
+      );
+      let downloaded = 0;
+      for (let i = 0; i < avatarEntries.length; i++) {
+        const [avatarId, name] = avatarEntries[i];
+        try {
+          const cached = await invoke<string | null>('has_avatar_image', { avatarId });
+          if (!cached) {
+            const url = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}&format=image&version=art_crop`;
+            const resp = await fetch(url);
+            if (resp.ok) {
+              const blob = await resp.blob();
+              const arrayBuf = await blob.arrayBuffer();
+              const data = Array.from(new Uint8Array(arrayBuf));
+              await invoke('save_avatar_image', { avatarId, data });
+              downloaded++;
+            }
+            await new Promise((r) => setTimeout(r, 60));
+          }
+        } catch {}
+        if (i % 5 === 0 || i === avatarEntries.length - 1) {
+          setAvatarDownloadProgress(`${i + 1}/${avatarEntries.length} scanned (${downloaded} downloaded)`);
+        }
+      }
+      await loadAvatarCacheStats();
+      setAvatarDownloadProgress(`Done! ${downloaded} new avatars cached locally.`);
+      setTimeout(() => setAvatarDownloadProgress(null), 4000);
+    } catch (e) {
+      console.error('Pre-download avatars error:', e);
+      setAvatarDownloadProgress('Error pre-downloading avatars');
+    } finally {
+      setAvatarDownloading(false);
+    }
+  };
 
   const handleSyncCardDb = async () => {
     setCardDbSyncing(true);
@@ -1740,6 +1813,62 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   )}
                   {cacheClearSuccess && (
                     <p className="text-xs font-mono" style={{ color: MTG_COLORS.green.text }}>Card image cache successfully cleared.</p>
+                  )}
+                </div>
+              )}
+
+              {/* Arena Avatar Asset Cache */}
+              {(matchImageCache || !isSearching) && (
+                <div className="space-y-3 pt-2">
+                  <div className="border-b border-white/10 pb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-300 font-sans">
+                      Arena Avatar Asset Cache
+                    </span>
+                    <span className="text-xs font-mono text-neutral-400">
+                      {formatBytes(avatarCacheStats?.size_bytes ?? 0)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div className="border border-white/10 bg-white/[0.02] p-3">
+                      <p className="text-[9.5px] font-mono uppercase text-neutral-500">Cached Avatars</p>
+                      <p className="text-xl font-mono font-bold text-white tabular-nums mt-0.5">
+                        {avatarCacheStats?.file_count?.toLocaleString() ?? 0} avatars
+                      </p>
+                    </div>
+                    <div className="border border-white/10 bg-white/[0.02] p-3">
+                      <p className="text-[9.5px] font-mono uppercase text-neutral-500">Avatar Storage Used</p>
+                      <p className="text-xl font-mono font-bold text-white tabular-nums mt-0.5">
+                        {formatBytes(avatarCacheStats?.size_bytes ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <button
+                      onClick={handlePreDownloadAvatars}
+                      disabled={avatarDownloading}
+                      style={{ backgroundColor: MTG_COLORS.blue.bg, borderColor: MTG_COLORS.blue.border }}
+                      className="px-4 py-2 border hover:brightness-125 active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Download className={`w-3.5 h-3.5 ${avatarDownloading ? 'animate-bounce' : ''}`} style={{ color: MTG_COLORS.blue.text }} />
+                      {avatarDownloading ? 'Pre-downloading…' : 'Pre-download All Avatars (~4.5 MB)'}
+                    </button>
+                    <button
+                      onClick={handleClearAvatarCache}
+                      disabled={avatarClearing || (avatarCacheStats?.file_count ?? 0) === 0}
+                      style={{ backgroundColor: MTG_COLORS.red.bg, borderColor: MTG_COLORS.red.border }}
+                      className="px-4 py-2 border hover:brightness-125 active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" style={{ color: MTG_COLORS.red.text }} />
+                      {avatarClearing ? 'Clearing…' : 'Clear Avatar Cache'}
+                    </button>
+                  </div>
+                  {avatarDownloadProgress && (
+                    <p className="text-xs font-mono animate-pulse" style={{ color: MTG_COLORS.green.text }}>{avatarDownloadProgress}</p>
+                  )}
+                  {avatarClearSuccess && (
+                    <p className="text-xs font-mono" style={{ color: MTG_COLORS.green.text }}>Avatar cache successfully cleared.</p>
                   )}
                 </div>
               )}

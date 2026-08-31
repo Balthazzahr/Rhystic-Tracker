@@ -253,11 +253,15 @@ async fn get_recent_matches(limit: Option<i64>) -> Result<Vec<serde_json::Value>
             "player_commander_name": m.player_commander_name,
             "player_life_end": m.player_life_end,
             "player_mulligans": m.player_mulligans,
+            "hero_platform": m.hero_platform,
+            "hero_avatar": m.hero_avatar,
             "opponent_name": m.opponent_name,
             "opponent_commander_id": m.opponent_commander_id,
             "opponent_commander_name": m.opponent_commander_name,
             "opponent_mulligans": m.opponent_mulligans,
             "opponent_life_end": m.opponent_life_end,
+            "opponent_platform": m.opponent_platform,
+            "opponent_avatar": m.opponent_avatar,
             "mana_curve": curve,
             "deck_colors": colors_arr,
             "opponent_colors": opponent_colors_arr,
@@ -3023,6 +3027,124 @@ fn clear_image_cache(app: tauri::AppHandle) -> Result<CacheStats, String> {
     Ok(CacheStats { size_bytes: 0, file_count: 0 })
 }
 
+/// Directory where MTGA avatar bust images are cached locally on demand.
+/// Lives under Tauri's appConfigDir (~/.config/rhystic-tracker/avatars)
+/// covered by Tauri assetProtocol scope.
+fn avatar_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let avatar_dir = dir.join("avatars");
+    std::fs::create_dir_all(&avatar_dir).map_err(|e| e.to_string())?;
+    Ok(avatar_dir)
+}
+
+fn avatar_filename(avatar_id: &str) -> String {
+    let mut s: String = avatar_id.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    s.truncate(80);
+    format!("{}.png", s)
+}
+
+#[tauri::command]
+fn get_avatar_cache_stats(app: tauri::AppHandle) -> Result<CacheStats, String> {
+    let dir = avatar_cache_dir(&app)?;
+    let mut total_size = 0u64;
+    let mut count = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    total_size += meta.len();
+                    count += 1;
+                }
+            }
+        }
+    }
+    Ok(CacheStats { size_bytes: total_size, file_count: count })
+}
+
+#[tauri::command]
+fn clear_avatar_cache(app: tauri::AppHandle) -> Result<CacheStats, String> {
+    let dir = avatar_cache_dir(&app)?;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+    Ok(CacheStats { size_bytes: 0, file_count: 0 })
+}
+
+#[tauri::command]
+fn save_avatar_image(app: tauri::AppHandle, avatar_id: String, data: Vec<u8>) -> Result<String, String> {
+    let dir = avatar_cache_dir(&app)?;
+    let path = dir.join(avatar_filename(&avatar_id));
+    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn has_avatar_image(app: tauri::AppHandle, avatar_id: String) -> Result<Option<String>, String> {
+    let dir = avatar_cache_dir(&app)?;
+    let clean = avatar_id.trim();
+    if clean.is_empty() {
+        let def = dir.join("default_adventurer.png");
+        if def.exists() {
+            return Ok(Some(def.to_string_lossy().to_string()));
+        }
+        return Ok(None);
+    }
+
+    // Generate candidates
+    let mut candidates = vec![avatar_filename(clean)];
+
+    // If Avatar_Basic_Character_SET
+    let stripped_prefix = clean
+        .strip_prefix("Avatar_Basic_")
+        .or_else(|| clean.strip_prefix("Avatar_Portrait_"))
+        .or_else(|| clean.strip_prefix("Avatar_Standard_"))
+        .or_else(|| clean.strip_prefix("Avatar_"))
+        .unwrap_or(clean);
+
+    candidates.push(format!("{}.png", stripped_prefix));
+
+    if let Some((char_name, set_code)) = stripped_prefix.rsplit_once('_') {
+        candidates.push(format!("{}_{}.png", set_code, char_name));
+        candidates.push(format!("{}.png", char_name));
+    }
+
+    for c in &candidates {
+        let p = dir.join(c);
+        if p.exists() {
+            return Ok(Some(p.to_string_lossy().to_string()));
+        }
+    }
+
+    // Try case-insensitive lookup
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        let lower_clean = clean.to_lowercase();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(fname) = path.file_stem().and_then(|s| s.to_str()) {
+                let f_lower = fname.to_lowercase();
+                if f_lower == lower_clean || f_lower.contains(&lower_clean) {
+                    return Ok(Some(path.to_string_lossy().to_string()));
+                }
+            }
+        }
+    }
+
+    // Guaranteed fallback to default_adventurer if present
+    let def = dir.join("default_adventurer.png");
+    if def.exists() {
+        return Ok(Some(def.to_string_lossy().to_string()));
+    }
+
+    Ok(None)
+}
+
 #[derive(serde::Serialize)]
 struct DatabaseStats {
     db_filename: String,
@@ -5130,6 +5252,10 @@ fn main() {
             set_minimize_to_tray,
             get_cache_stats,
             clear_image_cache,
+            get_avatar_cache_stats,
+            clear_avatar_cache,
+            save_avatar_image,
+            has_avatar_image,
             get_database_stats,
             export_database_backup,
             get_setup_status,

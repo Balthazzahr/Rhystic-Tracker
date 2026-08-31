@@ -50,20 +50,20 @@ function getCardCategory(name?: string, typeStr?: string): string {
   return 'Spells / Other';
 }
 
-export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: CardBreakdownProps) {
-  const playerCards = cards.filter(c => !c.is_opponent);
-  const opponentCards = cards.filter(c => c.is_opponent);
+export function CardBreakdown({ cards, onCardClick, impactfulGrpIds }: CardBreakdownProps) {
+  const playerCards = cards.filter((c) => !c.is_opponent);
+  const opponentCards = cards.filter((c) => c.is_opponent);
 
   const groupAndSortCards = (cardList: CardItem[]) => {
     const categories: Record<string, CardItem[]> = {
-      'Creatures': [],
-      'Planeswalkers': [],
-      'Instants': [],
-      'Sorceries': [],
-      'Artifacts': [],
-      'Enchantments': [],
-      'Battles': [],
-      'Lands': [],
+      Creatures: [],
+      Planeswalkers: [],
+      Instants: [],
+      Sorceries: [],
+      Artifacts: [],
+      Enchantments: [],
+      Battles: [],
+      Lands: [],
       'Spells / Other': [],
     };
 
@@ -86,19 +86,24 @@ export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: 
     const totalCount = Object.values(grouped).flat().reduce((acc, c) => acc + c.count, 0);
 
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden border border-white/10 bg-neutral-950/80 min-h-0">
-        {/* Column Header */}
-        <div className="p-3 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/50">
-          <span className="text-xs font-bold font-display uppercase tracking-wider text-white">
-            {title} ({totalCount})
-          </span>
-          <span className="text-[10px] font-mono text-neutral-500 uppercase">
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-h-0">
+        {/* Column Title Bar (Unboxed flat header) */}
+        <div className="pb-2.5 mb-2 border-b border-white/10 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-sans text-xs font-semibold uppercase tracking-wider text-white">
+              {title}
+            </span>
+            <span className="font-mono text-[11px] text-neutral-400 tabular-nums">
+              ({totalCount} {totalCount === 1 ? 'card' : 'cards'})
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">
             {isOpponentSide ? 'Revealed in Play' : 'Full Deck List'}
           </span>
         </div>
 
-        {/* Grouped & Sorted Cards List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3.5 custom-scrollbar min-h-0">
+        {/* Flat Unboxed Card List */}
+        <div className="flex-1 overflow-y-auto pr-1.5 space-y-4 custom-scrollbar min-h-0">
           {totalCount === 0 ? (
             <div className="p-8 border border-dashed border-white/10 text-center text-xs text-neutral-500 font-mono">
               No recorded cards for {title.toLowerCase()}
@@ -106,37 +111,42 @@ export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: 
           ) : (
             Object.entries(grouped).map(([category, list]) => {
               if (list.length === 0) return null;
+              const catTotal = list.reduce((acc, c) => acc + c.count, 0);
+
               return (
                 <div key={category} className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 border-b border-white/10 pb-1 px-0.5">
+                  {/* Category Header */}
+                  <div className="flex items-center justify-between text-[11px] font-sans font-semibold uppercase tracking-wider text-neutral-400 border-b border-white/10 pb-1">
                     <span>{category}</span>
-                    <span className="tabular-nums">{list.reduce((acc, c) => acc + c.count, 0)}</span>
+                    <span className="font-mono text-[10.5px] tabular-nums text-neutral-300">
+                      {catTotal}
+                    </span>
                   </div>
 
-                  <div className="space-y-0.5">
+                  {/* Card Rows (Flat table-row style without nested boxes) */}
+                  <div className="divide-y divide-white/[0.04]">
                     {list.map((card, idx) => {
                       const isImpactful = impactfulGrpIds?.has(card.grp_id) || false;
                       return (
                         <div
                           key={idx}
                           onClick={() => onCardClick && onCardClick(card)}
-                          className={`flex items-center justify-between px-2.5 py-1.5 border transition-colors cursor-pointer group ${
-                            isImpactful
-                              ? 'border-amber-500/30 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]'
-                              : 'border-white/5 bg-white/[0.015] hover:bg-white/[0.04]'
-                          }`}
+                          className="flex items-center justify-between py-1.5 px-2 hover:bg-white/[0.04] transition-colors cursor-pointer group select-none"
                         >
-                          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 border border-white/10 bg-black/40 text-neutral-300 shrink-0 tabular-nums">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+                            <span className="font-mono text-xs font-bold text-neutral-400 shrink-0 tabular-nums w-5 text-right">
                               {card.count}×
                             </span>
-                            <span className="text-xs font-bold font-display uppercase tracking-wide truncate group-hover:underline text-white leading-tight">
+                            <span className="text-xs font-sans font-medium text-white truncate group-hover:underline leading-tight">
                               {card.name}
                             </span>
                           </div>
-                          <div className="shrink-0 flex items-center gap-1.5">
+                          <div className="shrink-0 flex items-center gap-2">
                             {isImpactful && (
-                              <span className="ms ms-ability-duels-renowned text-xs text-amber-400" title="Match MVP Card" />
+                              <span
+                                className="ms ms-ability-duels-renowned text-xs text-[#E2BF6F]"
+                                title="Match MVP Card"
+                              />
                             )}
                             <RenderManaCost costStr={card.mana_cost} size={14} />
                           </div>
@@ -154,9 +164,13 @@ export function CardBreakdown({ cards, palette, onCardClick, impactfulGrpIds }: 
   };
 
   return (
-    <div className="h-full flex gap-3 overflow-hidden min-h-0">
-      {renderCardColumn('Your Deck', playerGrouped, false)}
-      {renderCardColumn('Opponent Cards', opponentGrouped, true)}
+    <div className="h-full flex gap-6 p-4 overflow-hidden min-h-0 divide-x divide-white/10">
+      <div className="flex-1 min-w-0 h-full overflow-hidden">
+        {renderCardColumn('Your Deck', playerGrouped, false)}
+      </div>
+      <div className="flex-1 min-w-0 h-full overflow-hidden pl-6">
+        {renderCardColumn('Opponent Cards', opponentGrouped, true)}
+      </div>
     </div>
   );
 }

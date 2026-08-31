@@ -18,11 +18,15 @@ pub struct MatchRecord {
     pub player_commander_name: Option<String>,
     pub player_life_end: Option<i32>,
     pub player_mulligans: Option<u32>,
+    pub hero_platform: Option<String>,
+    pub hero_avatar: Option<String>,
     pub opponent_name: Option<String>,
     pub opponent_commander_id: Option<u32>,
     pub opponent_commander_name: Option<String>,
     pub opponent_mulligans: Option<u32>,
     pub opponent_life_end: Option<i32>,
+    pub opponent_platform: Option<String>,
+    pub opponent_avatar: Option<String>,
     pub result_reason: Option<String>,
 }
 
@@ -321,7 +325,11 @@ impl MatchAssembler {
             opponent_life_end: None,
             going_first: false,
             player_mulligans: None,
+            hero_platform: None,
+            hero_avatar: None,
             opponent_mulligans: None,
+            opponent_platform: None,
+            opponent_avatar: None,
             duration_seconds: 0,
             result_reason: None,
             hero_seat_id: self.player_seat_id,
@@ -329,6 +337,29 @@ impl MatchAssembler {
     }
 
     pub fn update_reserved_players(&mut self, players: &serde_json::Value) {
+        let extract_platform = |p: &serde_json::Value| -> Option<String> {
+            p.get("platformId")
+                .or_else(|| p.get("platform"))
+                .or_else(|| p.get("clientPlatform"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+        };
+
+        let extract_avatar = |p: &serde_json::Value| -> Option<String> {
+            p.get("courseId")
+                .or_else(|| p.get("avatarSelection"))
+                .or_else(|| p.get("avatarId"))
+                .or_else(|| p.get("avatar"))
+                .or_else(|| p.get("characterId"))
+                .or_else(|| p.get("courseDeckSummary").and_then(|c| c.get("avatarSelection").or_else(|| c.get("avatarId"))))
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+        };
+
         if let Some(arr) = players.as_array() {
             // First pass: identify hero seat ID by matching userId or screen_name
             for p in arr {
@@ -348,18 +379,32 @@ impl MatchAssembler {
                     self.player_seat_id = system_seat;
                     if let Some(m) = &mut self.active_match {
                         m.hero_seat_id = system_seat;
+                        if let Some(plat) = extract_platform(p) {
+                            m.hero_platform = Some(plat);
+                        }
+                        if let Some(av) = extract_avatar(p) {
+                            m.hero_avatar = Some(av);
+                        }
                     }
                 }
             }
 
-            // Second pass: identify opponent name for the seat that is not hero
+            // Second pass: identify opponent details for the seat that is not hero
             for p in arr {
                 let pname = p.get("playerName").and_then(|v| v.as_str()).unwrap_or("");
                 let system_seat = p.get("systemSeatId").or_else(|| p.get("seatId")).and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
-                if system_seat != self.player_seat_id && !pname.is_empty() {
+                if system_seat != self.player_seat_id {
                     if let Some(m) = &mut self.active_match {
-                        m.opponent_name = Some(pname.to_string());
+                        if !pname.is_empty() {
+                            m.opponent_name = Some(pname.to_string());
+                        }
+                        if let Some(plat) = extract_platform(p) {
+                            m.opponent_platform = Some(plat);
+                        }
+                        if let Some(av) = extract_avatar(p) {
+                            m.opponent_avatar = Some(av);
+                        }
                     }
                 }
             }

@@ -2,6 +2,25 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.10] - 2026-08-31
+
+### 🥊 Match History Inspector Redesign, Street Fighter "VS" Header & Arena Avatar Ingestion
+
+- **Floating Unboxed Inspector Header & Arcade "VS" Face-Off**:
+  - Rebuilt the Match Inspector header into a floating unboxed stage with high-contrast text and centered arcade-style "VS" badge inspired by Street Fighter.
+  - Layered Hero and Opponent character avatars behind the top border rim of the modal container with authentic 3D overlap.
+- **Arena Avatar Ingestion & Full 406 MTGA Catalog**:
+  - Extracted full 406-avatar catalog mapping directly from Arena localization databases (`Raw_ClientLocalization_*.mtga`).
+  - Added schema migrations and log ingestion for `hero_avatar`, `opponent_avatar`, `hero_platform`, and `opponent_platform` telemetry.
+  - Native offline transparent Adventurer (`_npe_Player.png`) bundled directly as universal fallback.
+- **Platform Telemetry Badges**:
+  - Integrated platform badges across Windows PC, Steam, macOS, iOS, iPad, Android Phone, and Android Tablet with dedicated iconography.
+- **Flat Card Breakdown & Muted Mana Palette**:
+  - Removed nested boxes from the side-by-side card breakdown in favor of clean two-column lists matching the Match History table.
+  - Replaced all neon fluorescent badge accents with authentic muted MTG mana colors.
+
+---
+
 ## [1.3.9] - 2026-08-31
 
 ### ⚔️ Live Match HUD & Match Timeline Overhaul, Mulligan Parity & Layout Refinements

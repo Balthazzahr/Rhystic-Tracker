@@ -219,25 +219,25 @@ export function MatchTimeline({
     }
 
     let badgeText = 'PLAY';
-    let badgeStyle = 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30';
+    let badgeStyle = 'bg-[#4A7856]/20 text-[#76A382] border-[#4A7856]/40';
     if (ev.event_type === 'mulligan') {
       badgeText = 'MULLIGAN';
-      badgeStyle = 'bg-amber-950/50 text-amber-300 border-amber-500/30';
+      badgeStyle = 'bg-[#D4A237]/20 text-[#E2BF6F] border-[#D4A237]/40';
     } else if (ev.event_type === 'bottom') {
       badgeText = 'BOTTOM';
-      badgeStyle = 'bg-orange-950/50 text-orange-300 border-orange-500/30';
+      badgeStyle = 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40';
     } else if (ev.event_type === 'draw') {
       badgeText = ev.turn_number === 0 ? 'KEPT' : 'DRAW';
-      badgeStyle = ev.turn_number === 0 ? 'bg-indigo-950/50 text-indigo-300 border-indigo-500/30' : 'bg-sky-950/50 text-sky-300 border-sky-500/30';
+      badgeStyle = 'bg-[#4A7FA3]/20 text-[#7FAAC9] border-[#4A7FA3]/40';
     } else if (ev.event_type === 'token') {
       badgeText = 'TOKEN';
-      badgeStyle = 'bg-teal-950/50 text-teal-300 border-teal-500/30';
+      badgeStyle = 'bg-[#3D7D7D]/20 text-[#6EA8A8] border-[#3D7D7D]/40';
     } else if (ev.event_type === 'dies') {
       badgeText = 'DIES';
-      badgeStyle = 'bg-rose-950/50 text-rose-300 border-rose-500/30';
+      badgeStyle = 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40';
     } else if (ev.event_type === 'exile') {
       badgeText = 'EXILE';
-      badgeStyle = 'bg-purple-950/50 text-purple-300 border-purple-500/30';
+      badgeStyle = 'bg-[#8A719D]/20 text-[#B39EC4] border-[#8A719D]/40';
     }
 
     const isHidden = ev.grp_id === 0;
@@ -271,23 +271,23 @@ export function MatchTimeline({
 
   const leftLabel = goingFirst ? 'Your Timeline' : `${opponentName || 'Opponent'} Timeline`;
   const rightLabel = goingFirst ? `${opponentName || 'Opponent'} Timeline` : 'Your Timeline';
-  const leftColor = goingFirst ? 'text-emerald-400' : 'text-rose-400';
-  const rightColor = goingFirst ? 'text-rose-400' : 'text-emerald-400';
+  const leftColor = goingFirst ? 'text-[#76A382]' : 'text-[#D57C69]';
+  const rightColor = goingFirst ? 'text-[#D57C69]' : 'text-[#76A382]';
 
   return (
-    <div className="h-full flex flex-col space-y-3 p-3 border border-white/10 bg-neutral-950/80 min-h-0 overflow-hidden">
+    <div className="h-full flex flex-col space-y-3 p-4 min-h-0 overflow-hidden">
       {/* Header Bar */}
       <div className="flex items-center justify-between border-b border-white/10 pb-2 shrink-0">
         <div className="flex items-center gap-2">
           <Play className="w-3.5 h-3.5 text-neutral-400" />
-          <h3 className="text-xs font-display font-bold uppercase tracking-wider text-white">
+          <h3 className="font-sans text-[11px] font-semibold uppercase tracking-wider text-white">
             Match Play Timeline
           </h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-neutral-500 tabular-nums">Total Events: {turnEvents.length}</span>
+          <span className="text-[10px] font-mono text-neutral-400 tabular-nums">Events: {turnEvents.length}</span>
           <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
-            result === 'win' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+            result === 'win' ? 'bg-[#4A7856]/20 text-[#76A382] border-[#4A7856]/40' : 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40'
           }`}>
             {result}
           </span>
@@ -301,7 +301,7 @@ export function MatchTimeline({
         ) : turnEvents.length === 0 ? (
           <div className="p-8 border border-dashed border-white/10 text-center space-y-1.5 bg-neutral-900/30">
             <AlertCircle className="w-5 h-5 mx-auto text-amber-400 opacity-60" />
-            <p className="text-xs font-bold font-display uppercase tracking-wide text-white">
+            <p className="text-xs font-bold font-sans uppercase tracking-wide text-white">
               Detailed Turn Timeline Unavailable
             </p>
             <p className="text-[11px] font-sans text-neutral-400 max-w-sm mx-auto">
@@ -403,12 +403,12 @@ export function MatchTimeline({
         {/* Final Match Outcome Marker at Bottom of Sequence */}
         <div className="pt-1">
           {result === 'win' ? (
-            <div className="p-2.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
-              <CheckCircle2 className="w-4 h-4" /> MATCH ENDED — VICTORY
+            <div className="p-2.5 border border-[#4A7856]/40 bg-[#4A7856]/15 text-[#76A382] flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
+              <CheckCircle2 className="w-4 h-4 text-[#76A382]" /> MATCH ENDED — VICTORY
             </div>
           ) : (
-            <div className="p-2.5 border border-rose-500/30 bg-rose-500/10 text-rose-400 flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
-              <XCircle className="w-4 h-4" /> MATCH ENDED — DEFEAT
+            <div className="p-2.5 border border-[#B8503A]/40 bg-[#B8503A]/15 text-[#D57C69] flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
+              <XCircle className="w-4 h-4 text-[#D57C69]" /> MATCH ENDED — DEFEAT
             </div>
           )}
         </div>
