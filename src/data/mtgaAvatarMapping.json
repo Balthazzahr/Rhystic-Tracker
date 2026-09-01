@@ -1,0 +1,1254 @@
+{
+  "Avatar_Basic_Aang_TLA": {
+    "Guid": "ab7fec53c42931146ace54812068273b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Aang_TLA.png"
+  },
+  "Avatar_Basic_Abigale_SOS": {
+    "Guid": "2a66c23a6605fe04680e01c478dcefdc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Abigale_SOS.png"
+  },
+  "Avatar_Basic_Adventurer": {
+    "Guid": "ded2666d71dcf0b43a29250e5f3e366f",
+    "RelativePath": "Assets/Core/DuelScene/NewPlayerExperience/Images/Character/avatar_PlayerNPE.png"
+  },
+  "Avatar_Basic_Ajani_DMU": {
+    "Guid": "29f128bbb4c7392429301d26d6971cda",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ajani_DMU.png"
+  },
+  "Avatar_Basic_Ajani_FDN": {
+    "Guid": "1af91c818b2630d419668e3a638ae31d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ajani_FDN.png"
+  },
+  "Avatar_Basic_Ajani_Pixel": {
+    "Guid": "de30cc2b4672dee48b2d0238331aa935",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ajani_Pixel.png"
+  },
+  "Avatar_Basic_AjaniGoldmane": {
+    "Guid": "a3ffb58bc68e2ea41b19dd364e9a47c8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ajani_AER_01.png"
+  },
+  "Avatar_Basic_AlenaHalana_VOW": {
+    "Guid": "8710b6499155ce94695f94dec01dd320",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_AlenaHalana_VOW.png"
+  },
+  "Avatar_Basic_Alpharael_EOE": {
+    "Guid": "de12dbdb02433394c84935d2c78eaaed",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Alpharael_EOE.png"
+  },
+  "Avatar_Basic_AlphaWizard_DMU": {
+    "Guid": "5e96d8e7b99f78e41aa59bb01ffdab94",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_AlphaWizard_DMU.png"
+  },
+  "Avatar_Basic_Angrath": {
+    "Guid": "01494e94f1ae4944dab3719cf9458fb0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Angrath_RIX_01.png"
+  },
+  "Avatar_Basic_Appa_TLA": {
+    "Guid": "9895f5e0fc43efd469246f2ba41aad74",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Appa_TLA.png"
+  },
+  "Avatar_Basic_April_TMT": {
+    "Guid": "a0d65f5287b99c74ab812cafab62de88",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_April_TMT.png"
+  },
+  "Avatar_Basic_April_TMT_Pixel": {
+    "Guid": "54e252371328c094aaf040f67c8babe2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_April_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Aragorn_LTR": {
+    "Guid": "3867f2c98a22f554c95923e6cb4748c1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Aragorn_LTR.png"
+  },
+  "Avatar_Basic_Ashiok_THB": {
+    "Guid": "368a123eca9250147a87cc5c437b529e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ashiok_THB_01.png"
+  },
+  "Avatar_Basic_Ashiok_WAR": {
+    "Guid": "368a123eca9250147a87cc5c437b529e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ashiok_THB_01.png"
+  },
+  "Avatar_Basic_Ashling_ECL": {
+    "Guid": "bb59f7939083c7b41ba8416ceab11938",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ashling_ECL.png"
+  },
+  "Avatar_Basic_Ashling_MH3": {
+    "Guid": "64728a31aeddf3845b4afa97b3ce6a83",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ashling_MH3.png"
+  },
+  "Avatar_Basic_Astarion_HBG": {
+    "Guid": "19adb731820dbe74c875e702bd5434a0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Astarion_HBG.png"
+  },
+  "Avatar_Basic_Atraxa_MOM": {
+    "Guid": "127a7c4752ea9a045a73fa373a3a38a9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Atraxa_MOM.png"
+  },
+  "Avatar_Basic_Aurelia": {
+    "Guid": "0ca90c6633100c24abb7b5d587924a97",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Aurelia_GRN_01.png"
+  },
+  "Avatar_Basic_Azula_TLA": {
+    "Guid": "a23f1f4ecf9d1c0418e919ea7c8d9a67",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Azula_TLA.png"
+  },
+  "Avatar_Basic_BalthierFran_FIN": {
+    "Guid": "d997ed27335070a4882af214857425c1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_BalthierFran_FIN.png"
+  },
+  "Avatar_Basic_Bard_HOB": {
+    "Guid": "fdb6e9ec711054d498fcec0e863b9ecb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Bard_HOB.png"
+  },
+  "Avatar_Basic_Basri_M21": {
+    "Guid": "03ae7d3f85eb8984ea466bb57ffebf09",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Basri_M21_01.png"
+  },
+  "Avatar_Basic_Baylen_BLB": {
+    "Guid": "893c4603af780ac46b39e2f5c92afba7",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Baylen_BLB.png"
+  },
+  "Avatar_Basic_Bebop_TMT_Pixel": {
+    "Guid": "d5f67e378da1160458e1a8505508f716",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Bebop_TMT_Pixel.png"
+  },
+  "Avatar_Basic_BebopRocksteady_TMT": {
+    "Guid": "4350efa574b461a43921dd614e97b5b5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_BebopRocksteady_TMT.png"
+  },
+  "Avatar_Basic_Bilbo_HOB": {
+    "Guid": "188d1978001e648479e230293b20d72e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Bilbo_HOB.png"
+  },
+  "Avatar_Basic_BilboRiddles_HOB": {
+    "Guid": "2df2585571af71f4bbb3855159269076",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_BilboRiddles_HOB.png"
+  },
+  "Avatar_Basic_BlackPanther_MSH": {
+    "Guid": "b290adf0da83583448b38e456a5724a5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_BlackPanther_MSH.png"
+  },
+  "Avatar_Basic_BlackWidow_MSH": {
+    "Guid": "4a2fcd83a769d934c87fa512f78adb10",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_BlackWidow_MSH.png"
+  },
+  "Avatar_Basic_Bolas_DragonGod": {
+    "Guid": "a2a6c050006725349af110d1e1e0cfad",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Bolas_WAR_01.png"
+  },
+  "Avatar_Basic_BorborygmosFblthp_MOM": {
+    "Guid": "1ff3fff6948367748b9b3b533603c414",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_BorborygmosFblthp_MOM.png"
+  },
+  "Avatar_Basic_Boromir_LTR": {
+    "Guid": "3a6cfc6b6aa40ba41a31d719378d257d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Boromir_LTR.png"
+  },
+  "Avatar_Basic_Braids_DMU": {
+    "Guid": "b95b64201ce851c4b9afbdfcac8bcaef",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Braids_DMU.png"
+  },
+  "Avatar_Basic_Brass_LCI": {
+    "Guid": "e120c6b6273c63748869db02a77c4894",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Brass_LCI.png"
+  },
+  "Avatar_Basic_Brigid_ECL": {
+    "Guid": "5730c6e205fbabe4795ef2388a5ecc33",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Brigid_ECL.png"
+  },
+  "Avatar_Basic_Cactuar_FIN": {
+    "Guid": "6f213381847400e4cb793ebcf588b350",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Cactuar_FIN.png"
+  },
+  "Avatar_Basic_CaptainAmerica_MSH": {
+    "Guid": "a76d74d683d78df4591c5eaeb4911934",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_CaptainAmerica_MSH.png"
+  },
+  "Avatar_Basic_CaptainMarvel_MSH": {
+    "Guid": "4c4864a95baca274fa3586c1c7ad159b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_CaptainMarvel_MSH.png"
+  },
+  "Avatar_Basic_CaseyJones_TMT": {
+    "Guid": "7a50660c6a7b29c4594ffd03d78ff350",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_CaseyJones_TMT.png"
+  },
+  "Avatar_Basic_CaseyJones_TMT_Pixel": {
+    "Guid": "55b7d870dc621a14888461d5e1729d08",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_CaseyJones_TMT_Pixel.png"
+  },
+  "Avatar_Basic_CastleDwarf_FIN": {
+    "Guid": "f05ef26a711687d41a2c7eb39db5b73c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_CastleDwarf_FIN.png"
+  },
+  "Avatar_Basic_Chandra_DFT": {
+    "Guid": "aa593ddbddc477d4faa965ffe6362833",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Chandra_DFT.png"
+  },
+  "Avatar_Basic_Chandra_FDN": {
+    "Guid": "bed304adc68da6540a2d015b94f6b5f8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Chandra_FDN.png"
+  },
+  "Avatar_Basic_ChandraNalaar": {
+    "Guid": "acb660f90e31293469efed828cf742d0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Chandra_KLD_01.png"
+  },
+  "Avatar_Basic_ChandraNalaar_M20": {
+    "Guid": "87b0ca776a547cb4e8cb33a5c4144bf3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Chandra_M20_01.png"
+  },
+  "Avatar_Basic_Clive_FIN": {
+    "Guid": "f16c715e752643c47bd0a40dbdac4a4c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Clive_FIN.png"
+  },
+  "Avatar_Basic_Cloud_FIN": {
+    "Guid": "67ce0aba0dc3d4349a2a04c0745ab8b6",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Cloud_FIN.png"
+  },
+  "Avatar_Basic_CourtKnight_ELD": {
+    "Guid": "3e2636cf4b298574ea96cd597b489fe3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ardenvale_Knight_ELD_01.png"
+  },
+  "Avatar_Basic_Cruelclaw_BLB": {
+    "Guid": "82d177b288616f44b9c44e4eeeb5789a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Cruelclaw_BLB.png"
+  },
+  "Avatar_Basic_Danitha_DMU": {
+    "Guid": "80856ee032e9dba4e82bc62dcfed5b34",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Danitha_DMU.png"
+  },
+  "Avatar_Basic_Daredevil_MSH": {
+    "Guid": "024661c67fa9bcb4ab3b8216f8a6c0c4",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Daredevil_MSH.png"
+  },
+  "Avatar_Basic_Davriel_J21": {
+    "Guid": "d8561d0001f74364997d46bac06cd4db",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Davriel_J21.png"
+  },
+  "Avatar_Basic_DellianFell_SOS": {
+    "Guid": "dd384f3a7d23d4944a6a5d752507dfbb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__DellianFell_SOS.png"
+  },
+  "Avatar_Basic_Dina_SOS": {
+    "Guid": "fb589024a5f59c04cbf3dd681d92b0e1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__Dina_SOS.png"
+  },
+  "Avatar_Basic_Dina_STX": {
+    "Guid": "f6224dddd79180647b3dab804cb19aa5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Dina_STX.png"
+  },
+  "Avatar_Basic_Domri": {
+    "Guid": "a97194ad4c2aaed4e88fe5b6777fe432",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Domri_RNA_01.png"
+  },
+  "Avatar_Basic_Donatello_TMT": {
+    "Guid": "2943e78212059824da146d4aafe4f888",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Donatello_TMT.png"
+  },
+  "Avatar_Basic_Donatello_TMT_Pixel": {
+    "Guid": "fcd56bd5c5fbf3a46a8875f694cdc914",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Donatello_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Dovin": {
+    "Guid": "37a59726dc3b397498d85f1af0d20bd3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Dovin_Baan_RNA_01.png"
+  },
+  "Avatar_Basic_DrDoom_MSH": {
+    "Guid": "bebc7d3e43d35d643a03519c142d6174",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_DrDoom_MSH.png"
+  },
+  "Avatar_Basic_Elektra_MSH": {
+    "Guid": "5b829e6ba373194479a0967195f6ee0c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Elektra_MSH.png"
+  },
+  "Avatar_Basic_EleshNorn_ONE": {
+    "Guid": "89eb6982e0cddd240a9cfba8b00a8e09",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_EleshNorn_ONE.png"
+  },
+  "Avatar_Basic_Ellywick_AFR": {
+    "Guid": "4693afa48f4229b408c8db6c90c2ecbe",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ellywick_AFR.png"
+  },
+  "Avatar_Basic_Elspeth_MOM": {
+    "Guid": "04dd60a39cd1f9248ad57c9cf5b2efe3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Elspeth_MOM.png"
+  },
+  "Avatar_Basic_Elspeth_SNC": {
+    "Guid": "4e4741fcb6c602e409b10820bf0cfa7f",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Elspeth_SNC.png"
+  },
+  "Avatar_Basic_Elspeth_TDM": {
+    "Guid": "476e6e26662c7ca4baf339f83d2ac02b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Elspeth_TDM.png"
+  },
+  "Avatar_Basic_Elspeth_THB": {
+    "Guid": "df3118dd0626dce46a9d8450b2b98a71",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Elspeth_THB_01.png"
+  },
+  "Avatar_Basic_Emrakul_S25": {
+    "Guid": "e02a54f7da8f5a64191f1de8a0274522",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Emrakul_S25.png"
+  },
+  "Avatar_Basic_Eowyn_LTR": {
+    "Guid": "2a5f6ee56c2c36c489263d617ed656eb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Eowyn_LTR.png"
+  },
+  "Avatar_Basic_ErhnamDjinn": {
+    "Guid": "f9749037a4d9ca5478d1e24249b5175b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_ErhnamDjinn.png"
+  },
+  "Avatar_Basic_Eshki_TDM": {
+    "Guid": "4ab883969f2c05b4787ed7c41e1a5b71",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Eshki_TDM.png"
+  },
+  "Avatar_Basic_Eternal_Soldier": {
+    "Guid": "94f37e555241f374ab4edf7cd5542617",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Eternal_Soldier_01.png"
+  },
+  "Avatar_Basic_Ezio_ACR": {
+    "Guid": "80e0ef3e24d930942a4ebb272b4236a8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ezio_ACR.png"
+  },
+  "Avatar_Basic_FalcoSpara_SNC": {
+    "Guid": "15d0e02409868764384605c7b9f9ea1c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_FalcoSpara_SNC.png"
+  },
+  "Avatar_Basic_Fblthp_OpenBeta": {
+    "Guid": "fd9430f35d3090741a3a980d79ede230",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Fblthp_01.png"
+  },
+  "Avatar_Basic_Fblthp_OTJ": {
+    "Guid": "d24b768c20d82b448a64ba841036ae42",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Fblthp_OTJ.png"
+  },
+  "Avatar_Basic_Felothar_TDM": {
+    "Guid": "d1c5e7d0ae1168644a7b7b5049f7cde9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Felothar_TDM.png"
+  },
+  "Avatar_Basic_Ferrafor_ECL": {
+    "Guid": "7d52138eec1499341ace66d1c7297ffc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ferrafor_ECL.png"
+  },
+  "Avatar_Basic_Finneas_BLB": {
+    "Guid": "859a59c8c11e3d64298f6ab868a58136",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Finneas_BLB.png"
+  },
+  "Avatar_Basic_Fleem_OM1": {
+    "Guid": "f6e976b383ee4af4bb5dec89eae8f1d3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Fleem_OM1.png"
+  },
+  "Avatar_Basic_Flubs_BLB": {
+    "Guid": "df899d9c8c1548a4cb99287a5fd4d6ea",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Flubs_BLB.png"
+  },
+  "Avatar_Basic_Freyalise_J21": {
+    "Guid": "a4768577d3612df47ba29383e067eaa5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Freyalise_J21.png"
+  },
+  "Avatar_Basic_Frodo_LTR": {
+    "Guid": "b84b93144be07b741b07265ae4e715bc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Frodo_LTR.png"
+  },
+  "Avatar_Basic_Galactus_MSH": {
+    "Guid": "92b952f1f854aa3458172f998749300e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Galactus_MSH.png"
+  },
+  "Avatar_Basic_Galadriel_LTR": {
+    "Guid": "223ea297621b99f47b8661afc76e3f1a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Galadriel_LTR.png"
+  },
+  "Avatar_Basic_Gale_HBG": {
+    "Guid": "5e140690fa100a24c8aac0b73f0499be",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gale_HBG.png"
+  },
+  "Avatar_Basic_Gandalf_HOB": {
+    "Guid": "3857dd23cf7d09740965928023adc66e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gandalf_HOB.png"
+  },
+  "Avatar_Basic_Gandalf_LTR": {
+    "Guid": "77717d6b111e52f4cb3964912cd1f7d6",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gandalf_LTR.png"
+  },
+  "Avatar_Basic_Garruk_ELD": {
+    "Guid": "c37188ab013c82d47b84041e22e1eac2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Garruk_ELD_01.png"
+  },
+  "Avatar_Basic_Gev_BLB": {
+    "Guid": "eab294a5fac5b984190f3ce3bc6806fc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gev_BLB.png"
+  },
+  "Avatar_Basic_GideonJura": {
+    "Guid": "6c25486149c0860498ea4b86e28156b2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gideon_AKH_01.png"
+  },
+  "Avatar_Basic_Gilgamesh_FIN": {
+    "Guid": "f8afcd34cae09d34b93c9d654b891202",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gilgamesh_FIN.png"
+  },
+  "Avatar_Basic_Gishath_LCI": {
+    "Guid": "e82be4b26c012954484435244f517296",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gishath_LCI.png"
+  },
+  "Avatar_Basic_Gollum_HOB": {
+    "Guid": "24af2c69b97765a4293df9375d8cf76b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gollum_HOB.png"
+  },
+  "Avatar_Basic_Gollum_LTR": {
+    "Guid": "76ad993c59b58ad45954ed6e81c2d7ed",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Gollum_LTR.png"
+  },
+  "Avatar_Basic_Grist_MH3": {
+    "Guid": "d1901d48344c78745951e15d738dbad3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Grist_MH3.png"
+  },
+  "Avatar_Basic_Grub_ECL": {
+    "Guid": "62ecc8184c526014abd8edc16072d76b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Grub_ECL.png"
+  },
+  "Avatar_Basic_GwenStacy_SPM": {
+    "Guid": "aab63cb246f9670478c0b5b2a8e3a175",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_GwenStacy_SPM.png"
+  },
+  "Avatar_Basic_Haliya_EOE": {
+    "Guid": "95216de4608c82845bd3a2fe3d157aa0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Haliya_EOE.png"
+  },
+  "Avatar_Basic_HawkeyeClint_MSH": {
+    "Guid": "33b383619a5fbdf46a762539a7cfcef5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_HawkeyeClint_MSH.png"
+  },
+  "Avatar_Basic_HawkeyeKate_MSH": {
+    "Guid": "fa84b1aca57688242b78a8de0d6754f1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_HawkeyeKate_MSH.png"
+  },
+  "Avatar_Basic_Helga_BLB": {
+    "Guid": "d800d9d47a7fe574894008454956aace",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Helga_BLB.png"
+  },
+  "Avatar_Basic_Huatli": {
+    "Guid": "86a730b2c8c8899448d6c32c72752f65",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Huatli_XLN_01.png"
+  },
+  "Avatar_Basic_Huatli_LCI": {
+    "Guid": "c877cffddd8615142b759a0781083ace",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Huatli_LCI.png"
+  },
+  "Avatar_Basic_Hugs_BLB": {
+    "Guid": "9674b4e512369c44ea23242c67ab8c32",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Hugs_BLB.png"
+  },
+  "Avatar_Basic_Hulk_MSH": {
+    "Guid": "953802c3062f62d429da69f5fb54c8ed",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Hulk_MSH.png"
+  },
+  "Avatar_Basic_HumanTorch_MSH": {
+    "Guid": "62c83a5d0120741459a89752ec329636",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_HumanTorch_MSH.png"
+  },
+  "Avatar_Basic_Iroh_TLA": {
+    "Guid": "aa34fc58991245a46a2e518fc9f14b70",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Iroh_TLA.png"
+  },
+  "Avatar_Basic_IronMan_MSH": {
+    "Guid": "05ee3a5aa73477a4b876023d75d3b411",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_IronMan_MSH.png"
+  },
+  "Avatar_Basic_Jace_BLB": {
+    "Guid": "41554031261db5b4782d5db4aa27095d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jace_BLB.png"
+  },
+  "Avatar_Basic_Jace_ONE": {
+    "Guid": "127563e6fcb002b4f96c4b5b3f87d04b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jace_ONE.png"
+  },
+  "Avatar_Basic_Jace_TMS": {
+    "Guid": "bb6431e7ee4486b4c9853bdf216fcaa6",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jace_TMS.png"
+  },
+  "Avatar_Basic_JaceBeleren": {
+    "Guid": "c1b76a3f8af86904194c45a4d680a23d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jace_XLN_01.png"
+  },
+  "Avatar_Basic_Jaya_98": {
+    "Guid": "9d22ac6e0595d8c4a8d86b5203dd110e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jaya_98.png"
+  },
+  "Avatar_Basic_Jaya_DMU": {
+    "Guid": "5ded76455431a174aa2f6f8b9f6e6e46",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jaya_DMU.png"
+  },
+  "Avatar_Basic_JayaBallard": {
+    "Guid": "b23804ce5aa6c774abedce6b32e3b477",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jaya_DAR_01.png"
+  },
+  "Avatar_Basic_Jetmir_SNC": {
+    "Guid": "8dbd21e130a315c4bae681daf0241ceb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Jetmir_SNC.png"
+  },
+  "Avatar_Basic_JinGitaxias_ONE": {
+    "Guid": "d4db760db4c5c4d44a481b93fd3befef",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_JinGitaxias_ONE.png"
+  },
+  "Avatar_Basic_Kaalia_MH3": {
+    "Guid": "172548060feb87240b4d9590bbd7342a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kaalia_MH3.png"
+  },
+  "Avatar_Basic_Kaito_FDN": {
+    "Guid": "689b8cf29465fa34fa218ed8c86e204d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kaito_FDN.png"
+  },
+  "Avatar_Basic_Kaito_NEO": {
+    "Guid": "68dbe2f2b412ee84eb58f2187618051c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kaito_NEO.png"
+  },
+  "Avatar_Basic_Kang_MSH": {
+    "Guid": "38ba10c39033d2640af065ae3895556f",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kang_MSH.png"
+  },
+  "Avatar_Basic_Karn": {
+    "Guid": "12e6054b5a7d177489dbd90e264b5c9f",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Karn_DAR_01.png"
+  },
+  "Avatar_Basic_Katara_TLA": {
+    "Guid": "e1f47696a53bc6e44923869e14bb8ae4",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Katara_TLA.png"
+  },
+  "Avatar_Basic_Kaya": {
+    "Guid": "bcd532866b3a8db43b01850deb6b85e2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kaya_RNA_01.png"
+  },
+  "Avatar_Basic_Kaya_MKM": {
+    "Guid": "85a09bfcb0266db46b7b955028f90da9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kaya_MKM.png"
+  },
+  "Avatar_Basic_Kefka_FIN": {
+    "Guid": "4b9704fe52a46664fa0d1c6247a33e0a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kefka_FIN.png"
+  },
+  "Avatar_Basic_Kellan_LCI": {
+    "Guid": "4da27b644670f124c86d2f04d3fe5b3c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kellan_LCI.png"
+  },
+  "Avatar_Basic_Kellan_OTJ": {
+    "Guid": "851a0ba7a05e0984d8fde8cd1aa42731",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kellan_OTJ.png"
+  },
+  "Avatar_Basic_Kellan_WOE": {
+    "Guid": "0fd363ecbb6ede544bcb31bf3c280833",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kellan_WOE.png"
+  },
+  "Avatar_Basic_Killian_SOS": {
+    "Guid": "feaff2c79a9879a4ab30bc38a28e89f3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__Killian_SOS.png"
+  },
+  "Avatar_Basic_Killian_STX": {
+    "Guid": "cbdb181d7eeddf44da445da8a21f5b3c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_KillianLu_STX.png"
+  },
+  "Avatar_Basic_Kilo_EOE": {
+    "Guid": "53effc9e94a679b48b49240daefc3c17",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kilo_EOE.png"
+  },
+  "Avatar_Basic_Kiora_DG": {
+    "Guid": "a52bdfd6fcd474f4db2cf3f1d95ca664",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kiora_DG.png"
+  },
+  "Avatar_Basic_Kiora_J21": {
+    "Guid": "c3f6b86198734914e9a03a1e6a022713",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kiora_J21.png"
+  },
+  "Avatar_Basic_Koth_ONE": {
+    "Guid": "a8cc74a2f163fd948b7c47fb1d7cae8d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Koth_ONE.png"
+  },
+  "Avatar_Basic_Kotis_TDM": {
+    "Guid": "d7b02b9577d86434382bce5f25300433",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kotis_TDM.png"
+  },
+  "Avatar_Basic_Kozilek_S25": {
+    "Guid": "02f2b6a75e1d3e440b3e658950196257",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Kozilek_S25.png"
+  },
+  "Avatar_Basic_Krang_TMT": {
+    "Guid": "108f7464d9c448641a93fc3b8a3aa57c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Krang_TMT.png"
+  },
+  "Avatar_Basic_Krang_TMT_Pixel": {
+    "Guid": "833b8ee626d72ce4ca4aea8559c1ca05",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Krang_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Laezel_HBG": {
+    "Guid": "b112f268dee8f124589e305eb0978d9d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Laezel_HBG.png"
+  },
+  "Avatar_Basic_Lazav": {
+    "Guid": "c71dec55f799b344c9433e6db288d16b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Lazav_ANA_01.png"
+  },
+  "Avatar_Basic_Legolas_LTR": {
+    "Guid": "f6399db0c67f89d408b79fa31e65d510",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Legolas_LTR.png"
+  },
+  "Avatar_Basic_Leonardo_TMT": {
+    "Guid": "1bcaa43e9ebffe948b603ae86df97c1a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Leonardo_TMT.png"
+  },
+  "Avatar_Basic_Leonardo_TMT_Pixel": {
+    "Guid": "7b384a3d5136a6f40a6ab464158e7f00",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Leonardo_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Lightning_FIN": {
+    "Guid": "bcb5d36bc70f8df41825cc98c6002e8d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Lightning_FIN.png"
+  },
+  "Avatar_Basic_LilGiri": {
+    "Guid": "627c528de0e8bfa4c8699c08607662d3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_LilGiri.png"
+  },
+  "Avatar_Basic_Liliana_FDN": {
+    "Guid": "cab0465c938ca1340970e50dc6db0a6d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Liliana_FDN.png"
+  },
+  "Avatar_Basic_Liliana_S25": {
+    "Guid": "b31f21db65e9e174bac96850bb7c1500",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Liliana_S25.png"
+  },
+  "Avatar_Basic_LilianaVess": {
+    "Guid": "b870e55f6840161479df302807c47920",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Liliana_M19_01.png"
+  },
+  "Avatar_Basic_Loki_MSH": {
+    "Guid": "77d238a8c37c5b045a13b1db882404d2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Loki_MSH.png"
+  },
+  "Avatar_Basic_Lukka_IKO": {
+    "Guid": "8c9ecaa110214c64889e552a80d6b1fb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Lukka_IKO_01.png"
+  },
+  "Avatar_Basic_Mabel_BLB": {
+    "Guid": "636fa64cb02bb9041b3ec6efcc49275d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Mabel_BLB.png"
+  },
+  "Avatar_Basic_Maralen_ECL": {
+    "Guid": "1dc7ba2ea8ebf234881d090e68230174",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Maralen_ECL.png"
+  },
+  "Avatar_Basic_Michelangelo_TMT": {
+    "Guid": "4933b4ab39023a34d888b6a9170bbfb5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Michelangelo_TMT.png"
+  },
+  "Avatar_Basic_Michelangelo_TMT_Pixel": {
+    "Guid": "1b88dcdbc61b4384bb3626e43e31193f",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Michelangelo_TMT_Pixel.png"
+  },
+  "Avatar_Basic_MilesMorales_SPM": {
+    "Guid": "d14b28981e948c847b2fff53dc6251c4",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_MilesMorales_SPM.png"
+  },
+  "Avatar_Basic_Minsc_HBG": {
+    "Guid": "2c97a71fd79a9324c8f2980dbe195984",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Minsc_HBG.png"
+  },
+  "Avatar_Basic_Mishra_BRO": {
+    "Guid": "84f0e898e49061b43a33828ccafe4be8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Mishra_BRO.png"
+  },
+  "Avatar_Basic_Mishrabot_BRO": {
+    "Guid": "56abeb4ee79ef764995f9074cc797c08",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Mishrabot_BRO.png"
+  },
+  "Avatar_Basic_Mmmenon_EOE": {
+    "Guid": "e198dcbc87103d7468f855ddfd384f6e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Mmmenon_EOE.png"
+  },
+  "Avatar_Basic_Momo_TLA": {
+    "Guid": "c8a5fdad5bc49284bb18f6a50d4ed145",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Momo_TLA.png"
+  },
+  "Avatar_Basic_MrFantastic_MSH": {
+    "Guid": "ef8a5372824152e41a7997478a1c26e3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_MrFantastic_MSH.png"
+  },
+  "Avatar_Basic_MuYanling_M20": {
+    "Guid": "87212f289cc9e6d4695b90a815810543",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Mu_Yanling_M20_01.png"
+  },
+  "Avatar_Basic_Nahiri_ONE": {
+    "Guid": "11d0370a2e567a04c96da2e3e1c899cc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Nahiri_ONE.png"
+  },
+  "Avatar_Basic_Nahiri_ZNR": {
+    "Guid": "1a038ba451c555946b48fbbc6862c5c6",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Nahiri_ZNR_01.png"
+  },
+  "Avatar_Basic_Narset_Shiko_TDM": {
+    "Guid": "137c615c1db38444ca649e8a2f3f2edc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Narset_Shiko_TDM.png"
+  },
+  "Avatar_Basic_Narset_TDM": {
+    "Guid": "362fac8ff8ce0384190fd4ab9fb0fb12",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Narset_TDM.png"
+  },
+  "Avatar_Basic_Nashi_MOM": {
+    "Guid": "f6f6ceef4873a544e89d7312a0d3f807",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Nashi_MOM.png"
+  },
+  "Avatar_Basic_Newt_SOS": {
+    "Guid": "c67443edb7678b940b9997871a2e5d91",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Newt_SOS.png"
+  },
+  "Avatar_Basic_Niambi_DMU": {
+    "Guid": "c50343c5342bf7745b5c769f154bce0d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Niambi_DMU.png"
+  },
+  "Avatar_Basic_NickFury_MSH": {
+    "Guid": "b514f836abf84534cac9f7764e70dc57",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_NickFury_MSH.png"
+  },
+  "Avatar_Basic_NikoAris": {
+    "Guid": "d7b5f1ad557623040ab5b38bf7aac37f",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_NikoAris_KHM_01.png"
+  },
+  "Avatar_Basic_Nissa_ONE": {
+    "Guid": "7bb8906daf3c9bf4cada3c379a73b7d0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Nissa_ONE.png"
+  },
+  "Avatar_Basic_NissaRevane": {
+    "Guid": "5d7b7638b6500914c9dbcfc7955a242e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Nissa_KLD_01.png"
+  },
+  "Avatar_Basic_Noctis_FIN": {
+    "Guid": "f837634e61bf7594ba4a32304ea8fcb0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Noctis_FIN.png"
+  },
+  "Avatar_Basic_NPE": {
+    "Guid": "ded2666d71dcf0b43a29250e5f3e366f",
+    "RelativePath": "Assets/Core/DuelScene/NewPlayerExperience/Images/Character/avatar_PlayerNPE.png"
+  },
+  "Avatar_Basic_ObNixilis_SNC": {
+    "Guid": "d3ec9f21a84a7e94aa6b2aba80844b09",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_ObNixilis_SNC.png"
+  },
+  "Avatar_Basic_OkinecAhau_LCI": {
+    "Guid": "fa693f4adbb69aa40928b045904da992",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_OkinecAhau_LCI.png"
+  },
+  "Avatar_Basic_Oko_ELD": {
+    "Guid": "b04ef969a4346554183c6bdd6ce0d433",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Oko_ELD.png"
+  },
+  "Avatar_Basic_Oko_OTJ": {
+    "Guid": "a216e2c47cb6bf64994180d29bb4cdee",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Oko_OTJ.png"
+  },
+  "Avatar_Basic_Oko_W25": {
+    "Guid": "1c4c446a190dcca48924946efe0552b0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Oko_W25.png"
+  },
+  "Avatar_Basic_Olivia_VOW": {
+    "Guid": "a8a06fbbe968d614f801abf50ba6f2ae",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Olivia_VOW.png"
+  },
+  "Avatar_Basic_OnionKnight_FIN": {
+    "Guid": "d067928e1f3e8b348931f8d526ff7c25",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_OnionKnight_FIN.png"
+  },
+  "Avatar_Basic_Ozai_TLA": {
+    "Guid": "cb0cfb445e3566144975b5962f5b84dc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ozai_TLA.png"
+  },
+  "Avatar_Basic_PeterParker_SPM": {
+    "Guid": "a3e257904cbf5d64eab7d4e7662838c9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_PeterParker_SPM.png"
+  },
+  "Avatar_Basic_PhagetheUntouchable": {
+    "Guid": "e7f20922b792fa948ac296c6ac70a23b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_PhagetheUntouchable.png"
+  },
+  "Avatar_Basic_Phelddagrif": {
+    "Guid": "f086ba8b211e0954abf369859b3b8bb1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Phelddagrif.png"
+  },
+  "Avatar_Basic_Quintorius_LCI": {
+    "Guid": "4307a81a68d3d664fa5d1b29229b22d8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Quintorius_LCI.png"
+  },
+  "Avatar_Basic_Quintorius_SOS": {
+    "Guid": "a6ef17adc329d3f40940199720fec1d0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__Quintorious_SOS.png"
+  },
+  "Avatar_Basic_Quintorius_STX": {
+    "Guid": "107a116034f06bc469f86c5b50bf5fbb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_QuintoriusKand _STX.png"
+  },
+  "Avatar_Basic_Radagast_HOB": {
+    "Guid": "0728c1a5b9b79b7419a0b59a7cd9db2c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Radagast_HOB.png"
+  },
+  "Avatar_Basic_Raffine_SNC": {
+    "Guid": "694756b88fa6cb642a2f9b4d410d6938",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Raffine_SNC.png"
+  },
+  "Avatar_Basic_Rakdos": {
+    "Guid": "6e6d33fb7297c5744a2e62ac54fd8bab",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Rakdos_ANA_01.png"
+  },
+  "Avatar_Basic_Rakdos_OTJ": {
+    "Guid": "94c803495a2c76e4589da7e5da846ed8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Rakdos_OTJ.png"
+  },
+  "Avatar_Basic_Ral": {
+    "Guid": "e5dde28808eb2954898d0920e25a1bbb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ral_GRN_01.png"
+  },
+  "Avatar_Basic_RalZarek_SOS": {
+    "Guid": "205663d53fc1f86498db864938f0d3ed",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__RalZarek_SOS.png"
+  },
+  "Avatar_Basic_Raphael_TMT": {
+    "Guid": "56ee05391d9a5cf43b2610fe5a27a3f9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Raphael_TMT.png"
+  },
+  "Avatar_Basic_Raphael_TMT_Pixel": {
+    "Guid": "94d8658f1d0cbec42a7fba5a73db7346",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Raphael_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Rocksteady_TMT_Pixel": {
+    "Guid": "5faea294c47c8a147a24f547dd64f4e4",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Rocksteady_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Rootha_SOS": {
+    "Guid": "3b8e99bfd1e6476499f078be565347b7",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__Rootha_SOS.png"
+  },
+  "Avatar_Basic_Rootha_STX": {
+    "Guid": "c80011cec807be64798fbe735e1a5e2a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_RoothaSquallheart_STX.png"
+  },
+  "Avatar_Basic_Rowan_WOE": {
+    "Guid": "9f493665e1ada8e4899eade409e5fb42",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Rowan_WOE.png"
+  },
+  "Avatar_Basic_Rydia_FIN": {
+    "Guid": "a23734102d81a684986edbbad431f132",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Rydia_FIN.png"
+  },
+  "Avatar_Basic_Saheeli_DFT": {
+    "Guid": "cf46f1f70d829644d943e4803147b270",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Saheeli_DFT.png"
+  },
+  "Avatar_Basic_Saheeli_KLR": {
+    "Guid": "b22ff59e180462342bbb1788d553ed63",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Saheeli_Rai.png"
+  },
+  "Avatar_Basic_Sarkhan_J21": {
+    "Guid": "c26534b08ae95f241927cb71bd4fa13b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sarkhan_J21.png"
+  },
+  "Avatar_Basic_Sarkhan_TDM": {
+    "Guid": "1261ccf45a1b2994cb73d52f714df815",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sarkhan_TDM.png"
+  },
+  "Avatar_Basic_SarkhanVol": {
+    "Guid": "1d1f525db4d85004e94fb0827f8dfaef",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sarkhan_M19_01.png"
+  },
+  "Avatar_Basic_ScarletWitch_MSH": {
+    "Guid": "6b6835926db84e8498ef7a3b5c1336e1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_ScarletWitch_MSH.png"
+  },
+  "Avatar_Basic_Sephiroth_FIN": {
+    "Guid": "4c65fcea923ac504e9385f3612e48ba2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sephiroth_FIN.png"
+  },
+  "Avatar_Basic_Serra_MH1": {
+    "Guid": "6d8803cfb266d9041bb10e401e3c0966",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Serra_MH1_01.png"
+  },
+  "Avatar_Basic_Shadowheart_HBG": {
+    "Guid": "4472d257b08b9464583b99b1aa2cac6e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Shadowheart_HBG.png"
+  },
+  "Avatar_Basic_ShangChi_MSH": {
+    "Guid": "7ff9b6218045a0f408610fe470b51a99",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_ShangChi_MSH.png"
+  },
+  "Avatar_Basic_Shantotto_FIN": {
+    "Guid": "b65df5e35bbb2d0409a177e26cd5f3db",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Shantotto_FIN.png"
+  },
+  "Avatar_Basic_SheHulk_MSH": {
+    "Guid": "e8c2bebe03c4e1344b4ceab4924acfcf",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_SheHulk_MSH.png"
+  },
+  "Avatar_Basic_Sheoldred_ONE": {
+    "Guid": "f46ee02cc52da34498053c94c81f94ea",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sheoldred_ONE.png"
+  },
+  "Avatar_Basic_Shredder_TMT": {
+    "Guid": "8dd52fd3a7732914fafbb5f5d35cec68",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Shredder_TMT.png"
+  },
+  "Avatar_Basic_Shredder_TMT_Pixel": {
+    "Guid": "6d3a223263a43f14189a20e8b1a3ad26",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Shredder_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Six_MH3": {
+    "Guid": "b5004df05a3912d40851187b7b59c255",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Six_MH3.png"
+  },
+  "Avatar_Basic_Slimefoot_DMU": {
+    "Guid": "9e297cce9b2c1ba4b9e625f3a1bdb29d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Slimefoot_DMU.png"
+  },
+  "Avatar_Basic_SliverGravemother_CMM": {
+    "Guid": "1f53e632e4563034e80ebec0285cf365",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/Avatar_Bust_SliverGravemother_CMM.png"
+  },
+  "Avatar_Basic_Smaug_HOB": {
+    "Guid": "fc2ed29b5ba148541bbb1f2e20a2120a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Smaug_HOB.png"
+  },
+  "Avatar_Basic_Sokka_TLA": {
+    "Guid": "79844c128c9a3d74097345748f71a2ef",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sokka_TLA.png"
+  },
+  "Avatar_Basic_Sorin_Markov_M20": {
+    "Guid": "ff6b8e483a917e54393538dfda9a00ce",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sorin_Markov_M20_01.png"
+  },
+  "Avatar_Basic_Sorin_VOW": {
+    "Guid": "f14196e679cb6404791b4481888ff932",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sorin_VOW.png"
+  },
+  "Avatar_Basic_Sparky": {
+    "Guid": "5869c9a1b09d69142a1f44f7d20fbdd8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sparky_ANA_01.png"
+  },
+  "Avatar_Basic_Splinter_TMT": {
+    "Guid": "89350751b39ebd24eba956952f6b5f3b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Splinter_TMT.png"
+  },
+  "Avatar_Basic_Splinter_TMT_Pixel": {
+    "Guid": "37a4a46474e10bd43926efb4037c61a0",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Splinter_TMT_Pixel.png"
+  },
+  "Avatar_Basic_Squall_FIN": {
+    "Guid": "c50352f52b1b151459a4267b362c2639",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Squall_FIN.png"
+  },
+  "Avatar_Basic_Squee_DMU": {
+    "Guid": "c50198b9939e0c94ba252225d187f0ca",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Squee_DMU.png"
+  },
+  "Avatar_Basic_Stilzkin_FIN": {
+    "Guid": "af15716f836f7f04e973052be569d792",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Stilzkin_FIN.png"
+  },
+  "Avatar_Basic_Stormspitter_BLB": {
+    "Guid": "fa1126509bac85540b25e7a9df164789",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Stormspitter_BLB.png"
+  },
+  "Avatar_Basic_STX_ProfessorOnyx": {
+    "Guid": "2932f36021e8d8d4c93cf48deb50604e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_ProfessorOnyx_STX.png"
+  },
+  "Avatar_Basic_SueStorm_MSH": {
+    "Guid": "24ffd1d30069e644daf0d0689be26713",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_SueStorm_MSH.png"
+  },
+  "Avatar_Basic_Suki_TLA": {
+    "Guid": "8a4f84ba600bfa5438cbf04a7bf909a1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Suki_TLA.png"
+  },
+  "Avatar_Basic_Sygg_ECL": {
+    "Guid": "d8790dc309a0c0d4eb43126dc6ae30bc",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Sygg_ECL.png"
+  },
+  "Avatar_Basic_Szarel_EOE": {
+    "Guid": "e6b8c872fc143e649ba962da9eae4406",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Szarel_EOE.png"
+  },
+  "Avatar_Basic_Talion_WOE": {
+    "Guid": "1dc29f018a71d7049a34668fce351e49",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Talion_WOE.png"
+  },
+  "Avatar_Basic_Tamiyo_NEO": {
+    "Guid": "90000092ec7d69c419dae4fc212808e2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tamiyo_NEO.png"
+  },
+  "Avatar_Basic_Tamiyo_WAR": {
+    "Guid": "bd3e129c17b595f4f83dc822472f7c06",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tamiyo_WAR_01.png"
+  },
+  "Avatar_Basic_Tasha_HBG": {
+    "Guid": "4b373851623587b4abbfc3a7caba4301",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tasha_HBG.png"
+  },
+  "Avatar_Basic_Teferi": {
+    "Guid": "0567b3fb1a744564bacde8eeb5fcd684",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Teferi_DAR_01.png"
+  },
+  "Avatar_Basic_Teferi_98": {
+    "Guid": "85045ce692ba5554a92be15a90184997",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Teferi_98.png"
+  },
+  "Avatar_Basic_Terra_FIN": {
+    "Guid": "de367f7c41aa75d4b9a2b4c8d7e8ebd4",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Terra_FIN.png"
+  },
+  "Avatar_Basic_Teyo_J21": {
+    "Guid": "429515d5dc33561409cc20cd0a745f95",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Teyo_J21.png"
+  },
+  "Avatar_Basic_Tezzeret": {
+    "Guid": "af5a840661d4d4045a5e7ea52bde1377",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tezzeret_AER_01.png"
+  },
+  "Avatar_Basic_Tezzeret_EOE": {
+    "Guid": "51026089ac2f1f94ca219769e68f5360",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tezzeret_EOE.png"
+  },
+  "Avatar_Basic_Thanos_MSH": {
+    "Guid": "b4c49e20dc38dea4f90dcc9b91507bee",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Thanos_MSH.png"
+  },
+  "Avatar_Basic_TheWanderer_NEO": {
+    "Guid": "769e2f84bfaaa0046bd839a561c0b987",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_TheWanderer_NEO.png"
+  },
+  "Avatar_Basic_Thing_MSH": {
+    "Guid": "8af86c4b37331564e99c05e1a194682d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Thing_MSH.png"
+  },
+  "Avatar_Basic_Thor_MSH": {
+    "Guid": "073a5460cac4d474ea52361f03130d82",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Thor_MSH.png"
+  },
+  "Avatar_Basic_Thorin_HOB": {
+    "Guid": "1ebc0ecbde35c9c43ae4a76e8f9653f2",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Thorin_HOB.png"
+  },
+  "Avatar_Basic_Tibalt": {
+    "Guid": "205396d55d4d11d409195e9a1f944eab",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tibalt_KHM.png"
+  },
+  "Avatar_Basic_Tibalt_KHM": {
+    "Guid": "205396d55d4d11d409195e9a1f944eab",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tibalt_KHM.png"
+  },
+  "Avatar_Basic_Tidus_FIN": {
+    "Guid": "a837d6859ed2f9541805fd217f67123a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tidus_FIN.png"
+  },
+  "Avatar_Basic_Tinybones_OTJ": {
+    "Guid": "784b342bc6bacd44fab36c3a66745a9f",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tinybones_OTJ.png"
+  },
+  "Avatar_Basic_Titania_BRO": {
+    "Guid": "38f5cde0e26c4d246b8a7ccf0d476a94",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Titania_BRO.png"
+  },
+  "Avatar_Basic_Tonberry_FIN": {
+    "Guid": "3129d47180ee79342afbcec644c0c0e3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Tonberry_FIN.png"
+  },
+  "Avatar_Basic_Toph_TLA": {
+    "Guid": "974e1b0e51539b04ca4c170091aff9d8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Toph_TLA.png"
+  },
+  "Avatar_Basic_Trostani": {
+    "Guid": "eb468c6117de45340ba980670d3fec09",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Trostani_Discordant_GRN_01.png"
+  },
+  "Avatar_Basic_UB_PinkiePie": {
+    "Guid": "f8949d7dbd69d344dbbb47765c8b1e21",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_UB_PinkiePie.png"
+  },
+  "Avatar_Basic_Ugin_M21": {
+    "Guid": "132c7bec6435b144a9027d237d9ace2a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ugin_M21_01.png"
+  },
+  "Avatar_Basic_Ugin_TDM": {
+    "Guid": "ce5ee6914a2e7ae44973f5fec18026ba",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ugin_TDM.png"
+  },
+  "Avatar_Basic_Ugluk_LTR": {
+    "Guid": "6a75f27083e67454c97348796051b80b",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ugluk_LTR.png"
+  },
+  "Avatar_Basic_Ulamog_MH3": {
+    "Guid": "9e21362d698087a468fa3e73584754c1",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ulamog_MH3.png"
+  },
+  "Avatar_Basic_Ultron_MSH": {
+    "Guid": "3eaf208c90a8ea74cad9c792bebc38f3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ultron_MSH.png"
+  },
+  "Avatar_Basic_UNJohnny": {
+    "Guid": "0675759c1753f6541b8cf7ea3e9364d3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_UNJohnny.png"
+  },
+  "Avatar_Basic_UNSpike": {
+    "Guid": "82d9ee05e28da3a4aa1f99d60afd10e5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_UNSpike.png"
+  },
+  "Avatar_Basic_UNTimmy": {
+    "Guid": "4ca431ee3a55a5544a4c6e5f3f0853e5",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_UNTimmy.png"
+  },
+  "Avatar_Basic_UNVorthos": {
+    "Guid": "7290421ccd1ff1c47bd71c484ac5cf56",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_UNVorthos.png"
+  },
+  "Avatar_Basic_Urabrask_ONE": {
+    "Guid": "ef6a1e36a2283764087fd8a2b4b87911",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Urabrask_ONE.png"
+  },
+  "Avatar_Basic_Urza_BRO": {
+    "Guid": "1196e14d6a984fc40992fb758376d15d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Urza_BRO.png"
+  },
+  "Avatar_Basic_Urzabot_BRO": {
+    "Guid": "8b2350ef66bcb6b4f9807905959d213d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Urzabot_BRO.png"
+  },
+  "Avatar_Basic_Valgavoth_S25": {
+    "Guid": "ee2bdfc13bb96254e8829e78ab96d0a9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Valgavoth_S25.png"
+  },
+  "Avatar_Basic_Vannifar": {
+    "Guid": "5a92f39da3aad7f409524f7aadbb5887",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vannifer_RNA_01.png"
+  },
+  "Avatar_Basic_Venom_SPM": {
+    "Guid": "a2ffc1d87cad92e4c915143447298120",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Venom_SPM.png"
+  },
+  "Avatar_Basic_Vito_LCI": {
+    "Guid": "2d3b95d59bf866b4eb881d611dfb2622",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vito_LCI.png"
+  },
+  "Avatar_Basic_Vivien_ANB": {
+    "Guid": "96c4639a6871e864e88e2bdd3e592eaf",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vivien_ANB.png"
+  },
+  "Avatar_Basic_Vivien_FDN": {
+    "Guid": "d88408f5d4e73564e9247c926750bd51",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vivien_FDN.png"
+  },
+  "Avatar_Basic_Vivien_W25": {
+    "Guid": "54a5fedc74814bd499f2fd28bf6fa1ae",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vivien_W25.png"
+  },
+  "Avatar_Basic_VivienReid": {
+    "Guid": "fd8830872c0c229429158185b67fdddd",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vivien_M19_01.png"
+  },
+  "Avatar_Basic_Vorinclex_ONE": {
+    "Guid": "c40982af351834f47a5586e15ec5e61d",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vorinclex_ONE.png"
+  },
+  "Avatar_Basic_Vraska": {
+    "Guid": "c61d141765a4e5d4da0aad2345528ccb",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vraska_GRN_01.png"
+  },
+  "Avatar_Basic_Vraska_ONE": {
+    "Guid": "abd13c6fdedf02448abf89318e0bf790",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vraska_ONE.png"
+  },
+  "Avatar_Basic_Vraska_OTJ": {
+    "Guid": "cc6333ce7d3352e458ede86c6a987ee9",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vraska_OTJ.png"
+  },
+  "Avatar_Basic_Vren_BLB": {
+    "Guid": "dc53d509415d63747ba449d2fce1feca",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vren_BLB.png"
+  },
+  "Avatar_Basic_Will_WOE": {
+    "Guid": "91b6b2e0a3f4373458407141ef3e8a8e",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Will_WOE.png"
+  },
+  "Avatar_Basic_Winter_DSK": {
+    "Guid": "a82ffc1a7d4f33b4f8f0499045388c9c",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Winter_DSK.png"
+  },
+  "Avatar_Basic_Wolverine_MSH": {
+    "Guid": "b634d712bc9155b46b484722daa5f8d8",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Wolverine_MSH.png"
+  },
+  "Avatar_Basic_Wrenn_MID": {
+    "Guid": "2da30f1751f75b541b951b03f348de49",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Wrenn_MID.png"
+  },
+  "Avatar_Basic_Wyll_HBG": {
+    "Guid": "849ca4f4fe5c99e48b81a89556304952",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Wyll_HBG.png"
+  },
+  "Avatar_Basic_Xander_SNC": {
+    "Guid": "6ed220918f577ff43a1a32d1dc821a42",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Xander_SNC.png"
+  },
+  "Avatar_Basic_Yargle_DAR": {
+    "Guid": "00bc94b0af6b90941a839c7e676c8cf7",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Yargle_DAR.png"
+  },
+  "Avatar_Basic_Yshtola_FIN": {
+    "Guid": "d4bdcc0ee9348d346af8f8585be499df",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Yshtola_FIN.png"
+  },
+  "Avatar_Basic_Yuna_FIN": {
+    "Guid": "09a72dd44ab0f6740a0e71020e136949",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Yuna_FIN.png"
+  },
+  "Avatar_Basic_Ziatora_SNC": {
+    "Guid": "46d435bc30e54804d8d9f8f9cfacf485",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Ziatora_SNC.png"
+  },
+  "Avatar_Basic_Zimone_FDN": {
+    "Guid": "9ffe55fabf298dd459a26db131933b24",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Zimone_FDN.png"
+  },
+  "Avatar_Basic_Zimone_SOS": {
+    "Guid": "e7595e2adc67c7044b7e29bcad65dad3",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust__Zimone_SOS.png"
+  },
+  "Avatar_Basic_Zimone_STX": {
+    "Guid": "ad5414de596d8ba44a7dd28dc1e1f214",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_ZimoneWola_STX.png"
+  },
+  "Avatar_Basic_Zoraline_BLB": {
+    "Guid": "6577842abbb43df4c8915ed7b9db2f79",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Zoraline_BLB.png"
+  },
+  "Avatar_Basic_Zuko_TLA": {
+    "Guid": "f8b728b0e621057488b3606026e4965a",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Zuko_TLA.png"
+  },
+  "Avatar_Basic_Zurgo_TDM": {
+    "Guid": "8a5cb42280419d44aafe2b8db37365ca",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Zurgo_TDM.png"
+  },
+  "NPE_BOLAS": {
+    "Guid": "3d016201f3495b844b7f6d072367507b",
+    "RelativePath": "Assets/Core/Meta/NewPlayerExperience/Art/avatar_bolas_devastation_npe_phaseladder.png"
+  },
+  "NPE_ELF": {
+    "Guid": "1a157d9df74b33649ba5aac0953bcb12",
+    "RelativePath": "Assets/Core/Meta/NewPlayerExperience/Art/avatar_elfhame_druid_npe_phaseladder.png"
+  },
+  "NPE_GOBBO": {
+    "Guid": "8b6860fe374828347a211d6a5764d88b",
+    "RelativePath": "Assets/Core/Meta/NewPlayerExperience/Art/avatar_goblin_rabblemaster_npe_phaseladder.png"
+  },
+  "NPE_GOTH": {
+    "Guid": "a05862c7569010840a2f903b0c0b957c",
+    "RelativePath": "Assets/Core/Meta/NewPlayerExperience/Art/avatar_ruthless_ripper_npe_phaseladder.png"
+  },
+  "NPE_WET_ELF": {
+    "Guid": "f2185dedb7008184aacbb6fece4f9cab",
+    "RelativePath": "Assets/Core/Meta/NewPlayerExperience/Art/avatar_herald_of_secret_streams_npe_phaseladder.png"
+  },
+  "Placeholder": {
+    "Guid": "5a92f39da3aad7f409524f7aadbb5887",
+    "RelativePath": "Assets/Core/Art/Meta/Profile/AvatarBust_Vannifer_RNA_01.png"
+  }
+}

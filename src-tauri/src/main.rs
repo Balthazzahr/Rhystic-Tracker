@@ -3090,6 +3090,32 @@ async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<Avata
     let out_dir = avatar_cache_dir(&app)?;
     std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
 
+    // Try running extractor script if python is available
+    let script_candidates = [
+        PathBuf::from("/home/davepople/Projects/Rhystic Tracker/src-tauri/scripts/extract_mtga_avatars.py"),
+        std::env::current_exe().unwrap_or_default().parent().unwrap_or(std::path::Path::new("")).join("scripts/extract_mtga_avatars.py"),
+    ];
+
+    let py_bins = ["/tmp/unity_env/bin/python3", "python3", "python"];
+
+    for script in &script_candidates {
+        if script.exists() {
+            for py in &py_bins {
+                let status = std::process::Command::new(py)
+                    .arg(script)
+                    .arg("")
+                    .arg(&out_dir)
+                    .status();
+                if let Ok(s) = status {
+                    if s.success() {
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
     let count = match std::fs::read_dir(&out_dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
@@ -3150,17 +3176,26 @@ fn has_avatar_image(app: tauri::AppHandle, avatar_id: String) -> Result<Option<S
         }
     }
 
-    // Try case-insensitive lookup
+    // Try case-insensitive / substring lookup
     if let Ok(entries) = std::fs::read_dir(&dir) {
         let lower_clean = clean.to_lowercase();
+        let lower_stripped = stripped_prefix.to_lowercase();
+        let mut best_match: Option<PathBuf> = None;
+
         for entry in entries.flatten() {
             let path = entry.path();
             if let Some(fname) = path.file_stem().and_then(|s| s.to_str()) {
                 let f_lower = fname.to_lowercase();
-                if f_lower == lower_clean || f_lower.contains(&lower_clean) {
+                if f_lower == lower_clean || f_lower == lower_stripped {
                     return Ok(Some(path.to_string_lossy().to_string()));
                 }
+                if f_lower.contains(&lower_stripped) || lower_stripped.contains(&f_lower) {
+                    best_match = Some(path.clone());
+                }
             }
+        }
+        if let Some(p) = best_match {
+            return Ok(Some(p.to_string_lossy().to_string()));
         }
     }
 
