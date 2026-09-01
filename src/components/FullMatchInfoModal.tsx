@@ -112,10 +112,10 @@ export function FullMatchInfoModal({
           {/* --- HERO SIDE (Left: Avatar rising behind window + Deck Info) --- */}
           <div className="flex-1 flex items-end gap-4 min-w-0 justify-start">
             {/* Hero Avatar (Standing behind the modal window top rim) */}
-            <div className="w-56 h-48 sm:w-72 sm:h-60 shrink-0 flex items-end justify-center pointer-events-none translate-y-4 sm:translate-y-5 -mb-4 sm:-mb-5 z-0">
+            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-4 sm:translate-y-5 -mb-4 sm:-mb-5 z-0">
               <AvatarImage
                 avatarId={heroAvatar}
-                className="w-full h-full"
+                className="h-full"
               />
             </div>
 
@@ -188,11 +188,11 @@ export function FullMatchInfoModal({
             </div>
 
             {/* Opponent Avatar (Standing behind the modal window top rim) */}
-            <div className="w-56 h-48 sm:w-72 sm:h-60 shrink-0 flex items-end justify-center pointer-events-none translate-y-4 sm:translate-y-5 -mb-4 sm:-mb-5 z-0">
+            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-4 sm:translate-y-5 -mb-4 sm:-mb-5 z-0">
               <AvatarImage
                 avatarId={oppAvatar}
                 isOpponent={true}
-                className="w-full h-full"
+                className="h-full"
               />
             </div>
           </div>

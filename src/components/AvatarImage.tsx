@@ -39,7 +39,7 @@ export function AvatarImage({
         src={cachedUrl && !loadFailed ? cachedUrl : defaultAvatarImg}
         alt={avatarId || 'Avatar'}
         onError={() => setLoadFailed(true)}
-        className={`w-full h-full object-contain object-bottom drop-shadow-xl transition-transform duration-300 ${
+        className={`h-full w-auto max-w-full object-contain object-bottom drop-shadow-2xl transition-transform duration-300 ${
           isOpponent ? 'scale-x-[-1]' : ''
         }`}
       />
