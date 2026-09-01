@@ -9,7 +9,7 @@ def extract_avatars(raw_dir=None, out_dir=None):
         out_dir = os.path.expanduser("~/.config/rhystic-tracker/avatars")
     os.makedirs(out_dir, exist_ok=True)
 
-    # If raw_dir is provided (e.g. /.../MTGA/MTGA_Data/Downloads/Raw), get Downloads dir
+    # 1. Locate MTGA Downloads directory
     downloads_dir = None
     if raw_dir and os.path.exists(raw_dir):
         if os.path.basename(raw_dir.rstrip("/")) == "Raw":
@@ -22,7 +22,6 @@ def extract_avatars(raw_dir=None, out_dir=None):
                 downloads_dir = cand
 
     if not downloads_dir or not os.path.exists(downloads_dir):
-        # Search standard Wine / Steam / Lutris paths
         candidates = [
             os.path.expanduser("~/.steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
             os.path.expanduser("~/.steam/root/steamapps/common/MTGA/MTGA_Data/Downloads"),
@@ -44,15 +43,14 @@ def extract_avatars(raw_dir=None, out_dir=None):
         from PIL import Image
         UnityPy.config.FALLBACK_UNITY_VERSION = "2022.3.22f1"
     except ImportError:
-        print("Warning: UnityPy or PIL not installed, skipping dynamic extraction", file=sys.stderr)
+        print("Warning: UnityPy or PIL not installed", file=sys.stderr)
         return 0
 
     alt_files = glob.glob(os.path.join(downloads_dir, "ALT", "ALT_Avatar_*.mtga"))
-    manifest_files = glob.glob(os.path.join(downloads_dir, "Manifest_*.mtga"))
     bundle_dir = os.path.join(downloads_dir, "AssetBundle")
 
-    if not alt_files or not manifest_files or not os.path.exists(bundle_dir):
-        print("Error: Missing ALT or Manifest in MTGA Downloads directory", file=sys.stderr)
+    if not alt_files or not os.path.exists(bundle_dir):
+        print("Error: Missing ALT or AssetBundle directory", file=sys.stderr)
         return 0
 
     # 1. Parse ALT for NodeId -> RelativePath and AvatarID -> RelativePath
@@ -71,48 +69,44 @@ def extract_avatars(raw_dir=None, out_dir=None):
             for av_id, nid in child.items():
                 if nid in node_to_rel:
                     rel = node_to_rel[nid]
-                    rel_to_avatar_ids.setdefault(rel, []).append(av_id)
+                    rel_to_avatar_ids.setdefault(rel.lower(), []).append(av_id)
 
-    # 2. Parse Manifest for IndexedAssets
-    manifest_file = [m for m in sorted(manifest_files) if "Audio" not in m and "Localization" not in m][-1]
-    mf_data = json.load(open(manifest_file))
-    bundle_to_indexed = {}
-    for asset in mf_data.get("Assets", []):
-        name = asset.get("Name", "")
-        indexed = asset.get("IndexedAssets", [])
-        if "Bucket_Avatar.BustPayload" in name and indexed:
-            bundle_to_indexed[name] = indexed
-
+    # 2. Extract using exact m_PathID from m_Container
+    bust_bundles = glob.glob(os.path.join(bundle_dir, "Bucket_Avatar.BustPayload_*.mtga"))
     total_saved = 0
-    for b_name, indexed_assets in bundle_to_indexed.items():
-        b_path = os.path.join(bundle_dir, b_name)
-        if not os.path.exists(b_path):
-            continue
+
+    for b_path in bust_bundles:
         try:
             env = UnityPy.load(b_path)
-            sprites = [obj for obj in env.objects if obj.type.name == "Sprite"]
-            for idx, sprite_obj in enumerate(sprites):
-                if idx >= len(indexed_assets):
-                    break
-                rel_path = indexed_assets[idx]
-                try:
-                    s_data = sprite_obj.read()
-                    img = s_data.image
-                    if img:
-                        bbox = img.getbbox()
-                        if bbox:
-                            img = img.crop(bbox)
-                        stem = os.path.splitext(os.path.basename(rel_path))[0]
-                        clean_stem = stem.replace("AvatarBust_", "").replace("Avatar_Bust_", "")
-                        img.save(os.path.join(out_dir, f"{stem}.png"))
-                        img.save(os.path.join(out_dir, f"{clean_stem}.png"))
-                        for av_id in rel_to_avatar_ids.get(rel_path, []):
-                            img.save(os.path.join(out_dir, f"{av_id}.png"))
-                            total_saved += 1
-                except Exception:
-                    pass
+            path_id_to_rel = {}
+            for obj in env.objects:
+                if obj.type.name == "AssetBundle":
+                    ab_data = obj.read()
+                    for rel_path, asset_info in ab_data.m_Container:
+                        pid = asset_info.asset.m_PathID
+                        path_id_to_rel[pid] = rel_path
+
+            for obj in env.objects:
+                if obj.type.name == "Sprite" and obj.path_id in path_id_to_rel:
+                    rel = path_id_to_rel[obj.path_id]
+                    s_data = obj.read()
+                    try:
+                        img = s_data.image
+                        if img:
+                            bbox = img.getbbox()
+                            if bbox:
+                                img = img.crop(bbox)
+                            stem = os.path.splitext(os.path.basename(rel))[0]
+                            clean_stem = stem.replace("AvatarBust_", "").replace("Avatar_Bust_", "")
+                            img.save(os.path.join(out_dir, f"{stem}.png"))
+                            img.save(os.path.join(out_dir, f"{clean_stem}.png"))
+                            for av_id in rel_to_avatar_ids.get(rel.lower(), []):
+                                img.save(os.path.join(out_dir, f"{av_id}.png"))
+                                total_saved += 1
+                    except Exception:
+                        pass
         except Exception as e:
-            print(f"Error reading bundle {b_name}: {e}", file=sys.stderr)
+            print(f"Error {b_path}: {e}", file=sys.stderr)
 
     print(f"Successfully extracted {total_saved} avatars to {out_dir}")
     return total_saved
