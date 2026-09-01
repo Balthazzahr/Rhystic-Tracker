@@ -4,6 +4,20 @@ import glob
 import os
 import sys
 
+def tight_alpha_crop(img, alpha_threshold=25):
+    """Crops transparent padding while ignoring faint alpha compression noise."""
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    alpha = img.split()[-1]
+    mask = alpha.point(lambda p: 255 if p >= alpha_threshold else 0)
+    bbox = mask.getbbox()
+    if bbox:
+        # Also zero-out noise outside the threshold
+        cleaned_alpha = alpha.point(lambda p: p if p >= alpha_threshold else 0)
+        img.putalpha(cleaned_alpha)
+        return img.crop(bbox)
+    return img
+
 def extract_avatars(raw_dir=None, out_dir=None):
     if not out_dir:
         out_dir = os.path.expanduser("~/.config/rhystic-tracker/avatars")
@@ -93,9 +107,7 @@ def extract_avatars(raw_dir=None, out_dir=None):
                     try:
                         img = s_data.image
                         if img:
-                            bbox = img.getbbox()
-                            if bbox:
-                                img = img.crop(bbox)
+                            img = tight_alpha_crop(img, alpha_threshold=25)
                             stem = os.path.splitext(os.path.basename(rel))[0]
                             clean_stem = stem.replace("AvatarBust_", "").replace("Avatar_Bust_", "")
                             img.save(os.path.join(out_dir, f"{stem}.png"))

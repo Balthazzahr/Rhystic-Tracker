@@ -71,7 +71,7 @@ export async function getCachedAvatarUrl(avatarId?: string | null): Promise<stri
   try {
     const localPath = await invoke<string | null>('has_avatar_image', { avatarId: cleanId });
     if (localPath) {
-      const srcUrl = `${convertFileSrc(localPath)}?v=1.3.10`;
+      const srcUrl = `${convertFileSrc(localPath)}?v=1.3.10-crop2`;
       avatarSrcCache.set(cleanId, srcUrl);
       return srcUrl;
     }
