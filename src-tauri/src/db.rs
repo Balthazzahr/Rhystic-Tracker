@@ -105,6 +105,12 @@ CREATE TABLE IF NOT EXISTS deck_art_overrides (
     grp_id INTEGER,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS deck_bg_art_overrides (
+    deck_name TEXT PRIMARY KEY,
+    card_name TEXT NOT NULL,
+    grp_id INTEGER,
+    updated_at TEXT NOT NULL
+);
 -- Collection (draw-based, log-only). owned_count is monotonic
 -- non-decreasing, hard-capped at 4 (a playset). Only ever raised by
 -- draws (=>1) or TrueDeckList uploads (=> listed count, cap 4).

@@ -13,7 +13,7 @@ interface DeckAchievementsModalProps {
     total_awards: number;
     cards: Array<{ grp_id: number; card_name: string; count: number; tier?: string }>;
   }>;
-  palette: any;
+  palette?: any;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
 }
 
@@ -22,7 +22,6 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
   onClose,
   deckName,
   groupedAchievements = [],
-  palette,
   onShowCard,
 }) => {
   useEffect(() => {
@@ -38,40 +37,41 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const totalHonors = groupedAchievements.reduce((sum, g) => sum + g.total_awards, 0);
+  // Filter out any stray token entries just in case
+  const cleanGroups = (groupedAchievements || []).map((g) => ({
+    ...g,
+    cards: (g.cards || []).filter(
+      (c) => !c.card_name?.toLowerCase().includes('token')
+    ),
+  })).filter((g) => g.cards.length > 0);
+
+  const totalHonors = cleanGroups.reduce((sum, g) => sum + g.cards.reduce((cSum, c) => cSum + (c.count || 1), 0), 0);
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-xl animate-fade-in select-none"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl max-h-[85vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
-        style={{ backgroundColor: `${palette?.surface || '#12141A'}E6`, borderColor: palette?.border || '#2A2F3D' }}
+        className="w-full max-w-4xl max-h-[85vh] border border-white/20 bg-neutral-950/95 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div
-          className="p-5 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor: palette?.border }}
-        >
+        <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
           <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center border shadow-inner"
-              style={{ backgroundColor: `${palette?.accent || '#FACC15'}1a`, borderColor: `${palette?.accent || '#FACC15'}44` }}
-            >
-              <Trophy className="w-5 h-5" style={{ color: palette?.accent || '#FACC15' }} />
+            <div className="w-8 h-8 flex items-center justify-center border border-amber-500/30 bg-amber-500/10 text-amber-300">
+              <Trophy className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="rt-card-title leading-tight" style={{ color: palette?.text }}>
+                <h3 className="font-display font-bold uppercase tracking-wide text-white text-base leading-tight">
                   Card Achievements
                 </h3>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 tabular-nums">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-amber-500/30 bg-amber-500/10 text-amber-300 tabular-nums">
                   {totalHonors} Total
                 </span>
               </div>
-              <p className="text-xs font-mono opacity-60 truncate max-w-[450px]">
+              <p className="text-xs font-mono text-neutral-400 truncate max-w-[450px]">
                 {deckName}
               </p>
             </div>
@@ -79,8 +79,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
 
           <button
             onClick={onClose}
-            className="text-xs font-mono opacity-60 hover:opacity-100 p-1.5 rounded-lg border hover:bg-white/5 transition-opacity"
-            style={{ borderColor: palette?.border }}
+            className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 bg-neutral-900/60 transition-colors cursor-pointer"
             title="Close (Esc)"
           >
             <X className="w-4 h-4" />
@@ -88,47 +87,48 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-5">
-          {groupedAchievements.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
-              <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500">
-                <Award className="w-8 h-8 opacity-40" />
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
+          {cleanGroups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center space-y-2.5">
+              <div className="w-12 h-12 bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500">
+                <Award className="w-6 h-6 opacity-40" />
               </div>
-              <p className="rt-section-header" style={{ color: palette?.text }}>
+              <p className="font-display font-bold uppercase tracking-wider text-sm text-white">
                 No Card Achievements Earned Yet
               </p>
-              <p className="rt-narrative-sm opacity-50 max-w-sm">
+              <p className="text-xs font-sans text-neutral-400 max-w-sm">
                 Play matches with this deck on MTGA to earn combat badges, lethal strikes, and lifetime card honors!
               </p>
             </div>
           ) : (
-            groupedAchievements.map((group) => {
+            cleanGroups.map((group) => {
               const meta = getAchievementMeta(group.achievement);
               const topTier = group.cards[0]?.tier;
+              const groupAwards = group.cards.reduce((sum, c) => sum + (c.count || 1), 0);
+
               return (
                 <div
                   key={group.achievement}
-                  className="rounded-2xl border p-4 space-y-3 transition-colors"
-                  style={{ backgroundColor: `${palette?.mantle || '#0b0f17'}88`, borderColor: `${palette?.border}88` }}
+                  className="border border-white/10 bg-black/40 p-3.5 space-y-3"
                 >
                   {/* Achievement Group Header */}
-                  <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: `${palette?.border}55` }}>
-                    <h4 className="rt-section-header leading-tight" style={{ color: palette?.text }}>
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                    <h4 className="font-display font-bold uppercase tracking-wide text-xs text-white">
                       {meta.title}
                     </h4>
-                    <span className="text-[11px] font-mono font-bold opacity-60 tabular-nums">
-                      {group.total_awards === 1 ? '1 Card Award' : `${group.total_awards} Card Awards`}
+                    <span className="text-[10.5px] font-mono font-bold text-neutral-400 tabular-nums">
+                      {groupAwards === 1 ? '1 Award' : `${groupAwards} Awards`}
                     </span>
                   </div>
 
                   {/* Body with Badge on Left, Cards on Right */}
                   <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-4 pt-1">
-                    {/* Left: Large Badge Icon Showcase */}
-                    <div className="shrink-0 flex items-center justify-center p-2 w-28 min-h-[90px] group-hover:scale-105 transition-transform">
+                    {/* Left: Badge Icon Showcase */}
+                    <div className="shrink-0 flex items-center justify-center p-2 w-24 min-h-[80px]">
                       <AchievementBadge
                         title={group.achievement}
                         tier={topTier}
-                        count={group.total_awards}
+                        count={groupAwards}
                         size="2xl"
                         showTitle={false}
                         showCount={false}
@@ -136,29 +136,25 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
                     </div>
 
                     {/* Right: Grid of cards that earned this achievement */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 flex-1 w-full min-w-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1 w-full min-w-0">
                       {group.cards.map((card: any) => (
                         <button
                           key={`${card.grp_id}-${card.card_name}`}
                           onClick={() => onShowCard && onShowCard({ name: card.card_name, grp_id: card.grp_id }, false)}
-                          className="flex items-center gap-3 p-2 rounded-xl border bg-black/25 hover:bg-white/5 transition-all text-left group overflow-hidden"
-                          style={{ borderColor: `${palette?.border}66` }}
+                          className="flex items-center gap-2.5 p-1.5 border border-white/10 bg-neutral-900/50 hover:bg-white/5 transition-colors text-left group overflow-hidden cursor-pointer"
                           title="Click to view card details"
                         >
-                          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-slate-900">
+                          <div className="w-9 h-9 overflow-hidden shrink-0 border border-white/10 bg-neutral-900">
                             <CardImage
                               name={card.card_name}
                               version="art_crop"
                               className="w-full h-full object-cover"
                             />
                           </div>
-                          <span
-                            className="font-bold text-xs truncate flex-1 min-w-0 transition-colors group-hover:underline"
-                            style={{ color: palette?.text }}
-                          >
+                          <span className="font-sans font-bold text-xs truncate flex-1 min-w-0 text-neutral-200 group-hover:text-white group-hover:underline">
                             {card.card_name}
                           </span>
-                          <span className="shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white/10 text-white border border-white/20">
+                          <span className="shrink-0 text-[10px] font-mono font-bold px-1.5 py-0.2 border border-white/10 bg-black/50 text-neutral-300 tabular-nums">
                             {card.count > 1 ? `×${card.count}` : '1×'}
                           </span>
                         </button>

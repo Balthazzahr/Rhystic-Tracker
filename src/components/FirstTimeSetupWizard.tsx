@@ -189,7 +189,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
   const manaThemeOptions = [
     { id: 'white', label: 'White', symbol: 'W', color: '#E8E2CC' },
     { id: 'blue', label: 'Blue', symbol: 'U', color: '#4A7FA3' },
-    { id: 'black', label: 'Black', symbol: 'B', color: '#8a719d' },
+    { id: 'black', label: 'Black', symbol: 'B', color: '#374151' },
     { id: 'red', label: 'Red', symbol: 'R', color: '#B8503A' },
     { id: 'green', label: 'Green', symbol: 'G', color: '#4A7856' },
   ];

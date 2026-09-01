@@ -72,6 +72,25 @@ export const ManaPip: React.FC<ManaPipProps> = ({
     );
   }
 
+  const cleanHyb = sym.replace(/[/()]/g, '').toLowerCase();
+  const isHybrid = sym.includes('/') || ['wu','wb','ub','ur','br','bg','rw','rg','gw','gu','2w','2u','2b','2r','2g','wp','up','bp','rp','gp'].includes(cleanHyb);
+
+  if (isHybrid) {
+    const known = ['wu','wb','ub','ur','br','bg','rw','rg','gw','gu','2w','2u','2b','2r','2g','wp','up','bp','rp','gp'];
+    let hybClass = `ms-${cleanHyb}`;
+    if (!known.includes(cleanHyb) && cleanHyb.length === 2) {
+      const rev = cleanHyb[1] + cleanHyb[0];
+      if (known.includes(rev)) hybClass = `ms-${rev}`;
+    }
+    return (
+      <span
+        className={`ms ms-cost ${hybClass} inline-block shrink-0 leading-none ${className}`}
+        style={{ fontSize: `${Math.round(size * 0.85)}px`, verticalAlign: 'middle' }}
+        title={`Mana {${sym}}`}
+      />
+    );
+  }
+
   // 2. Vector Style: Classic High-Contrast Vector Glyphs
   if (manaPipStyle === 'vector') {
     const msClass = `ms ms-${sym.toLowerCase()} ms-cost`;

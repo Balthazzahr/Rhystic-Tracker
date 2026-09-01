@@ -68,7 +68,7 @@ const MTG_COLORS = {
     hoverBg: 'rgba(184, 80, 58, 0.3)',
   },
   purple: {
-    base: '#8a719d',
+    base: '#374151',
     bg: 'rgba(138, 113, 157, 0.2)',
     border: 'rgba(138, 113, 157, 0.5)',
     text: '#b39ec4',

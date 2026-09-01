@@ -15,9 +15,9 @@ const MS_CLASSES: Record<string, string> = {
   '∞': 'ms-infinity',
 };
 
-// Hybrid pairs -> mana-font class (e.g. G/W -> ms-gw, W/P -> ms-wp).
+// Hybrid pairs -> mana-font class (e.g. G/W -> ms-gu, W/P -> ms-wp).
 function hybridClass(sym: string): string | null {
-  const inner = sym.replace(/[()]/g, '');
+  const inner = sym.replace(/[()]/g, '').trim();
   const hyb = inner.toLowerCase().replace('/', '');
   if (!/^[wubrgcp0-9]{2,3}$/.test(hyb)) return null;
   const known = [
@@ -26,6 +26,10 @@ function hybridClass(sym: string): string | null {
     'wp','up','bp','rp','gp','wup','wbp','ubp','urp','brp','bgp','rwp','rgp','gwp','gup',
   ];
   if (known.includes(hyb)) return `ms-${hyb}`;
+  if (hyb.length === 2) {
+    const rev = hyb[1] + hyb[0];
+    if (known.includes(rev)) return `ms-${rev}`;
+  }
   return null;
 }
 

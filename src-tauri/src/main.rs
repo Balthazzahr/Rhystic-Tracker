@@ -22,6 +22,7 @@ use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState, MouseButton}
 use tauri::image::Image;
 use sqlx::Row;
 use serde::{Deserialize, Serialize};
+use chrono::Utc;
 
 fn redact_str(s: &str) -> String {
     if s.len() <= 6 {
@@ -891,6 +892,46 @@ async fn reset_deck_custom_art(deck_name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Set custom background artwork override for a deck.
+#[tauri::command]
+async fn set_deck_custom_bg_art(deck_name: String, card_name: String, grp_id: Option<i64>) -> Result<(), String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"
+        INSERT INTO deck_bg_art_overrides (deck_name, card_name, grp_id, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(deck_name) DO UPDATE SET
+            card_name = excluded.card_name,
+            grp_id = excluded.grp_id,
+            updated_at = excluded.updated_at
+        "#
+    )
+    .bind(&deck_name)
+    .bind(&card_name)
+    .bind(grp_id)
+    .bind(&now)
+    .execute(db.pool())
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Reset custom background artwork override for a deck.
+#[tauri::command]
+async fn reset_deck_custom_bg_art(deck_name: String) -> Result<(), String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM deck_bg_art_overrides WHERE deck_name = ?")
+        .bind(&deck_name)
+        .execute(db.pool())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Full detail for a single deck (Deck Detail view, Stage 1):
 /// base W-L / winrate, play vs draw split, dominant commander, deck colors,
 /// and the 5 most recent matches.
@@ -1266,7 +1307,7 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
     types_sorted.sort_by(|a, b| b.get("count").and_then(|v| v.as_i64()).unwrap_or(0)
         .cmp(&a.get("count").and_then(|v| v.as_i64()).unwrap_or(0)));
 
-    // Deck card achievements grouped by achievement type and top card achievements
+    // Deck card achievements grouped by achievement type and top card achievements (Hero non-tokens only)
     let achievement_rows = sqlx::query_as::<_, (i64, Option<String>, String)>(
         r#"
         SELECT i.grp_id, c.name as card_name, i.titles
@@ -1277,6 +1318,8 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
           AND i.seat_id = m.hero_seat_id
           AND m.timestamp >= '2026-08-23T06:30:00'
           AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
         "#
     )
     .bind(&deck_name)
@@ -1337,59 +1380,37 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         let tier_b = b.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
         let rank_a = tier_rank(tier_a);
         let rank_b = tier_rank(tier_b);
-
-        rank_b.cmp(&rank_a).then_with(|| {
-            let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+        if rank_a != rank_b {
+            rank_b.cmp(&rank_a)
+        } else {
             let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-            cnt_b.cmp(&cnt_a).then_with(|| {
-                let name_a = a.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
-                let name_b = b.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
-                name_a.cmp(name_b)
-            })
-        })
+            let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+            cnt_b.cmp(&cnt_a)
+        }
     });
 
-    let mut ach_groups: std::collections::HashMap<String, Vec<serde_json::Value>> = std::collections::HashMap::new();
-    for ((grp_id, card_name, title, tier), count) in &card_ach_counts {
-        ach_groups.entry(title.clone()).or_default().push(serde_json::json!({
-            "grp_id": grp_id,
-            "card_name": card_name,
-            "tier": tier,
-            "count": count
-        }));
+    // Grouping by achievement type
+    let mut grouped_map: std::collections::HashMap<String, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for ach in &top_card_achievements {
+        let ach_name = ach.get("achievement").and_then(|v| v.as_str()).unwrap_or("Achievement").to_string();
+        grouped_map.entry(ach_name).or_default().push(ach.clone());
     }
 
-    let mut grouped_by_achievement: Vec<serde_json::Value> = ach_groups.into_iter()
-        .map(|(title, mut cards)| {
-            cards.sort_by(|a, b| {
-                let tier_a = a.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
-                let tier_b = b.get("tier").and_then(|v| v.as_str()).unwrap_or("bronze");
-                let rank_a = tier_rank(tier_a);
-                let rank_b = tier_rank(tier_b);
-
-                rank_b.cmp(&rank_a).then_with(|| {
-                    let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-                    let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-                    cnt_b.cmp(&cnt_a).then_with(|| {
-                        let name_a = a.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
-                        let name_b = b.get("card_name").and_then(|v| v.as_str()).unwrap_or("");
-                        name_a.cmp(name_b)
-                    })
-                })
-            });
-            let total_awards: i64 = cards.iter().map(|c| c.get("count").and_then(|v| v.as_i64()).unwrap_or(0)).sum();
+    let mut grouped_by_achievement: Vec<serde_json::Value> = grouped_map.into_iter()
+        .map(|(achievement, cards)| {
+            let total_count: i64 = cards.iter().filter_map(|c| c.get("count").and_then(|v| v.as_i64())).sum();
             serde_json::json!({
-                "achievement": title,
-                "total_awards": total_awards,
+                "achievement": achievement,
+                "total_count": total_count,
                 "cards": cards
             })
         })
         .collect();
 
     grouped_by_achievement.sort_by(|a, b| {
-        let tot_b = b.get("total_awards").and_then(|v| v.as_i64()).unwrap_or(0);
-        let tot_a = a.get("total_awards").and_then(|v| v.as_i64()).unwrap_or(0);
-        tot_b.cmp(&tot_a)
+        let cnt_a = a.get("total_count").and_then(|v| v.as_i64()).unwrap_or(0);
+        let cnt_b = b.get("total_count").and_then(|v| v.as_i64()).unwrap_or(0);
+        cnt_b.cmp(&cnt_a)
     });
 
     let custom_art_row = sqlx::query(
@@ -1401,6 +1422,20 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
     .unwrap_or(None);
 
     let (custom_art_name, custom_art_grp_id) = if let Some(ca) = custom_art_row {
+        (ca.get::<Option<String>, _>("card_name"), ca.get::<Option<i64>, _>("grp_id"))
+    } else {
+        (None, None)
+    };
+
+    let custom_bg_art_row = sqlx::query(
+        "SELECT card_name, grp_id FROM deck_bg_art_overrides WHERE deck_name = ?"
+    )
+    .bind(&deck_name)
+    .fetch_optional(db.pool())
+    .await
+    .unwrap_or(None);
+
+    let (custom_bg_art_name, custom_bg_art_grp_id) = if let Some(ca) = custom_bg_art_row {
         (ca.get::<Option<String>, _>("card_name"), ca.get::<Option<i64>, _>("grp_id"))
     } else {
         (None, None)
@@ -1418,6 +1453,8 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         "commander_grp_id": commander_grp_id,
         "custom_art_name": custom_art_name,
         "custom_art_grp_id": custom_art_grp_id,
+        "custom_bg_art_name": custom_bg_art_name,
+        "custom_bg_art_grp_id": custom_bg_art_grp_id,
         "formats": formats,
         "colors": colors_arr,
         "recent_matches": recent,
@@ -5332,6 +5369,8 @@ fn main() {
             get_global_leaderboards,
             set_deck_custom_art,
             reset_deck_custom_art,
+            set_deck_custom_bg_art,
+            reset_deck_custom_bg_art,
             delete_match,
             set_always_on_top
         ])

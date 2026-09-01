@@ -26,6 +26,7 @@ interface MatchTimelineProps {
   cards: CardItem[];
   opponentName?: string;
   onCardClick?: (card: CardItem, turn: number) => void;
+  searchTerm?: string;
 }
 
 export function MatchTimeline({
@@ -37,10 +38,12 @@ export function MatchTimeline({
   cards,
   opponentName,
   onCardClick,
+  searchTerm = '',
 }: MatchTimelineProps) {
   const [turnEvents, setTurnEvents] = useState<TurnEventItem[]>([]);
   const [heroSeatId, setHeroSeatId] = useState<number>(goingFirst ? 1 : 2);
   const [loading, setLoading] = useState<boolean>(true);
+  const cleanQuery = searchTerm.trim().toLowerCase();
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -116,11 +119,21 @@ export function MatchTimeline({
     );
   };
 
-  const renderEventRow = (ev: TurnEventItem, columnIsFirst?: boolean) => {
+  const renderEventRow = (ev: TurnEventItem, columnIsFirst?: boolean, idx: number = 0) => {
     const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
     const activePlayerIsHero = columnIsFirst !== undefined ? (columnIsFirst ? goingFirst : !goingFirst) : isPlayer;
     const isAcrossTurn = columnIsFirst !== undefined && isPlayer !== activePlayerIsHero;
     const ownerTag = isAcrossTurn ? (isPlayer ? ' (You)' : ' (Opponent)') : '';
+
+    const isMatch = Boolean(cleanQuery && ev.name && ev.name.toLowerCase().includes(cleanQuery));
+    const isDeemphasized = Boolean(cleanQuery && !isMatch);
+    const highlightClasses = isMatch
+      ? 'bg-[#4A7FA3]/20'
+      : isDeemphasized
+      ? 'opacity-30'
+      : 'hover:bg-white/[0.02]';
+
+    const rowKey = `${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${idx}`;
 
     const isDamage = ev.event_type.startsWith('damage:');
     if (isDamage) {
@@ -133,14 +146,16 @@ export function MatchTimeline({
 
       return (
         <div
-          key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
-          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+          key={rowKey}
+          className={`text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
         >
           <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/50 text-amber-300 border-amber-500/30 shrink-0 tabular-nums">
             {amount} DMG
           </span>
           <span
-            className="truncate font-sans font-semibold text-white hover:text-amber-300 hover:underline cursor-pointer transition-colors text-xs"
+            className={`truncate font-sans font-semibold hover:underline cursor-pointer text-xs ${
+              isMatch ? 'text-[#7FAAC9] font-bold' : 'text-white hover:text-amber-300'
+            }`}
             onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
           >
             {ev.name}{ownerTag}
@@ -168,8 +183,8 @@ export function MatchTimeline({
 
       return (
         <div
-          key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
-          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+          key={rowKey}
+          className={`text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
         >
           <span
             className={`px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase shrink-0 tabular-nums ${
@@ -180,7 +195,7 @@ export function MatchTimeline({
           >
             {isOpponent ? 'OPP LIFE ' : 'LIFE '}{positive ? `+${d}` : d}
           </span>
-          <span className={`truncate font-sans font-medium text-xs ${positive ? 'text-emerald-300/90' : 'text-rose-300/90'}`}>
+          <span className={`truncate font-sans font-medium text-xs ${isMatch ? 'text-[#7FAAC9] font-bold' : positive ? 'text-emerald-300/90' : 'text-rose-300/90'}`}>
             {displayStr}{ownerTag}
           </span>
         </div>
@@ -201,14 +216,16 @@ export function MatchTimeline({
       }
       return (
         <div
-          key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
-          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+          key={rowKey}
+          className={`text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
         >
           <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/50 text-amber-300 border-amber-500/30 shrink-0 tabular-nums">
             {badgeText}
           </span>
           <span
-            className="truncate font-sans font-medium text-neutral-100 hover:text-white hover:underline cursor-pointer transition-colors text-xs"
+            className={`truncate font-sans font-medium hover:underline cursor-pointer text-xs ${
+              isMatch ? 'text-[#7FAAC9] font-bold' : 'text-neutral-100 hover:text-white'
+            }`}
             onClick={() => ev.grp_id > 0 && onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
           >
             {ev.name}{ownerTag}
@@ -247,8 +264,8 @@ export function MatchTimeline({
 
     return (
       <div
-        key={`${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${ev.timestamp}-${Math.random()}`}
-        className="text-xs font-mono flex items-center justify-between py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        key={rowKey}
+        className={`text-xs font-mono flex items-center justify-between py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
       >
         <div className="flex items-center gap-2 min-w-0">
           <span className={`px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase shrink-0 ${badgeStyle}`}>
@@ -256,7 +273,11 @@ export function MatchTimeline({
           </span>
           <span
             className={`truncate font-sans font-medium text-xs ${
-              isHidden ? 'italic text-neutral-400' : 'text-neutral-100 hover:text-white hover:underline cursor-pointer'
+              isHidden
+                ? 'italic text-neutral-400'
+                : isMatch
+                ? 'text-[#7FAAC9] font-bold hover:underline cursor-pointer'
+                : 'text-neutral-100 hover:text-white hover:underline cursor-pointer'
             }`}
             onClick={() => !isHidden && onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
           >
@@ -328,7 +349,7 @@ export function MatchTimeline({
                         No actions
                       </div>
                     ) : (
-                      openingEvents.first.map((ev) => renderEventRow(ev, true))
+                      openingEvents.first.map((ev, idx) => renderEventRow(ev, true, idx))
                     )}
                   </div>
 
@@ -339,7 +360,7 @@ export function MatchTimeline({
                         No actions
                       </div>
                     ) : (
-                      openingEvents.second.map((ev) => renderEventRow(ev, false))
+                      openingEvents.second.map((ev, idx) => renderEventRow(ev, false, idx))
                     )}
                   </div>
                 </div>
@@ -375,7 +396,7 @@ export function MatchTimeline({
                     {/* Left Column (First Player: Turn 1, 3, 5...) */}
                     <div className="space-y-1">
                       {cols.first.length > 0 ? (
-                        cols.first.map((ev) => renderEventRow(ev, true))
+                        cols.first.map((ev, idx) => renderEventRow(ev, true, idx))
                       ) : (
                         <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
                           No actions recorded
@@ -386,7 +407,7 @@ export function MatchTimeline({
                     {/* Right Column (Second Player: Turn 2, 4, 6...) */}
                     <div className="space-y-1">
                       {cols.second.length > 0 ? (
-                        cols.second.map((ev) => renderEventRow(ev, false))
+                        cols.second.map((ev, idx) => renderEventRow(ev, false, idx))
                       ) : (
                         <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
                           No actions recorded

@@ -75,7 +75,7 @@ export function OpponentH2HModal({
         {/* Header Bar */}
         <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
           <div className="flex items-center gap-3">
-            <Swords className="w-5 h-5" style={{ color: palette?.accent || '#8a719d' }} />
+            <Swords className="w-5 h-5" style={{ color: palette?.accent || '#6B7280' }} />
             <div>
               <p className="rt-label opacity-60">Head-to-Head Opponent Record</p>
               <h2 className="rt-card-title tracking-wide" style={{ color: palette?.text }}>
@@ -109,7 +109,7 @@ export function OpponentH2HModal({
             <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
               <div>
                 <p className="rt-label opacity-60">H2H Winrate</p>
-                <h3 className="rt-hero-stat mt-0.5" style={{ color: palette?.accent || '#8a719d' }}>
+                <h3 className="rt-hero-stat mt-0.5" style={{ color: palette?.accent || '#6B7280' }}>
                   {stats?.winrate ?? '0.0'}%
                 </h3>
               </div>

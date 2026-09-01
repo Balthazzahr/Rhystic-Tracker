@@ -2,6 +2,29 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.11] - 2026-09-01
+
+### 🔮 Deck Inspector Overhaul, Card Inspector Unboxing & Palette Synchronization
+
+- **Deck Inspector Modal Overhaul (`DeckDetailView.tsx`)**:
+  - Full-window ambient background card art dynamically loaded from the deck's cover/background card art.
+  - Floating, unboxed header combining the deck identity, mana curve histogram, card type bars, and mana distribution pie chart.
+  - Full cover art and background art selector modal with explicit click-to-select and active highlight lock-in.
+  - Plain typography applied to Commander and recent matches opponent cards in place of stylized fonts.
+  - Fixed decklist import IPC handler to invoke `save_deck_list` with arena export text.
+- **Card Inspector Redesign & Unboxing (`CardInspectorModal.tsx`)**:
+  - Eliminated nested boxes-within-boxes in favor of single-level, fully opaque dark panels (`bg-neutral-950`).
+  - Increased font sizes across the board (+2 points) for superior readability across all display resolutions.
+  - Increased backdrop darkness tint (`bg-black/75 backdrop-blur-md`) to ensure prominent modal pop-up focus while keeping the underlying window discernible.
+- **Black Mana & Data Visualization Palette Synchronization**:
+  - Unified the Black mana color (`B`) across pie charts, bar charts, and theme options to match the charcoal/dark slate fill of the Black Mana Pip (`#374151`), replacing legacy purple while preserving subtle window tints.
+- **Match History Navigation Fix**:
+  - Linked deck name clicks directly in the Match History table to open the Deck Inspector modal.
+- **Achievement Ingestion Filtering**:
+  - Restricted card achievements to player-owned cards only and filtered token cards from receiving card achievement titles.
+
+---
+
 ## [1.3.10] - 2026-08-31
 
 ### 🥊 Match History Inspector Redesign, Street Fighter "VS" Header & Arena Avatar Ingestion

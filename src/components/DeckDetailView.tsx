@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2, Image as ImageIcon, RotateCcw, Search } from 'lucide-react';
+import { Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2, Image as ImageIcon, RotateCcw, Search, Sparkles } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
@@ -8,6 +8,7 @@ import TrueDeckListView from './TrueDeckListView';
 import { AchievementBadge } from './AchievementBadge';
 import { DeckAchievementsModal } from './DeckAchievementsModal';
 import CardImage from './CardImage';
+import { ensureLocalImage } from '../utils/cardImageCache';
 
 interface DeckDetailViewProps {
   isOpen: boolean;
@@ -24,6 +25,35 @@ interface DeckDetailViewProps {
 }
 
 type Tip = { text: string; x: number; y: number };
+
+const formatChipColor = (formatStr?: string) => {
+  if (!formatStr) return { bg: '#94A3B818', fg: '#CBD5E1', border: '#94A3B838' };
+  const f = formatStr.toLowerCase();
+  if (f.includes('brawl') || f.includes('commander')) {
+    return { bg: '#4A7FA318', fg: '#7FAAC9', border: '#4A7FA338' };
+  } else if (f.includes('standard')) {
+    return { bg: '#B8503A18', fg: '#D57C69', border: '#B8503A38' };
+  } else if (f.includes('historic')) {
+    return { bg: '#4A785618', fg: '#76A382', border: '#4A785638' };
+  } else if (f.includes('timeless')) {
+    return { bg: '#8a719d18', fg: '#b39ec4', border: '#8a719d38' };
+  } else if (f.includes('alchemy')) {
+    return { bg: '#D4A23718', fg: '#E2BF6F', border: '#D4A23738' };
+  } else if (f.includes('explorer') || f.includes('pioneer')) {
+    return { bg: '#5B699418', fg: '#8C9AC4', border: '#5B699438' };
+  } else if (f.includes('draft') || f.includes('sealed') || f.includes('limited')) {
+    return { bg: '#D4A23718', fg: '#E2BF6F', border: '#D4A23738' };
+  } else if (f.includes('bot') || f.includes('sparky')) {
+    return { bg: '#3D7D7D18', fg: '#6EA8A8', border: '#3D7D7D38' };
+  } else if (f.includes('direct') || f.includes('challenge') || f.includes('friendly')) {
+    return { bg: '#B8503A18', fg: '#D57C69', border: '#B8503A38' };
+  } else if (f.includes('mwm') || f.includes('midweek')) {
+    return { bg: '#9E5B8E18', fg: '#C48EB6', border: '#9E5B8E38' };
+  } else if (f.includes('gladiator')) {
+    return { bg: '#6E8A4218', fg: '#98B36D', border: '#6E8A4238' };
+  }
+  return { bg: '#94A3B818', fg: '#CBD5E1', border: '#94A3B838' };
+};
 
 function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette: any; onTip: (t: Tip | null) => void }) {
   const labels = ['0', '1', '2', '3', '4', '5', '6', '7', '8+'];
@@ -43,13 +73,13 @@ function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette:
         {visible.map((val, i) => (
           <div key={i} className="flex-1 h-full flex flex-col justify-end">
             <div
-              className="w-full transition-colors hover:opacity-80"
+              className="w-full transition-colors hover:opacity-80 cursor-help"
               style={{
                 height: `${Math.max((val / max) * 100, 4)}%`,
-                backgroundColor: val > 0 ? (palette?.accent || '#8a719d') : 'rgba(255,255,255,0.05)',
+                backgroundColor: val > 0 ? (palette?.accent || '#374151') : 'rgba(255,255,255,0.05)',
               }}
-              onMouseEnter={(e) => onTip({ text: `${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
-              onMouseMove={(e) => onTip({ text: `${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
+              onMouseEnter={(e) => onTip({ text: `CMC ${visibleLabels[i]}: ${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
+              onMouseMove={(e) => onTip({ text: `CMC ${visibleLabels[i]}: ${val} card${val === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
               onMouseLeave={() => onTip(null)}
             />
           </div>
@@ -67,23 +97,40 @@ function ManaValueHistogram({ bins, palette, onTip }: { bins: number[]; palette:
 function CardTypeBars({ data, palette, onTip }: { data: { type: string; count: number }[]; palette: any; onTip: (t: Tip | null) => void }) {
   if (!data || data.length === 0) return <div className="text-xs font-mono text-neutral-500">No card type data</div>;
   const max = Math.max(...data.map(d => d.count), 1);
+  const barThickness = data.length <= 3 ? 'h-3.5' : data.length <= 5 ? 'h-2.5' : 'h-2';
+
   return (
-    <div className="flex-1 space-y-1.5 flex flex-col justify-center min-h-0">
-      {data.map((d) => (
-        <div
-          key={d.type}
-          className="flex items-center gap-2 group cursor-help"
-          onMouseEnter={(e) => onTip({ text: `${d.type}: ${d.count}`, x: e.clientX, y: e.clientY })}
-          onMouseMove={(e) => onTip({ text: `${d.type}: ${d.count}`, x: e.clientX, y: e.clientY })}
-          onMouseLeave={() => onTip(null)}
-        >
-          <span className="w-24 shrink-0 text-xs font-mono font-bold uppercase truncate text-neutral-400">{d.type}</span>
-          <div className="flex-1 h-2 bg-neutral-900/80 border border-white/5 overflow-hidden">
-            <div className="h-full" style={{ width: `${(d.count / max) * 100}%`, backgroundColor: palette?.accent || '#8a719d' }} />
+    <div className="relative flex-1 flex flex-col min-h-0 w-full h-full justify-center pt-6">
+      <div className="absolute top-0 inset-x-0 flex justify-center z-10 pointer-events-none">
+        <span className="px-2 py-0.2 border border-white/10 bg-black/60 text-[9px] font-mono uppercase tracking-wider font-bold text-neutral-400">
+          Card Types
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-evenly min-h-0 gap-1.5">
+        {data.map((d) => (
+          <div
+            key={d.type}
+            className="flex items-center gap-2 group cursor-help py-0.5"
+            onMouseEnter={(e) => onTip({ text: `${d.type}: ${d.count} card${d.count === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
+            onMouseMove={(e) => onTip({ text: `${d.type}: ${d.count} card${d.count === 1 ? '' : 's'}`, x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => onTip(null)}
+          >
+            <span className="w-24 shrink-0 text-xs font-mono font-bold uppercase truncate text-neutral-400 group-hover:text-white transition-colors">
+              {d.type}
+            </span>
+            <div className={`flex-1 ${barThickness} bg-neutral-900/80 border border-white/10 overflow-hidden`}>
+              <div
+                className="h-full group-hover:brightness-125 transition-all"
+                style={{
+                  width: `${(d.count / max) * 100}%`,
+                  backgroundColor: palette?.accent || '#374151',
+                }}
+              />
+            </div>
           </div>
-          <span className="text-[10px] font-mono text-neutral-400 tabular-nums w-5 text-right">{d.count}</span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -92,46 +139,76 @@ function CardTypeBars({ data, palette, onTip }: { data: { type: string; count: n
 const MANA_COLORS: Record<string, string> = {
   W: '#E8E2CC', // Warm Ivory / Parchment
   U: '#4A7FA3', // Steel Sapphire Blue
-  B: '#8a719d', // Obsidian / Deep Violet
+  B: '#374151', // Traditional Charcoal / Dark Slate
   R: '#B8503A', // Brick / Ember Red
   G: '#4A7856', // Forest Moss Green
   C: '#94A3B8', // Colorless Slate
 };
 
+const COLOR_NAMES: Record<string, string> = {
+  W: 'White',
+  U: 'Blue',
+  B: 'Black',
+  R: 'Red',
+  G: 'Green',
+  C: 'Colorless',
+};
+
 const RADIAN = Math.PI / 180;
-function ManaPie({ data }: { data: { color: string; count: number }[] }) {
+function ManaPie({ data, height = 175, onTip }: { data: { color: string; count: number }[]; height?: number; onTip: (t: Tip | null) => void }) {
   if (!data || data.length === 0) return <div className="text-xs font-mono text-neutral-500">No mana data</div>;
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+  const outerRadius = Math.max(76, Math.min(105, Math.floor((height - 20) / 2)));
+  const chartWidth = Math.max(185, outerRadius * 2 + 30);
+
   return (
-    <PieChart width={185} height={170}>
-      <Pie
-        data={data}
-        dataKey="count"
-        nameKey="color"
-        cx="50%"
-        cy="50%"
-        outerRadius={76}
-        paddingAngle={0}
-        stroke="none"
-        labelLine={false}
-        label={(props: any) => {
-          const { cx, cy, midAngle, outerRadius, percent, payload } = props;
-          if (!payload || percent < 0.04) return null;
-          const r = outerRadius * 0.62;
-          const x = cx + r * Math.cos(-midAngle * RADIAN);
-          const y = cy + r * Math.sin(-midAngle * RADIAN);
-          const size = Math.max(14, Math.min(26, outerRadius * 0.95 * Math.sqrt(percent)));
-          return (
-            <foreignObject x={x - size / 2} y={y - size / 2} width={size} height={size}>
-              <div className="w-full h-full flex items-center justify-center">
-                <ManaPip symbol={payload.color} size={size} />
-              </div>
-            </foreignObject>
-          );
-        }}
-      >
-        {data.map((d) => <Cell key={d.color} fill={MANA_COLORS[d.color] || '#94A3B8'} />)}
-      </Pie>
-    </PieChart>
+    <div className="relative flex items-center justify-center">
+      <PieChart width={chartWidth} height={height}>
+        <Pie
+          data={data}
+          dataKey="count"
+          nameKey="color"
+          cx="50%"
+          cy="50%"
+          outerRadius={outerRadius}
+          paddingAngle={0}
+          stroke="none"
+          labelLine={false}
+          onMouseEnter={(entry: any, index: number, e: any) => {
+            const d = data[index] || entry;
+            const colorName = COLOR_NAMES[d?.color] || d?.color || 'Color';
+            const cnt = d?.count || 0;
+            const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+            onTip({ text: `${colorName}: ${cnt} card${cnt === 1 ? '' : 's'} (${pct}%)`, x: e.clientX, y: e.clientY });
+          }}
+          onMouseMove={(entry: any, index: number, e: any) => {
+            const d = data[index] || entry;
+            const colorName = COLOR_NAMES[d?.color] || d?.color || 'Color';
+            const cnt = d?.count || 0;
+            const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+            onTip({ text: `${colorName}: ${cnt} card${cnt === 1 ? '' : 's'} (${pct}%)`, x: e.clientX, y: e.clientY });
+          }}
+          onMouseLeave={() => onTip(null)}
+          label={(props: any) => {
+            const { cx, cy, midAngle, outerRadius: rRadius, percent, payload } = props;
+            if (!payload || percent < 0.04) return null;
+            const r = rRadius * 0.62;
+            const x = cx + r * Math.cos(-midAngle * RADIAN);
+            const y = cy + r * Math.sin(-midAngle * RADIAN);
+            const size = Math.max(14, Math.min(26, rRadius * 0.95 * Math.sqrt(percent)));
+            return (
+              <foreignObject x={x - size / 2} y={y - size / 2} width={size} height={size}>
+                <div className="w-full h-full flex items-center justify-center pointer-events-none">
+                  <ManaPip symbol={payload.color} size={size} />
+                </div>
+              </foreignObject>
+            );
+          }}
+        >
+          {data.map((d) => <Cell key={d.color} fill={MANA_COLORS[d.color] || '#94A3B8'} />)}
+        </Pie>
+      </PieChart>
+    </div>
   );
 }
 
@@ -155,30 +232,70 @@ export function DeckDetailView({
   const [importResult, setImportResult] = useState<any>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const openImport = () => {
-    setImportResult(null);
-    setImportError(null);
-    setImportOpen(true);
-  };
-  const closeImport = () => {
-    if (importBusy) return;
-    setImportOpen(false);
-  };
   const [deckListData, setDeckListData] = useState<any>(null);
   const [deckListStatus, setDeckListStatus] = useState<any>(null);
   const [listMode, setListMode] = useState<'logged' | 'true'>('logged');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [bgImageUrl, setBgImageUrl] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportMode, setExportMode] = useState<'true' | 'logged'>('true');
   const [exportText, setExportText] = useState('');
   const [copied, setCopied] = useState(false);
   const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
 
-  // Custom Deck Box Cover Art Picker State
+  // Custom Deck Box Cover Art & Background Art Picker State
   const [chooseArtOpen, setChooseArtOpen] = useState(false);
+  const [artPickerMode, setArtPickerMode] = useState<'cover' | 'background'>('cover');
   const [artSearch, setArtSearch] = useState('');
   const [deckCardsList, setDeckCardsList] = useState<{ name: string; grp_id?: number; type?: string; mana_cost?: string }[]>([]);
-  const [hoveredCardArt, setHoveredCardArt] = useState<string | null>(null);
+  const [selectedCardArt, setSelectedCardArt] = useState<string | null>(null);
   const [artSaving, setArtSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !deckName) {
+      setBgImageUrl(null);
+      setSearchQuery('');
+      return;
+    }
+
+    let candidateName: string | null = null;
+    if (detail?.custom_bg_art_name) {
+      candidateName = detail.custom_bg_art_name;
+    } else if (detail?.custom_art_name) {
+      candidateName = detail.custom_art_name;
+    } else if (detail?.commander_name) {
+      candidateName = detail.commander_name;
+    }
+
+    if (candidateName) {
+      ensureLocalImage(candidateName, 'art_crop').then((url) => {
+        setBgImageUrl(url);
+      });
+    } else {
+      invoke<any>('get_deck_cards', { deckName })
+        .then((res) => {
+          if (res?.cards && Array.isArray(res.cards)) {
+            const nonLands = res.cards.filter(
+              (c: any) =>
+                !c.card_type?.toLowerCase().includes('land') &&
+                !c.card_type?.toLowerCase().includes('token') &&
+                c.name
+            );
+            if (nonLands.length > 0) {
+              const chosen = nonLands[Math.floor(Math.random() * nonLands.length)];
+              return ensureLocalImage(chosen.name, 'art_crop');
+            } else if (res.cards.length > 0) {
+              return ensureLocalImage(res.cards[0].name, 'art_crop');
+            }
+          }
+          return null;
+        })
+        .then((url) => {
+          if (url) setBgImageUrl(url);
+        })
+        .catch(() => setBgImageUrl(null));
+    }
+  }, [isOpen, deckName, detail]);
 
   useEffect(() => {
     if (!chooseArtOpen || !deckName) return;
@@ -216,8 +333,10 @@ export function DeckDetailView({
 
         list.sort((a, b) => a.name.localeCompare(b.name));
         setDeckCardsList(list);
-        if (list.length > 0) {
-          setHoveredCardArt(detail?.custom_art_name || detail?.commander_name || list[0].name);
+        if (artPickerMode === 'background') {
+          setSelectedCardArt(detail?.custom_bg_art_name || '__RANDOM__');
+        } else {
+          setSelectedCardArt(detail?.custom_art_name || detail?.commander_name || '__DEFAULT__');
         }
       } catch (e) {
         console.error('Failed to load deck cards for art picker:', e);
@@ -225,37 +344,75 @@ export function DeckDetailView({
     };
     loadCards();
     return () => { cancelled = true; };
-  }, [chooseArtOpen, deckName, detail]);
+  }, [chooseArtOpen, deckName, detail, artPickerMode]);
 
-  const handleSelectCustomArt = async (card: { name: string; grp_id?: number }) => {
+  const openImport = () => {
+    setImportResult(null);
+    setImportError(null);
+    setImportOpen(true);
+  };
+  const closeImport = () => {
+    if (importBusy) return;
+    setImportOpen(false);
+  };
+
+  const handleImportSubmit = async () => {
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const res = await invoke<any>('save_deck_list', {
+        deckName,
+        exportText: importText.trim(),
+      });
+      setImportResult(res);
+      onDeckListImported?.();
+    } catch (err: any) {
+      setImportError(String(err));
+    } finally {
+      setImportBusy(false);
+    }
+  };
+  const handleSelectArt = async (card: { name: string; grp_id?: number }) => {
     try {
       setArtSaving(true);
-      await invoke('set_deck_custom_art', {
-        deckName,
-        cardName: card.name,
-        grpId: card.grp_id || null,
-      });
+      if (artPickerMode === 'cover') {
+        await invoke('set_deck_custom_art', {
+          deckName,
+          cardName: card.name,
+          grpId: card.grp_id || null,
+        });
+      } else {
+        await invoke('set_deck_custom_bg_art', {
+          deckName,
+          cardName: card.name,
+          grpId: card.grp_id || null,
+        });
+      }
       setChooseArtOpen(false);
       if (onDeckListImported) {
         onDeckListImported();
       }
     } catch (e) {
-      console.error('Failed to set custom art:', e);
+      console.error('Failed to set art:', e);
     } finally {
       setArtSaving(false);
     }
   };
 
-  const handleResetCustomArt = async () => {
+  const handleResetArt = async () => {
     try {
       setArtSaving(true);
-      await invoke('reset_deck_custom_art', { deckName });
+      if (artPickerMode === 'cover') {
+        await invoke('reset_deck_custom_art', { deckName });
+      } else {
+        await invoke('reset_deck_custom_bg_art', { deckName });
+      }
       setChooseArtOpen(false);
       if (onDeckListImported) {
         onDeckListImported();
       }
     } catch (e) {
-      console.error('Failed to reset custom art:', e);
+      console.error('Failed to reset art:', e);
     } finally {
       setArtSaving(false);
     }
@@ -360,6 +517,9 @@ export function DeckDetailView({
   const drawTotal = (detail.draw?.wins || 0) + (detail.draw?.losses || 0);
   const drawWinPct = drawTotal > 0 ? (detail.draw.wins / drawTotal) * 100 : 0;
 
+  const cardTypeCount = detail.card_types?.length || 0;
+  const chartHeight = Math.max(175, cardTypeCount * 28 + 30);
+
   const winLossBar = (wins: number, losses: number, winPct: number) => {
     const total = wins + losses;
     const winShare = total > 0 ? (wins / total) * 100 : 50;
@@ -381,639 +541,795 @@ export function DeckDetailView({
   return (
     <div 
       onClick={onBack}
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-2xl animate-fade-in select-none"
       style={{ transform: 'translateZ(0)' }}
     >
+      {/* Ambient Background Card Art Crop spanning full window */}
+      {bgImageUrl && (
+        <img
+          src={bgImageUrl}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0 transition-opacity duration-500"
+          style={{
+            objectPosition: 'center 30%',
+            filter: 'saturate(0.60) brightness(0.60)',
+          }}
+          draggable={false}
+        />
+      )}
+
+      {/* Ambient darkness layers preserving sharp text contrast and clear background art */}
+      <div
+        className="absolute inset-0 bg-neutral-950/70 pointer-events-none z-0"
+        style={{ mixBlendMode: 'multiply' }}
+      />
+      <div
+        className="absolute inset-0 bg-neutral-950/50 pointer-events-none z-0"
+      />
+
+      {/* Floating Close Button in Top-Right */}
+      <button
+        onClick={onBack}
+        className="absolute top-3 right-3 p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 bg-neutral-900/60 hover:bg-neutral-800 transition-colors cursor-pointer z-30"
+        title="Close Inspector (Esc)"
+      >
+        <X className="w-4 h-4" />
+      </button>
+
+      {/* Main Inner Container */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[95vw] max-w-[1520px] h-[97vh] max-h-[1150px] border border-white/20 bg-neutral-950/92 backdrop-blur-md shadow-2xl flex flex-col overflow-hidden relative"
+        className="w-[95vw] max-w-[1520px] h-[95vh] max-h-[1150px] flex flex-col min-h-0 relative z-10 select-none gap-4"
       >
-        {/* Header bar */}
-        <div className="p-3.5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
-          >
-            <ChevronLeft className="w-4 h-4" /> Back to Deck Library
-          </button>
-          <button
-            onClick={onBack}
-            className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-            title="Close (Esc)"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        {/* 1. TOP FLOATING UNBOXED HEADER (No bounding border, no dark box) */}
+        <div className="shrink-0 space-y-4 px-1 relative z-10">
+          <div className="flex items-center justify-between gap-6 flex-wrap pr-10">
+            <div className="flex flex-col min-w-0 max-w-[60%] space-y-1.5">
+              <div className="flex items-center gap-3 min-w-0 flex-wrap">
+                <h2 className="text-2xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white truncate">
+                  {detail.deck_name}
+                </h2>
+                <button
+                  onClick={() => onDeleteDeck(detail.deck_name)}
+                  className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors cursor-pointer shrink-0"
+                  title="Delete deck"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-          {/* Top Title & Floating Analytics Header */}
-          <div className="p-5 border-b border-white/10 bg-neutral-900/30 shrink-0 space-y-4">
-            <div className="flex items-center justify-between gap-6 flex-wrap">
-              <div className="flex flex-col min-w-0 max-w-[60%] space-y-1.5">
-                <div className="flex items-center gap-3 min-w-0 flex-wrap">
-                  <h2 className="text-2xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white truncate">
-                    {detail.deck_name}
-                  </h2>
-                  <button
-                    onClick={() => { setArtSearch(''); setChooseArtOpen(true); }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-bold uppercase bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-neutral-300 hover:text-white transition-colors cursor-pointer rounded-sm shrink-0"
-                    title="Choose Deck Box Artwork"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Cover Art</span>
-                  </button>
-                  <button
-                    onClick={() => onDeleteDeck(detail.deck_name)}
-                    className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors cursor-pointer shrink-0"
-                    title="Delete deck"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {detail.formats && detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).map((fmt: string, idx: number) => (
+              {detail.formats && detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {detail.formats.filter((f: string) => !f.toLowerCase().includes('bot')).map((fmt: string) => {
+                    const color = formatChipColor(fmt);
+                    return (
                       <span
                         key={fmt}
-                        className="text-[10.5px] font-mono font-bold tracking-wider uppercase px-2.5 py-0.5 border border-white/15 bg-black/40 text-neutral-300"
+                        className="text-[10.5px] font-mono font-bold tracking-wider uppercase px-2.5 py-0.5 border"
+                        style={{
+                          backgroundColor: color.bg,
+                          color: color.fg,
+                          borderColor: color.border,
+                        }}
                       >
                         {fmt}
                       </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Commander Preview */}
-              {detail.commander_name && (
-                <div className="flex items-center gap-3 ml-auto min-w-0">
-                  <div className="text-right min-w-0">
-                    <p className="text-[9.5px] font-mono uppercase text-neutral-500">Commander</p>
-                    <button
-                      onClick={() => onShowCard({ name: detail.commander_name }, true)}
-                      className="text-sm sm:text-base font-bold font-display uppercase tracking-wide text-white hover:underline truncate block"
-                      title="View card"
-                    >
-                      {detail.commander_name}
-                    </button>
-                  </div>
-                  <div
-                    onClick={() => onShowCard({ name: detail.commander_name }, true)}
-                    className="w-14 h-14 border border-white/15 overflow-hidden bg-neutral-900 shrink-0 cursor-pointer shadow"
-                  >
-                    <CardImage
-                      name={detail.commander_name}
-                      version="art_crop"
-                      alt={detail.commander_name}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform"
-                    />
-                  </div>
+                    );
+                  })}
                 </div>
               )}
-
-              {/* Mana pips */}
-              <div className={`flex gap-1.5 shrink-0 ${detail.commander_name ? '' : 'ml-auto'}`}>
-                {(detail.colors || []).map((c: string) => <ManaPip key={c} symbol={c} size={32} />)}
-                {(detail.colors || []).length === 0 && <ManaPip symbol="C" size={32} />}
-              </div>
             </div>
 
-            {/* Row 2: Floating Analytics (No inner bounding boxes / darker backgrounds) */}
-            <div className="grid grid-cols-1 md:grid-cols-[220px_1fr_1fr] gap-6 pt-3 border-t border-white/10 h-[175px] items-center">
-              {chartsReady ? (
-                <>
-                  <div className="flex items-center justify-center h-full min-h-0">
-                    <ManaPie data={detail.mana_distribution || []} />
-                  </div>
-                  <div className="flex flex-col h-full min-h-0">
-                    <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
-                  </div>
-                  <div className="flex flex-col h-full min-h-0 pr-2">
-                    <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
-                  </div>
-                </>
-              ) : (
-                <div className="col-span-full h-full flex items-center justify-center text-xs font-mono text-neutral-500 uppercase tracking-widest">
-                  Loading analytics...
+            {/* Commander Preview */}
+            {detail.commander_name && (
+              <div className="flex items-center gap-3 ml-auto min-w-0">
+                <div className="text-right min-w-0">
+                  <p className="text-[9.5px] font-mono uppercase text-neutral-400">Commander</p>
+                  <button
+                    onClick={() => onShowCard({ name: detail.commander_name }, true)}
+                    className="text-sm sm:text-base font-semibold font-sans text-white hover:underline truncate block"
+                    title="View card"
+                  >
+                    {detail.commander_name}
+                  </button>
                 </div>
-              )}
+                <div
+                  onClick={() => onShowCard({ name: detail.commander_name }, true)}
+                  className="w-14 h-14 border border-white/15 overflow-hidden bg-neutral-900 shrink-0 cursor-pointer shadow hover:border-white/30 transition-colors"
+                >
+                  <CardImage
+                    name={detail.commander_name}
+                    version="art_crop"
+                    alt={detail.commander_name}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Mana pips */}
+            <div className={`flex gap-1.5 shrink-0 ${detail.commander_name ? '' : 'ml-auto'}`}>
+              {(detail.colors || []).map((c: string) => <ManaPip key={c} symbol={c} size={32} />)}
+              {(detail.colors || []).length === 0 && <ManaPip symbol="C" size={32} />}
             </div>
           </div>
 
-          {/* Bottom Body Grid */}
-          <div className="flex-1 flex overflow-hidden min-h-0">
-            {/* Left sidebar: Floating stats + recent matches */}
-            <div className="w-[320px] shrink-0 border-r border-white/10 flex flex-col min-h-0 bg-neutral-950/60 p-4 space-y-4">
-              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
-                {/* Winrate */}
-                <div className="border-b border-white/10 pb-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-mono uppercase text-neutral-500">Winrate</p>
-                    <h3 className="text-2xl font-mono font-bold mt-0.5 tabular-nums" style={{ color: winrateNum >= 50 ? '#34D399' : '#F87171' }}>
-                      {detail.winrate}
-                    </h3>
-                  </div>
-                  <span className="ms ms-ability-duels-renowned text-2xl text-amber-400/70" />
+          {/* Row 2: Floating Analytics (Dynamic height and proportional scaling) */}
+          <div
+            className="grid grid-cols-1 md:grid-cols-[auto_1fr_1fr] gap-6 pt-3 border-t border-white/10 items-center"
+            style={{ minHeight: `${chartHeight}px` }}
+          >
+            {chartsReady ? (
+              <>
+                <div className="flex items-center justify-center h-full min-h-0">
+                  <ManaPie data={detail.mana_distribution || []} height={chartHeight} onTip={setTip} />
                 </div>
-
-                {/* W/L record */}
-                <div className="border-b border-white/10 pb-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-mono uppercase text-neutral-500">W / L Record</p>
-                    <h3 className="text-2xl font-mono font-bold mt-0.5 text-white tabular-nums">
-                      {detail.wins} - {detail.losses}
-                    </h3>
-                  </div>
-                  <span className="ms ms-battle text-2xl text-neutral-500" />
+                <div className="flex flex-col h-full min-h-0" style={{ height: `${chartHeight}px` }}>
+                  <ManaValueHistogram bins={detail.mana_curve || [0,0,0,0,0,0,0,0]} palette={palette} onTip={setTip} />
                 </div>
-
-                {/* Win rate by position */}
-                <div className="border-b border-white/10 pb-3 space-y-2.5">
-                  <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Win Rate by Position</p>
-                  <div>
-                    <p className="text-[10px] font-mono font-bold uppercase text-neutral-500 mb-1">On the Play</p>
-                    {winLossBar(detail.play?.wins || 0, detail.play?.losses || 0, playWinPct)}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-mono font-bold uppercase text-neutral-500 mb-1">On the Draw</p>
-                    {winLossBar(detail.draw?.wins || 0, detail.draw?.losses || 0, drawWinPct)}
-                  </div>
+                <div className="flex flex-col h-full min-h-0 pr-2" style={{ height: `${chartHeight}px` }}>
+                  <CardTypeBars data={detail.card_types || []} palette={palette} onTip={setTip} />
                 </div>
+              </>
+            ) : (
+              <div className="col-span-full h-full flex items-center justify-center text-xs font-mono text-neutral-500 uppercase tracking-widest">
+                Loading analytics...
+              </div>
+            )}
+          </div>
+        </div>
 
-                {/* Card Achievements Summary */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                    <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Card Achievements</p>
-                    {(detail.top_card_achievements || []).length > 0 && (
-                      <button
-                        onClick={() => setAchievementsModalOpen(true)}
-                        className="text-[10px] font-mono font-bold text-sky-400 hover:underline cursor-pointer"
-                      >
-                        View All
-                      </button>
-                    )}
-                  </div>
+        {/* 2. MAIN WORKSPACE (Unboxed parent, translucent sidebar + translucent decklist table) */}
+        <div className="flex-1 flex gap-4 min-h-0 overflow-hidden relative z-10">
+          {/* Left sidebar: Translucent box */}
+          <div className="w-[320px] shrink-0 border border-white/10 bg-neutral-950/45 backdrop-blur-md p-4 flex flex-col min-h-0 space-y-4 shadow-xl">
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+              {/* Winrate */}
+              <div className="border-b border-white/10 pb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-mono uppercase text-neutral-500">Winrate</p>
+                  <h3 className="text-2xl font-mono font-bold mt-0.5 tabular-nums" style={{ color: winrateNum >= 50 ? '#34D399' : '#F87171' }}>
+                    {detail.winrate}
+                  </h3>
+                </div>
+                <span className="ms ms-ability-duels-renowned text-2xl text-amber-400/70" />
+              </div>
 
-                  {(detail.top_card_achievements || []).length === 0 ? (
-                    <p className="text-xs font-sans italic text-neutral-500 py-1">No achievements earned yet</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {(detail.top_card_achievements || []).slice(0, 3).map((ach: any, idx: number) => (
-                        <div 
-                          key={`${ach.grp_id}-${ach.achievement}-${idx}`} 
-                          className="flex items-center justify-between gap-2 p-1.5 border border-white/5 bg-white/[0.015]"
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <AchievementBadge
-                              title={ach.achievement}
-                              tier={ach.tier}
-                              count={ach.count}
-                              size="sm"
-                              showTitle={false}
-                              showCount={false}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <button
-                                onClick={() => onShowCard({ name: ach.card_name, grp_id: ach.grp_id }, false)}
-                                className="text-xs font-bold font-display uppercase tracking-wide truncate block text-left w-full hover:underline leading-tight text-white"
-                                title={ach.card_name}
-                              >
-                                {ach.card_name}
-                              </button>
-                              <span className="text-[10px] font-sans text-neutral-400 block truncate mt-0.5">
-                                {ach.achievement}
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.2 border border-white/10 bg-black/40 text-neutral-300">
-                            {ach.count > 1 ? `×${ach.count}` : '1×'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {/* W/L record */}
+              <div className="border-b border-white/10 pb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-mono uppercase text-neutral-500">W / L Record</p>
+                  <h3 className="text-2xl font-mono font-bold mt-0.5 text-white tabular-nums">
+                    {detail.wins} - {detail.losses}
+                  </h3>
+                </div>
+                <span className="ms ms-battle text-2xl text-neutral-500" />
+              </div>
+
+              {/* Win rate by position */}
+              <div className="border-b border-white/10 pb-3 space-y-2.5">
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Win Rate by Position</p>
+                <div>
+                  <p className="text-[10px] font-mono font-bold uppercase text-neutral-500 mb-1">On the Play</p>
+                  {winLossBar(detail.play?.wins || 0, detail.play?.losses || 0, playWinPct)}
+                </div>
+                <div>
+                  <p className="text-[10px] font-mono font-bold uppercase text-neutral-500 mb-1">On the Draw</p>
+                  {winLossBar(detail.draw?.wins || 0, detail.draw?.losses || 0, drawWinPct)}
                 </div>
               </div>
 
-              {/* Recent matches sidebar section */}
-              <div className="shrink-0 flex flex-col max-h-[35%] border-t border-white/10 pt-3">
-                <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-white/10">
-                  <p className="text-[10px] font-mono font-bold uppercase text-neutral-400">Recent Matches</p>
-                  <button
-                    onClick={onViewAll}
-                    className="text-[10px] font-mono font-bold text-sky-400 hover:underline uppercase cursor-pointer"
-                  >
-                    View All →
-                  </button>
-                </div>
-                <div className="overflow-y-auto custom-scrollbar space-y-1">
-                  {(detail.recent_matches || []).map((m: any) => (
-                    <button
-                      key={m.match_id}
-                      onClick={() => onSelectMatch(m.match_id)}
-                      className="w-full flex items-center gap-2 p-1.5 border border-white/5 bg-black/40 hover:bg-white/5 transition-colors text-left cursor-pointer"
-                    >
-                      {m.result === 'win' ? (
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400/90 shrink-0" />
-                      ) : (
-                        <XCircle className="w-3 h-3 text-rose-400/90 shrink-0" />
+              {/* Top Achievements Summary (Limited to 3 cards, no internal scroll wheel) */}
+              {(() => {
+                const cleanTopAchievements = (detail.top_card_achievements || []).filter(
+                  (ach: any) => !ach.card_name?.toLowerCase().includes('token')
+                );
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                      <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
+                        Top Achievements
+                      </p>
+                      {cleanTopAchievements.length > 0 && (
+                        <button
+                          onClick={() => setAchievementsModalOpen(true)}
+                          className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                        >
+                          View All →
+                        </button>
                       )}
-                      <span className="flex-1 font-bold font-display uppercase tracking-wide text-xs text-white truncate">
-                        {m.opponent_name || 'Opponent'}
-                      </span>
-                      <span className="text-[10px] font-mono tabular-nums text-neutral-500 shrink-0">
-                        {formatDateShort(m.timestamp)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                    </div>
+
+                    {cleanTopAchievements.length === 0 ? (
+                      <p className="text-xs font-sans italic text-neutral-500 py-1">No achievements earned yet</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {cleanTopAchievements.slice(0, 3).map((ach: any, idx: number) => (
+                          <div 
+                            key={`${ach.grp_id}-${ach.achievement}-${idx}`} 
+                            className="flex items-center justify-between gap-2 p-1.5 border border-white/5 bg-white/[0.015] hover:bg-white/[0.05] transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <AchievementBadge
+                                title={ach.achievement}
+                                tier={ach.tier}
+                                count={ach.count}
+                                size="sm"
+                                showTitle={false}
+                                showCount={false}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <button
+                                  onClick={() => onShowCard({ name: ach.card_name, grp_id: ach.grp_id }, false)}
+                                  className="text-xs font-semibold font-sans truncate block text-left w-full hover:underline leading-tight text-white"
+                                  title={ach.card_name}
+                                >
+                                  {ach.card_name}
+                                </button>
+                                <span className="text-[10px] font-sans text-neutral-400 block truncate mt-0.5">
+                                  {ach.achievement}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.2 border border-white/10 bg-black/40 text-neutral-300">
+                              {ach.count > 1 ? `×${ach.count}` : '1×'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Recent matches sidebar section */}
+            <div className="shrink-0 flex flex-col max-h-[25%] border-t border-white/10 pt-3">
+              <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-white/10">
+                <p className="text-[10px] font-mono font-bold uppercase text-neutral-400">Recent Matches</p>
+                <button
+                  onClick={onViewAll}
+                  className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  View All →
+                </button>
+              </div>
+              <div className="overflow-y-auto custom-scrollbar space-y-1">
+                {(detail.recent_matches || []).map((m: any) => (
+                  <button
+                    key={m.match_id}
+                    onClick={() => onSelectMatch(m.match_id)}
+                    className="w-full flex items-center gap-2 p-1.5 border border-white/5 bg-black/40 hover:bg-white/5 transition-colors text-left cursor-pointer"
+                  >
+                    {m.result === 'win' ? (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400/90 shrink-0" />
+                    ) : (
+                      <XCircle className="w-3 h-3 text-rose-400/90 shrink-0" />
+                    )}
+                    <span className="flex-1 font-semibold font-sans text-xs text-white truncate">
+                      {m.opponent_name || 'Opponent'}
+                    </span>
+                    <span className="text-[10px] font-mono tabular-nums text-neutral-500 shrink-0">
+                      {formatDateShort(m.timestamp)}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Main content area: decklist (True Decklist / All Logged Cards) */}
-            <div className="flex-1 p-5 overflow-hidden min-h-0 flex flex-col">
-              {/* Source toggle + actions */}
-              <div className="flex items-center justify-between mb-3.5 shrink-0 flex-wrap gap-2">
-                <div className="flex border border-white/10 bg-black/40">
+            {/* Bottom Sidebar Action Buttons: Cover Art & Background Art (Muted colors) */}
+            <div className="pt-3 border-t border-white/10 flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setArtSearch('');
+                  setArtPickerMode('cover');
+                  setSelectedCardArt(detail?.custom_art_name || detail?.commander_name || '__DEFAULT__');
+                  setChooseArtOpen(true);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-[11px] font-mono font-bold uppercase bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                title="Choose Deck Box Artwork"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Cover Art</span>
+              </button>
+              <button
+                onClick={() => {
+                  setArtSearch('');
+                  setArtPickerMode('background');
+                  setSelectedCardArt(detail?.custom_bg_art_name || '__RANDOM__');
+                  setChooseArtOpen(true);
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-[11px] font-mono font-bold uppercase bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                title="Choose Deck Background Artwork"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Background</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Right Main Column: Floating Toolbar on Top, Translucent Decklist Table Below */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden gap-3">
+            {/* Floating Toolbar: Transparent with NO bounding box / border */}
+            <div className="shrink-0 flex items-center justify-between flex-wrap gap-3 bg-transparent border-0 p-0">
+              {/* Search Bar on the Left */}
+              <div className="relative w-64 max-w-[280px] h-8 flex items-center shrink-0">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search deck cards..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans border border-white/10"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Segmented View Switcher & Action Buttons on the Right */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <div className="inline-flex items-center bg-white/[0.03] p-0.5 gap-0.5 shrink-0 border border-white/10">
                   <button
                     onClick={() => setListMode('true')}
-                    className={`px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
                       listMode === 'true'
-                        ? 'border border-white/20 bg-white/10 text-white'
-                        : 'text-neutral-400 hover:text-white border border-transparent'
+                        ? 'bg-white/[0.12] text-white shadow-sm font-bold'
+                        : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
                     }`}
                   >
                     True Decklist
                   </button>
                   <button
                     onClick={() => setListMode('logged')}
-                    className={`px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border-l border-white/10 ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
                       listMode === 'logged'
-                        ? 'border border-white/20 bg-white/10 text-white'
-                        : 'text-neutral-400 hover:text-white border border-transparent'
+                        ? 'bg-white/[0.12] text-white shadow-sm font-bold'
+                        : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
                     }`}
                   >
                     All Logged Cards
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => setAchievementsModalOpen(true)}
-                    className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-3 py-1.5 border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors cursor-pointer"
-                    title="View all card achievements won by this deck"
-                  >
-                    <Trophy className="w-3.5 h-3.5" /> Achievements
-                  </button>
-                  <button
-                    onClick={openImport}
-                    className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-3 py-1.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-                    title="Import a decklist from MTGA"
-                  >
-                    <Download className="w-3.5 h-3.5" /> Import
-                  </button>
-                  <button
-                    onClick={() => setExportOpen(true)}
-                    className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-3 py-1.5 border border-orange-500/20 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20 transition-colors cursor-pointer"
-                    title="Export this deck in MTGA format"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> Export
-                  </button>
-                </div>
+                <button
+                  onClick={openImport}
+                  className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-1.5 border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                  title="Import a decklist from MTGA"
+                >
+                  <Download className="w-3.5 h-3.5 text-neutral-400" /> Import
+                </button>
+                <button
+                  onClick={() => setExportOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-1.5 border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                  title="Export this deck in MTGA format"
+                >
+                  <Upload className="w-3.5 h-3.5 text-neutral-400" /> Export
+                </button>
               </div>
+            </div>
 
-              {/* Mode content */}
-              <div className="flex-1 overflow-hidden min-h-0 border border-white/10 bg-neutral-950 p-2">
-                {listMode === 'true' && deckListData ? (
-                  <TrueDeckListView
-                    data={deckListData}
-                    totalMatches={detail?.total || 0}
-                    status={deckListStatus}
-                    palette={palette}
-                    onShowCard={onShowCard}
-                  />
-                ) : listMode === 'true' ? (
-                  <div className="flex-1 flex flex-col items-center justify-center min-h-0 h-full">
-                    <div
-                      className="flex flex-col items-center gap-2 text-center cursor-pointer select-none p-6 border border-dashed border-white/15 hover:border-white/30 transition-colors"
-                      onClick={openImport}
-                    >
-                      <p className="text-base font-display uppercase tracking-wider text-white">
-                        Click to Import Decklist
-                      </p>
-                      <p className="text-xs font-mono text-neutral-400">
-                        Upload the full list of cards in this deck from MTG Arena
-                      </p>
-                    </div>
+            {/* Decklist Container: The only box on the right, translucent */}
+            <div className="flex-1 overflow-hidden min-h-0 border border-white/10 bg-neutral-950/45 backdrop-blur-md p-3 shadow-xl">
+              {listMode === 'true' && deckListData ? (
+                <TrueDeckListView
+                  data={deckListData}
+                  totalMatches={detail?.total || 0}
+                  status={deckListStatus}
+                  palette={palette}
+                  searchTerm={searchQuery}
+                  onShowCard={onShowCard}
+                />
+              ) : listMode === 'true' ? (
+                <div className="flex-1 flex flex-col items-center justify-center min-h-0 h-full">
+                  <div
+                    className="flex flex-col items-center gap-2 text-center cursor-pointer select-none p-6 border border-dashed border-white/15 hover:border-white/30 transition-colors"
+                    onClick={openImport}
+                  >
+                    <p className="text-base font-display uppercase tracking-wider text-white">
+                      Click to Import Decklist
+                    </p>
+                    <p className="text-xs font-mono text-neutral-400">
+                      Upload the full list of cards in this deck from MTG Arena
+                    </p>
                   </div>
-                ) : (
-                  <DeckCardList deckName={deckName} palette={palette} onShowCard={onShowCard} />
-                )}
+                </div>
+              ) : (
+                <DeckCardList deckName={deckName} palette={palette} searchTerm={searchQuery} onShowCard={onShowCard} />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating Tooltip */}
+      {tip && (
+        <div
+          className="fixed z-50 pointer-events-none px-2.5 py-1 text-xs font-mono font-bold bg-neutral-900/95 border border-white/20 text-white shadow-2xl"
+          style={{ left: tip.x + 12, top: tip.y + 12 }}
+        >
+          {tip.text}
+        </div>
+      )}
+
+      {/* Import Decklist Modal */}
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={closeImport}
+        >
+          <div
+            className="w-full max-w-2xl border border-white/20 bg-neutral-950 p-6 flex flex-col gap-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-lg font-bold font-display uppercase tracking-wider text-white">
+                  Import True Decklist
+                </h3>
+                <p className="text-xs font-mono text-neutral-400 mt-0.5">
+                  Paste an MTG Arena export to establish this deck's authoritative card list
+                </p>
+              </div>
+              <button
+                onClick={closeImport}
+                disabled={importBusy}
+                className="p-1 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-mono uppercase text-neutral-400 font-bold">
+                MTGA Export Text
+              </label>
+              <textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder={"Deck\n4 Lightning Bolt\n20 Mountain\n..."}
+                rows={10}
+                disabled={importBusy}
+                className="w-full p-3 bg-neutral-900 border border-white/10 font-mono text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-white/30 resize-none"
+              />
+            </div>
+
+            {importError && (
+              <div className="p-3 border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs font-mono flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{importError}</span>
+              </div>
+            )}
+
+            {importResult && (
+              <div className="p-3 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-mono flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>
+                  Successfully imported {importResult.card_count ?? importResult.cards_count ?? 0} cards
+                  {importResult.sideboard_count ? ` (${importResult.sideboard_count} sideboard)` : ''}.
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                onClick={closeImport}
+                disabled={importBusy}
+                className="px-4 py-2 border border-white/10 hover:border-white/20 text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {importResult ? 'Done' : 'Cancel'}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleImportSubmit}
+                  disabled={importBusy || !importText.trim()}
+                  className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{importBusy ? 'Importing...' : 'Save Decklist'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Decklist Modal */}
+      {exportOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setExportOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl border border-white/20 bg-neutral-950 p-6 flex flex-col gap-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-lg font-bold font-display uppercase tracking-wider text-white">
+                  Export Decklist
+                </h3>
+                <p className="text-xs font-mono text-neutral-400 mt-0.5">
+                  Copy this deck in MTG Arena export format
+                </p>
+              </div>
+              <button
+                onClick={() => setExportOpen(false)}
+                className="p-1 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+              <span className="text-xs font-mono uppercase text-neutral-400 mr-2">Source:</span>
+              <button
+                onClick={() => setExportMode('true')}
+                className={`px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider border transition-colors cursor-pointer ${
+                  exportMode === 'true'
+                    ? 'border-white/40 bg-white/10 text-white'
+                    : 'border-white/10 text-neutral-400 hover:text-white'
+                }`}
+              >
+                True Decklist
+              </button>
+              <button
+                onClick={() => setExportMode('logged')}
+                className={`px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider border transition-colors cursor-pointer ${
+                  exportMode === 'logged'
+                    ? 'border-white/40 bg-white/10 text-white'
+                    : 'border-white/10 text-neutral-400 hover:text-white'
+                }`}
+              >
+                All Logged Cards
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <textarea
+                value={exportText || 'No decklist cards available to export.'}
+                readOnly
+                rows={10}
+                className="w-full p-3 bg-neutral-900 border border-white/10 font-mono text-xs text-neutral-200 resize-none focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
+              <span className="text-xs font-mono text-neutral-500">
+                {copied ? '✓ Copied to clipboard!' : ''}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setExportOpen(false)}
+                  className="px-4 py-2 border border-white/10 hover:border-white/20 text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    if (!exportText) return;
+                    navigator.clipboard.writeText(exportText);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  disabled={!exportText}
+                  className="px-4 py-2 bg-white/[0.08] hover:bg-white/[0.14] text-white border border-white/20 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>{copied ? 'Copied' : 'Copy to Clipboard'}</span>
+                </button>
               </div>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Import Decklist Modal */}
-        {importOpen && (
+      {/* Choose Cover Art / Background Art Modal */}
+      {chooseArtOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setChooseArtOpen(false)}
+        >
           <div
-            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-fade-in select-text"
-            onClick={closeImport}
+            className="w-full max-w-2xl border border-white/20 bg-neutral-950 flex flex-col shadow-2xl overflow-hidden h-[600px] max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="w-full max-w-2xl border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+            {/* Header */}
+            <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
+              <div className="flex items-center gap-2.5">
+                {artPickerMode === 'cover' ? (
+                  <ImageIcon className="w-4 h-4 text-neutral-400" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-neutral-400" />
+                )}
                 <div>
-                  <p className="text-base font-bold font-display uppercase tracking-wide text-white">Import Decklist</p>
-                  <p className="text-xs font-mono text-neutral-400">Paste the deck export from MTG Arena (Ctrl+V)</p>
+                  <h3 className="text-base font-bold font-display uppercase tracking-wider text-white">
+                    {artPickerMode === 'cover' ? 'Choose Deck Box Cover Artwork' : 'Choose Deck Background Artwork'}
+                  </h3>
+                  <p className="text-xs font-mono text-neutral-400 mt-0.5">
+                    {artPickerMode === 'cover'
+                      ? 'Select any card from this deck to use as its deck box art crop'
+                      : 'Select any card from this deck to use as its ambient background'}
+                  </p>
                 </div>
-                <button
-                  onClick={closeImport}
-                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
               </div>
+              <button
+                onClick={() => setChooseArtOpen(false)}
+                className="p-1 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              <div className="p-4 space-y-3">
-                <textarea
-                  value={importText}
-                  onChange={(e) => setImportText(e.target.value)}
-                  placeholder="Deck&#10;4 Llanowar Elves&#10;4 Lightning Bolt&#10;..."
-                  className="w-full h-48 border border-white/10 bg-black/60 p-3 font-mono text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-white/30 resize-none"
+            {/* Search Bar */}
+            <div className="p-3 border-b border-white/10 bg-neutral-900/40 shrink-0">
+              <div className="relative">
+                <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={artSearch}
+                  onChange={(e) => setArtSearch(e.target.value)}
+                  placeholder="Search cards in this deck..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-black/60 border border-white/15 text-xs font-mono text-white placeholder-neutral-500 focus:outline-none focus:border-white/40"
+                  autoFocus
                 />
-
-                {importError && (
-                  <div className="p-2.5 border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs font-mono flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>{importError}</span>
-                  </div>
-                )}
-
-                {importResult && (
-                  <div className="p-2.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-mono flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 shrink-0" />
-                    <span>Imported {importResult.mainboard_count} mainboard cards successfully!</span>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
-                  <button
-                    onClick={closeImport}
-                    className="px-4 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    disabled={importBusy || !importText.trim()}
-                    onClick={async () => {
-                      setImportBusy(true);
-                      setImportError(null);
-                      try {
-                        const res = await invoke<any>('import_deck_list', {
-                          deckName,
-                          importText: importText.trim(),
-                        });
-                        setImportResult(res);
-                        onDeckListImported?.();
-                      } catch (err: any) {
-                        setImportError(String(err));
-                      } finally {
-                        setImportBusy(false);
-                      }
-                    }}
-                    className="px-4 py-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {importBusy ? 'Importing…' : 'Import Decklist'}
-                  </button>
-                </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Export Decklist Modal */}
-        {exportOpen && (
-          <div
-            className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-fade-in select-text"
-            onClick={() => setExportOpen(false)}
-          >
-            <div
-              className="w-full max-w-2xl border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-                <div>
-                  <p className="text-base font-bold font-display uppercase tracking-wide text-white">Export Decklist</p>
-                  <p className="text-xs font-mono text-neutral-400">Copy to clipboard for MTG Arena import</p>
-                </div>
-                <button
-                  onClick={setExportOpen.bind(null, false)}
-                  className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-4 space-y-3">
-                <textarea
-                  readOnly
-                  value={exportText}
-                  className="w-full h-48 border border-white/10 bg-black/60 p-3 font-mono text-xs text-white resize-none focus:outline-none"
-                />
-                <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                  <div className="flex border border-white/10 bg-black/40">
-                    <button
-                      onClick={() => setExportMode('true')}
-                      className={`px-3 py-1 text-xs font-mono font-bold uppercase ${
-                        exportMode === 'true' ? 'bg-white/15 text-white' : 'text-neutral-500'
+            {/* Content Split: Card List + Live Art Crop Preview */}
+            <div className="flex-1 min-h-0 flex divide-x divide-white/10 overflow-hidden">
+              {/* Scrollable list of options */}
+              <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-white/5 bg-black/20 custom-scrollbar">
+                {/* Top Reset/Random Option */}
+                {(() => {
+                  const isSpecial = artPickerMode === 'background' ? selectedCardArt === '__RANDOM__' : selectedCardArt === '__DEFAULT__';
+                  const isCurrent = artPickerMode === 'background' ? !detail?.custom_bg_art_name : !detail?.custom_art_name;
+                  const label = artPickerMode === 'background' ? 'Random' : 'Default';
+                  const subtext = artPickerMode === 'background' ? 'Random non-land card from deck' : 'Commander or top card';
+                  return (
+                    <div
+                      onClick={() => setSelectedCardArt(artPickerMode === 'background' ? '__RANDOM__' : '__DEFAULT__')}
+                      className={`flex items-center justify-between p-2.5 transition-colors cursor-pointer ${
+                        isSpecial ? 'bg-white/[0.18] border border-white/40 text-white font-bold' : 'hover:bg-white/5 border border-transparent text-neutral-300'
                       }`}
                     >
-                      True Decklist
-                    </button>
-                    <button
-                      onClick={() => setExportMode('logged')}
-                      className={`px-3 py-1 text-xs font-mono font-bold uppercase border-l border-white/10 ${
-                        exportMode === 'logged' ? 'bg-white/15 text-white' : 'text-neutral-500'
-                      }`}
-                    >
-                      Logged Cards
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(exportText);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>{copied ? 'Copied!' : 'Copy to Clipboard'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+                      <div className="flex flex-col min-w-0 pr-2">
+                        <span className="text-xs font-mono font-bold text-neutral-200 truncate">
+                          {label}
+                        </span>
+                        <span className="text-[10px] font-sans text-neutral-400 truncate">
+                          {subtext}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isCurrent && (
+                          <span className="text-[9.5px] font-mono font-bold uppercase px-1.5 py-0.5 bg-white/10 text-neutral-200 border border-white/20">
+                            Current
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
-        {/* Choose Deck Box Artwork Modal */}
-        {chooseArtOpen && (
-          <div
-            onClick={() => setChooseArtOpen(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fade-in"
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden max-h-[85vh]"
-            >
-              {/* Modal Header */}
-              <div className="p-3.5 border-b border-white/10 flex items-center justify-between bg-neutral-900/80 shrink-0">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                    Choose Deck Box Artwork
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleResetCustomArt}
-                    disabled={artSaving || !detail?.custom_art_name}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono uppercase border transition-colors ${
-                      detail?.custom_art_name
-                        ? 'border-white/20 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white cursor-pointer'
-                        : 'border-white/5 bg-transparent text-neutral-600 cursor-not-allowed opacity-50'
-                    }`}
-                    title="Reset to default commander or top card artwork"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset to Default</span>
-                  </button>
-                  <button
-                    onClick={() => setChooseArtOpen(false)}
-                    className="p-1 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Search Bar */}
-              <div className="p-3 border-b border-white/10 bg-neutral-900/40 shrink-0">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={artSearch}
-                    onChange={(e) => setArtSearch(e.target.value)}
-                    placeholder="Search cards in this deck..."
-                    className="w-full pl-9 pr-3 py-1.5 bg-black/60 border border-white/15 text-xs font-mono text-white placeholder-neutral-500 focus:outline-none focus:border-white/40"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              {/* Content Split: Card List + Live Art Crop Preview */}
-              <div className="flex-1 min-h-0 flex divide-x divide-white/10 overflow-hidden">
-                {/* Scrollable list of cards in deck */}
-                <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-white/5 bg-black/20">
-                  {deckCardsList
-                    .filter((c) => c.name.toLowerCase().includes(artSearch.toLowerCase()))
-                    .map((card) => {
-                      const isCurrent = (detail?.custom_art_name || detail?.commander_name || detail?.top_card_name) === card.name;
-                      const isHovered = (hoveredCardArt || detail?.custom_art_name || detail?.commander_name) === card.name;
-                      return (
-                        <div
-                          key={card.name}
-                          onMouseEnter={() => setHoveredCardArt(card.name)}
-                          onClick={() => handleSelectCustomArt(card)}
-                          className={`flex items-center justify-between p-2.5 transition-colors cursor-pointer ${
-                            isHovered ? 'bg-white/10' : 'hover:bg-white/5'
-                          }`}
-                        >
-                          <div className="flex flex-col min-w-0 pr-2">
-                            <span className="text-xs font-mono font-bold text-neutral-200 truncate">
-                              {card.name}
+                {/* Deck cards list */}
+                {deckCardsList
+                  .filter((c) => c.name.toLowerCase().includes(artSearch.toLowerCase()))
+                  .map((card) => {
+                    const isCurrent = (artPickerMode === 'background' ? detail?.custom_bg_art_name === card.name : detail?.custom_art_name === card.name);
+                    const isSelected = selectedCardArt === card.name;
+                    return (
+                      <div
+                        key={card.name}
+                        onClick={() => setSelectedCardArt(card.name)}
+                        className={`flex items-center justify-between p-2.5 transition-colors cursor-pointer ${
+                          isSelected ? 'bg-white/[0.18] border border-white/40 text-white font-bold' : 'hover:bg-white/5 border border-transparent text-neutral-300'
+                        }`}
+                      >
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className="text-xs font-mono font-bold text-neutral-200 truncate">
+                            {card.name}
+                          </span>
+                          {card.type && (
+                            <span className="text-[10px] font-sans text-neutral-500 truncate">
+                              {card.type}
                             </span>
-                            {card.type && (
-                              <span className="text-[10px] font-sans text-neutral-500 truncate">
-                                {card.type}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {isCurrent && (
-                              <span className="text-[9.5px] font-mono font-bold uppercase px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                                Current
-                              </span>
-                            )}
-                            <span className="text-[10px] font-mono text-neutral-500">
-                              {card.mana_cost || ''}
-                            </span>
-                          </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  {deckCardsList.filter((c) => c.name.toLowerCase().includes(artSearch.toLowerCase())).length === 0 && (
-                    <div className="p-8 text-center text-xs font-mono text-neutral-500 uppercase">
-                      No matching cards found
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isCurrent && (
+                            <span className="text-[9.5px] font-mono font-bold uppercase px-1.5 py-0.5 bg-white/10 text-neutral-200 border border-white/20">
+                              Current
+                            </span>
+                          )}
+                          <span className="text-[10px] font-mono text-neutral-500">
+                            {card.mana_cost || ''}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {deckCardsList.filter((c) => c.name.toLowerCase().includes(artSearch.toLowerCase())).length === 0 && artSearch && (
+                  <div className="p-8 text-center text-xs font-mono text-neutral-500 uppercase">
+                    No matching cards found
+                  </div>
+                )}
+              </div>
+
+              {/* Live Art Crop Preview */}
+              <div className="w-64 shrink-0 p-4 bg-neutral-900/30 flex flex-col items-center justify-center space-y-3">
+                <div className="w-full aspect-[4/3] border border-white/20 bg-black overflow-hidden shadow-lg relative rounded-sm flex items-center justify-center">
+                  {selectedCardArt === '__RANDOM__' ? (
+                    <div className="flex flex-col items-center gap-1.5 text-neutral-400">
+                      <Sparkles className="w-8 h-8 opacity-60" />
+                      <span className="text-[11px] font-mono uppercase font-bold">Random Art</span>
+                    </div>
+                  ) : selectedCardArt === '__DEFAULT__' ? (
+                    <div className="flex flex-col items-center gap-1.5 text-neutral-400">
+                      <ImageIcon className="w-8 h-8 opacity-60" />
+                      <span className="text-[11px] font-mono uppercase font-bold">Default Art</span>
+                    </div>
+                  ) : selectedCardArt ? (
+                    <CardImage
+                      name={selectedCardArt}
+                      version="art_crop"
+                      alt={selectedCardArt}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs font-mono text-neutral-600">
+                      No Preview
                     </div>
                   )}
                 </div>
-
-                {/* Live Art Crop Preview */}
-                <div className="w-64 shrink-0 p-4 bg-neutral-900/30 flex flex-col items-center justify-center space-y-3">
-                  <div className="w-full aspect-[4/3] border border-white/20 bg-black overflow-hidden shadow-lg relative rounded-sm">
-                    {hoveredCardArt ? (
-                      <CardImage
-                        name={hoveredCardArt}
-                        version="art_crop"
-                        alt={hoveredCardArt}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs font-mono text-neutral-600">
-                        No Preview
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-center w-full min-w-0">
-                    <p className="text-xs font-mono font-bold text-white uppercase truncate">
-                      {hoveredCardArt || 'Select a card'}
-                    </p>
-                    <p className="text-[10px] font-sans text-neutral-400 mt-0.5">
-                      Art Crop Deck Box Preview
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const c = deckCardsList.find((x) => x.name === hoveredCardArt);
-                      if (c) handleSelectCustomArt(c);
-                    }}
-                    disabled={artSaving || !hoveredCardArt}
-                    className="w-full py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Set as Deck Box Cover
-                  </button>
+                <div className="text-center w-full min-w-0">
+                  <p className="text-xs font-mono font-bold text-white uppercase truncate">
+                    {selectedCardArt === '__RANDOM__'
+                      ? 'Random'
+                      : selectedCardArt === '__DEFAULT__'
+                      ? 'Default'
+                      : selectedCardArt || 'Select an option'}
+                  </p>
+                  <p className="text-[10px] font-sans text-neutral-400 mt-0.5">
+                    {artPickerMode === 'cover' ? 'Deck Box Cover Preview' : 'Deck Background Preview'}
+                  </p>
                 </div>
+                <button
+                  onClick={() => {
+                    if (selectedCardArt === '__RANDOM__' || selectedCardArt === '__DEFAULT__') {
+                      handleResetArt();
+                    } else if (selectedCardArt) {
+                      const c = deckCardsList.find((x) => x.name === selectedCardArt);
+                      if (c) handleSelectArt(c);
+                    }
+                  }}
+                  disabled={artSaving || !selectedCardArt}
+                  className="w-full py-2 bg-white/[0.08] hover:bg-white/[0.14] text-white border border-white/20 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {artPickerMode === 'cover' ? 'Set as Deck Box Cover' : 'Set as Background'}
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Deck Achievements Modal */}
-        <DeckAchievementsModal
-          isOpen={achievementsModalOpen}
-          onClose={() => setAchievementsModalOpen(false)}
-          deckName={deckName}
-          achievements={detail?.all_card_achievements || detail?.top_card_achievements || []}
-          palette={palette}
-          onShowCard={onShowCard}
-        />
-      </div>
+      {/* Deck Achievements Modal */}
+      <DeckAchievementsModal
+        isOpen={achievementsModalOpen}
+        onClose={() => setAchievementsModalOpen(false)}
+        deckName={deckName}
+        groupedAchievements={detail?.card_achievements_grouped || []}
+        palette={palette}
+        onShowCard={onShowCard}
+      />
     </div>
   );
 }

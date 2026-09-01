@@ -7,7 +7,8 @@ interface TrueDeckListViewProps {
   data: any; // from get_deck_list: { cards, sideboard, commander_grp_id, updated_at }
   totalMatches: number;
   status?: any; // from get_deck_list_status: { missing_count, logged_count }
-  palette: any;
+  palette?: any;
+  searchTerm?: string;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
 }
 
@@ -59,7 +60,7 @@ function categorize(cardType?: string | null): string {
 const rarityLabel = (r: number) => RARITY_INFO[r]?.label || 'Common';
 const rarityColor = (r: number) => RARITY_INFO[r]?.color || '#9CA3AF';
 
-function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: TrueDeckListViewProps) {
+function TrueDeckListView({ data, totalMatches, status, palette, searchTerm = '', onShowCard }: TrueDeckListViewProps) {
   const [isWide, setIsWide] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1400 : false);
 
   useEffect(() => {
@@ -78,6 +79,7 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
   }, []);
 
   const numCols = isWide ? 3 : 2;
+  const cleanQuery = searchTerm.trim().toLowerCase();
 
   const cards: CardEntry[] = data?.cards || [];
   const sideboard: CardEntry[] = data?.sideboard || [];
@@ -124,39 +126,54 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
 
   const renderRow = (card: CardEntry) => {
     const symbols = parseMtgaManaCost(card.mana_cost || '');
+    const isMatch = Boolean(cleanQuery && card.name && card.name.toLowerCase().includes(cleanQuery));
+    const isDeemphasized = Boolean(cleanQuery && !isMatch);
+
     return (
       <div
         key={card.grp_id}
-        className="flex items-center gap-2 py-0.5 rounded px-1 cursor-pointer hover:bg-white/5 transition-colors"
+        className={`flex items-center justify-between py-1 px-2 cursor-pointer group select-none ${
+          isMatch
+            ? 'bg-[#4A7FA3]/20'
+            : isDeemphasized
+            ? 'opacity-30'
+            : 'hover:bg-white/[0.05]'
+        }`}
         onClick={() => onShowCard?.(card, false)}
       >
-        <span className="w-10 shrink-0 text-[15px] font-mono font-bold tabular-nums" style={{ color: palette?.text }}>
-          {card.count}x
-        </span>
-        <span className="flex-1 text-[15px] font-semibold truncate" style={{ color: palette?.text }}>
-          {card.name}
-        </span>
-        <span className="shrink-0 flex items-center gap-0.5">
+        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+          <span className="font-mono text-xs font-bold text-neutral-400 shrink-0 tabular-nums w-5 text-right">
+            {card.count}×
+          </span>
+          <span
+            className={`text-xs font-sans truncate group-hover:underline leading-tight ${
+              isMatch ? 'text-[#7FAAC9] font-bold' : 'font-medium text-white'
+            }`}
+          >
+            {card.name}
+          </span>
+        </div>
+        <div className="shrink-0 flex items-center gap-0.5">
           {symbols.length > 0 ? (
-            symbols.map((s, i) => <ManaFontPip key={i} symbol={s} size={17} />)
+            symbols.map((s, i) => <ManaFontPip key={i} symbol={s} size={13} />)
           ) : (
-            <span className="text-[11px] font-mono opacity-30">—</span>
+            <span className="text-[10px] font-mono text-neutral-600">—</span>
           )}
-        </span>
+        </div>
       </div>
     );
   };
 
   const renderGroup = (cat: string) => (
     <div key={cat} className="min-w-0">
-      <div className="flex items-center gap-2 mb-2 pb-1.5 border-b" style={{ borderColor: `${palette?.border}66` }}>
-        <span className={`ms ${TYPE_ICONS[cat] || 'ms-multicolor'} shrink-0`} style={{ fontSize: 20, color: palette?.text }} />
-        <span className="text-[15px] font-mono uppercase tracking-wider font-bold truncate" style={{ color: palette?.text }}>
+      <div className="flex items-center gap-2 mb-1.5 pb-1 border-b border-white/10">
+        <span className={`ms ${TYPE_ICONS[cat] || 'ms-other'} shrink-0 text-sm text-neutral-400`} />
+        <span className="text-xs font-sans uppercase tracking-wider font-bold text-white truncate">
           {cat}
         </span>
-        <span className="text-[12px] font-mono opacity-40 shrink-0">({groups.get(cat)!.length})</span>
+        <span className="text-[10.5px] font-mono text-neutral-500 shrink-0">({groups.get(cat)!.length})</span>
       </div>
-      <div className="space-y-0.5">
+      <div className="divide-y divide-white/[0.04]">
         {groups.get(cat)!.map(renderRow)}
       </div>
     </div>
@@ -168,14 +185,14 @@ function TrueDeckListView({ data, totalMatches, status, palette, onShowCard }: T
     if (!commanderCard) return null;
     return (
       <div className="min-w-0">
-        <div className="flex items-center gap-2 mb-2 pb-1.5 border-b" style={{ borderColor: `${palette?.border}66` }}>
-          <span className="ms ms-commander shrink-0" style={{ fontSize: 20, color: palette?.text }} />
-          <span className="text-[15px] font-mono uppercase tracking-wider font-bold truncate" style={{ color: palette?.text }}>
+        <div className="flex items-center gap-2 mb-1.5 pb-1 border-b border-white/10">
+          <span className="ms ms-commander shrink-0 text-sm text-amber-400" />
+          <span className="text-xs font-sans uppercase tracking-wider font-bold text-amber-300 truncate">
             Commander
           </span>
-          <span className="text-[12px] font-mono opacity-40 shrink-0">(1)</span>
+          <span className="text-[10.5px] font-mono text-amber-400/60 shrink-0">(1)</span>
         </div>
-        <div className="space-y-0.5">
+        <div className="divide-y divide-white/[0.04]">
           {renderRow(commanderCard)}
         </div>
       </div>

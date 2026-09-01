@@ -22,6 +22,19 @@ export function formatPlatformName(platform?: string | null): string {
   return platform;
 }
 
+function SteamLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.008l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.029 4.524 4.524s-2.03 4.524-4.524 4.524h-.105l-4.076 2.911c0 .052.005.105.005.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.724L.437 15.07C1.86 20.314 6.643 24 11.979 24c6.627 0 12-5.373 12-12S18.606 0 11.979 0zM7.558 17.067l-1.633-.674c.29-.48.784-.823 1.365-.917l1.432.592c-.035.15-.054.305-.054.465 0 .204.032.399.09.584l-1.2-.05zm8.384-10.428c-1.272 0-2.304 1.032-2.304 2.304 0 1.271 1.032 2.303 2.304 2.303 1.271 0 2.304-1.032 2.304-2.303 0-1.272-1.033-2.304-2.304-2.304zm0 .768c.848 0 1.536.688 1.536 1.536 0 .848-.688 1.536-1.536 1.536-.848 0-1.536-.688-1.536-1.536 0-.848.688-1.536 1.536-1.536z" />
+    </svg>
+  );
+}
+
 export function PlatformBadge({ platform, className = '', showLabel = false, size = 'sm' }: PlatformBadgeProps) {
   if (!platform) return null;
 
@@ -34,7 +47,7 @@ export function PlatformBadge({ platform, className = '', showLabel = false, siz
       return <Gamepad2 className={iconSize} />;
     }
     if (raw.includes('steam')) {
-      return <Monitor className={iconSize} />;
+      return <SteamLogo className={iconSize} />;
     }
     if (raw.includes('ios') || raw.includes('iphone')) {
       return <Smartphone className={iconSize} />;

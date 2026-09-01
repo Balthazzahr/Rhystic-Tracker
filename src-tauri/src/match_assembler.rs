@@ -128,6 +128,8 @@ pub struct MatchAssembler {
     pub instance_owner_map: HashMap<u32, u32>, // instanceId -> ownerSeatId
     pub ability_parent_map: HashMap<u32, u32>, // abilityInstanceId -> parentInstanceId
     pub token_instance_names: HashMap<u32, String>, // instanceId -> token name
+    pub token_instance_ids: HashSet<u32>,
+    pub token_grp_ids: HashSet<u32>,
     pub recorded_actions: HashSet<(u32, u32, String)>, // (turn_number, instance_id, event_type)
     pub turn_events: Vec<MatchTurnEventRecord>,
     pub turn_event_seqs: Vec<u64>,
@@ -164,6 +166,8 @@ impl MatchAssembler {
             collection_draws: Vec::new(),
             current_player_life: 20,
             current_opp_life: 20,
+            opp_life_before_combat: 20,
+            current_turn_hero_hits: Vec::new(),
             player_mulligans: 0,
             opponent_mulligans: 0,
             player_opening_hand: Vec::new(),
@@ -175,6 +179,8 @@ impl MatchAssembler {
             instance_owner_map: HashMap::new(),
             ability_parent_map: HashMap::new(),
             token_instance_names: HashMap::new(),
+            token_instance_ids: HashSet::new(),
+            token_grp_ids: HashSet::new(),
             recorded_actions: HashSet::new(),
             turn_events: Vec::new(),
             turn_event_seqs: Vec::new(),
@@ -188,8 +194,6 @@ impl MatchAssembler {
             match_start_time: None,
             impactful_cards: HashMap::new(),
             last_hero_damage_hit: None,
-            current_turn_hero_hits: Vec::new(),
-            opp_life_before_combat: 20,
             processed_msg_ids: HashSet::new(),
             last_completed: None,
             is_live: false,
@@ -258,6 +262,8 @@ impl MatchAssembler {
         self.active_life_sources.clear();
         self.impactful_cards.clear();
         self.processed_msg_ids.clear();
+        self.token_instance_ids.clear();
+        self.token_grp_ids.clear();
         self.current_turn = 0;
         self.feed_seq = 0;
         self.player_seat_id = 1;
@@ -589,8 +595,14 @@ impl MatchAssembler {
         if let Some(tname) = token_name {
             self.token_instance_names.insert(instance_id, tname);
         }
+        if is_token {
+            self.token_instance_ids.insert(instance_id);
+        }
         if let Some(gid) = grp_id {
             if gid > 0 {
+                if is_token {
+                    self.token_grp_ids.insert(gid);
+                }
                 if !self.instance_map.contains_key(&instance_id) {
                     learning_grp_now = true;
                 }
@@ -759,30 +771,32 @@ impl MatchAssembler {
             }
         }
 
-        // Award Heavy Hitter achievement titles with single-match magnitude tiering
-        if magnitude >= 10 {
-            let hm_tier = if magnitude >= 30 {
-                "Gold"
-            } else if magnitude >= 20 {
-                "Silver"
-            } else {
-                "Bronze"
-            };
-            let hm_title = format!("Haymaker ({})", hm_tier);
-            entry.titles.retain(|t| !t.starts_with("Haymaker"));
-            entry.titles.push(hm_title);
-        }
-        if entry.total_damage >= 25 {
-            let jg_tier = if entry.total_damage >= 60 {
-                "Gold"
-            } else if entry.total_damage >= 40 {
-                "Silver"
-            } else {
-                "Bronze"
-            };
-            let jg_title = format!("Juggernaut ({})", jg_tier);
-            entry.titles.retain(|t| !t.starts_with("Juggernaut"));
-            entry.titles.push(jg_title);
+        // Award Heavy Hitter achievement titles with single-match magnitude tiering (Hero non-token cards only)
+        if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && !self.token_instance_ids.contains(&instance_id) {
+            if magnitude >= 10 {
+                let hm_tier = if magnitude >= 30 {
+                    "Gold"
+                } else if magnitude >= 20 {
+                    "Silver"
+                } else {
+                    "Bronze"
+                };
+                let hm_title = format!("Haymaker ({})", hm_tier);
+                entry.titles.retain(|t| !t.starts_with("Haymaker"));
+                entry.titles.push(hm_title);
+            }
+            if entry.total_damage >= 25 {
+                let jg_tier = if entry.total_damage >= 60 {
+                    "Gold"
+                } else if entry.total_damage >= 40 {
+                    "Silver"
+                } else {
+                    "Bronze"
+                };
+                let jg_title = format!("Juggernaut ({})", jg_tier);
+                entry.titles.retain(|t| !t.starts_with("Juggernaut"));
+                entry.titles.push(jg_title);
+            }
         }
 
         // Track hero damage hits against opponent for lethal Executioner/Over-Killer
@@ -881,8 +895,8 @@ impl MatchAssembler {
         }
         entry.cards_drawn += count as i64;
 
-        // Award Rhystic Tracker achievement if hero card draws 5 or more extra cards in match
-        if seat_id == self.player_seat_id && entry.cards_drawn >= 5 {
+        // Award Rhystic Tracker achievement if hero card draws 5 or more extra cards in match (non-token only)
+        if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && entry.cards_drawn >= 5 {
             let rt_tier = if entry.cards_drawn >= 12 {
                 "Gold"
             } else if entry.cards_drawn >= 8 {
@@ -929,7 +943,7 @@ impl MatchAssembler {
             }
             entry.counters_added += amount as i64;
 
-            if seat_id == self.player_seat_id {
+            if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && !self.token_instance_ids.contains(&target_instance_id) {
                 // Hardened: 7+ (Bronze), 12+ (Silver), 20+ (Gold)
                 if entry.counters_added >= 7 {
                     let h_tier = if entry.counters_added >= 20 {
@@ -1105,6 +1119,9 @@ impl MatchAssembler {
                     }
 
                     for (grp, amt, _) in &lethal_hits {
+                        if self.token_grp_ids.contains(grp) {
+                            continue;
+                        }
                         let entry = self.impactful_cards.entry(*grp).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         let exec_tier = if *amt >= 15 {
@@ -1134,6 +1151,9 @@ impl MatchAssembler {
 
                     // Overkill calculation: individual creature must single-handedly account for the excess overkill threshold beyond pre-combat life
                     for (grp, amt, life_before) in &lethal_hits {
+                        if self.token_grp_ids.contains(grp) {
+                            continue;
+                        }
                         let pre_life = (*life_before).max(0);
                         let ind_overkill = *amt - pre_life;
                         if ind_overkill >= 7 {
@@ -1160,8 +1180,8 @@ impl MatchAssembler {
                         }
                     }
                 } else if reason.to_lowercase().contains("concede") {
-                    // Scoop Inducer candidate: evaluated by round and opponent life
-                    if let Some(last_play) = self.turn_events.iter().rev().find(|e| e.seat_id == self.player_seat_id && e.event_type == "play" && e.turn_number >= self.current_turn.saturating_sub(1)) {
+                    // Scoop Inducer candidate: evaluated by round and opponent life (non-token only)
+                    if let Some(last_play) = self.turn_events.iter().rev().find(|e| e.seat_id == self.player_seat_id && e.event_type == "play" && !self.token_grp_ids.contains(&e.grp_id) && e.turn_number >= self.current_turn.saturating_sub(1)) {
                         let entry = self.impactful_cards.entry(last_play.grp_id).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         let round = (self.current_turn + 1) / 2;

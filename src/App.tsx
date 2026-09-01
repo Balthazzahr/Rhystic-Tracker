@@ -1051,7 +1051,7 @@ export default function App() {
   const manaThemeOptions = [
     { id: 'white', label: 'White (Order)', symbol: 'W', color: '#E8E2CC' },
     { id: 'blue', label: 'Blue (Progress)', symbol: 'U', color: '#4A7FA3' },
-    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#8a719d' },
+    { id: 'black', label: 'Black (Ambition)', symbol: 'B', color: '#374151' },
     { id: 'red', label: 'Red (Chaos)', symbol: 'R', color: '#B8503A' },
     { id: 'green', label: 'Green (Nature)', symbol: 'G', color: '#4A7856' },
   ];
@@ -1703,10 +1703,7 @@ export default function App() {
               setSelectedMatchId(matchId);
               setIsFullInfoOpen(true);
             }}
-            onSelectDeck={(deckName) => {
-              setSelectedDeck(deckName);
-              setSelectedDeckDetail(null);
-            }}
+            onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
             initialSearch={matchHistorySearch}
             onDeleteMatch={() => loadData()}

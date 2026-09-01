@@ -18,6 +18,7 @@ interface CardBreakdownProps {
   palette: any;
   onCardClick?: (card: CardItem) => void;
   impactfulGrpIds?: Set<number>;
+  searchTerm?: string;
 }
 
 function getCardCmc(costStr?: string): number {
@@ -50,9 +51,22 @@ function getCardCategory(name?: string, typeStr?: string): string {
   return 'Spells / Other';
 }
 
-export function CardBreakdown({ cards, onCardClick, impactfulGrpIds }: CardBreakdownProps) {
+const CATEGORY_CONFIG: Record<string, { icon: string; color: string }> = {
+  Creatures: { icon: 'ms-creature', color: '#76A382' },
+  Planeswalkers: { icon: 'ms-planeswalker', color: '#E5A93C' },
+  Instants: { icon: 'ms-instant', color: '#4A7FA3' },
+  Sorceries: { icon: 'ms-sorcery', color: '#B8503A' },
+  Artifacts: { icon: 'ms-artifact', color: '#94A3B8' },
+  Enchantments: { icon: 'ms-enchantment', color: '#9B6BA0' },
+  Battles: { icon: 'ms-battle', color: '#D57C69' },
+  Lands: { icon: 'ms-land', color: '#A89F91' },
+  'Spells / Other': { icon: 'ms-multicolor', color: '#CBD5E1' },
+};
+
+export function CardBreakdown({ cards, onCardClick, impactfulGrpIds, searchTerm = '' }: CardBreakdownProps) {
   const playerCards = cards.filter((c) => !c.is_opponent);
   const opponentCards = cards.filter((c) => c.is_opponent);
+  const cleanQuery = searchTerm.trim().toLowerCase();
 
   const groupAndSortCards = (cardList: CardItem[]) => {
     const categories: Record<string, CardItem[]> = {
@@ -87,7 +101,7 @@ export function CardBreakdown({ cards, onCardClick, impactfulGrpIds }: CardBreak
 
     return (
       <div className="flex-1 flex flex-col h-full overflow-hidden min-h-0">
-        {/* Column Title Bar (Unboxed flat header) */}
+        {/* Column Title Bar (Clean flat header) */}
         <div className="pb-2.5 mb-2 border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <span className="font-sans text-xs font-semibold uppercase tracking-wider text-white">
@@ -97,9 +111,6 @@ export function CardBreakdown({ cards, onCardClick, impactfulGrpIds }: CardBreak
               ({totalCount} {totalCount === 1 ? 'card' : 'cards'})
             </span>
           </div>
-          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">
-            {isOpponentSide ? 'Revealed in Play' : 'Full Deck List'}
-          </span>
         </div>
 
         {/* Flat Unboxed Card List */}
@@ -112,42 +123,63 @@ export function CardBreakdown({ cards, onCardClick, impactfulGrpIds }: CardBreak
             Object.entries(grouped).map(([category, list]) => {
               if (list.length === 0) return null;
               const catTotal = list.reduce((acc, c) => acc + c.count, 0);
+              const catMeta = CATEGORY_CONFIG[category] || { icon: 'ms-multicolor', color: '#CBD5E1' };
 
               return (
                 <div key={category} className="space-y-1">
-                  {/* Category Header */}
-                  <div className="flex items-center justify-between text-[11px] font-sans font-semibold uppercase tracking-wider text-neutral-400 border-b border-white/10 pb-1">
-                    <span>{category}</span>
-                    <span className="font-mono text-[10.5px] tabular-nums text-neutral-300">
+                  {/* Category Header with MTG Mana Font Icon */}
+                  <div className="flex items-center justify-between text-[11px] font-sans font-semibold uppercase tracking-wider text-neutral-300 border-b border-white/10 pb-1 pt-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`ms ${catMeta.icon} text-xs`} style={{ color: catMeta.color }} />
+                      <span>{category}</span>
+                    </div>
+                    <span className="font-mono text-[10.5px] tabular-nums text-neutral-400">
                       {catTotal}
                     </span>
                   </div>
 
-                  {/* Card Rows (Flat table-row style without nested boxes) */}
+                  {/* Card Rows with Search Highlighting & De-emphasis */}
                   <div className="divide-y divide-white/[0.04]">
                     {list.map((card, idx) => {
                       const isImpactful = impactfulGrpIds?.has(card.grp_id) || false;
+                      const isMatch = Boolean(cleanQuery && card.name && card.name.toLowerCase().includes(cleanQuery));
+                      const isDeemphasized = Boolean(cleanQuery && !isMatch);
+
                       return (
                         <div
                           key={idx}
                           onClick={() => onCardClick && onCardClick(card)}
-                          className="flex items-center justify-between py-1.5 px-2 hover:bg-white/[0.04] transition-colors cursor-pointer group select-none"
+                          className={`flex items-center justify-between py-1.5 px-2 cursor-pointer group select-none ${
+                            isMatch
+                              ? 'bg-[#4A7FA3]/20'
+                              : isDeemphasized
+                              ? 'opacity-30'
+                              : 'hover:bg-white/[0.05]'
+                          }`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                             <span className="font-mono text-xs font-bold text-neutral-400 shrink-0 tabular-nums w-5 text-right">
                               {card.count}×
                             </span>
-                            <span className="text-xs font-sans font-medium text-white truncate group-hover:underline leading-tight">
+                            <span
+                              className={`text-xs font-sans truncate group-hover:underline leading-tight ${
+                                isMatch
+                                  ? 'text-[#7FAAC9] font-bold'
+                                  : isImpactful
+                                  ? 'text-[#E2BF6F] font-bold'
+                                  : 'font-medium text-white'
+                              }`}
+                            >
                               {card.name}
                             </span>
-                          </div>
-                          <div className="shrink-0 flex items-center gap-2">
                             {isImpactful && (
                               <span
-                                className="ms ms-ability-duels-renowned text-xs text-[#E2BF6F]"
+                                className="ms ms-ability-duels-renowned text-xs text-[#E2BF6F] shrink-0"
                                 title="Match MVP Card"
                               />
                             )}
+                          </div>
+                          <div className="shrink-0 flex items-center">
                             <RenderManaCost costStr={card.mana_cost} size={14} />
                           </div>
                         </div>
@@ -166,10 +198,10 @@ export function CardBreakdown({ cards, onCardClick, impactfulGrpIds }: CardBreak
   return (
     <div className="h-full flex gap-6 p-4 overflow-hidden min-h-0 divide-x divide-white/10">
       <div className="flex-1 min-w-0 h-full overflow-hidden">
-        {renderCardColumn('Your Deck', playerGrouped, false)}
+        {renderCardColumn('Cards You Played', playerGrouped, false)}
       </div>
       <div className="flex-1 min-w-0 h-full overflow-hidden pl-6">
-        {renderCardColumn('Opponent Cards', opponentGrouped, true)}
+        {renderCardColumn('Cards Opponent Played', opponentGrouped, true)}
       </div>
     </div>
   );
