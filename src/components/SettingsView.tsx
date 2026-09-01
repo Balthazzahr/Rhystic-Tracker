@@ -475,46 +475,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handlePreDownloadAvatars = async () => {
-    setAvatarDownloading(true);
-    setAvatarDownloadProgress('Starting avatar collection scan...');
-    try {
-      const avatarEntries = Object.entries(mtgaAvatarCatalog as Record<string, string>).filter(
-        ([_, name]) => name && !name.startsWith('$/') && name !== 'The Adventurer'
-      );
-      let downloaded = 0;
-      for (let i = 0; i < avatarEntries.length; i++) {
-        const [avatarId, name] = avatarEntries[i];
-        try {
-          const cached = await invoke<string | null>('has_avatar_image', { avatarId });
-          if (!cached) {
-            const url = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}&format=image&version=art_crop`;
-            const resp = await fetch(url);
-            if (resp.ok) {
-              const blob = await resp.blob();
-              const arrayBuf = await blob.arrayBuffer();
-              const data = Array.from(new Uint8Array(arrayBuf));
-              await invoke('save_avatar_image', { avatarId, data });
-              downloaded++;
-            }
-            await new Promise((r) => setTimeout(r, 60));
-          }
-        } catch {}
-        if (i % 5 === 0 || i === avatarEntries.length - 1) {
-          setAvatarDownloadProgress(`${i + 1}/${avatarEntries.length} scanned (${downloaded} downloaded)`);
-        }
-      }
-      await loadAvatarCacheStats();
-      setAvatarDownloadProgress(`Done! ${downloaded} new avatars cached locally.`);
-      setTimeout(() => setAvatarDownloadProgress(null), 4000);
-    } catch (e) {
-      console.error('Pre-download avatars error:', e);
-      setAvatarDownloadProgress('Error pre-downloading avatars');
-    } finally {
-      setAvatarDownloading(false);
-    }
-  };
-
   const handleSyncCardDb = async () => {
     setCardDbSyncing(true);
     setCardDbSyncResult(null);
