@@ -7,6 +7,7 @@ mod card_db;
 mod deck_list;
 mod settings;
 mod deck_legitimacy;
+mod dashboard;
 
 use tokio::sync::mpsc;
 use std::path::PathBuf;
@@ -5187,6 +5188,28 @@ async fn process_tailer_events(
     }
 }
 
+#[tauri::command]
+async fn get_dashboard_layout(db: tauri::State<'_, DatabaseManager>) -> Result<dashboard::DashboardLayoutPayload, String> {
+    db.get_dashboard_layout(dashboard::DEFAULT_LAYOUT_ID)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn save_dashboard_layout(db: tauri::State<'_, DatabaseManager>, layout: dashboard::DashboardLayoutPayload) -> Result<dashboard::DashboardLayoutPayload, String> {
+    db.save_dashboard_layout(dashboard::DEFAULT_LAYOUT_ID, &layout)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(layout)
+}
+
+#[tauri::command]
+async fn reset_dashboard_layout(db: tauri::State<'_, DatabaseManager>) -> Result<dashboard::DashboardLayoutPayload, String> {
+    db.reset_dashboard_layout(dashboard::DEFAULT_LAYOUT_ID)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
     // CRITICAL: Must be set BEFORE GTK/WebKit initializes any display connections to prevent DMA-BUF Wayland protocol crashes and black screens on NVIDIA/Linux drivers
     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
@@ -5439,7 +5462,10 @@ fn main() {
             set_deck_custom_bg_art,
             reset_deck_custom_bg_art,
             delete_match,
-            set_always_on_top
+            set_always_on_top,
+            get_dashboard_layout,
+            save_dashboard_layout,
+            reset_dashboard_layout
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

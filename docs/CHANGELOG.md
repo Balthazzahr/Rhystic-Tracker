@@ -2,7 +2,31 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [1.3.12] - 2026-09-02
+## [1.4.0] - 2026-09-02
+
+### 🍱 Dashboard 2.0: Modular Bento-Box Grid, Custom Theme Colors & Layout Architecture
+
+- **Configurable Bento-Box Widget Grid Architecture**:
+  - Rebuilt the core Dashboard around an extensible, persistent 12-column Bento-Box grid engine supporting multi-row dense packing and dynamic aspect ratios.
+  - Interactive Customize mode enabling direct drag-and-drop reordering, column width steppers (1c–12c), row height steppers (1r–8r), interactive drag-border resizing, and smart auto-filling row reflow upon widget removal.
+  - Complete widget catalog modal allowing arbitrary addition of dashboard modules: All-Time Win Rate, Today Win Rate, Current Streak, Trending Win Rate, Recent Matches, Deck Spotlight, Featured Leaderboard, Recent Achievements, Format Breakdown, and Fun Facts.
+  - Persistent layout engine backed by SQLite (`dashboard_layouts` table) and frontend client caching.
+- **Custom Module Color Customizer**:
+  - Interactive "Change Colors" modal allowing custom two-color pairings per module:
+    - All-Time Win Rate: Positive (≥50%) & Negative (<50%)
+    - Today Win Rate: Positive (≥50%) & Negative (<50%)
+    - Current Streak: Winning Streak & Losing Streak
+    - Trending Win Rate: Histogram Wins Bar & Losses Bar
+    - Recent Matches: Match Win & Match Loss
+  - Integrated with MTG mana swatches, custom hex picker inputs, and persistent storage.
+- **Responsive Dynamic Module Scaling**:
+  - Deck Spotlight: Adaptive card scaling down to 2r × 4c with miniature single-row notable cards.
+  - Recent Matches: Dynamic list displaying up to 50 matches when expanded, with compact mode hiding miniature cards on narrow widths.
+  - Current Streak: Large display formatting with live duration calculation elapsed since last win/loss.
+  - Recent Achievements: 2x enlarged heraldic shield badges with card artwork thumbnails.
+- **Sidebar & Header Modernization**:
+  - Unified `DASHBOARD` header with party ability icon across both new and legacy modes.
+  - Integrated full Rhystic Tracker wordmark logo in the sidebar header with auto-collapse to compact quill icon.
 
 ### 🏆 Achievements Modal Suite, Leaderboard Benchmarking & Search Bar Standardization
 

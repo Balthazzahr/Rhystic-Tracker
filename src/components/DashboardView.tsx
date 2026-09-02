@@ -77,6 +77,8 @@ interface DashboardViewProps {
   ) => void;
   hideBrandHeader?: boolean;
   isTestEnv?: boolean;
+  dashboardMode?: "2.0" | "legacy";
+  setDashboardMode?: (mode: "2.0" | "legacy") => void;
 }
 
 const scryfallArtUrl = (name: string) =>
@@ -167,6 +169,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onShowCard,
   hideBrandHeader = false,
   isTestEnv = false,
+  dashboardMode = "legacy",
+  setDashboardMode,
 }) => {
   const [chartFormat, setChartFormat] = useState("ALL");
   const [chartTime, setChartTime] = useState("14D");
@@ -958,32 +962,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar px-8 py-4">
-      {/* 0. BRAND LOGO + TEST ENVIRONMENT BADGE */}
-      <div
-        className={`flex flex-col items-center justify-center shrink-0 transition-opacity duration-500 pt-1 pb-2 ${
-          hideBrandHeader ? "opacity-0" : "opacity-100"
-        }`}
-      >
-        <div className="flex items-center justify-center gap-3">
-          <img
-            src={iconSvg}
-            alt=""
-            className="h-[48px] w-auto object-contain drop-shadow-md"
+      {/* TOP HEADER & MODE SWITCHER */}
+      <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0 gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span
+            className="ms ms-ability-party text-2xl leading-none"
+            style={{ color: accentColor }}
           />
-          <img
-            src={logoSvg}
-            alt="Rhystic Tracker"
-            className="h-[56px] w-auto object-contain drop-shadow-md"
-          />
-        </div>
-        {isTestEnv && (
-          <div className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-0.5 rounded text-xs font-mono font-bold tracking-wider bg-purple-950/70 border border-purple-500/50 text-purple-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-            <span>TEST ENVIRONMENT</span>
-            <span className="opacity-40">•</span>
-            <span className="opacity-70 text-[10px] lowercase font-normal">
-              rhystic_dev.db
+          <h1 className="text-[26px] font-display font-bold tracking-[0.12em] uppercase text-white leading-none">
+            DASHBOARD
+          </h1>
+          {isTestEnv && (
+            <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider rounded bg-purple-950/70 border border-purple-500/50 text-purple-300">
+              TEST ENV
             </span>
+          )}
+        </div>
+
+        {setDashboardMode && (
+          <div className="flex items-center bg-white/[0.04] p-0.5 border border-white/10">
+            <button
+              onClick={() => setDashboardMode("2.0")}
+              className={`px-3 py-1 text-xs font-sans font-medium transition-all ${
+                dashboardMode === "2.0"
+                  ? "bg-white/[0.12] text-white shadow-sm font-bold"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setDashboardMode("legacy")}
+              className={`px-3 py-1 text-xs font-sans font-medium transition-all ${
+                dashboardMode === "legacy"
+                  ? "bg-white/[0.12] text-white shadow-sm font-bold"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              Legacy
+            </button>
           </div>
         )}
       </div>

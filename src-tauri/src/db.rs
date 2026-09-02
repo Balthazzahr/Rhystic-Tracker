@@ -1,6 +1,7 @@
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use chrono::{DateTime, Utc};
 use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord, MatchImpactfulRecord};
+use crate::dashboard::{default_dashboard_layout, validate_layout, DashboardLayoutPayload};
 
 pub struct DatabaseManager {
     pool: Pool<Sqlite>,
@@ -143,6 +144,13 @@ CREATE TABLE IF NOT EXISTS sets_metadata (
     name TEXT NOT NULL,
     released_at TEXT,
     icon_svg_uri TEXT,
+    updated_at TEXT NOT NULL
+);
+-- Configurable dashboard widget grid layout persistence.
+CREATE TABLE IF NOT EXISTS dashboard_layouts (
+    id TEXT PRIMARY KEY,
+    schema_version INTEGER NOT NULL,
+    layout_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 "#;
@@ -1602,6 +1610,64 @@ impl DatabaseManager {
         .await?;
         Ok(row.map(|(c,)| c > 0).unwrap_or(false))
     }
+
+    /// Retrieve the dashboard layout from SQLite. If missing, corrupt, or invalid,
+    /// falls back to saving and returning the default 6-widget layout.
+    pub async fn get_dashboard_layout(&self, layout_id: &str) -> Result<DashboardLayoutPayload, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query("SELECT schema_version, layout_json FROM dashboard_layouts WHERE id = ?")
+            .bind(layout_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some(r) = row {
+            let version: i64 = r.get("schema_version");
+            let json_str: String = r.get("layout_json");
+            if let Ok(mut payload) = serde_json::from_str::<DashboardLayoutPayload>(&json_str) {
+                payload.schema_version = version as u32;
+                if validate_layout(&payload).is_ok() {
+                    return Ok(payload);
+                }
+            }
+        }
+
+        // Fresh install / missing / invalid data: save & return default layout
+        let default_layout = default_dashboard_layout();
+        let _ = self.save_dashboard_layout(layout_id, &default_layout).await;
+        Ok(default_layout)
+    }
+
+    /// Persist a dashboard layout into SQLite after validating widget kinds & dimensions.
+    pub async fn save_dashboard_layout(&self, layout_id: &str, layout: &DashboardLayoutPayload) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        validate_layout(layout).map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?;
+        let json_str = serde_json::to_string(layout)?;
+        let now = Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            INSERT INTO dashboard_layouts (id, schema_version, layout_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                schema_version = excluded.schema_version,
+                layout_json = excluded.layout_json,
+                updated_at = excluded.updated_at
+            "#
+        )
+        .bind(layout_id)
+        .bind(layout.schema_version as i64)
+        .bind(json_str)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Reset a dashboard layout to the default 6-widget layout and persist it.
+    pub async fn reset_dashboard_layout(&self, layout_id: &str) -> Result<DashboardLayoutPayload, Box<dyn std::error::Error + Send + Sync>> {
+        let default_layout = default_dashboard_layout();
+        self.save_dashboard_layout(layout_id, &default_layout).await?;
+        Ok(default_layout)
+    }
 }
 
 #[cfg(test)]
@@ -2042,6 +2108,77 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(owned_86715, 4);
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_layout_fresh_fallback() {
+        let db = in_memory_db().await;
+        // On empty DB, get_dashboard_layout should return and persist the default 10-widget layout
+        let layout = db.get_dashboard_layout("default").await.unwrap();
+        assert_eq!(layout.schema_version, 1);
+        assert_eq!(layout.widgets.len(), 10);
+        assert_eq!(layout.widgets[0].kind, "win_rate_summary");
+
+        // Verify it was persisted to SQLite
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM dashboard_layouts WHERE id = 'default'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_layout_save_and_load() {
+        let db = in_memory_db().await;
+        let mut custom = default_dashboard_layout();
+        custom.widgets[0].x = 2;
+        custom.widgets[0].y = 3;
+        custom.widgets[0].width = 6;
+        custom.widgets[0].height = 2;
+        custom.widgets[0].settings = serde_json::json!({ "custom_key": "custom_value" });
+
+        db.save_dashboard_layout("default", &custom).await.unwrap();
+
+        let loaded = db.get_dashboard_layout("default").await.unwrap();
+        assert_eq!(loaded.widgets[0].x, 2);
+        assert_eq!(loaded.widgets[0].y, 3);
+        assert_eq!(loaded.widgets[0].width, 6);
+        assert_eq!(loaded.widgets[0].height, 2);
+        assert_eq!(loaded.widgets[0].settings["custom_key"], "custom_value");
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_layout_invalid_kind_rejected_and_fallback() {
+        let db = in_memory_db().await;
+        let mut invalid = default_dashboard_layout();
+        invalid.widgets[0].kind = "malicious_widget_kind".to_string();
+
+        let res = db.save_dashboard_layout("default", &invalid).await;
+        assert!(res.is_err(), "Saving invalid kind must return error");
+
+        // Manually insert corrupted raw JSON into SQLite to test corrupt fallback behavior
+        sqlx::query("INSERT INTO dashboard_layouts (id, schema_version, layout_json, updated_at) VALUES ('corrupted', 1, '{\"schema_version\":1,\"widgets\":[{\"id\":\"w1\",\"kind\":\"unknown_kind\",\"x\":0,\"y\":0,\"width\":1,\"height\":1,\"settings\":{}}]}', '2026-09-02')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        let fallback = db.get_dashboard_layout("corrupted").await.unwrap();
+        assert_eq!(fallback.widgets.len(), 10, "Corrupted layout must fall back to default 10-widget layout");
+        assert_eq!(fallback.widgets[0].kind, "win_rate_summary");
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_layout_reset() {
+        let db = in_memory_db().await;
+        let mut custom = default_dashboard_layout();
+        custom.widgets[0].width = 8;
+        db.save_dashboard_layout("default", &custom).await.unwrap();
+
+        let reset = db.reset_dashboard_layout("default").await.unwrap();
+        assert_eq!(reset.widgets[0].width, 4, "Reset must restore default width");
+
+        let loaded = db.get_dashboard_layout("default").await.unwrap();
+        assert_eq!(loaded.widgets[0].width, 4);
     }
 }
 

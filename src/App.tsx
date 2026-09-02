@@ -42,6 +42,7 @@ import { AchievementBadge } from './components/AchievementBadge';
 import { OpponentH2HModal } from './components/OpponentH2HModal';
 import { DeckDetailView } from './components/DeckDetailView';
 import { DashboardView } from './components/DashboardView';
+import { Dashboard2View } from './components/dashboard/Dashboard2View';
 import { CardNameTooltip } from './components/CardNameTooltip';
 import { CardImage } from './components/CardImage';
 import { CardTrophyCaseModal } from './components/CardTrophyCaseModal';
@@ -397,6 +398,16 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('deckCardSize', deckCardSize);
   }, [deckCardSize]);
+
+  // Dashboard view mode: '2.0' (default) or 'legacy', persisted locally.
+  const [dashboardMode, setDashboardMode] = useState<'2.0' | 'legacy'>(() => {
+    const saved = localStorage.getItem('rhystic_dashboard_mode');
+    return saved === '2.0' ? '2.0' : 'legacy';
+  });
+  const handleSetDashboardMode = (mode: '2.0' | 'legacy') => {
+    setDashboardMode(mode);
+    localStorage.setItem('rhystic_dashboard_mode', mode);
+  };
   // Measure the available area of the card grid to derive the card size.
   const cardAreaRef = useRef<HTMLDivElement>(null);
   const [cardArea, setCardArea] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -1495,22 +1506,29 @@ export default function App() {
         }}
       >
         <div className="flex flex-col flex-1 min-h-0">
-          {/* Logo Brand Section: symbol icon always shown, centered. */}
+          {/* Logo Brand Section: Logo image above symbol icon */}
           <div 
-            className={`flex flex-col items-center justify-center shrink-0 transition-all pt-3 pb-4 ${
+            className={`flex flex-col items-center justify-center shrink-0 transition-all pt-2 pb-3.5 ${
               isSidebarCollapsed ? 'px-0' : 'px-2'
             }`}
           >
+            {!isSidebarCollapsed && (
+              <img 
+                src={logoImg} 
+                alt="Rhystic Tracker" 
+                className="h-8 w-auto object-contain drop-shadow-md mb-2.5 transition-all"
+              />
+            )}
             <img 
               src={symbolIcon} 
-              alt="Rhystic Tracker" 
+              alt="Rhystic Tracker Icon" 
               className={`object-contain w-auto drop-shadow-md transition-all ${
-                isSidebarCollapsed ? 'h-8' : 'h-[75px]'
+                isSidebarCollapsed ? 'h-8' : 'h-[50px]'
               }`}
             />
             {envInfo?.is_test && (
               <div 
-                className={`mt-2.5 rounded-full border font-mono font-bold tracking-wider transition-all select-none flex items-center justify-center gap-1.5 shadow-sm ${
+                className={`mt-2 rounded-full border font-mono font-bold tracking-wider transition-all select-none flex items-center justify-center gap-1.5 shadow-sm ${
                   isSidebarCollapsed ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-3 py-0.5'
                 }`}
                 style={{
@@ -1636,20 +1654,41 @@ export default function App() {
         
         {/* VIEW 1: Dashboard (default landing view) */}
         {activeTab === 'dashboard' && (
-          <DashboardView
-            matches={matches}
-            deckOverview={deckOverview}
-            palette={palette}
-            formatOptions={formatOptions}
-            timeOptions={timeOptions}
-            onSelectMatch={(matchId) => {
-              setSelectedMatchId(matchId);
-              setIsFullInfoOpen(true);
-            }}
-            onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
-            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
-            isTestEnv={envInfo?.is_test}
-          />
+          dashboardMode === '2.0' ? (
+            <Dashboard2View
+              matches={matches}
+              deckOverview={deckOverview}
+              palette={palette}
+              formatOptions={formatOptions}
+              timeOptions={timeOptions}
+              onSelectMatch={(matchId) => {
+                setSelectedMatchId(matchId);
+                setIsFullInfoOpen(true);
+              }}
+              onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
+              onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+              isTestEnv={envInfo?.is_test}
+              dashboardMode={dashboardMode}
+              setDashboardMode={handleSetDashboardMode}
+            />
+          ) : (
+            <DashboardView
+              matches={matches}
+              deckOverview={deckOverview}
+              palette={palette}
+              formatOptions={formatOptions}
+              timeOptions={timeOptions}
+              onSelectMatch={(matchId) => {
+                setSelectedMatchId(matchId);
+                setIsFullInfoOpen(true);
+              }}
+              onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
+              onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+              isTestEnv={envInfo?.is_test}
+              dashboardMode={dashboardMode}
+              setDashboardMode={handleSetDashboardMode}
+            />
+          )
         )}
 
         {/* VIEW 2: Settings Screen */}
