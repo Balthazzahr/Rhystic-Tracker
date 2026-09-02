@@ -6,6 +6,7 @@ import { parseMtgaManaCost } from '../utils/manaUtils';
 import { AchievementBadge } from './AchievementBadge';
 import { setCardStylePref } from '../utils/cardStylePrefs';
 import { CardImage } from './CardImage';
+import { cleanCardName } from '../utils/cardImageCache';
 
 interface CardInspectorModalProps {
   isOpen: boolean;
@@ -96,7 +97,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
   const [, setOverlayImgTriedNamed] = useState(false);
   const [, setOverlayImgFailed] = useState(false);
 
-  const cardName = deckCardOverlay?.card?.name || 'Card';
+  const cardName = cleanCardName(deckCardOverlay?.card?.name) || 'Card';
 
   useEffect(() => {
     setOverlayImgFailed(false);

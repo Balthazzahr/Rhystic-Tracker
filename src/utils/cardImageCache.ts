@@ -78,9 +78,13 @@ async function fetchImageBlob(url: string, retries = 2, delayMs = 300): Promise<
   throw new Error(`Failed to fetch image after retries: ${url}`);
 }
 
-export function cleanCardNameForScryfall(name: string): string {
+export function cleanCardName(name?: string | null): string {
   if (!name) return '';
-  return name.trim();
+  return name.replace(/<[^>]+>/g, '').trim();
+}
+
+export function cleanCardNameForScryfall(name: string): string {
+  return cleanCardName(name);
 }
 
 function blobToBytes(blob: Blob): Promise<Uint8Array> {

@@ -7,7 +7,7 @@ import { MatchTimeline } from './MatchTimeline';
 import CardImage from './CardImage';
 import AvatarImage from './AvatarImage';
 import PlatformBadge, { formatPlatformName } from './PlatformBadge';
-import { ensureLocalImage } from '../utils/cardImageCache';
+import { ensureLocalImage, cleanCardName } from '../utils/cardImageCache';
 
 interface FullMatchInfoModalProps {
   isOpen: boolean;
@@ -200,7 +200,7 @@ export function FullMatchInfoModal({
           {/* --- HERO SIDE (Left: Avatar rising behind window + Deck Info + Larger Mana Pips Underneath) --- */}
           <div className="flex-1 flex items-end gap-4 min-w-0 justify-start">
             {/* Hero Avatar (Standing behind the modal window top rim) */}
-            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-4 sm:translate-y-5 -mb-4 sm:-mb-5 z-0">
+            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
               <AvatarImage
                 avatarId={heroAvatar}
                 className="h-full"
@@ -258,7 +258,7 @@ export function FullMatchInfoModal({
             </div>
 
             {/* Opponent Avatar (Standing behind the modal window top rim) */}
-            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-4 sm:translate-y-5 -mb-4 sm:-mb-5 z-0">
+            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
               <AvatarImage
                 avatarId={oppAvatar}
                 isOpponent={true}
@@ -322,7 +322,7 @@ export function FullMatchInfoModal({
                             />
                           </div>
                           <p className="text-[11px] font-bold font-sans text-white truncate shrink-0 mt-0.5">
-                            {commanderInfo.player_commander.name}
+                            {cleanCardName(commanderInfo.player_commander.name)}
                           </p>
                         </>
                       ) : (
@@ -349,7 +349,7 @@ export function FullMatchInfoModal({
                             />
                           </div>
                           <p className="text-[11px] font-bold font-sans text-white truncate shrink-0 mt-0.5">
-                            {commanderInfo.opponent_commander.name}
+                            {cleanCardName(commanderInfo.opponent_commander.name)}
                           </p>
                         </>
                       ) : (

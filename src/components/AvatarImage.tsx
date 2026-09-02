@@ -33,12 +33,16 @@ export function AvatarImage({
     };
   }, [avatarId]);
 
+  const avatarKey = (avatarId || '').toLowerCase();
+  const isSmaug = avatarKey.includes('smaug');
+
   return (
     <div className={`relative flex items-end justify-center select-none ${className}`}>
       <img
         src={cachedUrl && !loadFailed ? cachedUrl : defaultAvatarImg}
         alt={avatarId || 'Avatar'}
         onError={() => setLoadFailed(true)}
+        style={isSmaug ? { transform: 'translateY(-28px) scale(1.12)' } : undefined}
         className={`h-full w-auto max-w-full object-contain object-bottom drop-shadow-2xl transition-transform duration-300 ${
           isOpponent ? 'scale-x-[-1]' : ''
         }`}

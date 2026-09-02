@@ -4,6 +4,12 @@ All notable changes to Rhystic Tracker are documented here.
 
 ## [1.4.0] - 2026-09-02
 
+### ⚡ Urgent Hotfix (Post-Release)
+- **Mana Dynamo Per-Instance Tracking**: Resolved bug where tapping multiple copies of basic lands (e.g. 5 Snow-Covered Forests) aggregated into the same card definition ID; now strictly tracks burst mana output per individual battlefield permanent instance.
+- **Swarmer Token Attribution**: Removed unbounded backwards search across match history that erroneously credited tokens created in later turns to single-token spells (e.g. Ranger Class).
+- **Card Name HTML Tag Sanitization**: Cleaned raw HTML markup (e.g. `<i>il</i>` in *Elas il-Kor, Sadistic Pilgrim*) across Card Inspector, Commander badges, Card Breakdown, and SQLite `cards_cache`.
+- **Match Inspector Avatar Polish**: Lifted baseline standing avatar height and added custom upward focal offset/scaling for Smaug.
+
 ### 🍱 Dashboard 2.0: Modular Bento-Box Grid, Custom Theme Colors & Layout Architecture
 
 - **Configurable Bento-Box Widget Grid Architecture**:

@@ -521,9 +521,24 @@ impl DatabaseManager {
                         let cmc = cmc_opt.unwrap_or(0);
 
                         if is_land {
+                            let is_basic_or_regular = type_str.contains("basic")
+                                || name == "forest"
+                                || name == "plains"
+                                || name == "island"
+                                || name == "swamp"
+                                || name == "mountain"
+                                || name.starts_with("snow-covered ");
+                            if is_basic_or_regular {
+                                // Basic and standard 1-mana lands cannot produce 5+ burst mana from a single instance
+                                titles.retain(|t| !t.starts_with("Mana Dynamo"));
+                            }
                             // Lands can only ever receive Mana Dynamo
                             titles.retain(|t| t.starts_with("Mana Dynamo"));
                         } else {
+                            // Ranger Class only spawns 1 Wolf token on ETB, cannot legitimately earn Swarmer (20+ tokens)
+                            if name.contains("ranger class") {
+                                titles.retain(|t| !t.starts_with("Swarmer"));
+                            }
                             // Non-land cards with CMC < 5 cannot receive Scoop Inducer
                             if cmc < 5 {
                                 titles.retain(|t| !t.starts_with("Scoop Inducer"));
@@ -589,6 +604,15 @@ impl DatabaseManager {
             WHERE max_hit >= 10 AND max_hit < 20 
               AND (titles IS NULL OR titles = '' OR titles = '[]')
               AND match_id IN (SELECT id FROM matches WHERE timestamp >= '2026-08-23T06:30:00')
+            "#
+        ).execute(&pool).await;
+
+        // Migration: Sanitize HTML tags in cards_cache.name (e.g. <i>il</i> in Elas il-Kor)
+        let _ = sqlx::query(
+            r#"
+            UPDATE cards_cache
+            SET name = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(name, '<i>', ''), '</i>', ''), '<I>', ''), '</I>', ''), '<nobr>', ''), '</nobr>', '')
+            WHERE name LIKE '%<%'
             "#
         ).execute(&pool).await;
 

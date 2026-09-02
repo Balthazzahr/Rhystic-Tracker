@@ -183,7 +183,8 @@ pub struct MatchAssembler {
     pub seen_damage_annotation_ids: HashSet<u32>,
     pub active_life_sources: HashMap<u32, u32>, // target_seat -> source_instance_id
     pub turn_damage_taken_by_instance: HashMap<u32, i32>, // instanceId -> combat damage taken this turn
-    pub turn_mana_by_source: HashMap<u32, u32>, // grp_id -> mana generated this turn
+    pub turn_mana_by_instance: HashMap<u32, u32>, // permanent_instance_id -> mana generated this turn
+    pub token_spawner_map: HashMap<u32, u32>, // token_instance_id -> spawner_grp_id
     pub pending_counter_events: Vec<(u32, u32)>, // (affector_grp_id, target_grp_id)
     pub card_cmc_map: HashMap<u32, u32>, // grp_id -> cmc
     pub feed_seq: u64,
@@ -241,7 +242,8 @@ impl MatchAssembler {
             seen_damage_annotation_ids: HashSet::new(),
             active_life_sources: HashMap::new(),
             turn_damage_taken_by_instance: HashMap::new(),
-            turn_mana_by_source: HashMap::new(),
+            turn_mana_by_instance: HashMap::new(),
+            token_spawner_map: HashMap::new(),
             pending_counter_events: Vec::new(),
             card_cmc_map: HashMap::new(),
             feed_seq: 0,
@@ -320,6 +322,8 @@ impl MatchAssembler {
         self.processed_msg_ids.clear();
         self.token_instance_ids.clear();
         self.token_grp_ids.clear();
+        self.token_spawner_map.clear();
+        self.turn_mana_by_instance.clear();
         self.current_turn = 0;
         self.feed_seq = 0;
         self.player_seat_id = 1;
@@ -760,11 +764,11 @@ impl MatchAssembler {
             // Token created directly on the battlefield
             event_type = Some("token".to_string());
             if seat_id == self.player_seat_id {
-                let spawner_grp = self.ability_parent_map.get(&instance_id)
-                    .and_then(|p| self.instance_map.get(p))
-                    .copied()
+                let spawner_grp = self.token_spawner_map.get(&instance_id).copied()
                     .or_else(|| {
-                        self.turn_events.iter().rev().find(|e| e.seat_id == self.player_seat_id && e.event_type == "play" && !self.token_grp_ids.contains(&e.grp_id)).map(|e| e.grp_id)
+                        self.ability_parent_map.get(&instance_id)
+                            .and_then(|p| self.instance_map.get(p))
+                            .copied()
                     });
                 if let Some(s_grp) = spawner_grp {
                     if !self.token_grp_ids.contains(&s_grp) {
@@ -1245,6 +1249,10 @@ impl MatchAssembler {
             return;
         }
 
+        for target_id in affected_ids {
+            self.token_spawner_map.insert(*target_id, affector_grp);
+        }
+
         let is_wipe_category = category.eq_ignore_ascii_case("Destroy")
             || category.eq_ignore_ascii_case("Exile")
             || category.eq_ignore_ascii_case("Sacrifice")
@@ -1319,12 +1327,13 @@ impl MatchAssembler {
         let mut grp_id = self.instance_map.get(&affector_id).copied().unwrap_or(0);
         let mut seat_id = self.instance_owner_map.get(&affector_id).copied().unwrap_or(0);
 
-        if (grp_id == 0 || seat_id == 0) && self.ability_parent_map.contains_key(&affector_id) {
-            if let Some(parent_id) = self.ability_parent_map.get(&affector_id).copied() {
-                if let Some(pgid) = self.instance_map.get(&parent_id).copied() { grp_id = pgid; }
-                if seat_id == 0 { seat_id = self.instance_owner_map.get(&parent_id).copied().unwrap_or(0); }
-            }
-        }
+        let permanent_instance_id = if let Some(parent_id) = self.ability_parent_map.get(&affector_id).copied() {
+            if let Some(pgid) = self.instance_map.get(&parent_id).copied() { grp_id = pgid; }
+            if seat_id == 0 { seat_id = self.instance_owner_map.get(&parent_id).copied().unwrap_or(0); }
+            parent_id
+        } else {
+            affector_id
+        };
 
         if grp_id == 0 {
             return;
@@ -1334,7 +1343,7 @@ impl MatchAssembler {
             // Mana Dynamo tracking (Hero permanent generating mana in turn)
             let entry = self.impactful_cards.entry(grp_id).or_default();
             if entry.seat_id == 0 { entry.seat_id = seat_id; }
-            let turn_val = self.turn_mana_by_source.entry(grp_id).or_insert(0);
+            let turn_val = self.turn_mana_by_instance.entry(permanent_instance_id).or_insert(0);
             *turn_val += count;
             if *turn_val > entry.max_turn_mana {
                 entry.max_turn_mana = *turn_val;
@@ -1411,7 +1420,7 @@ impl MatchAssembler {
         if turn > 0 {
             if turn > self.current_turn {
                 self.evaluate_ironclad();
-                self.turn_mana_by_source.clear();
+                self.turn_mana_by_instance.clear();
                 self.current_turn_hero_hits.clear();
                 self.opp_life_before_combat = self.current_opp_life;
             }
@@ -2727,6 +2736,88 @@ use super::*;
         if let Some(island) = impactful.iter().find(|i| i.grp_id == 8888) {
             assert!(!island.titles.iter().any(|t| t.starts_with("Cat Burglar")), "Island must NOT receive Cat Burglar");
             assert!(!island.titles.iter().any(|t| t.starts_with("Tax Collector")), "Island must NOT receive Tax Collector");
+        }
+    }
+
+    #[test]
+    fn test_multiple_basic_lands_do_not_earn_mana_dynamo() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-forest-test".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 5, &[(1, 20), (2, 20)], 1);
+
+        // Hero plays 5 separate Snow-Covered Forests (same grp_id 74213, different instance IDs 101..=105)
+        for inst in 101..=105 {
+            assembler.process_game_object(inst, Some(74213), Some(1), 28, true, false, None);
+        }
+
+        // In turn 5, each forest taps for 1 mana (total 5 mana paid by hero across 5 different instances)
+        for inst in 101..=105 {
+            assembler.process_mana_paid_event(inst, 1);
+        }
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+        if let Some(forest) = impactful.iter().find(|i| i.grp_id == 74213) {
+            assert!(!forest.titles.iter().any(|t| t.starts_with("Mana Dynamo")), "5 basic lands generating 1 mana each must NOT award Mana Dynamo");
+        }
+    }
+
+    #[test]
+    fn test_single_land_burst_mana_earns_mana_dynamo() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-nykthos-test".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 5, &[(1, 20), (2, 20)], 1);
+
+        // Hero plays Nykthos, Shrine to Nyx (grp 45678, inst 50)
+        assembler.process_game_object(50, Some(45678), Some(1), 28, true, false, None);
+
+        // Nykthos produces 8 mana in turn 5 from its single instance
+        assembler.process_mana_paid_event(50, 8);
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+        let nykthos = impactful.iter().find(|i| i.grp_id == 45678).expect("Nykthos must be impactful");
+        assert!(nykthos.titles.contains(&"Mana Dynamo (Silver)".to_string()), "Single land generating 8 burst mana must earn Mana Dynamo (Silver)");
+    }
+
+    #[test]
+    fn test_ranger_class_single_token_does_not_earn_swarmer_from_unlinked_tokens() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-ranger-test".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Turn 2: Cast Ranger Class (grp 77519, inst 60)
+        assembler.update_game_state(Some(1), 2, &[(1, 20), (2, 20)], 1);
+        assembler.process_game_object(60, Some(77519), Some(1), 27, true, false, None);
+        assembler.process_game_object(60, Some(77519), Some(1), 28, true, false, None);
+
+        // 1 Wolf token spawned by Ranger Class (inst 100)
+        assembler.register_ability_parent(100, 60);
+        assembler.process_game_object(100, Some(99001), Some(1), 28, false, true, Some("Wolf".to_string()));
+
+        // Turn 3: 25 unlinked tokens enter the battlefield (no link to Ranger Class)
+        assembler.update_game_state(Some(2), 3, &[(1, 20), (2, 20)], 1);
+        for i in 1..=25 {
+            assembler.process_game_object(200 + i, Some(99002), Some(1), 28, false, true, Some("Elemental".to_string()));
+        }
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+        if let Some(ranger) = impactful.iter().find(|i| i.grp_id == 77519) {
+            assert!(!ranger.titles.iter().any(|t| t.starts_with("Swarmer")), "Ranger Class must NOT receive Swarmer from unlinked tokens");
         }
     }
 }

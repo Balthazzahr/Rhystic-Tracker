@@ -1,5 +1,6 @@
 import React from 'react';
 import { RenderManaCost, parseMtgaManaCost } from '../utils/manaUtils';
+import { cleanCardName } from '../utils/cardImageCache';
 
 export interface CardItem {
   grp_id: number;
@@ -170,7 +171,7 @@ export function CardBreakdown({ cards, onCardClick, impactfulGrpIds, searchTerm 
                                   : 'font-medium text-white'
                               }`}
                             >
-                              {card.name}
+                              {cleanCardName(card.name)}
                             </span>
                             {isImpactful && (
                               <span
