@@ -5189,14 +5189,16 @@ async fn process_tailer_events(
 }
 
 #[tauri::command]
-async fn get_dashboard_layout(db: tauri::State<'_, DatabaseManager>) -> Result<dashboard::DashboardLayoutPayload, String> {
+async fn get_dashboard_layout() -> Result<dashboard::DashboardLayoutPayload, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     db.get_dashboard_layout(dashboard::DEFAULT_LAYOUT_ID)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn save_dashboard_layout(db: tauri::State<'_, DatabaseManager>, layout: dashboard::DashboardLayoutPayload) -> Result<dashboard::DashboardLayoutPayload, String> {
+async fn save_dashboard_layout(layout: dashboard::DashboardLayoutPayload) -> Result<dashboard::DashboardLayoutPayload, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     db.save_dashboard_layout(dashboard::DEFAULT_LAYOUT_ID, &layout)
         .await
         .map_err(|e| e.to_string())?;
@@ -5204,7 +5206,8 @@ async fn save_dashboard_layout(db: tauri::State<'_, DatabaseManager>, layout: da
 }
 
 #[tauri::command]
-async fn reset_dashboard_layout(db: tauri::State<'_, DatabaseManager>) -> Result<dashboard::DashboardLayoutPayload, String> {
+async fn reset_dashboard_layout() -> Result<dashboard::DashboardLayoutPayload, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
     db.reset_dashboard_layout(dashboard::DEFAULT_LAYOUT_ID)
         .await
         .map_err(|e| e.to_string())

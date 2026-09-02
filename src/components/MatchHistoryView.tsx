@@ -188,6 +188,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   const [timeFilter, setTimeFilter] = useState<'ALL' | '7D' | 'LAST_WEEK' | '30D' | 'PREV_MONTH' | 'THIS_YEAR' | 'PREV_YEAR'>('ALL');
   const [resultFilter, setResultFilter] = useState<'ALL' | 'win' | 'loss'>('ALL');
   const [positionFilter, setPositionFilter] = useState<'ALL' | 'play' | 'draw'>('ALL');
+  const [deckFilter, setDeckFilter] = useState<string>('ALL');
   const [showAdvModal, setShowAdvModal] = useState(false);
 
   // Match Deletion state
@@ -413,6 +414,22 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     return map;
   }, [deckOverview]);
 
+  // Extract unique deck names for the Deck filter in Advanced Filters modal
+  const deckOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of matches) {
+      if (m.player_deck_name && m.player_deck_name !== 'Selected Deck') {
+        set.add(m.player_deck_name);
+      }
+    }
+    for (const d of deckOverview) {
+      if (d.deck_name) {
+        set.add(d.deck_name);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [matches, deckOverview]);
+
   // Deck artwork lookup
   const getDeckArt = (deckName?: string, commanderName?: string): string => {
     if (commanderName) return commanderName;
@@ -442,6 +459,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
       // 1. Result filter
       if (resultFilter !== 'ALL' && m.result !== resultFilter) return false;
+
+      // 1.5 Deck filter
+      if (deckFilter !== 'ALL' && m.player_deck_name !== deckFilter) return false;
 
       // 2. Format filter
       if (formatFilter !== 'ALL') {
@@ -490,21 +510,23 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
       return true;
     });
-  }, [matches, searchTerm, formatFilter, timeFilter, resultFilter, positionFilter, colorFilter]);
+  }, [matches, searchTerm, formatFilter, timeFilter, resultFilter, positionFilter, deckFilter, colorFilter]);
 
-  const hasActiveAdvancedFilters = formatFilter !== 'ALL' || timeFilter !== 'ALL' || resultFilter !== 'ALL' || positionFilter !== 'ALL';
+  const hasActiveAdvancedFilters = formatFilter !== 'ALL' || timeFilter !== 'ALL' || resultFilter !== 'ALL' || positionFilter !== 'ALL' || deckFilter !== 'ALL';
 
   const activeAdvancedFilterCount =
     (formatFilter !== 'ALL' ? 1 : 0) +
     (timeFilter !== 'ALL' ? 1 : 0) +
     (resultFilter !== 'ALL' ? 1 : 0) +
-    (positionFilter !== 'ALL' ? 1 : 0);
+    (positionFilter !== 'ALL' ? 1 : 0) +
+    (deckFilter !== 'ALL' ? 1 : 0);
 
   const clearAdvancedFilters = () => {
     setFormatFilter('ALL');
     setTimeFilter('ALL');
     setResultFilter('ALL');
     setPositionFilter('ALL');
+    setDeckFilter('ALL');
   };
 
   const activeChips = useMemo(() => {
@@ -516,6 +538,14 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         key: 'format',
         label: `Format: ${opt?.label || formatFilter}`,
         onRemove: () => setFormatFilter('ALL'),
+      });
+    }
+
+    if (deckFilter !== 'ALL') {
+      chips.push({
+        key: 'deck',
+        label: `Deck: ${deckFilter}`,
+        onRemove: () => setDeckFilter('ALL'),
       });
     }
 
@@ -545,7 +575,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     }
 
     return chips;
-  }, [formatFilter, timeFilter, resultFilter, positionFilter, normalizedFormatOptions]);
+  }, [formatFilter, deckFilter, timeFilter, resultFilter, positionFilter, normalizedFormatOptions]);
 
   // --- Pagination (30 matches per page) ---
   const [page, setPage] = useState(1);
