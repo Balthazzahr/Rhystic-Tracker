@@ -15,6 +15,7 @@ import { ChevronRight, X } from "lucide-react";
 import { ManaPip } from "./ManaPip";
 import { CardNameTooltip } from "./CardNameTooltip";
 import { AchievementBadge } from "./AchievementBadge";
+import { AchievementDetailModal } from "./AchievementDetailModal";
 import { getAchievementMeta } from "../utils/achievementBadges";
 import logoSvg from "../assets/RhysticTrackerLogo.svg";
 import iconSvg from "../assets/RhysticTrackerICON.svg";
@@ -171,8 +172,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [chartTime, setChartTime] = useState("14D");
   const [rawAchievements, setRawAchievements] = useState<any[]>([]);
   const [recentAchievements, setRecentAchievements] = useState<any[]>([]);
-  const [selectedAchievement, setSelectedAchievement] = useState<any>(null);
   const [featuredLeaderboard, setFeaturedLeaderboard] = useState<any>(null);
+  const [inspectedAchievement, setInspectedAchievement] = useState<any>(null);
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
 
@@ -180,17 +181,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     () => matches.filter((m) => m.result === "win" || m.result === "loss"),
     [matches],
   );
-
-  // Escape key listener for achievement drilldown
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedAchievement(null);
-    };
-    if (selectedAchievement) {
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [selectedAchievement]);
 
   // ---- Fetch Global Achievements for Highlights & Drilldown ----
   useEffect(() => {
@@ -1715,10 +1705,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             card_name: item.cardName,
                             grp_id: item.grpId,
                             count: item.count,
+                            highest_tier: item.tier,
                           },
                         ],
                       };
-                      setSelectedAchievement(found);
+                      setInspectedAchievement(found);
                     }}
                     className="flex items-center justify-between gap-3 p-2 bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors cursor-pointer group"
                   >
@@ -1824,91 +1815,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* ACHIEVEMENT PREVIEWER MODAL */}
-      {selectedAchievement && (
-        <div
-          className="fixed inset-0 z-[999] flex flex-col items-center justify-center p-6 bg-black/85 backdrop-blur-2xl select-none"
-          onClick={() => setSelectedAchievement(null)}
-        >
-          <div
-            className="flex flex-col max-w-2xl w-full max-h-[85vh] rounded-2xl border border-white/20 shadow-2xl overflow-hidden bg-neutral-900/95 backdrop-blur-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="p-5 border-b border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <AchievementBadge
-                  title={selectedAchievement.achievement}
-                  tier={selectedAchievement.highest_tier}
-                  count={selectedAchievement.total_awards}
-                  size="xl"
-                  showTitle={false}
-                  showCount={false}
-                />
-                <div>
-                  <h3 className="text-lg font-display font-bold text-white leading-tight">
-                    {getAchievementMeta(selectedAchievement.achievement).title}
-                  </h3>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    {
-                      getAchievementMeta(selectedAchievement.achievement)
-                        .description
-                    }
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedAchievement(null)}
-                className="p-1.5 rounded-lg border border-transparent hover:border-white/10 hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Awarded Cards List */}
-            <div className="p-5 flex-1 overflow-y-auto custom-scrollbar space-y-3">
-              <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 font-semibold">
-                Awarded Cards ({selectedAchievement.cards?.length || 0})
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {(selectedAchievement.cards || []).map((c: any, i: number) => (
-                  <div
-                    key={c.grp_id ?? i}
-                    onClick={() => {
-                      setSelectedAchievement(null);
-                      onShowCard(
-                        { name: c.card_name, grp_id: c.grp_id },
-                        false,
-                      );
-                    }}
-                    className="flex items-center justify-between p-2.5 bg-white/[0.03] border border-white/5 hover:bg-white/10 transition-colors cursor-pointer text-xs group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 shrink-0 overflow-hidden border border-white/10 bg-neutral-950">
-                        <img
-                          src={scryfallArtUrl(c.card_name)}
-                          alt={c.card_name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          loading="lazy"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.visibility =
-                              "hidden";
-                          }}
-                        />
-                      </div>
-                      <span className="font-semibold text-white truncate">
-                        {c.card_name}
-                      </span>
-                    </div>
-                    <span className="text-neutral-400 tabular-nums font-mono">
-                      {c.count}×
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* ACHIEVEMENT DRILL-DOWN TROPHY CABINET MODAL */}
+      {inspectedAchievement && (
+        <AchievementDetailModal
+          achievement={inspectedAchievement}
+          onClose={() => setInspectedAchievement(null)}
+          onShowCard={onShowCard}
+          palette={palette}
+        />
       )}
     </div>
   );

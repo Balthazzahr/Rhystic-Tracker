@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { X, Target, Sparkles, Search, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, GripVertical, RotateCcw, Check, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { X, Sparkles, Search, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, GripVertical, RotateCcw, Check, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
+import { AchievementDetailModal } from './AchievementDetailModal';
 import { getAchievementMeta, ACHIEVEMENTS_REGISTRY } from '../utils/achievementBadges';
 import CardImage from './CardImage';
 
@@ -20,14 +22,14 @@ export interface AchievementColumnDef {
 }
 
 const DEFAULT_ACH_COLUMNS: AchievementColumnDef[] = [
-  { key: 'achievement', label: 'Achievement', description: 'Achievement name with mini emblem badge', visible: true, width: 'flex-1 min-w-[220px]', align: 'left' },
-  { key: 'highest_tier', label: 'Highest Tier', description: 'Highest achievement tier earned (Gold / Silver / Bronze)', visible: true, width: 'w-28', align: 'center' },
-  { key: 'gold', label: 'Gold', description: 'Times the Gold tier has been earned', visible: true, width: 'w-16', align: 'center' },
-  { key: 'silver', label: 'Silver', description: 'Times the Silver tier has been earned', visible: true, width: 'w-16', align: 'center' },
-  { key: 'bronze', label: 'Bronze', description: 'Times the Bronze tier has been earned', visible: true, width: 'w-16', align: 'center' },
-  { key: 'first_earned', label: 'First Earned', description: 'Date the achievement was first earned', visible: true, width: 'w-28', align: 'center' },
-  { key: 'cards', label: 'Cards', description: 'Distinct decorated cards count', visible: true, width: 'w-20', align: 'center' },
-  { key: 'cards_achieved', label: 'Cards Achieved', description: 'Mini art previews of the top earning cards (click to inspect)', visible: true, width: 'flex-1 min-w-[180px]', align: 'center' },
+  { key: 'achievement', label: 'Achievement', description: 'Achievement name with mini emblem badge', visible: true, width: 'w-60 shrink-0', align: 'left' },
+  { key: 'cards_achieved', label: 'Cards Achieved', description: 'Mini art previews of the top earning cards (click to inspect)', visible: true, width: 'flex-1 min-w-[200px]', align: 'center' },
+  { key: 'highest_tier', label: 'Highest Tier', description: 'Highest achievement tier earned (Gold / Silver / Bronze)', visible: true, width: 'w-28 shrink-0', align: 'center' },
+  { key: 'gold', label: 'Gold', description: 'Times the Gold tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
+  { key: 'silver', label: 'Silver', description: 'Times the Silver tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
+  { key: 'bronze', label: 'Bronze', description: 'Times the Bronze tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
+  { key: 'first_earned', label: 'First Earned', description: 'Date the achievement was first earned', visible: true, width: 'w-28 shrink-0', align: 'center' },
+  { key: 'cards', label: 'Cards', description: 'Distinct decorated cards count', visible: true, width: 'w-20 shrink-0', align: 'center' },
 ];
 
 const ACH_COLUMNS_STORAGE_KEY = 'rhystic_achievements_columns';
@@ -113,6 +115,33 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
 
     return [...unlockedList, ...unearnedList];
   }, [unlockedList, showUnearned]);
+
+  // Global listener for deep-linking into specific achievement drill-down
+  useEffect(() => {
+    const handleOpenAch = (e: any) => {
+      const achName = e.detail?.name || e.detail?.achievement;
+      if (!achName) return;
+      const meta = getAchievementMeta(achName);
+      const existing = displayList.find((a: any) => {
+        const aMeta = getAchievementMeta(a.achievement);
+        return aMeta.id === meta.id || a.achievement.toLowerCase() === achName.toLowerCase() || aMeta.title.toLowerCase() === achName.toLowerCase();
+      });
+      if (existing) {
+        setSelectedAchievement(existing);
+      } else {
+        setSelectedAchievement({
+          achievement: meta.title,
+          highest_tier: 'bronze',
+          total_awards: 0,
+          cards: [],
+          is_unearned: true,
+          meta,
+        });
+      }
+    };
+    window.addEventListener('rhystic-open-achievement', handleOpenAch);
+    return () => window.removeEventListener('rhystic-open-achievement', handleOpenAch);
+  }, [displayList]);
 
   // Search-filtered list (by achievement title or decorated card name)
   const filteredList = useMemo(() => {
@@ -443,10 +472,10 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                       <div
                         key={ach.achievement}
                         onClick={() => setSelectedAchievement(ach)}
-                        className={`w-[325px] h-[370px] shrink-0 p-4 border transition-[border-color,background-color,opacity] duration-200 flex flex-col items-center justify-between cursor-pointer text-center group ${
+                        className={`w-[325px] h-[370px] shrink-0 p-4 border transition-colors duration-200 flex flex-col items-center justify-between cursor-pointer text-center group ${
                           isUnearnedItem
-                            ? 'bg-black/40 hover:bg-black/60 border-white/5 hover:border-white/20 opacity-55 hover:opacity-90'
-                            : 'bg-neutral-950 hover:bg-white/[0.04] border-white/10 hover:border-white/30'
+                            ? 'bg-neutral-950/30 border-white/5 hover:border-white/20 opacity-55'
+                            : 'bg-neutral-950/50 backdrop-blur-md border-white/10 hover:border-white/30'
                         }`}
                       >
                         <div className="w-full flex items-center justify-between gap-2 pb-2 border-b border-white/10">
@@ -463,8 +492,8 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                             }`}>{ach.highest_tier}</span>
                           )}
                         </div>
-                        <div className={`w-[174px] h-[174px] flex items-center justify-center my-auto transition-transform duration-300 group-hover:scale-105 ${isUnearnedItem ? 'opacity-35 grayscale' : ''}`}>
-                          <AchievementBadge title={ach.achievement} tier={ach.highest_tier} count={ach.total_awards} size="hero" showTitle={false} showCount={false} />
+                        <div className={`w-[210px] h-[185px] flex items-center justify-center my-auto transition-transform duration-300 ease-out group-hover:scale-[1.20] group-hover:drop-shadow-[0_0_25px_rgba(255,255,255,0.15)] origin-center ${isUnearnedItem ? 'opacity-35 grayscale' : ''}`}>
+                          <AchievementBadge title={ach.achievement} tier={ach.highest_tier} count={ach.total_awards} size="hero" showTitle={false} showCount={false} showTooltip={false} />
                         </div>
                         <div className="space-y-0.5 mb-1">
                           {isUnearnedItem ? (
@@ -558,40 +587,65 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                             case 'gold':
                             case 'silver':
                             case 'bronze':
+                              const tierVal = ach[`${col.key}_count`] ?? ach[col.key] ?? 0;
                               return (
                                 <div key={col.key} className={cellClass}>
-                                  <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">{ach[`${col.key}_count`] || '—'}</span>
+                                  {isUnearnedItem ? (
+                                    <span className="text-xs font-mono text-neutral-600">—</span>
+                                  ) : (
+                                    <span className="text-xs font-mono text-neutral-300 tabular-nums">{tierVal}</span>
+                                  )}
+                                </div>
+                              );
+                            case 'total':
+                              return (
+                                <div key={col.key} className={cellClass}>
+                                  {isUnearnedItem ? (
+                                    <span className="text-xs font-mono text-neutral-600">—</span>
+                                  ) : (
+                                    <span className="text-xs font-mono font-bold text-white tabular-nums">{ach.total_awards || 0}</span>
+                                  )}
+                                </div>
+                              );
+                            case 'cards':
+                            case 'decorated_cards':
+                              return (
+                                <div key={col.key} className={cellClass}>
+                                  {isUnearnedItem ? (
+                                    <span className="text-xs font-mono text-neutral-600">—</span>
+                                  ) : (
+                                    <span className="text-xs font-mono text-neutral-300 tabular-nums">{ach.cards?.length || 0}</span>
+                                  )}
                                 </div>
                               );
                             case 'first_earned':
                               return (
                                 <div key={col.key} className={cellClass}>
-                                  <span className="text-xs font-mono tabular-nums text-neutral-300">{dateStr}</span>
-                                </div>
-                              );
-                            case 'cards':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">{ach.cards?.length || '—'}</span>
+                                  <span className="text-xs font-mono text-neutral-400">{dateStr}</span>
                                 </div>
                               );
                             case 'cards_achieved':
+                            case 'top_earners':
                               return (
                                 <div key={col.key} className={cellClass}>
-                                  {topEarners.length > 0 ? (
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    {topEarners.map((c: any, i: number) => (
-                                      <button
-                                        key={c.grp_id || i}
-                                        onClick={(e) => { e.stopPropagation(); onShowCard?.({ name: c.card_name, grp_id: c.grp_id }, false); }}
-                                        className="w-7 h-7 border border-white/10 overflow-hidden shadow-sm bg-neutral-900 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
-                                        title={c.card_name}
-                                      >
-                                        <CardImage name={c.card_name} version="art_crop" alt={c.card_name} className="w-full h-full object-cover" />
-                                      </button>
-                                    ))}
-                                  </div>
-                                ) : <span className="text-xs font-mono text-neutral-600">—</span>}
+                                  {isUnearnedItem ? (
+                                    <span className="text-xs font-mono text-neutral-600">—</span>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5 overflow-hidden">
+                                      {topEarners.map((c: any) => {
+                                        const cName = c.card_name || c.name || `Card #${c.grp_id}`;
+                                        return (
+                                          <div
+                                            key={c.grp_id || cName}
+                                            className="w-6 h-6 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm"
+                                            title={`${cName} (${c.highest_tier || 'bronze'}, ${c.count || c.award_count || 1}×)`}
+                                          >
+                                            <CardImage name={cName} version="art_crop" alt={cName} className="w-full h-full object-cover" />
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             default:
@@ -657,294 +711,25 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
             <p className="text-xs font-sans text-neutral-400 leading-relaxed max-w-md">
               Deck-level milestones, win streaks, comeback victories, and archetype dominance achievements are currently in active design.
             </p>
-            <div className="p-4 border border-white/10 bg-white/[0.02] text-xs font-mono text-neutral-300 space-y-1.5 w-full text-left">
-              <p className="font-bold flex items-center gap-1.5" style={{ color: accentColor }}>
-                <Sparkles className="w-4 h-4" /> Roadmap Feature
-              </p>
-              <p className="text-neutral-400 font-sans text-[11.5px] leading-relaxed">
-                Check back in upcoming releases for Deck Win Streaks, Comeback King, and Archetype Mastery badges!
-              </p>
-            </div>
           </div>
         </div>
       )}
 
       {/* 4. DRILL-DOWN MODAL & FLOATING FLAVOR QUOTE */}
       {selectedAchievement && (
-        <div
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none overflow-y-auto custom-scrollbar"
-          onClick={() => setSelectedAchievement(null)}
-        >
-          <div className="flex flex-col items-center justify-center max-w-5xl w-full my-auto">
-            {/* Modal Frame */}
-            <div
-              className="w-full max-h-[78vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-20 h-20 shrink-0 flex items-center justify-center">
-                    <AchievementBadge
-                      title={selectedAchievement.achievement}
-                      tier={selectedAchievement.highest_tier}
-                      count={selectedAchievement.total_awards}
-                      size="2xl"
-                      showTitle={false}
-                      showCount={false}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <h2 className="text-xl font-display font-bold tracking-[0.12em] uppercase text-white">
-                        {selectedMeta?.title}
-                      </h2>
-                      {selectedAchievement.total_awards > 0 ? (
-                        <>
-                          <span
-                            className={`text-[10px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
-                              selectedAchievement.highest_tier === 'gold'
-                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-                                : selectedAchievement.highest_tier === 'silver'
-                                ? 'bg-slate-400/15 text-slate-200 border-slate-400/40'
-                                : 'bg-amber-900/25 text-amber-200 border-amber-700/40'
-                            }`}
-                          >
-                            {selectedAchievement.highest_tier} Tier
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 border border-white/10 bg-white/5 text-neutral-300">
-                            {selectedAchievement.cards?.length || 0} {selectedAchievement.cards?.length === 1 ? 'Card' : 'Cards'} Decorated
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/5 text-neutral-400 uppercase">
-                          Unearned
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-neutral-400 mt-1 font-sans">
-                      {selectedMeta?.tierDescriptions?.[selectedAchievement.highest_tier as 'bronze' | 'silver' | 'gold'] || selectedMeta?.description}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setSelectedAchievement(null)}
-                  className="p-1.5 bg-transparent hover:bg-white/[0.08] text-neutral-400 hover:text-white active:scale-95 transition-all cursor-pointer"
-                  title="Close (Esc)"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Modal Body: Left Decorated Cards + Right Tier Milestones */}
-              <div className="flex-1 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-white/10 overflow-hidden min-h-0">
-                {/* Left Column: Decorated Cards List */}
-                <div className="flex-1 flex flex-col min-h-0 p-5 overflow-hidden">
-                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10 shrink-0">
-                    <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300">
-                      Decorated Cards
-                    </span>
-                    <span className="text-xs font-mono text-neutral-500 tabular-nums">
-                      {selectedAchievement.cards?.length || 0} Total
-                    </span>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-                    {!selectedAchievement.cards || selectedAchievement.cards.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2 opacity-60">
-                        <span className="ms ms-ability-duels-renowned text-4xl text-neutral-500" />
-                        <p className="text-xs font-sans italic text-neutral-400">No cards have achieved this honor yet.</p>
-                        <p className="text-[11px] font-sans text-neutral-500 max-w-xs">
-                          Trigger the milestone conditions during a live MTG Arena match to decorate your first card.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {selectedAchievement.cards.map((c: any) => {
-                          const cardName = c.card_name || c.name || `Card #${c.grp_id}`;
-                          const awardCount = c.count || c.award_count || 1;
-                          return (
-                            <div
-                              key={c.grp_id || cardName}
-                              onClick={() => {
-                                setSelectedAchievement(null);
-                                onShowCard?.({ name: cardName, grp_id: c.grp_id }, false);
-                              }}
-                              className="p-2.5 border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] flex items-center justify-between gap-2.5 transition-colors cursor-pointer group"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                {/* Card Art Thumbnail */}
-                                <div className="w-11 h-11 shrink-0 border border-white/15 overflow-hidden bg-neutral-900 group-hover:border-white/50 transition-colors shadow-sm">
-                                  <CardImage
-                                    name={cardName}
-                                    version="art_crop"
-                                    alt={cardName}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                  />
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                  <span
-                                    className="text-xs font-bold font-display uppercase tracking-wide text-white truncate block text-left w-full group-hover:underline leading-snug"
-                                    title={cardName}
-                                  >
-                                    {cardName}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 mt-1">
-                                    <span
-                                      className={`text-[9px] font-mono font-bold px-1.5 py-0.2 border uppercase ${
-                                        c.highest_tier === 'gold'
-                                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                          : c.highest_tier === 'silver'
-                                          ? 'bg-slate-400/15 text-slate-200 border-slate-400/30'
-                                          : 'bg-amber-900/25 text-amber-200 border-amber-700/30'
-                                      }`}
-                                    >
-                                      {c.highest_tier}
-                                    </span>
-                                    {c.max_val > 0 && (
-                                      <span className="text-[10px] font-mono text-neutral-400">
-                                        Best: <strong className="text-white">{c.max_val}</strong>
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Trigger Multiplier Count Pill */}
-                              <div className="shrink-0 flex flex-col items-end gap-0.5">
-                                <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/[0.04] text-white">
-                                  {awardCount > 1 ? `×${awardCount}` : '1×'}
-                                </span>
-                                <span className="text-[8.5px] font-mono uppercase tracking-wider text-neutral-500">
-                                  Triggered
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Column: Tier Milestones */}
-                <div className="w-full md:w-80 p-5 flex flex-col justify-between space-y-4 bg-neutral-900/20 shrink-0">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 pb-2 border-b border-white/10">
-                      <Target className="w-4 h-4" style={{ color: accentColor }} />
-                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                        Tier Milestones
-                      </span>
-                    </div>
-
-                    {/* Gold Tier */}
-                    <div
-                      className={`p-3 border transition-all ${
-                        isTierAchieved('gold', selectedAchievement)
-                          ? 'bg-amber-500/10 border-amber-500/40 shadow-sm'
-                          : 'bg-black/20 border-white/10 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold font-display uppercase tracking-wide text-amber-400 flex items-center gap-1.5">
-                          <span className="ms ms-ability-duels-renowned text-xs text-amber-300" /> Gold Tier
-                        </span>
-                        {isTierAchieved('gold', selectedAchievement) && (
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border bg-amber-500/20 text-amber-300 border-amber-500/40 uppercase">
-                            Achieved
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
-                        {selectedMeta?.tierDescriptions?.gold || selectedMeta?.criteria?.gold}
-                      </p>
-                    </div>
-
-                    {/* Silver Tier */}
-                    <div
-                      className={`p-3 border transition-all ${
-                        isTierAchieved('silver', selectedAchievement)
-                          ? 'bg-slate-400/10 border-slate-400/40 shadow-sm'
-                          : 'bg-black/20 border-white/10 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold font-display uppercase tracking-wide text-slate-200 flex items-center gap-1.5">
-                          <span className="ms ms-ability-duels-renowned text-xs text-slate-300" /> Silver Tier
-                        </span>
-                        {isTierAchieved('silver', selectedAchievement) && (
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border bg-slate-500/20 text-slate-200 border-slate-500/40 uppercase">
-                            Achieved
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
-                        {selectedMeta?.tierDescriptions?.silver || selectedMeta?.criteria?.silver}
-                      </p>
-                    </div>
-
-                    {/* Bronze Tier */}
-                    <div
-                      className={`p-3 border transition-all ${
-                        isTierAchieved('bronze', selectedAchievement)
-                          ? 'bg-amber-900/20 border-amber-700/40 shadow-sm'
-                          : 'bg-black/20 border-white/10 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold font-display uppercase tracking-wide text-amber-500 flex items-center gap-1.5">
-                          <span className="ms ms-ability-duels-renowned text-xs text-amber-600" /> Bronze Tier
-                        </span>
-                        {isTierAchieved('bronze', selectedAchievement) && (
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border bg-amber-900/30 text-amber-200 border-amber-800/40 uppercase">
-                            Achieved
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
-                        {selectedMeta?.tierDescriptions?.bronze || selectedMeta?.criteria?.bronze}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-white/10 text-center">
-                    <span className="text-[10px] font-mono text-neutral-500">
-                      {selectedAchievement.is_unearned || selectedAchievement.total_awards === 0
-                        ? 'Objective criteria to unlock'
-                        : `Highest Honor: ${selectedAchievement.highest_tier?.toUpperCase()}`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Floating Flavor Quote Outside & Below the Modal Window */}
-            {selectedMeta?.flavorQuote && (
-              <div
-                className="w-full max-w-3xl pt-5 text-center space-y-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <p className="text-base md:text-lg font-plantin italic text-white leading-relaxed drop-shadow-md">
-                  "{selectedMeta.flavorQuote}"
-                </p>
-                {selectedMeta.flavorAttribution && (
-                  <p className="text-xs font-mono font-medium text-neutral-400">
-                    — {selectedMeta.flavorAttribution}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <AchievementDetailModal
+          achievement={selectedAchievement}
+          onClose={() => setSelectedAchievement(null)}
+          onShowCard={onShowCard}
+          palette={palette}
+        />
       )}
 
       {/* COLUMN CUSTOMIZER MODAL */}
-      {showColumnModal && (
+      {showColumnModal && createPortal(
         <div
           onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1019,32 +804,15 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                           borderColor: col.visible ? accentColor : undefined,
                         }}
                       >
-                        {col.visible && (
-                          <Check
-                            className="w-3 h-3 stroke-[3]"
-                            style={{ color: getContrastTextColor(accentColor) }}
-                          />
-                        )}
+                        {col.visible && <Check className="w-3 h-3 stroke-[3]" />}
                       </button>
-                      <div>
-                        <div className="text-xs font-sans font-bold text-white tracking-wide flex items-center gap-2">
-                          <span>{col.label}</span>
-                          {isTarget && (
-                            <span
-                              className="text-[9px] font-mono uppercase px-1.5 py-0.2 border font-bold"
-                              style={{
-                                color: accentColor,
-                                borderColor: `${accentColor}66`,
-                                backgroundColor: `${accentColor}20`,
-                              }}
-                            >
-                              ⇄ SWAP TO POS #{idx + 1}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10.5px] font-mono text-neutral-400 leading-tight">
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold font-display uppercase tracking-wider text-white">
+                          {col.label}
+                        </span>
+                        <p className="text-[11px] font-sans text-neutral-400 truncate">
                           {col.description}
-                        </div>
+                        </p>
                       </div>
                     </div>
 
@@ -1093,7 +861,8 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

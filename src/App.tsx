@@ -8,7 +8,6 @@ import {
   Sparkles,
   BookOpen,
   Settings,
-  Trophy,
   CheckCircle2,
   XCircle,
   BarChart3,
@@ -266,13 +265,24 @@ export default function App() {
   // Listen for navigation events from the system tray menu
   useEffect(() => {
     const unlisten = listen<string>('navigate-to-tab', (event) => {
-      if (event.payload === 'live' || event.payload === 'dashboard' || event.payload === 'matches' || event.payload === 'decks' || event.payload === 'collection' || event.payload === 'settings') {
+      if (event.payload === 'live' || event.payload === 'dashboard' || event.payload === 'matches' || event.payload === 'decks' || event.payload === 'collection' || event.payload === 'settings' || event.payload === 'achievements') {
         setActiveTab(event.payload as any);
       }
     });
     return () => {
       unlisten.then(f => f());
     };
+  }, []);
+
+  // Global handler to switch to Achievements tab and dismiss card modals when inspecting an achievement
+  useEffect(() => {
+    const handleOpenAch = () => {
+      setActiveTab('achievements');
+      setDeckCardOverlay(null);
+      setCardTrophyModalOpen(false);
+    };
+    window.addEventListener('rhystic-open-achievement', handleOpenAch);
+    return () => window.removeEventListener('rhystic-open-achievement', handleOpenAch);
   }, []);
 
   // Environment info (test environment vs production)

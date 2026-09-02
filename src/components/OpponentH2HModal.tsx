@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Trophy, Swords, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
+import { X, Swords, CheckCircle2, XCircle, BarChart3, Award } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface OpponentH2HModalProps {
@@ -113,7 +113,7 @@ export function OpponentH2HModal({
                   {stats?.winrate ?? '0.0'}%
                 </h3>
               </div>
-              <Trophy className="w-5 h-5 opacity-40" style={{ color: palette?.accent }} />
+              <span className="ms ms-ability-duels-renowned text-xl opacity-40" style={{ color: palette?.accent }} />
             </div>
 
             <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>

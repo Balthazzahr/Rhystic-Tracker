@@ -206,9 +206,10 @@ export async function ensureLocalImage(
       }
     }
 
-    // Fallback 1: named?exact resolution
+    // Fallback 1: named?exact resolution (with set constraint if normSet provided)
     try {
-      const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}&format=image&version=${version}`;
+      const setParam = normSet ? `&set=${encodeURIComponent(normSet)}` : '';
+      const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}${setParam}&format=image&version=${version}`;
       const blob = await fetchImageBlob(namedUrl);
       const bytes = await compressImageBlob(blob);
       if (bytes.length > 500) {
@@ -219,7 +220,21 @@ export async function ensureLocalImage(
         return url;
       }
     } catch {
-      // Fall through to split card / double face fallback
+      // Fall through to unconstrained named lookup if set-constrained lookup failed
+      if (normSet) {
+        try {
+          const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}&format=image&version=${version}`;
+          const blob = await fetchImageBlob(namedUrl);
+          const bytes = await compressImageBlob(blob);
+          if (bytes.length > 500) {
+            const path = await invoke<string>('save_card_image', { name: cacheName, version, data: Array.from(bytes) });
+            const url = convertFileSrc(path);
+            srcCache.set(`${version}:${cacheName}`, url);
+            srcCache.set(`${version}:${cleanName}`, url);
+            return url;
+          }
+        } catch { /* fall through */ }
+      }
     }
 
     // Fallback 2: If card name has double-face slash " // ", try front face

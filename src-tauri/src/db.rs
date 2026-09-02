@@ -495,25 +495,39 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
-        // Migration: sanitize Scoop Inducer titles so lands and cheap non-bombs (< CMC 5) never retain Scoop Inducer
-        if let Ok(rows) = sqlx::query_as::<_, (i64, i64, String, i32)>(
-            "SELECT i.id, i.grp_id, i.titles, i.total_damage FROM match_impactful_cards i WHERE i.titles LIKE '%Scoop Inducer%'"
+        // Migration: sanitize historical achievement titles in match_impactful_cards
+        if let Ok(rows) = sqlx::query_as::<_, (i64, i64, String)>(
+            "SELECT i.id, i.grp_id, i.titles FROM match_impactful_cards i WHERE i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'"
         ).fetch_all(&pool).await {
-            for (row_id, grp_id, titles_json, total_dmg) in rows {
+            for (row_id, grp_id, titles_json) in rows {
                 if let Ok(mut titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
-                    let card_info = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
-                        "SELECT card_type, cmc FROM cards_cache WHERE grp_id = ?"
+                    let orig_len = titles.len();
+                    let card_info = sqlx::query_as::<_, (Option<String>, Option<String>, Option<i64>)>(
+                        "SELECT name, card_type, cmc FROM cards_cache WHERE grp_id = ?"
                     ).bind(grp_id).fetch_optional(&pool).await.unwrap_or(None);
 
-                    let is_invalid = if let Some((card_type, cmc)) = card_info {
-                        let type_str = card_type.unwrap_or_default().to_lowercase();
-                        type_str.contains("land") || (cmc.unwrap_or(0) < 5 && total_dmg < 5)
-                    } else {
-                        false
-                    };
+                    if let Some((name_opt, card_type_opt, cmc_opt)) = card_info {
+                        let name = name_opt.unwrap_or_default().to_lowercase();
+                        let type_str = card_type_opt.unwrap_or_default().to_lowercase();
+                        let is_land = type_str.contains("land");
+                        let cmc = cmc_opt.unwrap_or(0);
 
-                    if is_invalid {
-                        titles.retain(|t| t != "Scoop Inducer");
+                        if is_land {
+                            // Lands can only ever receive Mana Dynamo
+                            titles.retain(|t| t.starts_with("Mana Dynamo"));
+                        } else {
+                            // Non-land cards with CMC < 5 cannot receive Scoop Inducer
+                            if cmc < 5 {
+                                titles.retain(|t| !t.starts_with("Scoop Inducer"));
+                            }
+                            // Excalibur and charge counter cards cannot receive Ozolithic!
+                            if name.contains("excalibur") {
+                                titles.retain(|t| !t.starts_with("Ozolithic!"));
+                            }
+                        }
+                    }
+
+                    if titles.len() != orig_len {
                         let new_json = serde_json::to_string(&titles).unwrap_or_else(|_| "[]".to_string());
                         let _ = sqlx::query("UPDATE match_impactful_cards SET titles = ? WHERE id = ?")
                             .bind(new_json)

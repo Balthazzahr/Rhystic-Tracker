@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Trophy } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
@@ -102,6 +102,30 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
     setOverlayImgFailed(false);
     setOverlayImgTriedNamed(false);
   }, [cardName, isOpen, overlaySelected]);
+
+  const aggregatedAchievements = useMemo(() => {
+    if (!overlayStats?.lifetime_titles) return [];
+    const map = new Map<string, { title: string; highestTier: 'gold' | 'silver' | 'bronze'; totalCount: number }>();
+    const tierRank: Record<string, number> = { gold: 3, silver: 2, bronze: 1 };
+
+    for (const [rawTitle, count] of Object.entries(overlayStats.lifetime_titles)) {
+      const cleanTitle = rawTitle.replace(/\s*\((Gold|Silver|Bronze)\)/i, '').trim();
+      const tierMatch = rawTitle.match(/\((Gold|Silver|Bronze)\)/i);
+      const tier = (tierMatch ? tierMatch[1].toLowerCase() : 'bronze') as 'gold' | 'silver' | 'bronze';
+      const c = typeof count === 'number' ? count : 1;
+
+      const existing = map.get(cleanTitle);
+      if (!existing) {
+        map.set(cleanTitle, { title: cleanTitle, highestTier: tier, totalCount: c });
+      } else {
+        existing.totalCount += c;
+        if ((tierRank[tier] || 1) > (tierRank[existing.highestTier] || 1)) {
+          existing.highestTier = tier;
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [overlayStats?.lifetime_titles]);
 
   if (!isOpen || !deckCardOverlay) return null;
 
@@ -397,9 +421,9 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
               </div>
             </div>
 
-            {/* Achievements Section (Seamlessly integrated, no extra outer box) */}
-            {overlayStats?.lifetime_titles && Object.keys(overlayStats.lifetime_titles).length > 0 && (
-              <div className="pt-3.5 border-t border-white/10 space-y-2.5 shrink-0">
+            {/* Achievements Section (Badge Only Compact Viewer - Highest Tier Only) */}
+            {aggregatedAchievements.length > 0 && (
+              <div className="pt-3.5 border-t border-white/10 space-y-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300">
                     Card Achievements
@@ -408,16 +432,34 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
                     onClick={onOpenTrophyCase}
                     className="text-xs font-mono font-medium uppercase tracking-wider text-neutral-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                   >
-                    <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="ms ms-ability-duels-renowned text-xs text-amber-400" />
                     <span>View All →</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2 pt-0.5">
-                  {Object.entries(overlayStats.lifetime_titles).slice(0, 4).map(
-                    ([title, count]: [string, any]) => (
-                      <AchievementBadge key={title} title={title} count={count} size="sm" />
-                    )
-                  )}
+                <div className="flex items-center gap-3 pt-1 flex-wrap">
+                  {aggregatedAchievements.map((ach) => (
+                    <div
+                      key={ach.title}
+                      className="cursor-pointer hover:scale-110 active:scale-95 transition-transform flex items-center justify-center w-11 h-10"
+                      onClick={() => {
+                        window.dispatchEvent(
+                          new CustomEvent('rhystic-open-achievement', {
+                            detail: { name: ach.title },
+                          })
+                        );
+                      }}
+                      title={`${ach.title} (${ach.highestTier.toUpperCase()}) — ${ach.totalCount}× · Click to inspect`}
+                    >
+                      <AchievementBadge
+                        title={ach.title}
+                        tier={ach.highestTier}
+                        count={ach.totalCount}
+                        size="xl"
+                        showTitle={false}
+                        showCount={false}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

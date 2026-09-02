@@ -558,7 +558,7 @@ export function FullMatchInfoModal({
               {/* Top Toolbar: Search Bar on Left + View Switcher on Right */}
               <div className="flex items-center justify-between gap-4 shrink-0 pb-1 flex-wrap">
                 {/* Search Filter Input */}
-                <div className="relative w-64 max-w-[280px] h-8 flex items-center shrink-0">
+                <div className="relative w-64 shrink-0 h-8 flex items-center">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
                   <input
                     type="text"

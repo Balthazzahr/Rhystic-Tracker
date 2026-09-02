@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2, Image as ImageIcon, RotateCcw, Search, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, Layers, X, Upload, Download, Copy, CheckCircle, AlertTriangle, Trash2, Image as ImageIcon, RotateCcw, Search, Sparkles } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 import { ManaPip } from './ManaPip';
@@ -854,14 +854,14 @@ export function DeckDetailView({
             {/* Floating Toolbar: Transparent with NO bounding box / border */}
             <div className="shrink-0 flex items-center justify-between flex-wrap gap-3 bg-transparent border-0 p-0">
               {/* Search Bar on the Left */}
-              <div className="relative w-64 max-w-[280px] h-8 flex items-center shrink-0">
+              <div className="relative w-64 shrink-0 h-8 flex items-center">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search deck cards..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans border border-white/10"
+                  className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
                 />
                 {searchQuery && (
                   <button
@@ -1169,17 +1169,25 @@ export function DeckDetailView({
             </div>
 
             {/* Search Bar */}
-            <div className="p-3 border-b border-white/10 bg-neutral-900/40 shrink-0">
-              <div className="relative">
-                <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <div className="p-3 border-b border-white/10 shrink-0">
+              <div className="relative h-8 flex items-center">
+                <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={artSearch}
                   onChange={(e) => setArtSearch(e.target.value)}
                   placeholder="Search cards in this deck..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-black/60 border border-white/15 text-xs font-mono text-white placeholder-neutral-500 focus:outline-none focus:border-white/40"
+                  className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
                   autoFocus
                 />
+                {artSearch && (
+                  <button
+                    onClick={() => setArtSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1326,6 +1334,7 @@ export function DeckDetailView({
         isOpen={achievementsModalOpen}
         onClose={() => setAchievementsModalOpen(false)}
         deckName={deckName}
+        deckArtName={detail?.custom_art_name || detail?.commander_name || (detail?.card_achievements_grouped?.[0]?.cards?.[0]?.card_name)}
         groupedAchievements={detail?.card_achievements_grouped || []}
         palette={palette}
         onShowCard={onShowCard}

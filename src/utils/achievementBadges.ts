@@ -14,6 +14,13 @@ export interface AchievementTierDescriptions {
   gold: string;
 }
 
+export interface AchievementArtCard {
+  name: string;
+  setCode?: string;
+  collectorNumber?: string;
+  artist?: string;
+}
+
 export interface AchievementMeta {
   id: string;
   title: string;
@@ -23,6 +30,7 @@ export interface AchievementMeta {
   criteria: AchievementCriteria;
   flavorQuote: string;
   flavorAttribution: string;
+  artCard?: AchievementArtCard;
 }
 
 export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
@@ -43,6 +51,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'All your plans, all your spells, all your dreams—swept away in an instant.',
     flavorAttribution: 'Door to Nothingness',
+    artCard: {
+      name: 'Gingerbrute',
+      setCode: 'woe',
+      collectorNumber: '246',
+    },
   },
   executioner: {
     id: 'executioner',
@@ -61,6 +74,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'One touch is all that separates the living from memory.',
     flavorAttribution: 'Phage the Untouchable',
+    artCard: {
+      name: "Elspeth's Smite",
+      setCode: 'mom',
+      collectorNumber: '13',
+      artist: 'Livia Prima',
+    },
   },
   over_killer: {
     id: 'over_killer',
@@ -79,6 +98,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: "For when winning just isn't enough, leave nothing behind to bury.",
     flavorAttribution: 'Urza',
+    artCard: {
+      name: 'Scorching Dragonfire',
+      setCode: 'eld',
+      collectorNumber: '139',
+    },
   },
   haymaker: {
     id: 'haymaker',
@@ -97,6 +121,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'No warnings, no subtlety—just pure, unadulterated devastation.',
     flavorAttribution: 'Akroma, Angel of Wrath',
+    artCard: {
+      name: 'Savage Punch',
+      setCode: 'ktk',
+      collectorNumber: '146',
+    },
   },
   juggernaut: {
     id: 'juggernaut',
@@ -115,42 +144,58 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'A storm of steel and stone that turns entire matches into rubble.',
     flavorAttribution: 'Ulamog',
+    artCard: {
+      name: 'Darksteel Colossus',
+      setCode: 'dst',
+      collectorNumber: '109',
+      artist: 'Carl Critchlow',
+    },
   },
   hardened: {
     id: 'hardened',
     title: 'Hardened',
-    category: 'Counters',
-    description: 'Awarded to a creature accumulating power/toughness-boosting counters on itself across a match.',
+    category: 'Toughness',
+    description: "Awarded to spells, equipment, or abilities that increase a creature's toughness.",
     tierDescriptions: {
-      bronze: 'Awarded for accumulating 7+ power/toughness counters on a single creature across a match.',
-      silver: 'Awarded for accumulating 12+ power/toughness counters on a single creature across a match.',
-      gold: 'Awarded for accumulating 20+ power/toughness counters on a single creature across a match.',
+      bronze: "Awarded for increasing a creature's toughness by 7+ via spells, equipment, or abilities.",
+      silver: "Awarded for increasing a creature's toughness by 12+ via spells, equipment, or abilities.",
+      gold: "Awarded for increasing a creature's toughness by 20+ via spells, equipment, or abilities.",
     },
     criteria: {
-      bronze: 'Accumulated 7+ counters on a single creature.',
-      silver: 'Accumulated 12+ counters on a single creature.',
-      gold: 'Accumulated 20+ counters on a single creature.',
+      bronze: "Boosted a creature's toughness by 7+.",
+      silver: "Boosted a creature's toughness by 12+.",
+      gold: "Boosted a creature's toughness by 20+.",
     },
-    flavorQuote: 'Growth is not an event; it is an unstoppable physical inevitability.',
-    flavorAttribution: 'Vorel of the Hull Clade',
+    flavorQuote: 'Armor may buckle, but true resolve hardens under fire.',
+    flavorAttribution: 'Gideon Jura',
+    artCard: {
+      name: 'Hardened Scales',
+      setCode: 'ktk',
+      collectorNumber: '133',
+    },
   },
   ozolithic: {
     id: 'ozolithic',
     title: 'Ozolithic!',
     category: 'Counters',
-    description: 'Awarded when a creature reaches monumental total power derived from counters.',
+    description: 'Awarded to a card that places +1/+1 counters onto a creature.',
     tierDescriptions: {
-      bronze: "Awarded for boosting a creature's total power to 25+ via counters.",
-      silver: "Awarded for boosting a creature's total power to 50+ via counters.",
-      gold: "Awarded for boosting a creature's total power to 75+ via counters.",
+      bronze: 'Awarded for putting 10+ +1/+1 counters onto a creature across a match.',
+      silver: 'Awarded for putting 15+ +1/+1 counters onto a creature across a match.',
+      gold: 'Awarded for putting 20+ +1/+1 counters onto a creature across a match.',
     },
     criteria: {
-      bronze: 'Reached 25+ total power via counters.',
-      silver: 'Reached 50+ total power via counters.',
-      gold: 'Reached 75+ total power via counters.',
+      bronze: 'Placed 10+ +1/+1 counters on a creature.',
+      silver: 'Placed 15+ +1/+1 counters on a creature.',
+      gold: 'Placed 20+ +1/+1 counters on a creature.',
     },
     flavorQuote: 'Power is never truly lost on Ikoria—it merely finds a more terrifying vessel.',
     flavorAttribution: 'The Ozolith',
+    artCard: {
+      name: 'The Ozolith',
+      setCode: 'iko',
+      collectorNumber: '237',
+    },
   },
   vampiric: {
     id: 'vampiric',
@@ -169,6 +214,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'I have lived for millennia. Your heartbeat was always meant to sustain mine.',
     flavorAttribution: 'Sorin Markov',
+    artCard: {
+      name: 'Bankrupt in Blood',
+      setCode: 'rna',
+      collectorNumber: '62',
+      artist: 'Seb McKinnon',
+    },
   },
   negator: {
     id: 'negator',
@@ -187,6 +238,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: "It was a masterpiece of arcane design. It's a shame it will never happen.",
     flavorAttribution: 'Jace Beleren',
+    artCard: {
+      name: 'Remand',
+      setCode: 'rav',
+      collectorNumber: '63',
+      artist: 'Mark A. Nelson',
+    },
   },
   sweeper: {
     id: 'sweeper',
@@ -205,6 +262,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'Sweep the impure from our sight and let perfection reign.',
     flavorAttribution: 'Elesh Norn',
+    artCard: {
+      name: 'Day of Judgment',
+      setCode: 'm12',
+      collectorNumber: '12',
+      artist: 'Vincent Proce',
+    },
   },
   cataclysm: {
     id: 'cataclysm',
@@ -223,6 +286,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'I will wipe mankind, whom I have created, from the face of the earth.',
     flavorAttribution: 'Wrath of God',
+    artCard: {
+      name: 'Doomskar',
+      setCode: 'khm',
+      collectorNumber: '9',
+    },
   },
   royal_assassin: {
     id: 'royal_assassin',
@@ -241,6 +309,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'He does not boast. He does not threaten. He simply crosses another name off the list.',
     flavorAttribution: 'Royal Assassin',
+    artCard: {
+      name: 'Hired Blade',
+      setCode: 'm19',
+      collectorNumber: '100',
+      artist: 'Mark Behm',
+    },
   },
   ironclad: {
     id: 'ironclad',
@@ -259,6 +333,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'The strongest wall is not made of stone, but of unyielding discipline and iron will.',
     flavorAttribution: 'Arcades, the Strategist',
+    artCard: {
+      name: 'Darksteel Colossus',
+      setCode: 'dst',
+      collectorNumber: '109',
+      artist: 'Carl Critchlow',
+    },
   },
   tax_collector: {
     id: 'tax_collector',
@@ -277,6 +357,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'Did you pay the one? I didn\'t think so.',
     flavorAttribution: 'Rhystic Study',
+    artCard: {
+      name: 'Smothering Tithe',
+      setCode: 'rna',
+      collectorNumber: '22',
+    },
   },
   cat_burglar: {
     id: 'cat_burglar',
@@ -295,6 +380,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: "What's yours is mine, and what's mine was probably yours five seconds ago.",
     flavorAttribution: 'Gonti, Lord of Luxury',
+    artCard: {
+      name: 'Robber of the Rich',
+      setCode: 'eld',
+      collectorNumber: '138',
+    },
   },
   grand_larceny: {
     id: 'grand_larceny',
@@ -313,6 +403,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: "Look at me. I'm the commander now.",
     flavorAttribution: 'Control Magic',
+    artCard: {
+      name: 'Hostage Taker',
+      setCode: 'xln',
+      collectorNumber: '223',
+    },
   },
   blinkmaster: {
     id: 'blinkmaster',
@@ -331,6 +426,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'Time is merely a suggestion when reality bends to your cycle.',
     flavorAttribution: 'Yorion, Sky Nomad',
+    artCard: {
+      name: 'Ephemerate',
+      setCode: 'sta',
+      collectorNumber: '5',
+    },
   },
   immortal: {
     id: 'immortal',
@@ -349,6 +449,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'Death is a revolving door for those too stubborn to rest.',
     flavorAttribution: "Kroxa, Titan of Death's Hunger",
+    artCard: {
+      name: 'Squee, the Immortal',
+      setCode: 'dom',
+      collectorNumber: '146',
+    },
   },
   swarmer: {
     id: 'swarmer',
@@ -367,6 +472,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'One was annoying. Ten were alarming. A thousand is an extinction-level event.',
     flavorAttribution: 'Scute Swarm',
+    artCard: {
+      name: 'Scute Swarm',
+      setCode: 'znr',
+      collectorNumber: '203',
+    },
   },
   rhystic_tracker: {
     id: 'rhystic_tracker',
@@ -385,6 +495,12 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'Every card in hand is another equation solved in advance.',
     flavorAttribution: 'Niv-Mizzet, Parun',
+    artCard: {
+      name: 'Rhystic Study',
+      setCode: 'wot',
+      collectorNumber: '25',
+      artist: 'Serena Malyon',
+    },
   },
   mana_dynamo: {
     id: 'mana_dynamo',
@@ -403,6 +519,11 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     },
     flavorQuote: 'Harnessing the raw energy of stars to fuel unimaginable spells.',
     flavorAttribution: 'Caged Sun',
+    artCard: {
+      name: 'Worn Powerstone',
+      setCode: 'brr',
+      collectorNumber: '65',
+    },
   },
 };
 

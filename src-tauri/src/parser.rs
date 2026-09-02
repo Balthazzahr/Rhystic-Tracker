@@ -23,6 +23,9 @@ pub struct GameStateStep {
     pub life_modifications: Vec<(u32, u32, i32)>, // (affector_id, target_seat, delta)
     pub draw_events: Vec<(u32, u32)>,
     pub mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
+    pub counter_spell_events: Vec<(u32, u32)>, // (affector_id, target_instance_id)
+    pub zone_transfer_events: Vec<(u32, Vec<u32>, String, u32, u32)>, // (affector_id, affected_ids, category, zone_src, zone_dest)
+    pub mana_paid_events: Vec<(u32, u32)>, // (affector_id, count)
 }
 
 #[derive(Debug, Clone)]
@@ -488,39 +491,55 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                             }
                                         } else if ann_type.contains("ZoneTransfer") {
                                             let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-                                            if affector_id > 0 {
-                                                let affected_ids: Vec<u32> = a.get("affectedIds")
-                                                    .and_then(|arr| arr.as_array())
-                                                    .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
-                                                    .unwrap_or_default();
+                                            let affected_ids: Vec<u32> = a.get("affectedIds")
+                                                .and_then(|arr| arr.as_array())
+                                                .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
+                                                .unwrap_or_default();
 
-                                                let mut is_draw = false;
-                                                if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
-                                                    for d in details {
-                                                        let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
-                                                        if key == "category" {
-                                                            let cat_str = d.get("valueString").and_then(|v| v.as_array())
-                                                                .and_then(|arr| arr.first())
-                                                                .and_then(|s| s.as_str())
-                                                                .unwrap_or("");
-                                                            if cat_str.eq_ignore_ascii_case("Draw") {
-                                                                is_draw = true;
-                                                                break;
-                                                            }
+                                            let mut category = String::new();
+                                            let mut zone_src = 0u32;
+                                            let mut zone_dest = 0u32;
+                                            if let Some(details) = a.get("details").and_then(|d| d.as_array()) {
+                                                for d in details {
+                                                    let key = d.get("key").and_then(|k| k.as_str()).unwrap_or("");
+                                                    if key == "category" {
+                                                        if let Some(cat_str) = d.get("valueString").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|s| s.as_str()) {
+                                                            category = cat_str.to_string();
+                                                        }
+                                                    } else if key == "zone_src" {
+                                                        if let Some(zs) = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()) {
+                                                            zone_src = zs as u32;
+                                                        }
+                                                    } else if key == "zone_dest" {
+                                                        if let Some(zd) = d.get("valueInt32").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|x| x.as_i64()) {
+                                                            zone_dest = zd as u32;
                                                         }
                                                     }
                                                 }
+                                            }
 
-                                                if is_draw {
-                                                    let count = if affected_ids.is_empty() { 1 } else { affected_ids.len() as u32 };
-                                                    step.draw_events.push((affector_id, count));
+                                            if category.eq_ignore_ascii_case("Draw") && affector_id > 0 {
+                                                let count = if affected_ids.is_empty() { 1 } else { affected_ids.len() as u32 };
+                                                step.draw_events.push((affector_id, count));
+                                            } else if category.eq_ignore_ascii_case("Countered") {
+                                                for target_id in &affected_ids {
+                                                    step.counter_spell_events.push((affector_id, *target_id));
                                                 }
+                                            }
+
+                                            if affector_id > 0 || !category.is_empty() || zone_src > 0 || zone_dest > 0 {
+                                                step.zone_transfer_events.push((affector_id, affected_ids, category, zone_src, zone_dest));
+                                            }
+                                        } else if ann_type.contains("ManaPaid") {
+                                            let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+                                            if affector_id > 0 {
+                                                step.mana_paid_events.push((affector_id, 1));
                                             }
                                         }
                                     }
                                 }
 
-                                if !step.objects.is_empty() || step.turn_number > 0 || !step.life_by_seat.is_empty() || !step.damage_events.is_empty() || !step.counter_events.is_empty() || !step.draw_events.is_empty() || !step.diff_deleted_ids.is_empty() || !step.ability_associations.is_empty() || !step.object_id_changes.is_empty() || !step.life_modifications.is_empty() {
+                                if !step.objects.is_empty() || step.turn_number > 0 || !step.life_by_seat.is_empty() || !step.damage_events.is_empty() || !step.counter_events.is_empty() || !step.draw_events.is_empty() || !step.diff_deleted_ids.is_empty() || !step.ability_associations.is_empty() || !step.object_id_changes.is_empty() || !step.life_modifications.is_empty() || !step.counter_spell_events.is_empty() || !step.zone_transfer_events.is_empty() || !step.mana_paid_events.is_empty() {
                                     steps.push(step);
                                 }
                             }

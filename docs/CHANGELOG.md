@@ -2,6 +2,27 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.3.12] - 2026-09-02
+
+### 🏆 Achievements Modal Suite, Leaderboard Benchmarking & Search Bar Standardization
+
+- **Master Achievements Trophy Cabinet Modal (`AchievementDetailModal.tsx`)**:
+  - Rebuilt the Achievement Drill-Down / Trophy Cabinet modal with a stamped heraldic shield badge, floating Beleren title, decorated cards gallery with mini art thumbnails, tier milestone progression indicators, and floating flavor quotes.
+  - Linked Recent Achievements on the Dashboard to open the full Trophy Cabinet modal directly in-place without navigating away from the dashboard view.
+  - Extracted as a reusable component shared across Dashboard, Achievements View, and Deck/Card trophy modals.
+- **Deck & Card Achievements Modals Styling**:
+  - Upgraded Deck Achievements and Card Trophy Case modals with floating headers, MTG wreath icons, and 75% larger trophy badges.
+  - Fixed mini arts and column alignment in Achievements table view.
+- **Leaderboards View & Modal Redesign (`LeaderboardsView.tsx`)**:
+  - Rebuilt the full Leaderboard modal with floating header, frosted glass container, and standard search styling.
+  - Pinned Top 3 Podium Benchmark (#1 Gold, #2 Silver, #3 Bronze) during search with comparison delta ("Gap to Podium") for cards outside the top 3.
+  - Fixed modal height to maintain layout consistency across search queries.
+  - Implemented strict token creature exclusions across all SQL queries and frontend filters.
+- **App-Wide Search Bar Standardization**:
+  - Standardized search bar dimensions, borderless frosted glass background (`bg-white/[0.04]`), typography, icons, and clear buttons across all views and modals.
+
+---
+
 ## [1.3.11] - 2026-09-01
 
 ### 🔮 Deck Inspector Overhaul, Card Inspector Unboxing & Palette Synchronization

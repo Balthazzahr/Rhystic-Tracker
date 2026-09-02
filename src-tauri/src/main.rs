@@ -1693,6 +1693,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         WHERE i.seat_id = m.hero_seat_id 
           AND (i.max_hit_combat > 0 OR i.damage_combat > 0)
           AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         HAVING record_value > 0
         ORDER BY record_value DESC, card_name ASC
@@ -1711,6 +1715,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id AND i.damage_combat > 0 AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1728,6 +1736,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id AND i.damage_combat > 0 AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1751,6 +1763,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         WHERE i.seat_id = m.hero_seat_id 
           AND (i.max_hit_spell > 0 OR i.damage_spell > 0)
           AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         HAVING record_value > 0
         ORDER BY record_value DESC, card_name ASC
@@ -1769,6 +1785,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id AND i.damage_spell > 0 AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1786,6 +1806,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id AND i.damage_spell > 0 AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1808,6 +1832,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
         WHERE i.seat_id = m.hero_seat_id
           AND m.timestamp >= '2026-08-23T06:30:00'
           AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         "#
     )
     .fetch_all(pool)
@@ -1881,6 +1909,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
           AND c.name IS NOT NULL
           AND c.name != ''
           AND m.timestamp >= '2026-08-23T06:30:00'
+          AND (c.card_type IS NULL OR LOWER(c.card_type) NOT LIKE '%token%')
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -1901,7 +1933,10 @@ async fn get_global_leaderboards() -> Result<serde_json::Value, String> {
           AND e.event_type = 'play'
           AND c.name IS NOT NULL
           AND c.name != ''
-          AND c.card_type NOT LIKE '%Land%'
+          AND (c.card_type IS NULL OR (LOWER(c.card_type) NOT LIKE '%land%' AND LOWER(c.card_type) NOT LIKE '%token%'))
+          AND (c.rarity IS NULL OR LOWER(c.rarity) != 'token')
+          AND (c.name IS NULL OR LOWER(c.name) NOT LIKE '%token%')
+          AND NOT (LOWER(COALESCE(c.card_type, '')) LIKE '%creature%' AND (c.mana_cost IS NULL OR c.mana_cost = ''))
         GROUP BY c.name
         ORDER BY record_value DESC, card_name ASC
         "#
@@ -3004,23 +3039,6 @@ fn has_card_image(app: tauri::AppHandle, name: String, version: String) -> Resul
         let exact_normal = dir.join(card_img_filename(&name, "normal"));
         if exact_normal.exists() {
             return Ok(Some(exact_normal.to_string_lossy().to_string()));
-        }
-    }
-
-    // 3. If printing-specific name ('Name|set|cn'), check base card name on disk
-    if let Some(base_name) = name.split('|').next() {
-        let trimmed_base = base_name.trim();
-        if !trimmed_base.is_empty() && trimmed_base != name.as_str() {
-            let base_path = dir.join(card_img_filename(trimmed_base, &version));
-            if base_path.exists() {
-                return Ok(Some(base_path.to_string_lossy().to_string()));
-            }
-            if version == "small" {
-                let base_normal = dir.join(card_img_filename(trimmed_base, "normal"));
-                if base_normal.exists() {
-                    return Ok(Some(base_normal.to_string_lossy().to_string()));
-                }
-            }
         }
     }
 
@@ -5002,6 +5020,15 @@ async fn dispatch_parsed_event(
                 for (affector_id, count) in step.draw_events {
                     assembler.process_draw_event(affector_id, count);
                 }
+                for (affector_id, target_id) in step.counter_spell_events {
+                    assembler.process_counterspell_event(affector_id, target_id, None);
+                }
+                for (affector_id, affected_ids, category, zone_src, zone_dest) in step.zone_transfer_events {
+                    assembler.process_zone_transfer_event(affector_id, &affected_ids, &category, zone_src, zone_dest);
+                }
+                for (affector_id, count) in step.mana_paid_events {
+                    assembler.process_mana_paid_event(affector_id, count);
+                }
             }
             let draws = assembler.drain_collection_draws();
             if !draws.is_empty() {
@@ -5025,20 +5052,60 @@ async fn dispatch_parsed_event(
                 }
 
                 let mut validated_impactful = impactful.clone();
+
+                // Validate and award Negator titles based on countered spell CMCs from cards_cache
+                for (affector_grp, target_grp) in &assembler.pending_counter_events {
+                    let target_cmc: Option<i64> = sqlx::query_scalar(
+                        "SELECT cmc FROM cards_cache WHERE grp_id = ?"
+                    ).bind(*target_grp as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
+
+                    if let Some(cmc) = target_cmc {
+                        if cmc >= 5 {
+                            let tier = if cmc >= 10 {
+                                "Gold"
+                            } else if cmc >= 7 {
+                                "Silver"
+                            } else {
+                                "Bronze"
+                            };
+                            if let Some(imp) = validated_impactful.iter_mut().find(|i| i.grp_id == *affector_grp) {
+                                match_assembler::add_tiered_title(&mut imp.titles, "Negator", tier);
+                            } else {
+                                validated_impactful.push(match_assembler::MatchImpactfulRecord {
+                                    grp_id: *affector_grp,
+                                    seat_id: assembler.player_seat_id,
+                                    total_damage: 0,
+                                    max_hit: 0,
+                                    max_hit_combat: 0,
+                                    max_hit_spell: 0,
+                                    damage_to_player: 0,
+                                    damage_to_permanents: 0,
+                                    damage_combat: 0,
+                                    damage_spell: 0,
+                                    titles: vec![format!("Negator ({})", tier)],
+                                    cards_drawn: 0,
+                                    counters_added: 0,
+                                });
+                            }
+                        }
+                    }
+                }
+
                 for imp in &mut validated_impactful {
-                    if imp.titles.iter().any(|t| t.starts_with("Scoop Inducer")) {
-                        let card_info = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
-                            "SELECT card_type, cmc FROM cards_cache WHERE grp_id = ?"
-                        ).bind(imp.grp_id as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
+                    let card_info = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
+                        "SELECT card_type, cmc FROM cards_cache WHERE grp_id = ?"
+                    ).bind(imp.grp_id as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
 
-                        let is_invalid = if let Some((card_type, cmc)) = card_info {
-                            let type_str = card_type.unwrap_or_default().to_lowercase();
-                            type_str.contains("land") || cmc.unwrap_or(0) < 5
-                        } else {
-                            true
-                        };
+                    if let Some((card_type, cmc)) = card_info {
+                        let type_str = card_type.unwrap_or_default().to_lowercase();
+                        let is_land = type_str.contains("land");
+                        let cmc_val = cmc.unwrap_or(0);
 
-                        if is_invalid {
+                        if is_land {
+                            // Lands can never receive non-mana titles (e.g. Scoop Inducer, Tax Collector, Cat Burglar, etc.)
+                            imp.titles.retain(|t| t.starts_with("Mana Dynamo"));
+                        } else if cmc_val < 5 {
+                            // Non-land cards with CMC < 5 cannot receive Scoop Inducer
                             imp.titles.retain(|t| !t.starts_with("Scoop Inducer"));
                         }
                     }
