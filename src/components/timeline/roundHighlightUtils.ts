@@ -172,25 +172,23 @@ export function enrichActionsWithCombatContext(
       enriched.amount = dmg;
 
       const target = (ev.target_name || '').trim();
-      const isTargetPlayer =
+      const isTargetHero =
         target === 'You' ||
-        target === opponentName ||
-        target.toLowerCase().includes('opponent') ||
-        target.toLowerCase().includes('player') ||
-        target.toLowerCase() === 'you';
+        target.toLowerCase() === 'you' ||
+        target.toLowerCase().includes('player');
 
-      if (isTargetPlayer) {
-        if (isPlayer) {
-          // Hero damaged Opponent
-          enriched.oppLifeBefore = currentOppLife;
-          currentOppLife = Math.max(0, currentOppLife - dmg);
-          enriched.oppLifeAfter = currentOppLife;
-        } else {
-          // Opponent damaged Hero
-          enriched.heroLifeBefore = currentHeroLife;
-          currentHeroLife = Math.max(0, currentHeroLife - dmg);
-          enriched.heroLifeAfter = currentHeroLife;
-        }
+      const isTargetOpponent =
+        target === opponentName ||
+        target.toLowerCase().includes('opponent');
+
+      if (isTargetOpponent) {
+        enriched.oppLifeBefore = currentOppLife;
+        currentOppLife = Math.max(0, currentOppLife - dmg);
+        enriched.oppLifeAfter = currentOppLife;
+      } else if (isTargetHero) {
+        enriched.heroLifeBefore = currentHeroLife;
+        currentHeroLife = Math.max(0, currentHeroLife - dmg);
+        enriched.heroLifeAfter = currentHeroLife;
       } else if (target) {
         // Target is creature
         const targetClean = target.toLowerCase();

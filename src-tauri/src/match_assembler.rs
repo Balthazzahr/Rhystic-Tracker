@@ -929,57 +929,69 @@ impl MatchAssembler {
 
         // Track hero damage hits against opponent for lethal Executioner/Over-Killer
         let opp_seat = if self.player_seat_id == 1 { 2 } else { 1 };
-        if target_instance_id == 1 || target_instance_id == 2 {
+        if (target_instance_id == 1 || target_instance_id == 2) && target_instance_id == opp_seat {
             *self.turn_damage_to_seat.entry(target_instance_id).or_insert(0) += magnitude;
-        }
-        if seat_id == self.player_seat_id && target_instance_id == opp_seat {
-            self.current_turn_hero_hits.push((grp_id, magnitude, self.current_opp_life));
-            self.last_hero_damage_hit = Some((grp_id, magnitude, self.current_opp_life));
+            if seat_id == self.player_seat_id {
+                self.current_turn_hero_hits.push((grp_id, magnitude, self.current_opp_life));
+                self.last_hero_damage_hit = Some((grp_id, magnitude, self.current_opp_life));
+            }
         }
 
-        // Also record to live damage feed for the HUD
-        self.damage_feed_events.push((
-            LiveDamageFeedEvent {
-                source_instance_id: instance_id,
-                target_instance_id,
-                amount: magnitude,
-                damage_type,
+        // Check if this is self-damage to player (e.g. Talisman, painland, shockland)
+        let is_self_damage = (target_instance_id == seat_id)
+            || (seat_id == self.player_seat_id && target_instance_id == self.player_seat_id)
+            || (seat_id != self.player_seat_id && (target_instance_id == 1 || target_instance_id == 2) && target_instance_id != self.player_seat_id);
+
+        if !is_self_damage {
+            // Also record to live damage feed for the HUD
+            self.damage_feed_events.push((
+                LiveDamageFeedEvent {
+                    source_instance_id: instance_id,
+                    target_instance_id,
+                    amount: magnitude,
+                    damage_type,
+                    turn_number: self.current_turn,
+                },
+                self.feed_seq,
+            ));
+
+            // If target_instance_id is a creature/planeswalker (> 2), resolve its grp_id from instance_map or ability_parent_map
+            let target_grp_id = if target_instance_id > 2 {
+                self.instance_map.get(&target_instance_id).copied()
+                    .or_else(|| {
+                        self.ability_parent_map.get(&target_instance_id)
+                            .and_then(|pid| self.instance_map.get(pid).copied())
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+
+            // Stash into turn_events so the match play timeline also reflects combat & spell damage
+            let dmg_event_type = if is_combat {
+                if target_grp_id > 0 {
+                    format!("damage:combat:{}:{}:{}", magnitude, target_instance_id, target_grp_id)
+                } else {
+                    format!("damage:combat:{}:{}", magnitude, target_instance_id)
+                }
+            } else {
+                if target_grp_id > 0 {
+                    format!("damage:spell:{}:{}:{}", magnitude, target_instance_id, target_grp_id)
+                } else {
+                    format!("damage:spell:{}:{}", magnitude, target_instance_id)
+                }
+            };
+            self.turn_events.push(MatchTurnEventRecord {
                 turn_number: self.current_turn,
-            },
-            self.feed_seq,
-        ));
-
-        // If target_instance_id is a creature/planeswalker (> 2), resolve its grp_id from instance_map
-        let target_grp_id = if target_instance_id > 2 {
-            self.instance_map.get(&target_instance_id).copied().unwrap_or(0)
-        } else {
-            0
-        };
-
-        // Stash into turn_events so the match play timeline also reflects combat & spell damage
-        let dmg_event_type = if is_combat {
-            if target_grp_id > 0 {
-                format!("damage:combat:{}:{}:{}", magnitude, target_instance_id, target_grp_id)
-            } else {
-                format!("damage:combat:{}:{}", magnitude, target_instance_id)
-            }
-        } else {
-            if target_grp_id > 0 {
-                format!("damage:spell:{}:{}:{}", magnitude, target_instance_id, target_grp_id)
-            } else {
-                format!("damage:spell:{}:{}", magnitude, target_instance_id)
-            }
-        };
-        self.turn_events.push(MatchTurnEventRecord {
-            turn_number: self.current_turn,
-            seat_id,
-            event_type: dmg_event_type,
-            grp_id,
-            instance_id: Some(instance_id),
-            timestamp: Utc::now().to_rfc3339(),
-        });
-        self.turn_event_seqs.push(self.feed_seq);
-        self.feed_seq += 1;
+                seat_id,
+                event_type: dmg_event_type,
+                grp_id,
+                instance_id: Some(instance_id),
+                timestamp: Utc::now().to_rfc3339(),
+            });
+            self.turn_event_seqs.push(self.feed_seq);
+            self.feed_seq += 1;
+        }
     }
 
     pub fn register_ability_parent(&mut self, ability_id: u32, parent_id: u32) {
@@ -2428,6 +2440,52 @@ use super::*;
         assert_eq!(dies_event.grp_id, 78354);
         assert_eq!(dies_event.turn_number, 4);
         assert_eq!(dies_event.seat_id, 1);
+    }
+
+    #[test]
+    fn test_self_damage_filtered_from_combat_events() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-self-dmg".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 5, &[(1, 25), (2, 25)], 1);
+        // Hero controls Talisman of Indulgence (Grp 87235, Inst 711)
+        assembler.process_game_object(711, Some(87235), Some(1), 28, true, false, None);
+
+        // Talisman deals 1 damage to its controller (Seat 1)
+        assembler.process_damage_event(100, 711, 1, 1, 1);
+
+        // Verified: Self-damage must NOT be pushed into damage_feed_events or turn_events
+        assert_eq!(assembler.damage_feed_events.len(), 0, "Self damage must not appear in damage feed");
+        assert_eq!(assembler.turn_events.iter().filter(|e| e.event_type.starts_with("damage:")).count(), 0, "Self damage must not appear as damage turn event");
+        assert_eq!(assembler.turn_damage_to_seat.get(&1).copied().unwrap_or(0), 0, "Self damage must not count towards lethal hits");
+    }
+
+    #[test]
+    fn test_creature_damage_target_grp_id_resolved() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-creature-tgt".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 8, &[(1, 20), (2, 20)], 1);
+        // Opponent controls Sorin of House Markov (Grp 90816, Inst 948)
+        assembler.process_game_object(948, Some(90816), Some(2), 28, true, false, None);
+        // Hero controls Chandra (Grp 75695, Inst 952)
+        assembler.process_game_object(952, Some(75695), Some(1), 28, true, false, None);
+
+        // Chandra deals 4 direct damage to Sorin (Inst 948)
+        assembler.process_damage_event(200, 952, 948, 4, 2);
+
+        let dmg_event = assembler.turn_events.iter().find(|e| e.event_type.starts_with("damage:")).expect("Damage event exists");
+        assert_eq!(dmg_event.event_type, "damage:spell:4:948:90816", "Event type must encode target grp_id");
     }
 
     #[test]

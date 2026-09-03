@@ -34,7 +34,19 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
   const isOutOfTurn = isPlayer !== isTurnActivePlayer;
 
   const evType = (action.event_type || action.type || 'play').toLowerCase();
-  const rawName = action.name || 'Unknown Action';
+  let rawName = action.source_name || action.name || 'Unknown Action';
+  if (evType.startsWith('life')) {
+    if (rawName.startsWith('Life Total:')) {
+      rawName = action.source_name || 'Life Total Change';
+    } else if (rawName.includes('→')) {
+      const m = rawName.match(/\(([^)]+)\)$/);
+      if (m && !m[1].match(/^[+-]?\d+$/)) {
+        rawName = m[1];
+      } else {
+        rawName = action.source_name || 'Life Total Change';
+      }
+    }
+  }
   const displayName = cleanCardName(rawName);
 
   const cleanQuery = searchTerm.trim().toLowerCase();
@@ -59,12 +71,21 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
   let lifeDelta = 0;
   let lifeTotal = '';
   if (evType.startsWith('life')) {
-    if (action.event_type?.startsWith('life:')) {
+    if (action.delta !== undefined && action.delta !== 0) {
+      lifeDelta = action.delta;
+    } else if (action.amount !== undefined && action.amount !== 0) {
+      lifeDelta = action.amount;
+    } else if (action.event_type?.startsWith('life:')) {
       const parts = action.event_type.split(':');
       lifeDelta = parseInt(parts[1] || '0', 10);
       lifeTotal = parts[2] || '';
-    } else if (action.amount !== undefined) {
-      lifeDelta = action.amount;
+    }
+    // Also parse from displayName if needed (e.g. "25 → 24 (-1) (Talisman of Indulgence)")
+    if (lifeDelta === 0) {
+      const m = displayName.match(/\(([+-]?\d+)\)/);
+      if (m) {
+        lifeDelta = parseInt(m[1], 10);
+      }
     }
   }
 
@@ -105,12 +126,15 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
       );
     }
     if (evType === 'dies') {
-      const isTokenArtifact =
-        action.card_type?.toLowerCase().includes('token') ||
-        ['treasure', 'food', 'clue', 'blood', 'map', 'powerstone', 'incubator', 'gold'].some((t) =>
-          displayName.toLowerCase().includes(t)
-        );
-      if (isTokenArtifact) {
+      const cardTypeLower = (action.card_type || '').toLowerCase();
+      const isCreature = cardTypeLower.includes('creature');
+      const isNonCreatureToken =
+        !isCreature &&
+        (cardTypeLower.includes('token') ||
+          ['treasure', 'food', 'clue', 'blood', 'map', 'powerstone', 'incubator', 'gold'].some((t) =>
+            displayName.toLowerCase().includes(t)
+          ));
+      if (isNonCreatureToken) {
         return (
           <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/30 text-amber-300 border-amber-500/40 shrink-0">
             USED
@@ -177,13 +201,19 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
   // =========================================================================
   // 1. COMBAT & TARGETED DAMAGE ACTIONS (PERFECTLY ALIGNED 3-ZONE GRID)
   // =========================================================================
-  if (evType.startsWith('damage')) {
-    const isTargetPlayer =
-      targetName === 'You' ||
-      targetName === opponentName ||
-      targetName.toLowerCase().includes('opponent') ||
-      targetName.toLowerCase().includes('player') ||
-      targetName.toLowerCase() === 'you';
+  const isTargetHero =
+    targetName === 'You' ||
+    targetName.toLowerCase() === 'you' ||
+    targetName.toLowerCase().includes('player');
+
+  const isTargetOpponent =
+    targetName === opponentName ||
+    targetName.toLowerCase().includes('opponent');
+
+  const isSelfDamage = (isPlayer && isTargetHero) || (!isPlayer && isTargetOpponent);
+
+  if (evType.startsWith('damage') && !isSelfDamage) {
+    const isTargetPlayer = isTargetHero || isTargetOpponent;
 
     const lifeChangeStr =
       action.oppLifeAfter !== undefined
@@ -291,7 +321,7 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
               isTargetPlayer ? (
                 <>
                   <span className="text-xs font-sans font-bold text-[#76A382] truncate">
-                    You (Hero)
+                    You
                   </span>
                   <span className="text-[10px] font-mono px-2 py-0.5 bg-[#4A7856]/20 text-[#76A382] border border-[#4A7856]/30 tabular-nums shrink-0 font-medium">
                     {heroLifeChangeStr}

@@ -4284,14 +4284,22 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
         let mana_cost: Option<String> = r.get("mana_cost");
         let titles = titles_map.get(&grp_id).cloned().unwrap_or_default();
 
+        let mut amount: Option<i32> = None;
+        let mut delta: Option<i32> = None;
         let display_name = if event_type.starts_with("life:") {
             let parts: Vec<&str> = event_type.split(':').collect();
-            let delta = parts.get(1).unwrap_or(&"0");
-            let total = parts.get(2).unwrap_or(&"0");
-            let sign = if delta.starts_with('-') || delta.starts_with('+') { "" } else { "+" };
-            format!("Life Total: {} ({}{})", total, sign, delta)
+            let d: i32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+            delta = Some(d);
+            amount = Some(d);
+            if let Some(ref card_name) = name {
+                card_name.clone()
+            } else if grp_id > 0 {
+                format!("Unknown Card (#{})", grp_id)
+            } else {
+                "Life Total Change".to_string()
+            }
         } else {
-            name.unwrap_or_else(|| if grp_id == 0 { "Unknown Action".to_string() } else { format!("Unknown Card (#{})", grp_id) })
+            name.clone().unwrap_or_else(|| if grp_id == 0 { "Unknown Action".to_string() } else { format!("Unknown Card (#{})", grp_id) })
         };
 
         let mut target_name: Option<String> = None;
@@ -4301,14 +4309,17 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
                 let a: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
                 let t: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
                 let g: i64 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+                amount = Some(a);
                 (a, t, g)
             } else if parts.len() == 4 {
                 let a: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
                 let t: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                amount = Some(a);
                 (a, t, 0)
             } else {
                 let t: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
                 let a: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                amount = Some(a);
                 (a, t, 0)
             };
 
@@ -4336,9 +4347,12 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
             "grp_id": grp_id,
             "timestamp": timestamp,
             "name": display_name,
+            "source_name": name,
             "target_name": target_name,
             "card_type": card_type,
             "mana_cost": mana_cost,
+            "amount": amount,
+            "delta": delta,
             "titles": titles,
         }));
     }
@@ -4534,18 +4548,20 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                 };
 
                 let display_str = if let Some(ref sname) = source_name {
-                    format!("{} → {} ({} {}) ({})", old, new, if delta >= 0 { "+" } else { "" }, delta, sname)
+                    sname.clone()
                 } else {
-                    format!("{} → {} ({} {})", old, new, if delta >= 0 { "+" } else { "" }, delta)
+                    "Life Total Change".to_string()
                 };
 
                 merged.push((*seq, serde_json::json!({
                     "type": "life",
+                    "event_type": format!("life:{}:{}", delta, new),
                     "seat_id": seat,
                     "is_player": *seat == assembler.player_seat_id,
                     "name": display_str,
                     "source_name": source_name,
                     "delta": delta,
+                    "amount": delta,
                     "turn": turn,
                     "grp_id": src_grp.unwrap_or(0),
                 })));
@@ -4558,18 +4574,31 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                 let src_name = meta.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| format!("#{}", src_grp));
                 let card_type = meta.as_ref().and_then(|c| c.card_type.clone());
 
-                let target_name = if dmg.target_instance_id == assembler.player_seat_id {
-                    "You".to_string()
+                let (target_name, tgt_grp) = if dmg.target_instance_id == assembler.player_seat_id {
+                    ("You".to_string(), 0u32)
                 } else if dmg.target_instance_id == 1 || dmg.target_instance_id == 2 {
-                    active.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string())
+                    (active.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string()), 0u32)
                 } else {
-                    let tgt_grp = assembler.instance_map.get(&dmg.target_instance_id).copied().unwrap_or(0);
-                    card_db::get_card_metadata(db_for_names.pool(), tgt_grp as i64)
-                        .await.ok().flatten().map(|c| c.name).unwrap_or_else(|| "Permanent".to_string())
+                    let tgt_grp = assembler.instance_map.get(&dmg.target_instance_id).copied()
+                        .or_else(|| {
+                            assembler.ability_parent_map.get(&dmg.target_instance_id)
+                                .and_then(|pid| assembler.instance_map.get(pid).copied())
+                        })
+                        .unwrap_or(0);
+                    let name = if tgt_grp > 0 {
+                        card_db::get_card_metadata(db_for_names.pool(), tgt_grp as i64)
+                            .await.ok().flatten().map(|c| c.name)
+                            .unwrap_or_else(|| format!("Target #{}", dmg.target_instance_id))
+                    } else {
+                        format!("Target #{}", dmg.target_instance_id)
+                    };
+                    (name, tgt_grp)
                 };
 
+                let dtype_str = if dmg.damage_type == 1 { "combat" } else if dmg.damage_type == 3 { "fight" } else { "spell" };
                 merged.push((*seq, serde_json::json!({
                     "type": "damage",
+                    "event_type": format!("damage:{}:{}:{}:{}", dtype_str, dmg.amount, dmg.target_instance_id, tgt_grp),
                     "seat_id": src_seat,
                     "is_player": src_seat == assembler.player_seat_id,
                     "name": src_name,
@@ -4807,40 +4836,54 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                             let old_total = new_total - delta;
                             let src_name = name_opt.clone();
                             let display_str = if let Some(ref sn) = src_name {
-                                format!("{} → {} ({} {}) ({})", old_total, new_total, if delta >= 0 { "+" } else { "" }, delta, sn)
+                                sn.clone()
                             } else {
-                                format!("{} → {} ({} {})", old_total, new_total, if delta >= 0 { "+" } else { "" }, delta)
+                                "Life Total Change".to_string()
                             };
                             completed_recent_events.push(serde_json::json!({
                                 "type": "life",
+                                "event_type": ev_type,
                                 "seat_id": s_id,
                                 "is_player": is_hero,
                                 "name": display_str,
                                 "source_name": src_name,
                                 "delta": delta,
+                                "amount": delta,
                                 "turn": t_num,
                                 "grp_id": gid,
                             }));
                         } else if ev_type.starts_with("damage:") {
                             let parts: Vec<&str> = ev_type.split(':').collect();
-                            let (amount, tgt_id) = if parts.len() >= 4 {
+                            let (amount, tgt_id, tgt_gid) = if parts.len() >= 5 {
                                 let amt: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
                                 let tid: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
-                                (amt, tid)
+                                let g: i64 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                (amt, tid, g)
+                            } else if parts.len() == 4 {
+                                let amt: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                let tid: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                (amt, tid, 0)
                             } else {
                                 let tid: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
                                 let amt: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-                                (amt, tid)
+                                (amt, tid, 0)
                             };
                             let target_name = if tgt_id == record.hero_seat_id {
                                 "You".to_string()
                             } else if tgt_id == 1 || tgt_id == 2 || tgt_id == 0 {
                                 record.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string())
+                            } else if tgt_gid > 0 {
+                                if let Ok(Some(meta)) = card_db::get_card_metadata(pool, tgt_gid).await {
+                                    meta.name
+                                } else {
+                                    format!("Target #{}", tgt_id)
+                                }
                             } else {
                                 format!("Target #{}", tgt_id)
                             };
                             completed_recent_events.push(serde_json::json!({
                                 "type": "damage",
+                                "event_type": ev_type,
                                 "seat_id": s_id,
                                 "is_player": is_hero,
                                 "name": name_opt.unwrap_or_else(|| format!("#{}", gid)),
