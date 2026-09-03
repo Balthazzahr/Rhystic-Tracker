@@ -2,6 +2,23 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.4.1] - 2026-09-03
+
+### ⚔️ Match Timeline & Inspector Polish
+- **Symmetrical Player & Opponent Layout**: Symmetrically mirrored action boxes between hero and opponent without redundant prefixes; removed card mana costs in favor of card type indicators.
+- **Directional Combat Damage Arrows**: Added clear green arrows when player deals damage to opponent, red arrows when opponent deals damage to player, centered with aligned red damage badges.
+- **Heart Life Total Indicators**: Replaced textual life changes with heart icon formatting (`[❤️ -X → Y]`).
+- **Token Sacrifice & Inspector Upgrades**: Designated artifact tokens being sacrificed as amber `[USED]` rather than `DIES`. Fixed Token Inspector Scryfall set prefix resolution (`tm21`, `txln`) and face-name matching.
+- **Zero-Latency Card Type Tooltips**: Replaced delayed hover tooltips on card type icons with instant CSS tooltips.
+- **Play Timeline Default**: Opened the Match Inspector directly to the Play Timeline tab by default.
+
+### 🍱 Dashboard 2.0 & Widget Enhancements
+- **Interactive HSV & Hex Color Chooser**: Replaced fixed preset swatches with a full HSV color wheel / eyedropper picker, custom hex input with validation, and one-click copy-to-clipboard button.
+- **Deck Spotlight Full Art Redesign**: Widget displays full card art crop matching the Deck Library deck box (custom art, commander, or top card) spanning behind a translucent header. Centered masking tape title with mana pips, stacked win rate, taller borderless curve histogram colored by positive win rate, and whole-widget clickability opening the Deck Inspector.
+- **Current Streak Dot Density & Dynamic Stretching**: Scaled trail to 4 games per column (up to 16 games for 4 columns) with responsive rectangles dynamically stretching to 100% of widget width. Centered subtle `"W"` and `"L"` letters, active streak highlight ring, and contextual captions for winning/losing runs.
+- **Recent Matches Streamlined Rows**: Simplified layout removing mini impactful cards in favor of equal-width themed `WIN` / `LOSS` badges, deck preview art thumbnails, matchup text, relative time elapsed, and Match History-aligned format badges.
+- **Pure Color Fidelity**: Removed fillOpacity and border strokes on Trending Win Rate bars to ensure true selected hex colors render without tinting; matched All-Time and Today Win Rate subheading win/loss counts with positive/negative color slots.
+
 ## [1.4.0] - 2026-09-02
 
 ### ⚡ Urgent Hotfix (Post-Release)

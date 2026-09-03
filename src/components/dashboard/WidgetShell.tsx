@@ -11,6 +11,8 @@ interface WidgetShellProps {
   emptyMessage?: string;
   children: React.ReactNode;
   className?: string;
+  headerClassName?: string;
+  background?: React.ReactNode;
 }
 
 export const WidgetShell: React.FC<WidgetShellProps> = ({
@@ -23,13 +25,20 @@ export const WidgetShell: React.FC<WidgetShellProps> = ({
   emptyMessage = "No data recorded yet",
   children,
   className = "",
+  headerClassName = "",
+  background,
 }) => {
   return (
     <div
-      className={`bg-neutral-950/50 backdrop-blur-md border border-white/10 p-4 flex flex-col h-full rounded-none transition-all duration-200 select-none ${className}`}
+      className={`bg-neutral-950/50 backdrop-blur-md border border-white/10 p-4 flex flex-col h-full rounded-none transition-all duration-200 select-none relative overflow-hidden ${className}`}
     >
+      {/* Full-shell background underneath header and body */}
+      {background}
+
       {/* Widget Header */}
-      <div className="flex items-center justify-between gap-3 pb-2 border-b border-white/10 shrink-0">
+      <div
+        className={`flex items-center justify-between gap-3 pb-2 border-b border-white/10 shrink-0 relative z-10 ${headerClassName}`}
+      >
         <div className="flex items-baseline gap-2 min-w-0">
           <h3 className="text-[11px] font-sans font-semibold tracking-[0.16em] uppercase text-neutral-200 truncate">
             {title}

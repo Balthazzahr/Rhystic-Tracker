@@ -4236,6 +4236,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
         .map_err(|e| e.to_string())?;
 
     let hero_seat_id: u32 = match_row.as_ref().and_then(|r| r.try_get::<i64, _>("hero_seat_id").ok()).map(|s| s as u32).unwrap_or(1);
+    let opp_name: String = match_row.as_ref().and_then(|r| r.try_get::<String, _>("opponent_name").ok()).unwrap_or_else(|| "Opponent".to_string());
 
     // Fetch impactful card titles for this match to annotate timeline events
     let imp_rows = sqlx::query("SELECT grp_id, titles FROM match_impactful_cards WHERE match_id = ?")
@@ -4293,6 +4294,40 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
             name.unwrap_or_else(|| if grp_id == 0 { "Unknown Action".to_string() } else { format!("Unknown Card (#{})", grp_id) })
         };
 
+        let mut target_name: Option<String> = None;
+        if event_type.starts_with("damage:") {
+            let parts: Vec<&str> = event_type.split(':').collect();
+            let (_amt, tid, tgt_gid) = if parts.len() >= 5 {
+                let a: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                let t: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                let g: i64 = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+                (a, t, g)
+            } else if parts.len() == 4 {
+                let a: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                let t: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                (a, t, 0)
+            } else {
+                let t: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                let a: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                (a, t, 0)
+            };
+
+            let t_name = if tid == hero_seat_id {
+                "You".to_string()
+            } else if tid == 1 || tid == 2 || tid == 0 {
+                opp_name.clone()
+            } else if tgt_gid > 0 {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), tgt_gid).await {
+                    meta.name
+                } else {
+                    format!("Target #{}", tid)
+                }
+            } else {
+                format!("Target #{}", tid)
+            };
+            target_name = Some(t_name);
+        }
+
         events.push(serde_json::json!({
             "turn_number": turn_number,
             "seat_id": seat_id,
@@ -4301,6 +4336,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
             "grp_id": grp_id,
             "timestamp": timestamp,
             "name": display_name,
+            "target_name": target_name,
             "card_type": card_type,
             "mana_cost": mana_cost,
             "titles": titles,
@@ -4787,10 +4823,19 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                             }));
                         } else if ev_type.starts_with("damage:") {
                             let parts: Vec<&str> = ev_type.split(':').collect();
-                            let tgt_id: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-                            let amount: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-                            let target_name = if tgt_id == 1 || tgt_id == 2 {
-                                if tgt_id == record.hero_seat_id { "You".to_string() } else { record.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string()) }
+                            let (amount, tgt_id) = if parts.len() >= 4 {
+                                let amt: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                let tid: u32 = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                (amt, tid)
+                            } else {
+                                let tid: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                let amt: i32 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                                (amt, tid)
+                            };
+                            let target_name = if tgt_id == record.hero_seat_id {
+                                "You".to_string()
+                            } else if tgt_id == 1 || tgt_id == 2 || tgt_id == 0 {
+                                record.opponent_name.clone().unwrap_or_else(|| "Opponent".to_string())
                             } else {
                                 format!("Target #{}", tgt_id)
                             };

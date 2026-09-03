@@ -183,6 +183,7 @@ pub struct MatchAssembler {
     pub seen_damage_annotation_ids: HashSet<u32>,
     pub active_life_sources: HashMap<u32, u32>, // target_seat -> source_instance_id
     pub turn_damage_taken_by_instance: HashMap<u32, i32>, // instanceId -> combat damage taken this turn
+    pub turn_damage_to_seat: HashMap<u32, i32>, // seat_id -> damage taken this turn
     pub turn_mana_by_instance: HashMap<u32, u32>, // permanent_instance_id -> mana generated this turn
     pub token_spawner_map: HashMap<u32, u32>, // token_instance_id -> spawner_grp_id
     pub pending_counter_events: Vec<(u32, u32)>, // (affector_grp_id, target_grp_id)
@@ -242,6 +243,7 @@ impl MatchAssembler {
             seen_damage_annotation_ids: HashSet::new(),
             active_life_sources: HashMap::new(),
             turn_damage_taken_by_instance: HashMap::new(),
+            turn_damage_to_seat: HashMap::new(),
             turn_mana_by_instance: HashMap::new(),
             token_spawner_map: HashMap::new(),
             pending_counter_events: Vec::new(),
@@ -324,6 +326,7 @@ impl MatchAssembler {
         self.token_grp_ids.clear();
         self.token_spawner_map.clear();
         self.turn_mana_by_instance.clear();
+        self.turn_damage_to_seat.clear();
         self.current_turn = 0;
         self.feed_seq = 0;
         self.player_seat_id = 1;
@@ -926,6 +929,9 @@ impl MatchAssembler {
 
         // Track hero damage hits against opponent for lethal Executioner/Over-Killer
         let opp_seat = if self.player_seat_id == 1 { 2 } else { 1 };
+        if target_instance_id == 1 || target_instance_id == 2 {
+            *self.turn_damage_to_seat.entry(target_instance_id).or_insert(0) += magnitude;
+        }
         if seat_id == self.player_seat_id && target_instance_id == opp_seat {
             self.current_turn_hero_hits.push((grp_id, magnitude, self.current_opp_life));
             self.last_hero_damage_hit = Some((grp_id, magnitude, self.current_opp_life));
@@ -943,11 +949,26 @@ impl MatchAssembler {
             self.feed_seq,
         ));
 
+        // If target_instance_id is a creature/planeswalker (> 2), resolve its grp_id from instance_map
+        let target_grp_id = if target_instance_id > 2 {
+            self.instance_map.get(&target_instance_id).copied().unwrap_or(0)
+        } else {
+            0
+        };
+
         // Stash into turn_events so the match play timeline also reflects combat & spell damage
         let dmg_event_type = if is_combat {
-            format!("damage:combat:{}:{}", magnitude, target_instance_id)
+            if target_grp_id > 0 {
+                format!("damage:combat:{}:{}:{}", magnitude, target_instance_id, target_grp_id)
+            } else {
+                format!("damage:combat:{}:{}", magnitude, target_instance_id)
+            }
         } else {
-            format!("damage:spell:{}:{}", magnitude, target_instance_id)
+            if target_grp_id > 0 {
+                format!("damage:spell:{}:{}:{}", magnitude, target_instance_id, target_grp_id)
+            } else {
+                format!("damage:spell:{}:{}", magnitude, target_instance_id)
+            }
         };
         self.turn_events.push(MatchTurnEventRecord {
             turn_number: self.current_turn,
@@ -1142,7 +1163,11 @@ impl MatchAssembler {
             self.active_life_sources.insert(target_seat, affector_id);
 
             // Vampiric: Non-combat life drain from opponent (delta < 0 on opponent)
-            if delta < 0 && target_seat != self.player_seat_id {
+            // If damage was dealt to this seat on this turn that accounts for this life loss, it is damage resolution, not aristocrat life drain.
+            let dmg_to_seat = self.turn_damage_to_seat.get(&target_seat).copied().unwrap_or(0);
+            let is_damage_resolution = dmg_to_seat >= delta.abs();
+
+            if delta < 0 && target_seat != self.player_seat_id && !is_damage_resolution {
                 let mut grp_id = self.instance_map.get(&affector_id).copied().unwrap_or(0);
                 let mut seat_id = self.instance_owner_map.get(&affector_id).copied().unwrap_or(0);
                 if (grp_id == 0 || seat_id == 0) && self.ability_parent_map.contains_key(&affector_id) {
@@ -1421,6 +1446,7 @@ impl MatchAssembler {
             if turn > self.current_turn {
                 self.evaluate_ironclad();
                 self.turn_mana_by_instance.clear();
+                self.turn_damage_to_seat.clear();
                 self.current_turn_hero_hits.clear();
                 self.opp_life_before_combat = self.current_opp_life;
             }
@@ -1443,14 +1469,17 @@ impl MatchAssembler {
 
             if current_life != *life {
                 let delta = *life - current_life;
-                // If life decreased due to a combat damage event to this seat on this turn,
-                // the damage event already documents the hit in the HUD feed.
-                let was_combat_damage = delta < 0 && self.damage_feed_events.iter().any(|(dmg, _)| {
-                    dmg.turn_number == self.current_turn
-                        && dmg.target_instance_id == *seat
-                        && dmg.amount == delta.abs()
-                        && (dmg.damage_type == 1 || dmg.damage_type == 3)
-                });
+                // If life decreased due to combat damage events to this seat on this turn,
+                // the damage events already document the hit in the HUD feed.
+                let total_combat_dmg: i32 = self.damage_feed_events.iter()
+                    .filter(|(dmg, _)| {
+                        dmg.turn_number == self.current_turn
+                            && dmg.target_instance_id == *seat
+                            && (dmg.damage_type == 1 || dmg.damage_type == 3)
+                    })
+                    .map(|(dmg, _)| dmg.amount)
+                    .sum();
+                let was_combat_damage = delta < 0 && total_combat_dmg >= delta.abs();
 
                 if !was_combat_damage {
                     self.life_events.push((self.current_turn, current_life, *life, *seat, source_grp, self.feed_seq));
@@ -2819,5 +2848,51 @@ use super::*;
         if let Some(ranger) = impactful.iter().find(|i| i.grp_id == 77519) {
             assert!(!ranger.titles.iter().any(|t| t.starts_with("Swarmer")), "Ranger Class must NOT receive Swarmer from unlinked tokens");
         }
+    }
+
+    #[test]
+    fn test_combat_damage_does_not_award_vampiric_or_duplicate_life_event() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-combat-vamp".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 6, &[(1, 20), (2, 20)], 1);
+
+        // Hero creatures on battlefield:
+        // 1. Stoic Sphinx (grp 90417, inst 10)
+        // 2. The Lord of the Eagles (grp 103419, inst 20)
+        // 3. Cemetery Illuminator (grp 78836, inst 30)
+        // 4. Spectral Sailor (grp 93877, inst 40)
+        assembler.process_game_object(10, Some(90417), Some(1), 28, true, false, None);
+        assembler.process_game_object(20, Some(103419), Some(1), 28, true, false, None);
+        assembler.process_game_object(30, Some(78836), Some(1), 28, true, false, None);
+        assembler.process_game_object(40, Some(93877), Some(1), 28, true, false, None);
+
+        // Turn 6 Combat: 4 creatures deal 5 + 8 + 2 + 1 = 16 combat damage to Seat 2 (Opponent)
+        assembler.process_damage_event(1, 10, 2, 5, 1);
+        assembler.process_damage_event(2, 20, 2, 8, 1);
+        assembler.process_damage_event(3, 30, 2, 2, 1);
+        assembler.process_damage_event(4, 40, 2, 1, 1);
+
+        // MTGA emits ModifiedLife (-16 life on seat 2, affectorId = 10 (Stoic Sphinx))
+        assembler.process_life_modification(10, 2, -16);
+
+        // Game state life update: Opponent life goes 20 -> 4
+        assembler.update_game_state(Some(2), 6, &[(1, 20), (2, 4)], 1);
+
+        // Verify turn events has damage events and NO redundant life:-16:4 event
+        let life_events_on_turn_6: Vec<_> = assembler.turn_events.iter()
+            .filter(|e| e.turn_number == 6 && e.event_type.starts_with("life:"))
+            .collect();
+        assert_eq!(life_events_on_turn_6.len(), 0, "No duplicate life event should be recorded when life decrease was caused by combat damage");
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+        let sphinx = impactful.iter().find(|i| i.grp_id == 90417).expect("Stoic Sphinx impactful");
+        assert!(!sphinx.titles.iter().any(|t| t.starts_with("Vampiric")), "Stoic Sphinx must NOT receive Vampiric from combat damage");
+        assert_eq!(sphinx.damage_combat, 5);
     }
 }

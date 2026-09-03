@@ -1,13 +1,7 @@
 import React, { useMemo } from "react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
-import { CardNameTooltip } from "../../CardNameTooltip";
-
-const scryfallCardUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
-
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+import CardImage from "../../CardImage";
 
 const renderColorPips = (colors: string[], size: number = 12) => {
   if (!colors || colors.length === 0) {
@@ -29,13 +23,9 @@ const renderColorPips = (colors: string[], size: number = 12) => {
 export const DeckSpotlightWidget: React.FC<WidgetProps> = ({
   widget,
   deckOverview,
+  customColors,
   onSelectDeck,
-  onShowCard,
 }) => {
-  const width = widget.width || 5;
-  const height = widget.height || 3;
-  const isSmall = width <= 4 || height <= 2;
-
   const eligibleDecks = useMemo(
     () =>
       (deckOverview || []).filter(
@@ -54,180 +44,169 @@ export const DeckSpotlightWidget: React.FC<WidgetProps> = ({
     return (deckOverview || [])[0] || null;
   }, [eligibleDecks, deckOverview]);
 
-  const spotlightIsBrawl = useMemo(
-    () =>
-      (spotlight?.formats || []).some((f: any) =>
-        String(f.format || "")
-          .toLowerCase()
-          .includes("brawl"),
-      ),
-    [spotlight],
-  );
+  // Resolve deck art name matching the Deck Box / Deck Library view
+  const deckArtName = useMemo(() => {
+    if (!spotlight) return "";
+    return (
+      spotlight.custom_art_name ||
+      spotlight.top_commander_name ||
+      spotlight.top_card_name ||
+      ""
+    );
+  }, [spotlight]);
 
-  const spotlightMarquee = useMemo(() => {
-    if (!spotlight) return null;
-    if (spotlightIsBrawl && spotlight.top_commander_name) {
-      return {
-        name: spotlight.top_commander_name,
-        grp_id: spotlight.top_commander_grp_id,
-        isCommander: true,
-      };
+  // Deterministic tape angle derived from deck name
+  const tapeAngle = useMemo(() => {
+    let h = 0;
+    const str = spotlight?.deck_name || "";
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i);
+      h |= 0;
     }
-    const keys: any[] = spotlight.key_cards || [];
-    const best = keys.reduce<any | null>(
-      (acc, k) => (!acc || (k.cmc || 0) > (acc.cmc || 0) ? k : acc),
-      null,
-    );
-    if (best)
-      return { name: best.name, grp_id: best.grp_id, isCommander: false };
-    if (spotlight.top_card_name)
-      return {
-        name: spotlight.top_card_name,
-        grp_id: spotlight.top_card_grp_id,
-        isCommander: false,
-      };
-    return null;
-  }, [spotlight, spotlightIsBrawl]);
+    const abs = Math.abs(h);
+    const raw = ((abs % 1000) / 1000) * 4.8 - 2.4;
+    return Math.abs(raw) < 0.6 ? (raw < 0 ? -1.3 : 1.3) : Number(raw.toFixed(2));
+  }, [spotlight?.deck_name]);
 
-  const spotlightKeyCards = useMemo(() => {
-    if (!spotlight) return [];
-    const BASIC_LANDS = new Set([
-      "Plains",
-      "Island",
-      "Swamp",
-      "Mountain",
-      "Forest",
-      "Snow-Covered Plains",
-      "Snow-Covered Island",
-      "Snow-Covered Swamp",
-      "Snow-Covered Mountain",
-      "Snow-Covered Forest",
-      "Wastes",
-    ]);
-    const rawKeys: any[] = spotlight.key_cards || [];
-    const nonLandKeys = rawKeys.filter((k) => !BASIC_LANDS.has(k.name));
+  // Deck format label
+  const deckFormat = useMemo(() => {
+    if (!spotlight?.formats || spotlight.formats.length === 0) return "Constructed";
+    const first = spotlight.formats[0];
+    return typeof first === "string" ? first : first.format || "Constructed";
+  }, [spotlight]);
 
-    const cardsList: any[] = spotlight.cards || spotlight.main_deck || [];
-    const addedNames = new Set(nonLandKeys.map((k) => k.name));
-    if (spotlightMarquee) addedNames.add(spotlightMarquee.name);
+  // Custom colors for Deck Spotlight
+  const positiveColor = customColors?.deckSpotlight?.positive || "#10B981";
+  const negativeColor = customColors?.deckSpotlight?.negative || "#EF4444";
+  const wrNum = parseFloat(String(spotlight?.winrate || "0").replace(/%/g, "")) || 0;
+  const winRateColor = wrNum >= 50 ? positiveColor : negativeColor;
 
-    const extraCards = cardsList.filter(
-      (c) => !BASIC_LANDS.has(c.name) && !addedNames.has(c.name),
-    );
-    const maxCards = isSmall ? 4 : 8;
-    return [...nonLandKeys, ...extraCards].slice(0, maxCards);
-  }, [spotlight, spotlightMarquee, isSmall]);
+  // Mana curve aggregation
+  const curveData = useMemo(() => {
+    const raw: number[] = spotlight?.mana_curve || [];
+    if (!raw || raw.length === 0) return null;
+    const counts = raw.slice(1, 8); // CMC 1 through 7+
+    const maxVal = Math.max(...counts, 1);
+    return { counts, maxVal };
+  }, [spotlight?.mana_curve]);
+
+  // Full-shell background node extending behind header and body
+  const backgroundNode = spotlight && (
+    <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+      {deckArtName ? (
+        <CardImage
+          name={deckArtName}
+          version="art_crop"
+          alt={deckArtName}
+          className="w-full h-full object-cover object-center scale-105 filter blur-[0.2px]"
+        />
+      ) : (
+        <div className="w-full h-full bg-neutral-900" />
+      )}
+      {/* Subtle translucent overlays allowing the artwork to show brightly behind header & body */}
+      <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/40 to-neutral-950/20" />
+      <div className="absolute inset-0 bg-black/10" />
+    </div>
+  );
 
   return (
     <WidgetShell
-      title="DECK SPOTLIGHT"
-      subtitle={!isSmall && spotlight ? "Top performing active deck" : undefined}
+      title="Deck Spotlight"
       isEmpty={!spotlight}
       emptyMessage="No qualifying deck recorded (requires 10+ games and 50%+ win rate)."
+      className="relative overflow-hidden cursor-pointer group"
+      headerClassName="bg-black/25 backdrop-blur-xs px-4 pt-3 pb-2 -mx-4 -mt-4 border-b border-white/10 cursor-pointer"
+      background={backgroundNode}
     >
       {spotlight && (
-        <div className="flex gap-3.5 items-start w-full pt-1 flex-1 min-h-0 overflow-hidden">
-          {/* Featured / Marquee Commander Card */}
-          {spotlightMarquee && (
+        <div
+          onClick={() => onSelectDeck(spotlight.deck_name)}
+          className="w-full h-full flex flex-col justify-between relative z-10 min-h-0 pt-1 select-none cursor-pointer"
+          title={`Open ${spotlight.deck_name} in Deck Inspector`}
+        >
+          {/* Top Section: Title on Tape with Mana Pips Centered */}
+          <div className="flex items-center justify-center w-full">
             <div
-              className={`shrink-0 overflow-hidden cursor-zoom-in group shadow-2xl transition-all hover:scale-105 border border-white/10 bg-neutral-900 rounded-xs ${
-                isSmall
-                  ? "w-[110px] h-[154px]"
-                  : "w-[155px] sm:w-[172px] h-[217px] sm:h-[240px]"
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onShowCard(
-                  {
-                    name: spotlightMarquee.name,
-                    grp_id: spotlightMarquee.grp_id,
-                  },
-                  spotlightMarquee.isCommander,
-                );
-              }}
+              className="transition-transform group-hover:scale-[1.02] active:scale-[0.98] inline-flex items-center max-w-full"
             >
-              <img
-                src={scryfallCardUrl(spotlightMarquee.name)}
-                alt={spotlightMarquee.name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = scryfallArtUrl(spotlightMarquee.name);
-                }}
-              />
-            </div>
-          )}
-
-          {/* Deck Info & Notable Cards */}
-          <div className="min-w-0 flex-1 flex flex-col justify-start gap-2.5 self-start">
-            <div>
               <div
-                onClick={() => onSelectDeck(spotlight.deck_name)}
-                className={`font-display font-bold text-white truncate leading-tight cursor-pointer hover:underline ${
-                  isSmall ? "text-base sm:text-lg" : "text-xl sm:text-2xl"
-                }`}
-                title={spotlight.deck_name}
+                className="px-3.5 py-1.5 max-w-full flex items-center gap-2 relative select-none"
+                style={{
+                  background:
+                    "linear-gradient(178deg, rgba(248, 244, 230, 0.94) 0%, rgba(238, 232, 214, 0.90) 100%)",
+                  boxShadow:
+                    "0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.1)",
+                  clipPath:
+                    "polygon(0% 4%, 2% 16%, 0.5% 32%, 2.5% 48%, 0% 64%, 2% 80%, 0.5% 96%, 98% 98%, 99.5% 82%, 97.5% 66%, 100% 50%, 98% 34%, 99.5% 18%, 97.5% 2%)",
+                  transform: `rotate(${tapeAngle}deg)`,
+                }}
               >
-                {spotlight.deck_name}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                {renderColorPips(spotlight.colors || [], 11)}
-                {spotlightMarquee?.isCommander && (
-                  <span className="text-[11px] font-sans text-neutral-400 truncate opacity-80">
-                    {spotlightMarquee.name}
-                  </span>
-                )}
-              </div>
-              <div className="text-[11px] font-sans text-neutral-300 mt-1 tabular-nums">
-                {spotlight.total_matches} games <span className="opacity-40">·</span>{" "}
-                <span className="font-semibold text-white">
-                  {String(spotlight.winrate || "").replace(/%/g, "")}% WR
+                {renderColorPips(spotlight.colors || [], 14)}
+                <span
+                  className="tracking-wide truncate uppercase leading-tight text-[#141418] text-base sm:text-lg font-bold"
+                  style={{
+                    fontFamily:
+                      '"Permanent Marker", "Outfit", cursive, sans-serif',
+                    textShadow:
+                      "0 0 1px rgba(20, 20, 24, 0.6), 0 0.5px 0.5px rgba(0, 0, 0, 0.4)",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {spotlight.deck_name}
                 </span>
               </div>
             </div>
+          </div>
 
-            {/* Notable Cards Grid */}
-            {spotlightKeyCards.length > 0 && (
-              <div className="mt-1">
-                <div className="text-[9px] font-sans uppercase tracking-wider text-neutral-400 mb-1 opacity-80 font-medium">
-                  NOTABLE CARDS IN DECK
-                </div>
-                <div
-                  className={`grid gap-1.5 w-fit ${
-                    isSmall ? "grid-cols-4" : "grid-cols-4"
-                  }`}
-                >
-                  {spotlightKeyCards.map((k: any) => (
+          {/* Bottom Section: Stacked Win Rate & Taller Borderless Transparent Mana Curve */}
+          <div className="flex flex-wrap items-end justify-between gap-3 pt-3 border-t border-white/10">
+            {/* Stacked Win Rate */}
+            <div className="flex flex-col justify-end">
+              <div className="text-[10px] font-sans text-neutral-400 font-medium uppercase tracking-wider">
+                Win Rate
+              </div>
+              <div
+                className="text-2xl sm:text-3xl font-display font-bold tabular-nums tracking-wide leading-none my-0.5"
+                style={{ color: winRateColor }}
+              >
+                {String(spotlight.winrate || "").replace(/%/g, "")}%
+              </div>
+              <div className="text-[11px] font-sans text-neutral-400 tabular-nums">
+                {spotlight.total_matches} games played
+              </div>
+            </div>
+
+            {/* Mana Curve Mini Histogram (No curve text, no border, transparent background, taller bars) */}
+            {curveData && (
+              <div className="flex items-end gap-1.5 h-14 bg-black/20 px-2 py-1 rounded-xs">
+                {curveData.counts.map((count: number, idx: number) => {
+                  const cmc = idx + 1;
+                  const heightPct =
+                    curveData.maxVal > 0
+                      ? (count / curveData.maxVal) * 100
+                      : 0;
+                  return (
                     <div
-                      key={k.grp_id ?? k.name}
-                      className={`shrink-0 ${
-                        isSmall ? "w-[36px] h-[50px]" : "w-[46px] h-[64px]"
-                      }`}
+                      key={cmc}
+                      className="flex flex-col items-center justify-end h-full gap-0.5"
+                      title={`CMC ${cmc >= 7 ? "7+" : cmc}: ${count} cards`}
                     >
-                      <CardNameTooltip name={k.name}>
-                        <div
-                          className={`w-full h-full overflow-hidden border border-white/15 cursor-zoom-in hover:scale-105 transition-transform shadow-md bg-neutral-900 rounded-xs`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onShowCard({ name: k.name, grp_id: k.grp_id }, false);
-                          }}
-                        >
-                          <img
-                            src={scryfallCardUrl(k.name)}
-                            alt={k.name}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = scryfallArtUrl(k.name);
-                            }}
-                          />
-                        </div>
-                      </CardNameTooltip>
+                      <div
+                        className="w-2.5 sm:w-3 hover:brightness-125 transition-all rounded-t-[1px]"
+                        style={{
+                          height: `${Math.max(
+                            count > 0 ? 4 : 0,
+                            Math.round((heightPct / 100) * 38),
+                          )}px`,
+                          backgroundColor: positiveColor,
+                        }}
+                      />
+                      <span className="text-[8px] font-mono text-neutral-400 leading-none">
+                        {cmc >= 7 ? "7+" : cmc}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             )}
           </div>

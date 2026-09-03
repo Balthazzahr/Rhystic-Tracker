@@ -1,21 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle2, XCircle, AlertCircle, Play } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Play, AlertCircle, CheckCircle2, XCircle, ChevronsUpDown, ChevronDown, ChevronRight } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardItem } from './CardBreakdown';
-import { RenderManaCost } from '../utils/manaUtils';
-
-interface TurnEventItem {
-  turn_number: number;
-  seat_id: number;
-  is_player?: boolean;
-  event_type: 'play' | 'draw' | string;
-  grp_id: number;
-  timestamp: string;
-  name: string;
-  card_type?: string;
-  mana_cost?: string;
-  titles?: string[];
-}
+import { TimelineAction, enrichActionsWithCombatContext } from './timeline/roundHighlightUtils';
+import { TurnActionRow } from './timeline/TurnActionRow';
+import { RoundTurnGroup } from './timeline/RoundTurnGroup';
 
 interface MatchTimelineProps {
   matchId: string;
@@ -25,6 +14,7 @@ interface MatchTimelineProps {
   palette: any;
   cards: CardItem[];
   opponentName?: string;
+  formatName?: string;
   onCardClick?: (card: CardItem, turn: number) => void;
   searchTerm?: string;
 }
@@ -34,50 +24,71 @@ export function MatchTimeline({
   turns,
   goingFirst,
   result,
-  palette,
   cards,
   opponentName,
+  formatName,
   onCardClick,
   searchTerm = '',
 }: MatchTimelineProps) {
-  const [turnEvents, setTurnEvents] = useState<TurnEventItem[]>([]);
+  const [turnEvents, setTurnEvents] = useState<TimelineAction[]>([]);
   const [heroSeatId, setHeroSeatId] = useState<number>(goingFirst ? 1 : 2);
   const [loading, setLoading] = useState<boolean>(true);
-  const cleanQuery = searchTerm.trim().toLowerCase();
+
+  // Two-tier collapsible state
+  const [collapsedRounds, setCollapsedRounds] = useState<Set<number>>(new Set());
+  const [collapsedTurns, setCollapsedTurns] = useState<Set<number>>(new Set());
+  const [openingCollapsed, setOpeningCollapsed] = useState<boolean>(true);
+  const [hasInitializedRounds, setHasInitializedRounds] = useState<boolean>(false);
 
   useEffect(() => {
+    let isCancelled = false;
     const fetchEvents = async () => {
       setLoading(true);
+      setHasInitializedRounds(false);
       try {
         const res = await invoke<any>('get_match_turn_events', { matchId });
-        if (res && Array.isArray(res.events)) {
-          setTurnEvents(res.events);
-          setHeroSeatId(res.hero_seat_id || (goingFirst ? 1 : 2));
-        } else if (Array.isArray(res)) {
-          setTurnEvents(res);
+        if (!isCancelled) {
+          if (res && Array.isArray(res.events)) {
+            setTurnEvents(res.events);
+            setHeroSeatId(res.hero_seat_id || (goingFirst ? 1 : 2));
+          } else if (Array.isArray(res)) {
+            setTurnEvents(res);
+          }
         }
       } catch (e) {
-        console.error('Failed to fetch match turn events:', e);
-        setTurnEvents([]);
+        if (!isCancelled) {
+          console.error('Failed to fetch match turn events:', e);
+          setTurnEvents([]);
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
     fetchEvents();
+    return () => {
+      isCancelled = true;
+    };
   }, [matchId, goingFirst]);
 
-  const { openingEvents, eventsByRound } = React.useMemo(() => {
-    const opening: { first: TurnEventItem[]; second: TurnEventItem[] } = { first: [], second: [] };
-    const map: Record<number, { first: TurnEventItem[]; second: TurnEventItem[]; firstTurn: number; secondTurn: number }> = {};
+  // Group events by Opening Phase (Turn 0) and by Round (Turn >= 1)
+  const { openingEvents, roundsData, totalRounds } = useMemo(() => {
+    const enrichedEvents = enrichActionsWithCombatContext(turnEvents, formatName, opponentName);
+    const opening: TimelineAction[] = [];
+    const map: Record<number, { first: TimelineAction[]; second: TimelineAction[]; firstTurn: number; secondTurn: number }> = {};
 
-    for (const ev of turnEvents) {
-      const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
-      const isFirst = goingFirst ? isPlayer : !isPlayer;
+    let maxRound = Math.ceil(Math.max(1, turns) / 2);
 
-      if (ev.turn_number === 0) {
-        (isFirst ? opening.first : opening.second).push(ev);
+    for (const ev of enrichedEvents) {
+      const turnNum = ev.turn_number !== undefined ? ev.turn_number : (ev.turn !== undefined ? ev.turn : 1);
+
+      if (turnNum === 0) {
+        opening.push(ev);
       } else {
-        const round = Math.ceil(ev.turn_number / 2);
+        const round = Math.ceil(turnNum / 2);
+        if (round > maxRound) maxRound = round;
+
         if (!map[round]) {
           map[round] = {
             first: [],
@@ -86,214 +97,83 @@ export function MatchTimeline({
             secondTurn: round * 2,
           };
         }
-        const isFirstTurn = ev.turn_number % 2 !== 0;
-        (isFirstTurn ? map[round].first : map[round].second).push(ev);
+
+        if (turnNum % 2 !== 0) {
+          map[round].first.push(ev);
+        } else {
+          map[round].second.push(ev);
+        }
       }
     }
-    return { openingEvents: opening, eventsByRound: map };
-  }, [turnEvents, heroSeatId, goingFirst]);
 
-  const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
-    Creature: { icon: 'ms-creature', color: '#22C55E' },
-    Instant: { icon: 'ms-instant', color: '#EF4444' },
-    Sorcery: { icon: 'ms-sorcery', color: '#F59E0B' },
-    Artifact: { icon: 'ms-artifact', color: '#94A3B8' },
-    Enchantment: { icon: 'ms-enchantment', color: '#A855F7' },
-    Planeswalker: { icon: 'ms-planeswalker', color: '#F97316' },
-    Battle: { icon: 'ms-battle', color: '#F43F5E' },
-    Land: { icon: 'ms-land', color: '#D97706' },
-  };
-
-  const getCardTypeBadge = (rawType?: string) => {
-    if (!rawType) return null;
-    const match = Object.entries(CARD_TYPE_CONFIG).find(([k]) =>
-      rawType.toLowerCase().includes(k.toLowerCase())
-    );
-    if (!match) return null;
-    const [typeName, info] = match;
-    return (
-      <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 border shrink-0 border-white/10 bg-white/[0.04] text-neutral-300">
-        <i className={`ms ${info.icon} text-[10px]`} style={{ color: info.color }} />
-        <span>{rawType}</span>
-      </span>
-    );
-  };
-
-  const renderEventRow = (ev: TurnEventItem, columnIsFirst?: boolean, idx: number = 0) => {
-    const isPlayer = ev.is_player !== undefined ? ev.is_player : (ev.seat_id === heroSeatId);
-    const activePlayerIsHero = columnIsFirst !== undefined ? (columnIsFirst ? goingFirst : !goingFirst) : isPlayer;
-    const isAcrossTurn = columnIsFirst !== undefined && isPlayer !== activePlayerIsHero;
-    const ownerTag = isAcrossTurn ? (isPlayer ? ' (You)' : ' (Opponent)') : '';
-
-    const isMatch = Boolean(cleanQuery && ev.name && ev.name.toLowerCase().includes(cleanQuery));
-    const isDeemphasized = Boolean(cleanQuery && !isMatch);
-    const highlightClasses = isMatch
-      ? 'bg-[#4A7FA3]/20'
-      : isDeemphasized
-      ? 'opacity-30'
-      : 'hover:bg-white/[0.02]';
-
-    const rowKey = `${ev.turn_number}-${ev.seat_id}-${ev.grp_id}-${ev.event_type}-${idx}`;
-
-    const isDamage = ev.event_type.startsWith('damage:');
-    if (isDamage) {
-      const parts = ev.event_type.split(':');
-      const tgtId = parseInt(parts[1] || '0', 10);
-      const amount = parts[2] || '0';
-      const targetName = tgtId === 1 || tgtId === 2
-        ? (tgtId === heroSeatId ? 'You' : (opponentName || 'Opponent'))
-        : `Target #${tgtId}`;
-
-      return (
-        <div
-          key={rowKey}
-          className={`text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
-        >
-          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/50 text-amber-300 border-amber-500/30 shrink-0 tabular-nums">
-            {amount} DMG
-          </span>
-          <span
-            className={`truncate font-sans font-semibold hover:underline cursor-pointer text-xs ${
-              isMatch ? 'text-[#7FAAC9] font-bold' : 'text-white hover:text-amber-300'
-            }`}
-            onClick={() => onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
-          >
-            {ev.name}{ownerTag}
-          </span>
-          {getCardTypeBadge(ev.card_type)}
-          <span className="text-neutral-500 text-[10px] shrink-0">→</span>
-          <span className="truncate text-amber-200/80 text-xs font-sans">
-            {targetName}
-          </span>
-        </div>
-      );
+    const rounds = [];
+    for (let r = 1; r <= maxRound; r++) {
+      const entry = map[r] || {
+        first: [],
+        second: [],
+        firstTurn: r * 2 - 1,
+        secondTurn: r * 2,
+      };
+      rounds.push({ round: r, ...entry });
     }
 
-    const isLife = ev.event_type.startsWith('life:');
-    if (isLife) {
-      const parts = ev.event_type.split(':');
-      const d = parseInt(parts[1] || '0', 10);
-      const total = parseInt(parts[2] || '0', 10);
-      const oldTotal = total - d;
-      const positive = d >= 0;
-      const isOpponent = !isPlayer;
-      const sign = positive ? '+' : '';
-      const srcName = ev.grp_id > 0 && ev.name ? ` (${ev.name})` : '';
-      const displayStr = `${oldTotal} → ${total} (${sign}${d})${srcName}`;
+    return { openingEvents: opening, roundsData: rounds, totalRounds: maxRound };
+  }, [turnEvents, turns]);
 
-      return (
-        <div
-          key={rowKey}
-          className={`text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
-        >
-          <span
-            className={`px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase shrink-0 tabular-nums ${
-              positive
-                ? 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30'
-                : 'bg-rose-950/50 text-rose-300 border-rose-500/30'
-            }`}
-          >
-            {isOpponent ? 'OPP LIFE ' : 'LIFE '}{positive ? `+${d}` : d}
-          </span>
-          <span className={`truncate font-sans font-medium text-xs ${isMatch ? 'text-[#7FAAC9] font-bold' : positive ? 'text-emerald-300/90' : 'text-rose-300/90'}`}>
-            {displayStr}{ownerTag}
-          </span>
-        </div>
-      );
+  // Collapse all rounds by default on initial load of a match
+  useEffect(() => {
+    if (!loading && totalRounds > 0 && !hasInitializedRounds) {
+      const allRounds = new Set<number>();
+      for (let r = 1; r <= totalRounds; r++) {
+        allRounds.add(r);
+      }
+      setCollapsedRounds(allRounds);
+      setOpeningCollapsed(true);
+      setHasInitializedRounds(true);
     }
+  }, [loading, totalRounds, hasInitializedRounds]);
 
-    const isCounter = ev.event_type.startsWith('counter:');
-    if (isCounter) {
-      const parts = ev.event_type.split(':');
-      const counterName = parts[1] || '+1/+1';
-      const amount = parseInt(parts[2] || '1', 10);
-      let badgeText = '';
-      if (counterName === '+1/+1') {
-        badgeText = amount > 0 ? `+${amount} +1/+1` : `${amount} +1/+1`;
+  const toggleRound = (roundNum: number) => {
+    setCollapsedRounds((prev) => {
+      const next = new Set(prev);
+      if (next.has(roundNum)) {
+        next.delete(roundNum);
       } else {
-        const cLabel = counterName === 'counter' ? 'COUNTER' : `${counterName.toUpperCase()} COUNTER`;
-        badgeText = amount > 0 ? `+${amount} ${cLabel}` : `${amount} ${cLabel}`;
+        next.add(roundNum);
       }
-      return (
-        <div
-          key={rowKey}
-          className={`text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
-        >
-          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/50 text-amber-300 border-amber-500/30 shrink-0 tabular-nums">
-            {badgeText}
-          </span>
-          <span
-            className={`truncate font-sans font-medium hover:underline cursor-pointer text-xs ${
-              isMatch ? 'text-[#7FAAC9] font-bold' : 'text-neutral-100 hover:text-white'
-            }`}
-            onClick={() => ev.grp_id > 0 && onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
-          >
-            {ev.name}{ownerTag}
-          </span>
-          {getCardTypeBadge(ev.card_type)}
-        </div>
-      );
-    }
-
-    let badgeText = 'PLAY';
-    let badgeStyle = 'bg-[#4A7856]/20 text-[#76A382] border-[#4A7856]/40';
-    if (ev.event_type === 'mulligan') {
-      badgeText = 'MULLIGAN';
-      badgeStyle = 'bg-[#D4A237]/20 text-[#E2BF6F] border-[#D4A237]/40';
-    } else if (ev.event_type === 'bottom') {
-      badgeText = 'BOTTOM';
-      badgeStyle = 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40';
-    } else if (ev.event_type === 'draw') {
-      badgeText = ev.turn_number === 0 ? 'KEPT' : 'DRAW';
-      badgeStyle = 'bg-[#4A7FA3]/20 text-[#7FAAC9] border-[#4A7FA3]/40';
-    } else if (ev.event_type === 'token') {
-      badgeText = 'TOKEN';
-      badgeStyle = 'bg-[#3D7D7D]/20 text-[#6EA8A8] border-[#3D7D7D]/40';
-    } else if (ev.event_type === 'dies') {
-      badgeText = 'DIES';
-      badgeStyle = 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40';
-    } else if (ev.event_type === 'exile') {
-      badgeText = 'EXILE';
-      badgeStyle = 'bg-[#8A719D]/20 text-[#B39EC4] border-[#8A719D]/40';
-    }
-
-    const isHidden = ev.grp_id === 0;
-    const displayName = isHidden
-      ? (ev.event_type === 'mulligan' ? 'Mulligan taken (Hand shuffled back)' : 'Card bottomed')
-      : ev.name;
-
-    return (
-      <div
-        key={rowKey}
-        className={`text-xs font-mono flex items-center justify-between py-1 px-2.5 border-b border-white/[0.03] ${highlightClasses}`}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase shrink-0 ${badgeStyle}`}>
-            {badgeText}
-          </span>
-          <span
-            className={`truncate font-sans font-medium text-xs ${
-              isHidden
-                ? 'italic text-neutral-400'
-                : isMatch
-                ? 'text-[#7FAAC9] font-bold hover:underline cursor-pointer'
-                : 'text-neutral-100 hover:text-white hover:underline cursor-pointer'
-            }`}
-            onClick={() => !isHidden && onCardClick && onCardClick({ grp_id: ev.grp_id, is_opponent: !isPlayer, count: 1, name: ev.name, mana_cost: ev.mana_cost, card_type: ev.card_type }, ev.turn_number)}
-          >
-            {displayName}{ownerTag}
-          </span>
-          {!isHidden && getCardTypeBadge(ev.card_type)}
-        </div>
-        {!isHidden && ev.mana_cost && <RenderManaCost costStr={ev.mana_cost} size={12} />}
-      </div>
-    );
+      return next;
+    });
   };
 
-  const leftLabel = goingFirst ? 'Your Timeline' : `${opponentName || 'Opponent'} Timeline`;
-  const rightLabel = goingFirst ? `${opponentName || 'Opponent'} Timeline` : 'Your Timeline';
-  const leftColor = goingFirst ? 'text-[#76A382]' : 'text-[#D57C69]';
-  const rightColor = goingFirst ? 'text-[#D57C69]' : 'text-[#76A382]';
+  const toggleTurn = (turnNum: number) => {
+    setCollapsedTurns((prev) => {
+      const next = new Set(prev);
+      if (next.has(turnNum)) {
+        next.delete(turnNum);
+      } else {
+        next.add(turnNum);
+      }
+      return next;
+    });
+  };
+
+  const areAllCollapsed = collapsedRounds.size >= totalRounds;
+
+  const toggleAllRounds = () => {
+    if (areAllCollapsed) {
+      // Expand all
+      setCollapsedRounds(new Set());
+      setOpeningCollapsed(false);
+    } else {
+      // Collapse all
+      const all = new Set<number>();
+      for (let r = 1; r <= totalRounds; r++) {
+        all.add(r);
+      }
+      setCollapsedRounds(all);
+      setOpeningCollapsed(true);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col space-y-3 p-4 min-h-0 overflow-hidden">
@@ -304,21 +184,46 @@ export function MatchTimeline({
           <h3 className="font-sans text-[11px] font-semibold uppercase tracking-wider text-white">
             Match Play Timeline
           </h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono text-neutral-400 tabular-nums">Events: {turnEvents.length}</span>
-          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
-            result === 'win' ? 'bg-[#4A7856]/20 text-[#76A382] border-[#4A7856]/40' : 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40'
-          }`}>
-            {result}
+          <span className="text-[10px] font-mono text-neutral-400 tabular-nums">
+            ({totalRounds} {totalRounds === 1 ? 'Round' : 'Rounds'})
           </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Master Expand / Collapse Toggle */}
+          {!loading && turnEvents.length > 0 && (
+            <button
+              onClick={toggleAllRounds}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase rounded border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors"
+            >
+              <ChevronsUpDown className="w-3 h-3 text-amber-400" />
+              <span>{areAllCollapsed ? 'Expand All' : 'Collapse All'}</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-neutral-400 tabular-nums">
+              Events: {turnEvents.length}
+            </span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
+                result === 'win'
+                  ? 'bg-[#4A7856]/20 text-[#76A382] border-[#4A7856]/40'
+                  : 'bg-[#B8503A]/20 text-[#D57C69] border-[#B8503A]/40'
+              }`}
+            >
+              {result}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar min-h-0">
         {loading ? (
-          <div className="p-8 text-center text-xs text-neutral-500 font-mono">Loading turn timeline...</div>
+          <div className="p-8 text-center text-xs text-neutral-500 font-mono">
+            Loading turn timeline...
+          </div>
         ) : turnEvents.length === 0 ? (
           <div className="p-8 border border-dashed border-white/10 text-center space-y-1.5 bg-neutral-900/30">
             <AlertCircle className="w-5 h-5 mx-auto text-amber-400 opacity-60" />
@@ -331,108 +236,86 @@ export function MatchTimeline({
           </div>
         ) : (
           <>
-            {/* Opening Hand & Mulligans Phase (Turn 0) */}
-            {(openingEvents.first.length > 0 || openingEvents.second.length > 0) && (
-              <div className="space-y-1.5">
-                <div className="text-[9.5px] font-mono uppercase font-bold tracking-wider text-amber-300/90 px-3 py-1 bg-amber-500/10 border-y border-amber-500/30 flex items-center justify-between">
-                  <span>Opening Phase · Turn 0</span>
-                  <span className="text-[9px] font-mono font-normal opacity-70">
-                    Mulligans & Opening Hands
+            {/* Opening Phase (Turn 0: Mulligans & Opening Hands) */}
+            {openingEvents.length > 0 && (
+              <div className="border-b border-white/10 pb-1">
+                <div
+                  className="flex items-center justify-between px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/15 border-y border-purple-500/20 cursor-pointer transition-colors select-none"
+                  onClick={() => setOpeningCollapsed((prev) => !prev)}
+                >
+                  <div className="flex items-center gap-2">
+                    {openingCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-purple-300" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-purple-300" />
+                    )}
+                    <span className="font-mono text-xs font-bold text-purple-300 tracking-wider uppercase">
+                      Opening Phase · Turn 0
+                    </span>
+                    <span className="text-[10px] font-mono text-purple-300/70">
+                      (Mulligans & Opening Hands)
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-purple-300/80">
+                    {openingEvents.length} {openingEvents.length === 1 ? 'action' : 'actions'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Left Column Opening Hand (First Player) */}
-                  <div className="space-y-1">
-                    {openingEvents.first.length === 0 ? (
-                      <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
-                        No actions
-                      </div>
-                    ) : (
-                      openingEvents.first.map((ev, idx) => renderEventRow(ev, true, idx))
-                    )}
+                {!openingCollapsed && (
+                  <div className="pt-1 pb-1 space-y-0">
+                    {openingEvents.map((ev, idx) => (
+                      <TurnActionRow
+                        key={`open-${idx}`}
+                        action={ev}
+                        isTurnActivePlayer={goingFirst}
+                        density="detailed"
+                        opponentName={opponentName}
+                        onCardClick={onCardClick}
+                        searchTerm={searchTerm}
+                      />
+                    ))}
                   </div>
-
-                  {/* Right Column Opening Hand (Second Player) */}
-                  <div className="space-y-1">
-                    {openingEvents.second.length === 0 ? (
-                      <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
-                        No actions
-                      </div>
-                    ) : (
-                      openingEvents.second.map((ev, idx) => renderEventRow(ev, false, idx))
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
-            {/* In-Game Rounds (Turn >= 1) */}
-            {Object.entries(eventsByRound).map(([roundStr, cols]) => {
-              const roundNum = parseInt(roundStr, 10);
-              if (cols.first.length === 0 && cols.second.length === 0) return null;
-
-              return (
-                <div key={roundNum} className="space-y-1.5">
-                  {/* Round Header Bar */}
-                  <div className="text-[10px] font-mono uppercase font-bold tracking-wider text-neutral-200 px-3 py-1 bg-white/[0.03] border-y border-white/10 flex items-center justify-between">
-                    <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                      ROUND {roundNum}
-                    </span>
-                    <div className="flex items-center gap-2 font-mono text-[9px] tracking-widest">
-                      <span className={`${leftColor} font-bold`}>
-                        TURN {cols.firstTurn} ({goingFirst ? 'YOU' : (opponentName || 'OPPONENT')})
-                      </span>
-                      <span className="text-neutral-600">|</span>
-                      <span className={`${rightColor} font-bold`}>
-                        TURN {cols.secondTurn} ({goingFirst ? (opponentName || 'OPPONENT') : 'YOU'})
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Two-Column Action Grid for the Round */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Left Column (First Player: Turn 1, 3, 5...) */}
-                    <div className="space-y-1">
-                      {cols.first.length > 0 ? (
-                        cols.first.map((ev, idx) => renderEventRow(ev, true, idx))
-                      ) : (
-                        <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
-                          No actions recorded
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Column (Second Player: Turn 2, 4, 6...) */}
-                    <div className="space-y-1">
-                      {cols.second.length > 0 ? (
-                        cols.second.map((ev, idx) => renderEventRow(ev, false, idx))
-                      ) : (
-                        <div className="text-[11px] font-sans text-neutral-500/70 italic px-2.5 py-1">
-                          No actions recorded
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {/* In-Game Rounds (Turn >= 1) — Collapsed by Default with Highlights */}
+            {roundsData.map((r) => (
+              <RoundTurnGroup
+                key={`round-${r.round}`}
+                roundNum={r.round}
+                firstTurnNum={r.firstTurn}
+                secondTurnNum={r.secondTurn}
+                firstTurnEvents={r.first}
+                secondTurnEvents={r.second}
+                firstPlayerIsHero={goingFirst}
+                opponentName={opponentName}
+                isRoundCollapsed={collapsedRounds.has(r.round)}
+                onToggleRound={() => toggleRound(r.round)}
+                collapsedTurns={collapsedTurns}
+                onToggleTurn={toggleTurn}
+                density="detailed"
+                searchTerm={searchTerm}
+                onCardClick={onCardClick}
+              />
+            ))}
           </>
         )}
 
         {/* Final Match Outcome Marker at Bottom of Sequence */}
-        <div className="pt-1">
-          {result === 'win' ? (
-            <div className="p-2.5 border border-[#4A7856]/40 bg-[#4A7856]/15 text-[#76A382] flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
-              <CheckCircle2 className="w-4 h-4 text-[#76A382]" /> MATCH ENDED — VICTORY
-            </div>
-          ) : (
-            <div className="p-2.5 border border-[#B8503A]/40 bg-[#B8503A]/15 text-[#D57C69] flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
-              <XCircle className="w-4 h-4 text-[#D57C69]" /> MATCH ENDED — DEFEAT
-            </div>
-          )}
-        </div>
+        {!loading && turnEvents.length > 0 && (
+          <div className="pt-2">
+            {result === 'win' ? (
+              <div className="p-2.5 border border-[#4A7856]/40 bg-[#4A7856]/15 text-[#76A382] flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
+                <CheckCircle2 className="w-4 h-4 text-[#76A382]" /> MATCH ENDED — VICTORY
+              </div>
+            ) : (
+              <div className="p-2.5 border border-[#B8503A]/40 bg-[#B8503A]/15 text-[#D57C69] flex items-center justify-center gap-2 text-xs font-bold tracking-widest font-mono uppercase">
+                <XCircle className="w-4 h-4 text-[#D57C69]" /> MATCH ENDED — DEFEAT
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -45,7 +45,13 @@ const printingKey = (p: any) =>
   `${normalizeScryfallSetCode(p.set_code)}|${cleanCollectorNumber(p.collector_number)}`;
 
 const scryfallPrintingImageUrl = (name: string, p?: any): string => {
-  const setCode = normalizeScryfallSetCode(p?.set_code);
+  const isToken =
+    p?.card_type?.toLowerCase().includes('token') ||
+    String(p?.rarity) === '0';
+  let setCode = normalizeScryfallSetCode(p?.set_code);
+  if (isToken && setCode && !setCode.startsWith('t')) {
+    setCode = `t${setCode}`;
+  }
   const cn = cleanCollectorNumber(p?.collector_number);
   if (setCode && cn) {
     return `https://api.scryfall.com/cards/${encodeURIComponent(setCode)}/${encodeURIComponent(cn)}?format=image&version=normal`;
@@ -158,14 +164,31 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
           {/* PANEL 1: Card image preview + Set / Art Selector                         */}
           {/* ========================================================================= */}
           <div className="w-[360px] max-w-[90vw] shrink-0 flex flex-col">
-            <CardImage
-              key={`${cardName}:${selPrinting?.set_code || ''}:${selPrinting?.collector_number || ''}`}
-              name={cardName}
-              version="normal"
-              printing={selPrinting ? { setCode: selPrinting.set_code, collectorNumber: selPrinting.collector_number } : undefined}
-              className="w-full aspect-[2.5/3.5] shadow-2xl block border border-white/15"
-              alt={cardName}
-            />
+            {(() => {
+              const isTokenCard =
+                deckCardOverlay?.card?.card_type?.toLowerCase().includes('token') ||
+                selPrinting?.card_type?.toLowerCase().includes('token') ||
+                selPrinting?.rarity === 0;
+              const printingSetCode = selPrinting?.set_code
+                ? isTokenCard && !normalizeScryfallSetCode(selPrinting.set_code).startsWith('t')
+                  ? `t${normalizeScryfallSetCode(selPrinting.set_code)}`
+                  : normalizeScryfallSetCode(selPrinting.set_code)
+                : undefined;
+              return (
+                <CardImage
+                  key={`${cardName}:${printingSetCode || ''}:${selPrinting?.collector_number || ''}`}
+                  name={cardName}
+                  version="normal"
+                  printing={
+                    selPrinting
+                      ? { setCode: printingSetCode, collectorNumber: selPrinting.collector_number }
+                      : undefined
+                  }
+                  className="w-full aspect-[2.5/3.5] shadow-2xl block border border-white/15"
+                  alt={cardName}
+                />
+              );
+            })()}
 
             {/* Set / Art Selector Underneath */}
             <div className="mt-3 shrink-0">
@@ -314,12 +337,20 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
             {overlayScryfall &&
               (() => {
                 const scry = overlayScryfall;
-                const face = scry.card_faces?.[0] || null;
-                const oracleText = scry.oracle_text || face?.oracle_text || '';
+                const face =
+                  scry.card_faces?.find(
+                    (f: any) =>
+                      f.name?.toLowerCase().trim() === cardName.toLowerCase().trim() ||
+                      f.name?.toLowerCase().includes(cardName.toLowerCase()) ||
+                      cardName.toLowerCase().includes(f.name?.toLowerCase())
+                  ) ||
+                  scry.card_faces?.[0] ||
+                  null;
+                const oracleText = (face && face.oracle_text !== undefined) ? face.oracle_text : (scry.oracle_text || '');
                 const flavorText = (overlaySelected && overlayFlavors[overlaySelected]) || '';
-                const power = scry.power ?? face?.power;
-                const toughness = scry.toughness ?? face?.toughness;
-                const loyalty = scry.loyalty ?? face?.loyalty;
+                const power = face ? face.power : scry.power;
+                const toughness = face ? face.toughness : scry.toughness;
+                const loyalty = face ? face.loyalty : scry.loyalty;
                 const keywords: string[] = scry.keywords || [];
                 return (
                   <div className="space-y-3 flex-1 min-h-0">

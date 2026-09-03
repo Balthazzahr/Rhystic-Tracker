@@ -9,10 +9,9 @@ export const WinRateSummaryWidget: React.FC<WidgetProps> = ({
   isLoading = false,
 }) => {
   const isEmpty = stats.allCount === 0;
-  const outcomeColor =
-    stats.allWinRate >= 50
-      ? customColors?.allTimeWinRate?.positive || "#10B981"
-      : customColors?.allTimeWinRate?.negative || "#EF4444";
+  const winColor = customColors?.allTimeWinRate?.positive || "#10B981";
+  const lossColor = customColors?.allTimeWinRate?.negative || "#EF4444";
+  const outcomeColor = stats.allWinRate >= 50 ? winColor : lossColor;
 
   return (
     <WidgetShell
@@ -33,9 +32,13 @@ export const WinRateSummaryWidget: React.FC<WidgetProps> = ({
 
         <div className="text-xs font-sans text-neutral-400 font-normal tabular-nums pt-2 border-t border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="text-emerald-400 font-medium">{stats.allWins}W</span>
+            <span className="font-medium" style={{ color: winColor }}>
+              {stats.allWins}W
+            </span>
             <span className="opacity-30">/</span>
-            <span className="text-rose-400 font-medium">{stats.allLosses}L</span>
+            <span className="font-medium" style={{ color: lossColor }}>
+              {stats.allLosses}L
+            </span>
           </div>
           <div className="text-neutral-400">
             {stats.allCount} {stats.allCount === 1 ? "game" : "games"}

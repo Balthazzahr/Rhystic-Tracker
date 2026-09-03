@@ -510,7 +510,6 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = ({
               name="Wins"
               stackId="matches"
               fill={winBarColor}
-              fillOpacity={0.65}
               isAnimationActive={false}
             />
             <Bar
@@ -519,9 +518,6 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = ({
               name="Losses"
               stackId="matches"
               fill={lossBarColor}
-              stroke="rgba(255,255,255,0.15)"
-              strokeWidth={1}
-              fillOpacity={0.4}
               isAnimationActive={false}
             />
 

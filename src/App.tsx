@@ -635,17 +635,29 @@ export default function App() {
           setOverlaySelected(saved ? printingKey(saved) : (prefKey || printingKey(printings[0])));
         }
         // Fetch flavor text for each printing so it matches the selected art.
+        const isTokenCard =
+          deckCardOverlay?.card?.card_type?.toLowerCase().includes('token') ||
+          deckCardOverlay?.card?.name?.toLowerCase().includes('token') ||
+          printings[0]?.card_type?.toLowerCase().includes('token') ||
+          printings[0]?.rarity === 0;
+
         const flavors: Record<string, string> = {};
         for (const p of printings) {
           const key = printingKey(p);
           try {
+            const rawSet = String(p.set_code).toLowerCase();
+            const tokenSet = isTokenCard && !rawSet.startsWith('t') ? `t${rawSet}` : rawSet;
             const url = p.set_code && p.collector_number
-              ? `https://api.scryfall.com/cards/${String(p.set_code).toLowerCase()}/${encodeURIComponent(String(p.collector_number))}?format=json`
+              ? `https://api.scryfall.com/cards/${tokenSet}/${encodeURIComponent(cleanCollectorNumber(p.collector_number))}?format=json`
               : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`;
             const resp = await fetch(url);
             if (resp.ok) {
               const data = await resp.json();
-              const face = data.card_faces?.[0] || null;
+              const face = data.card_faces?.find((f: any) =>
+                f.name?.toLowerCase().trim() === name.toLowerCase().trim() ||
+                f.name?.toLowerCase().includes(name.toLowerCase()) ||
+                name.toLowerCase().includes(f.name?.toLowerCase())
+              ) || data.card_faces?.[0] || null;
               const ft = data.flavor_text || face?.flavor_text || '';
               if (ft) flavors[key] = ft;
             }
@@ -666,7 +678,21 @@ export default function App() {
       try {
         let data = scryfallCardCache.get(name);
         if (!data) {
-          const resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
+          const isTokenCard =
+            deckCardOverlay?.card?.card_type?.toLowerCase().includes('token') ||
+            deckCardOverlay?.card?.name?.toLowerCase().includes('token');
+
+          let url = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`;
+          if (isTokenCard && deckCardOverlay?.card?.set_code && deckCardOverlay?.card?.collector_number) {
+            const rawSet = String(deckCardOverlay.card.set_code).toLowerCase();
+            const tokenSet = !rawSet.startsWith('t') ? `t${rawSet}` : rawSet;
+            url = `https://api.scryfall.com/cards/${tokenSet}/${encodeURIComponent(cleanCollectorNumber(deckCardOverlay.card.collector_number))}?format=json`;
+          }
+
+          let resp = await fetch(url);
+          if (!resp.ok && isTokenCard) {
+            resp = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`);
+          }
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           data = await resp.json();
           scryfallCardCache.set(name, data);

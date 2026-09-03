@@ -129,7 +129,15 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
     try {
       const cached = localStorage.getItem("rhystic_dashboard_colors");
       if (cached) {
-        return { ...DEFAULT_DASHBOARD_COLORS, ...JSON.parse(cached) };
+        const parsed = JSON.parse(cached);
+        return {
+          ...DEFAULT_DASHBOARD_COLORS,
+          ...parsed,
+          deckSpotlight: {
+            ...DEFAULT_DASHBOARD_COLORS.deckSpotlight,
+            ...(parsed.deckSpotlight || {}),
+          },
+        };
       }
     } catch {}
     return DEFAULT_DASHBOARD_COLORS;

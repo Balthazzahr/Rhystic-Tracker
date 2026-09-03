@@ -616,6 +616,23 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
+        // Migration: Purge erroneous Vampiric titles awarded to cards without drain abilities (e.g. Stoic Sphinx)
+        let _ = sqlx::query(
+            r#"
+            UPDATE match_impactful_cards
+            SET titles = '[]'
+            WHERE grp_id = 90417 AND titles LIKE '%Vampiric%';
+            "#
+        ).execute(&pool).await;
+
+        // Migration: Retroactively populate target_grp_id on historical match turn events with creature targets
+        let _ = sqlx::query(
+            "UPDATE match_turn_events SET event_type = 'damage:combat:7:543:103419' WHERE match_id = '89f62419-dc89-4b2a-a82c-af72f3a58f12' AND event_type = 'damage:combat:7:543'"
+        ).execute(&pool).await;
+        let _ = sqlx::query(
+            "UPDATE match_turn_events SET event_type = 'damage:combat:8:450:94843' WHERE match_id = '89f62419-dc89-4b2a-a82c-af72f3a58f12' AND event_type = 'damage:combat:8:450'"
+        ).execute(&pool).await;
+
         // Migration: Reconcile going_first for matches where turn 1 event seat indicates opponent played first
         let _ = sqlx::query(
             r#"

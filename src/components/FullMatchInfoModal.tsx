@@ -65,7 +65,7 @@ export function FullMatchInfoModal({
   onSelectOpponent,
   onShowCard,
 }: FullMatchInfoModalProps) {
-  const [subTab, setSubTab] = useState<'cards' | 'timeline'>('cards');
+  const [subTab, setSubTab] = useState<'cards' | 'timeline'>('timeline');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [bgImageUrl, setBgImageUrl] = useState<string | null>(null);
 
@@ -175,6 +175,133 @@ export function FullMatchInfoModal({
       c.titles.length > 0
   );
 
+  const isFirstPlayerHero = selectedMatch.going_first !== false;
+
+  const renderHeroStation = (isLeft: boolean) => (
+    <div className={`flex-1 flex items-end gap-4 min-w-0 ${isLeft ? 'justify-start text-left' : 'justify-end text-right'}`}>
+      {isLeft && (
+        <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
+          <AvatarImage avatarId={heroAvatar} className="h-full" />
+        </div>
+      )}
+
+      <div className={`flex flex-col min-w-0 max-w-[420px] pb-2 ${isLeft ? '' : 'items-end'}`}>
+        <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[#76A382] mb-0.5">
+          Your Deck
+        </span>
+        <button
+          onClick={() => onSelectDeck && onSelectDeck(selectedMatch.player_deck_name)}
+          className={`text-xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white hover:underline cursor-pointer leading-tight line-clamp-2 ${
+            isLeft ? 'text-left' : 'text-right'
+          }`}
+          title={`View Deck: ${selectedMatch.player_deck_name}`}
+        >
+          {selectedMatch.player_deck_name || 'Hero Deck'}
+        </button>
+        <div className={`mt-1.5 flex items-center ${isLeft ? 'justify-start' : 'justify-end'}`}>
+          {renderDeckColorIdentity(selectedMatch.deck_colors || selectedMatch.hero_deck_colors, 20)}
+        </div>
+      </div>
+
+      {!isLeft && (
+        <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
+          <AvatarImage avatarId={heroAvatar} className="h-full" />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderOpponentStation = (isLeft: boolean) => (
+    <div className={`flex-1 flex items-end gap-4 min-w-0 ${isLeft ? 'justify-start text-left' : 'justify-end text-right'}`}>
+      {isLeft && (
+        <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
+          <AvatarImage avatarId={oppAvatar} isOpponent={true} className="h-full" />
+        </div>
+      )}
+
+      <div className={`flex flex-col min-w-0 max-w-[420px] pb-2 ${isLeft ? '' : 'items-end'}`}>
+        <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[#D57C69] mb-0.5">
+          Opponent
+        </span>
+        <button
+          onClick={() => onSelectOpponent && onSelectOpponent(selectedMatch.opponent_name || 'Opponent')}
+          className={`text-xl sm:text-3xl font-bold font-display uppercase tracking-wide text-neutral-200 hover:text-white hover:underline cursor-pointer leading-tight line-clamp-2 ${
+            isLeft ? 'text-left' : 'text-right'
+          }`}
+          title={`View Opponent: ${selectedMatch.opponent_name || 'Opponent'}`}
+        >
+          {selectedMatch.opponent_name || 'Opponent'}
+        </button>
+        <div className={`mt-1.5 flex items-center ${isLeft ? 'justify-start' : 'justify-end'}`}>
+          {renderDeckColorIdentity(selectedMatch.opponent_colors || selectedMatch.opponent_colors_str, 20)}
+        </div>
+      </div>
+
+      {!isLeft && (
+        <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
+          <AvatarImage avatarId={oppAvatar} isOpponent={true} className="h-full" />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPlayerCommanderCard = () => (
+    <div className="text-center flex flex-col gap-1 overflow-hidden">
+      <p className="text-[9px] font-mono text-[#76A382] uppercase shrink-0 font-bold">Your Cmdr</p>
+      {commanderInfo?.player_commander ? (
+        <>
+          <div
+            onClick={() => onShowCard?.(commanderInfo.player_commander, true)}
+            className="h-16 w-full border border-white/15 overflow-hidden bg-neutral-900 shadow cursor-pointer hover:border-white/30 transition-colors"
+          >
+            <CardImage
+              name={commanderInfo.player_commander.name}
+              version="art_crop"
+              alt={commanderInfo.player_commander.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <p className="text-[11px] font-bold font-sans text-white truncate shrink-0 mt-0.5">
+            {cleanCardName(commanderInfo.player_commander.name)}
+          </p>
+        </>
+      ) : (
+        <div className="h-16 border border-dashed border-white/10 flex items-center justify-center text-[10px] text-neutral-500 font-mono">
+          No Cmdr
+        </div>
+      )}
+    </div>
+  );
+
+  const renderOpponentCommanderCard = () => (
+    <div className="text-center flex flex-col gap-1 overflow-hidden">
+      <p className="text-[9px] font-mono text-[#D57C69] uppercase shrink-0 font-bold">Opp Cmdr</p>
+      {commanderInfo?.opponent_commander ? (
+        <>
+          <div
+            onClick={() => onShowCard?.(commanderInfo.opponent_commander, true)}
+            className="h-16 w-full border border-white/15 overflow-hidden bg-neutral-900 shadow cursor-pointer hover:border-white/30 transition-colors"
+          >
+            <CardImage
+              name={commanderInfo.opponent_commander.name}
+              version="art_crop"
+              alt={commanderInfo.opponent_commander.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <p className="text-[11px] font-bold font-sans text-white truncate shrink-0 mt-0.5">
+            {cleanCardName(commanderInfo.opponent_commander.name)}
+          </p>
+        </>
+      ) : (
+        <div className="h-16 border border-dashed border-white/10 flex flex-col items-center justify-center text-[10px] text-neutral-500 font-mono px-1">
+          <span>Uncast /</span>
+          <span>Unknown</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       onClick={onClose}
@@ -197,75 +324,42 @@ export function FullMatchInfoModal({
             <X className="w-4 h-4" />
           </button>
 
-          {/* --- HERO SIDE (Left: Avatar rising behind window + Deck Info + Larger Mana Pips Underneath) --- */}
-          <div className="flex-1 flex items-end gap-4 min-w-0 justify-start">
-            {/* Hero Avatar (Standing behind the modal window top rim) */}
-            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
-              <AvatarImage
-                avatarId={heroAvatar}
-                className="h-full"
-              />
-            </div>
-
-            {/* Hero Deck Name + Mana Pips Underneath (Floating unboxed) */}
-            <div className="flex flex-col min-w-0 max-w-[420px] pb-2">
-              <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[#76A382] mb-0.5">
-                Your Deck
-              </span>
-              <button
-                onClick={() => onSelectDeck && onSelectDeck(selectedMatch.player_deck_name)}
-                className="text-xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white hover:underline cursor-pointer text-left leading-tight line-clamp-2"
-                title={`View Deck: ${selectedMatch.player_deck_name}`}
-              >
-                {selectedMatch.player_deck_name || 'Hero Deck'}
-              </button>
-              <div className="mt-1.5 flex items-center">
-                {renderDeckColorIdentity(selectedMatch.deck_colors || selectedMatch.hero_deck_colors, 20)}
+          {/* Player Stations: Left = First Player, Right = Second Player */}
+          {isFirstPlayerHero ? (
+            <>
+              {renderHeroStation(true)}
+              {/* --- DEAD-CENTER FIGHTING GAME "VS" CLUSTER --- */}
+              <div className="shrink-0 flex items-center justify-center px-4 sm:px-6 pb-2 text-center pointer-events-none">
+                <span
+                  className="font-display text-3xl sm:text-4xl lg:text-5xl font-black italic tracking-wider transform -skew-x-12 select-none uppercase bg-gradient-to-b from-[#FFF07C] via-[#FF7A00] to-[#E52D27] bg-clip-text text-transparent drop-shadow-lg"
+                  style={{
+                    WebkitTextStroke: '1.2px #FFFFFF',
+                    filter: 'drop-shadow(0 0 12px rgba(229, 45, 39, 0.75)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.95))',
+                  }}
+                >
+                  VS
+                </span>
               </div>
-            </div>
-          </div>
-
-          {/* --- DEAD-CENTER FIGHTING GAME "VS" CLUSTER --- */}
-          <div className="shrink-0 flex items-center justify-center px-4 sm:px-6 pb-2 text-center pointer-events-none">
-            <span
-              className="font-display text-3xl sm:text-4xl lg:text-5xl font-black italic tracking-wider transform -skew-x-12 select-none uppercase bg-gradient-to-b from-[#FFF07C] via-[#FF7A00] to-[#E52D27] bg-clip-text text-transparent drop-shadow-lg"
-              style={{
-                WebkitTextStroke: '1.2px #FFFFFF',
-                filter: 'drop-shadow(0 0 12px rgba(229, 45, 39, 0.75)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.95))',
-              }}
-            >
-              VS
-            </span>
-          </div>
-
-          {/* --- OPPONENT SIDE (Right: Opponent Info + Larger Mana Pips Underneath + Avatar rising behind window) --- */}
-          <div className="flex-1 flex items-end gap-4 min-w-0 justify-end text-right">
-            {/* Opponent Name + Mana Pips Underneath (Floating unboxed) */}
-            <div className="flex flex-col min-w-0 max-w-[420px] items-end pb-2">
-              <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[#D57C69] mb-0.5">
-                Opponent
-              </span>
-              <button
-                onClick={() => onSelectOpponent && onSelectOpponent(selectedMatch.opponent_name || 'Opponent')}
-                className="text-xl sm:text-3xl font-bold font-display uppercase tracking-wide text-neutral-200 hover:text-white hover:underline cursor-pointer text-right leading-tight line-clamp-2"
-                title={`View Opponent: ${selectedMatch.opponent_name || 'Opponent'}`}
-              >
-                {selectedMatch.opponent_name || 'Opponent'}
-              </button>
-              <div className="mt-1.5 flex items-center justify-end">
-                {renderDeckColorIdentity(selectedMatch.opponent_colors || selectedMatch.opponent_colors_str, 20)}
+              {renderOpponentStation(false)}
+            </>
+          ) : (
+            <>
+              {renderOpponentStation(true)}
+              {/* --- DEAD-CENTER FIGHTING GAME "VS" CLUSTER --- */}
+              <div className="shrink-0 flex items-center justify-center px-4 sm:px-6 pb-2 text-center pointer-events-none">
+                <span
+                  className="font-display text-3xl sm:text-4xl lg:text-5xl font-black italic tracking-wider transform -skew-x-12 select-none uppercase bg-gradient-to-b from-[#FFF07C] via-[#FF7A00] to-[#E52D27] bg-clip-text text-transparent drop-shadow-lg"
+                  style={{
+                    WebkitTextStroke: '1.2px #FFFFFF',
+                    filter: 'drop-shadow(0 0 12px rgba(229, 45, 39, 0.75)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.95))',
+                  }}
+                >
+                  VS
+                </span>
               </div>
-            </div>
-
-            {/* Opponent Avatar (Standing behind the modal window top rim) */}
-            <div className="h-48 sm:h-60 max-w-[340px] shrink-0 flex items-end justify-center pointer-events-none translate-y-1 sm:translate-y-2 -mb-1 sm:-mb-2 z-0">
-              <AvatarImage
-                avatarId={oppAvatar}
-                isOpponent={true}
-                className="h-full"
-              />
-            </div>
-          </div>
+              {renderHeroStation(false)}
+            </>
+          )}
         </div>
 
         {/* =========================================================================
@@ -305,60 +399,17 @@ export function FullMatchInfoModal({
                     Commanders
                   </p>
                   <div className="grid grid-cols-2 gap-2.5">
-                    {/* Player Commander */}
-                    <div className="text-center flex flex-col gap-1 overflow-hidden">
-                      <p className="text-[9px] font-mono text-neutral-400 uppercase shrink-0">Your Cmdr</p>
-                      {commanderInfo?.player_commander ? (
-                        <>
-                          <div
-                            onClick={() => onShowCard?.(commanderInfo.player_commander, true)}
-                            className="h-16 w-full border border-white/15 overflow-hidden bg-neutral-900 shadow cursor-pointer hover:border-white/30 transition-colors"
-                          >
-                            <CardImage
-                              name={commanderInfo.player_commander.name}
-                              version="art_crop"
-                              alt={commanderInfo.player_commander.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <p className="text-[11px] font-bold font-sans text-white truncate shrink-0 mt-0.5">
-                            {cleanCardName(commanderInfo.player_commander.name)}
-                          </p>
-                        </>
-                      ) : (
-                        <div className="h-16 border border-dashed border-white/10 flex items-center justify-center text-[10px] text-neutral-500 font-mono">
-                          No Cmdr
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Opponent Commander */}
-                    <div className="text-center flex flex-col gap-1 overflow-hidden">
-                      <p className="text-[9px] font-mono text-neutral-400 uppercase shrink-0">Opp Cmdr</p>
-                      {commanderInfo?.opponent_commander ? (
-                        <>
-                          <div
-                            onClick={() => onShowCard?.(commanderInfo.opponent_commander, true)}
-                            className="h-16 w-full border border-white/15 overflow-hidden bg-neutral-900 shadow cursor-pointer hover:border-white/30 transition-colors"
-                          >
-                            <CardImage
-                              name={commanderInfo.opponent_commander.name}
-                              version="art_crop"
-                              alt={commanderInfo.opponent_commander.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <p className="text-[11px] font-bold font-sans text-white truncate shrink-0 mt-0.5">
-                            {cleanCardName(commanderInfo.opponent_commander.name)}
-                          </p>
-                        </>
-                      ) : (
-                        <div className="h-16 border border-dashed border-white/10 flex flex-col items-center justify-center text-[10px] text-neutral-500 font-mono px-1">
-                          <span>Uncast /</span>
-                          <span>Unknown</span>
-                        </div>
-                      )}
-                    </div>
+                    {isFirstPlayerHero ? (
+                      <>
+                        {renderPlayerCommanderCard()}
+                        {renderOpponentCommanderCard()}
+                      </>
+                    ) : (
+                      <>
+                        {renderOpponentCommanderCard()}
+                        {renderPlayerCommanderCard()}
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -628,6 +679,8 @@ export function FullMatchInfoModal({
                       result={selectedMatch.result}
                       palette={palette}
                       cards={cards}
+                      opponentName={selectedMatch.opponent_name || 'Opponent'}
+                      formatName={selectedMatch.format_name || selectedMatch.format}
                       searchTerm={searchQuery}
                       onCardClick={(card) => {
                         onShowCard?.(card);

@@ -1,9 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Clock, Swords, Activity, Sparkles, Search, X } from 'lucide-react';
+import { Clock, Swords, Activity, Sparkles, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { ManaPip } from './ManaPip';
 import CardImage from './CardImage';
 import logoImg from '../assets/RhysticTrackerLogo.svg';
 import symbolIcon from '../assets/RhysticTrackerICON.svg';
+import { RoundTurnGroup } from './timeline/RoundTurnGroup';
+import { TurnActionRow } from './timeline/TurnActionRow';
+import { enrichActionsWithCombatContext } from './timeline/roundHighlightUtils';
 
 interface LiveHUDViewProps {
   palette?: any;
@@ -217,22 +220,45 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     return nameMatch || typeMatch || targetMatch || actionMatch;
   };
 
+  // Collapsible Round & Turn state (All expanded by default in Live HUD)
+  const [collapsedRounds, setCollapsedRounds] = useState<Set<number>>(new Set());
+  const [collapsedTurns, setCollapsedTurns] = useState<Set<number>>(new Set());
+  const [openingCollapsed, setOpeningCollapsed] = useState<boolean>(false);
+
+  const toggleRound = (roundNum: number) => {
+    setCollapsedRounds((prev) => {
+      const next = new Set(prev);
+      if (next.has(roundNum)) next.delete(roundNum);
+      else next.add(roundNum);
+      return next;
+    });
+  };
+
+  const toggleTurn = (turnNum: number) => {
+    setCollapsedTurns((prev) => {
+      const next = new Set(prev);
+      if (next.has(turnNum)) next.delete(turnNum);
+      else next.add(turnNum);
+      return next;
+    });
+  };
+
   // Group events by Round & Turn
   const { roundsList, openingEvents } = useMemo(() => {
-    const rawEvents = liveMatchState?.recent_events || [];
-    const opening: { first: any[]; second: any[] } = { first: [], second: [] };
+    const raw = liveMatchState?.recent_events || [];
+    const oppName = liveMatchState?.opponent_name || 'Opponent';
+    const rawEvents = enrichActionsWithCombatContext(raw, liveMatchState?.format, oppName);
+    const opening: any[] = [];
     const roundsMap: Record<number, { first: any[]; second: any[]; firstTurn: number; secondTurn: number }> = {};
 
     let maxRound = 1;
 
     for (const ev of rawEvents) {
       const turn = ev.turn !== undefined ? ev.turn : 1;
-      const isHero = ev.is_player;
-      const isFirst = firstPlayerIsHero ? isHero : !isHero;
 
       if (turn === 0) {
         if (filterEvent(ev)) {
-          (isFirst ? opening.first : opening.second).push(ev);
+          opening.push(ev);
         }
       } else {
         const roundNum = Math.ceil(turn / 2);
@@ -246,10 +272,11 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
           };
         }
         if (filterEvent(ev)) {
-          // If turn is odd (1, 3, 5...), it occurred during the First Player's turn (Left column).
-          // If turn is even (2, 4, 6...), it occurred during the Second Player's turn (Right column).
-          const isFirstTurn = turn % 2 !== 0;
-          (isFirstTurn ? roundsMap[roundNum].first : roundsMap[roundNum].second).push(ev);
+          if (turn % 2 !== 0) {
+            roundsMap[roundNum].first.push(ev);
+          } else {
+            roundsMap[roundNum].second.push(ev);
+          }
         }
       }
     }
@@ -269,7 +296,7 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     }
 
     return { roundsList: rounds, openingEvents: opening };
-  }, [liveMatchState?.recent_events, liveMatchState?.turn, liveMatchState?.round, firstPlayerIsHero, query]);
+  }, [liveMatchState?.recent_events, liveMatchState?.turn, liveMatchState?.round, query]);
 
   // Last 3 Actions for bottom ticker
   const lastThreeActions = useMemo(() => {
@@ -722,10 +749,11 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     </div>
   );
 
-  const leftLabel = firstPlayerIsHero ? 'Your Timeline' : 'Opponent Timeline';
-  const rightLabel = firstPlayerIsHero ? 'Opponent Timeline' : 'Your Timeline';
-  const leftColorClass = firstPlayerIsHero ? 'text-emerald-400' : 'text-rose-400';
-  const rightColorClass = firstPlayerIsHero ? 'text-rose-400' : 'text-emerald-400';
+  const opponentName = liveMatchState?.opponent_name || 'Opponent';
+  const leftLabel = `${opponentName.toUpperCase()} (OPPONENT)`;
+  const rightLabel = 'YOU';
+  const leftColorClass = 'text-rose-400';
+  const rightColorClass = 'text-emerald-400';
 
   return (
     <div className="flex-1 min-h-0 flex flex-col space-y-3 px-8 py-4 overflow-hidden select-none">
@@ -953,101 +981,86 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
             )}
           </div>
 
-          {/* Top Timeline Column Labels (Sitting cleanly above the box, no background) */}
-          <div className="grid grid-cols-2 gap-4 px-3.5 pt-0.5 shrink-0">
+          {/* Top Timeline Column Labels (Left = Opponent, Right = You) */}
+          <div className="flex items-center justify-between px-3.5 pt-0.5 shrink-0">
             <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${leftColorClass} pl-1`}>
               {leftLabel}
             </div>
-            <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${rightColorClass} pl-1`}>
+            <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${rightColorClass} pr-1`}>
               {rightLabel}
             </div>
           </div>
 
-          {/* UNIFIED TIMELINE CONTAINER (The ONLY container box on the page — Standardized bg-neutral-950/50) */}
+          {/* UNIFIED TIMELINE CONTAINER (Standardized bg-neutral-950/50, All Rounds Expanded by Default) */}
           <div
             ref={timelineRef}
-            className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md p-3.5 overflow-y-auto custom-scrollbar flex flex-col space-y-3"
+            className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md p-3 overflow-y-auto custom-scrollbar flex flex-col space-y-2.5"
           >
-
             {/* Opening Phase Row (if any) */}
-            {(openingEvents.first.length > 0 || openingEvents.second.length > 0) && (
-              <div className="space-y-1.5">
-                <div className="text-[9.5px] font-mono uppercase font-bold tracking-wider text-amber-300/90 px-3 py-1 bg-amber-500/10 border-y border-amber-500/30 flex items-center justify-between">
-                  <span>OPENING PHASE · TURN 0</span>
-                  <span className="text-[9px] text-neutral-400 font-sans">Mulligans & Opening Hands</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 items-start">
-                  <div className="space-y-1 pl-3 pr-4 border-r border-white/5">
-                    {openingEvents.first.length > 0 ? (
-                      collapseFeedEvents(openingEvents.first).map((e: any, idx: number) => renderFeedItem(e, idx))
+            {openingEvents.length > 0 && (
+              <div className="border-b border-white/10 pb-1 shrink-0">
+                <div
+                  className="flex items-center justify-between px-3 py-1 bg-purple-500/10 hover:bg-purple-500/15 border-y border-purple-500/20 cursor-pointer transition-colors select-none text-[10px] font-mono"
+                  onClick={() => setOpeningCollapsed((prev) => !prev)}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {openingCollapsed ? (
+                      <ChevronRight className="w-3 h-3 text-purple-300" />
                     ) : (
-                      <div className="text-[10px] font-sans italic text-neutral-400 py-1">No actions</div>
+                      <ChevronDown className="w-3 h-3 text-purple-300" />
                     )}
+                    <span className="font-bold text-purple-300 uppercase tracking-wider">
+                      OPENING PHASE · TURN 0
+                    </span>
+                    <span className="text-purple-300/70 font-sans text-[9.5px]">
+                      (Mulligans & Opening Hands)
+                    </span>
                   </div>
-                  <div className="space-y-1 pl-4 pr-3">
-                    {openingEvents.second.length > 0 ? (
-                      collapseFeedEvents(openingEvents.second).map((e: any, idx: number) => renderFeedItem(e, idx))
-                    ) : (
-                      <div className="text-[10px] font-sans italic text-neutral-400 py-1">No actions</div>
-                    )}
-                  </div>
+                  <span className="text-purple-300/80">
+                    {openingEvents.length} {openingEvents.length === 1 ? 'action' : 'actions'}
+                  </span>
                 </div>
+
+                {!openingCollapsed && (
+                  <div className="pt-0.5 pb-1 space-y-0">
+                    {openingEvents.map((ev: any, idx: number) => (
+                      <TurnActionRow
+                        key={`live-open-${idx}`}
+                        action={ev}
+                        isTurnActivePlayer={firstPlayerIsHero}
+                        density="compact"
+                        opponentName={opponentName}
+                        searchTerm={search}
+                        onCardClick={(card) => onShowCard && onShowCard({ name: card.name, grp_id: card.grp_id })}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Synchronized Rounds (Full-Width Header spanning both sides, 2-column actions with subtle separator line) */}
-            {roundsList.map((r) => {
-              const hasFirst = r.first.length > 0;
-              const hasSecond = r.second.length > 0;
+            {/* In-Game Synchronized Rounds (Expanded by Default with Auto-Scroll) */}
+            {roundsList.map((r) => (
+              <RoundTurnGroup
+                key={`live-round-${r.round}`}
+                roundNum={r.round}
+                firstTurnNum={r.firstTurn}
+                secondTurnNum={r.secondTurn}
+                firstTurnEvents={r.first}
+                secondTurnEvents={r.second}
+                firstPlayerIsHero={firstPlayerIsHero}
+                opponentName={opponentName}
+                isRoundCollapsed={collapsedRounds.has(r.round)}
+                onToggleRound={() => toggleRound(r.round)}
+                collapsedTurns={collapsedTurns}
+                onToggleTurn={toggleTurn}
+                density="compact"
+                searchTerm={search}
+                onCardClick={(card) => onShowCard && onShowCard({ name: card.name, grp_id: card.grp_id })}
+              />
+            ))}
 
-              return (
-                <div key={r.round} className="space-y-1.5">
-                  {/* Full-width Round Separator Banner */}
-                  <div className="flex items-center justify-between text-xs font-mono uppercase font-bold px-3 py-1 bg-white/[0.05] border-y border-white/10 text-white tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
-                      <span>ROUND {r.round}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-[10px]">
-                      <span className={`${leftColorClass} font-bold`}>
-                        TURN {r.firstTurn} ({firstPlayerIsHero ? 'YOU' : 'OPPONENT'})
-                      </span>
-                      <span className="text-neutral-600">|</span>
-                      <span className={`${rightColorClass} font-bold`}>
-                        TURN {r.secondTurn} ({firstPlayerIsHero ? 'OPPONENT' : 'YOU'})
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 2-Column Synchronized Turn Actions (Top-to-Bottom Flow with subtle vertical separator line) */}
-                  <div className="grid grid-cols-2 gap-4 items-start">
-                    {/* Left Column (First Player) */}
-                    <div className="space-y-1 pl-3 pr-4 border-r border-white/5">
-                      {hasFirst ? (
-                        collapseFeedEvents(r.first).map((e: any, idx: number) => renderFeedItem(e, idx, true))
-                      ) : (
-                        <div className="text-[10px] font-sans italic text-neutral-400 py-1 px-1">
-                          No actions recorded
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Column (Second Player) */}
-                    <div className="space-y-1 pl-4 pr-3">
-                      {hasSecond ? (
-                        collapseFeedEvents(r.second).map((e: any, idx: number) => renderFeedItem(e, idx, false))
-                      ) : (
-                        <div className="text-[10px] font-sans italic text-neutral-400 py-1 px-1">
-                          No actions recorded
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {roundsList.length === 0 && openingEvents.first.length === 0 && openingEvents.second.length === 0 && (
+            {roundsList.length === 0 && openingEvents.length === 0 && (
               <p className="text-xs font-sans italic text-neutral-400 py-8 text-center">
                 {query ? 'No matching actions found' : 'Awaiting first game actions...'}
               </p>
