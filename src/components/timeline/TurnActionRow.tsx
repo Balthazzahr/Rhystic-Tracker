@@ -161,10 +161,61 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
         </span>
       );
     }
-    if (evType === 'counter') {
+    if (evType.startsWith('counter')) {
+      const parts = (action.event_type || action.type || '').split(':');
+      let counterLabel = 'COUNTER';
+      if (parts.length >= 3) {
+        const kind = parts[1];
+        const amt = parseInt(parts[2] || '0', 10);
+        if (kind === '+1/+1') {
+          counterLabel = amt >= 0 ? `+${amt}/+${amt}` : `${amt}/${amt}`;
+        } else {
+          counterLabel = amt >= 0 ? `+${amt} ${kind}` : `${amt} ${kind}`;
+        }
+      }
       return (
         <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/30 text-amber-300 border-amber-500/30 shrink-0">
-          COUNTER
+          {counterLabel}
+        </span>
+      );
+    }
+    if (evType === 'exile') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-900/30 text-amber-400 border-amber-500/30 shrink-0">
+          EXILE
+        </span>
+      );
+    }
+    if (evType === 'mulligan') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-purple-950/30 text-purple-300 border-purple-500/30 shrink-0">
+          MULLIGAN
+        </span>
+      );
+    }
+    if (evType === 'bottom') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-blue-950/30 text-blue-300 border-blue-500/30 shrink-0">
+          BOTTOM
+        </span>
+      );
+    }
+    if (evType.startsWith('mill')) {
+      let count = 1;
+      const parts = (action.event_type || action.type || '').split(':');
+      if (parts.length >= 2) {
+        count = parseInt(parts[1] || '1', 10);
+      }
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-indigo-950/30 text-indigo-300 border-indigo-500/30 shrink-0">
+          MILL {count}
+        </span>
+      );
+    }
+    if (evType === 'blink' || evType === 'return') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-cyan-950/30 text-cyan-300 border-cyan-500/30 shrink-0">
+          BLINK
         </span>
       );
     }

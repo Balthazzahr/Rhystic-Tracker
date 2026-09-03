@@ -563,13 +563,14 @@ pub fn parse_line(line: &str) -> ParsedEvent {
             let json_str = &line[start..];
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
                 let target_obj = v.get("mulliganResp")
-                    .or_else(|| v.get("clientToGreMessage").and_then(|c| c.get("mulliganResp")));
+                    .or_else(|| v.get("clientToGreMessage").and_then(|c| c.get("mulliganResp")))
+                    .or_else(|| v.get("payload").and_then(|p| p.get("mulliganResp")));
                 if let Some(resp) = target_obj {
                     let decision = resp.get("decision").and_then(|d| d.as_str()).unwrap_or("");
-                    if decision.contains("Mulligan") {
-                        return ParsedEvent::MulliganEvent { seat_id: 0, is_mulligan: true, num_cards: None };
-                    } else if decision.contains("Accept") || decision.contains("Keep") {
+                    if decision.contains("Accept") || decision.contains("Keep") {
                         return ParsedEvent::MulliganEvent { seat_id: 0, is_mulligan: false, num_cards: None };
+                    } else if decision.contains("Mulligan") {
+                        return ParsedEvent::MulliganEvent { seat_id: 0, is_mulligan: true, num_cards: None };
                     }
                 }
             }
@@ -884,6 +885,25 @@ mod tests {
                 assert_eq!(steps[0].counter_events[0], (548, 1, 1));
             }
             other => panic!("expected GameStateUpdates with counter event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_mulligan_payload_wrapped_parsing() {
+        let line_mulligan = r#"{"clientToMatchServiceMessageType":"ClientToMatchServiceMessageType_ClientToGREMessage","payload":{"type":"ClientMessageType_MulliganResp","mulliganResp":{"decision":"MulliganOption_Mulligan"}}}"#;
+        match parse_line(line_mulligan) {
+            ParsedEvent::MulliganEvent { is_mulligan, .. } => {
+                assert!(is_mulligan, "Should detect mulligan from payload");
+            }
+            other => panic!("expected MulliganEvent, got {:?}", other),
+        }
+
+        let line_accept = r#"{"clientToMatchServiceMessageType":"ClientToMatchServiceMessageType_ClientToGREMessage","payload":{"type":"ClientMessageType_MulliganResp","mulliganResp":{"decision":"MulliganOption_Accept"}}}"#;
+        match parse_line(line_accept) {
+            ParsedEvent::MulliganEvent { is_mulligan, .. } => {
+                assert!(!is_mulligan, "Should detect accept from payload");
+            }
+            other => panic!("expected MulliganEvent accept, got {:?}", other),
         }
     }
 }

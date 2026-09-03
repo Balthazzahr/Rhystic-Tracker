@@ -46,8 +46,15 @@ export function scoreAction(ev: TimelineAction, isOutOfTurn: boolean = false): n
   const hasTitles = Array.isArray(ev.titles) && ev.titles.length > 0;
 
   // Highlights ONLY include cards played or considerable damage being done.
-  // Never include cards drawn, tokens, dies, or life events.
-  if (evType === 'draw' || evType === 'token' || evType === 'dies' || evType.startsWith('life')) {
+  if (
+    evType === 'draw' ||
+    evType === 'token' ||
+    evType === 'dies' ||
+    evType === 'mulligan' ||
+    evType === 'bottom' ||
+    evType.startsWith('counter') ||
+    evType.startsWith('life')
+  ) {
     return 0;
   }
 

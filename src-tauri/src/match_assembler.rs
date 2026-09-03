@@ -321,6 +321,7 @@ impl MatchAssembler {
         self.seen_damage_annotation_ids.clear();
         self.active_life_sources.clear();
         self.impactful_cards.clear();
+        self.pending_counter_events.clear();
         self.processed_msg_ids.clear();
         self.token_instance_ids.clear();
         self.token_grp_ids.clear();
@@ -726,10 +727,9 @@ impl MatchAssembler {
 
         let mut event_type = None;
         if zone_id == 28 {
-            self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "dies" || act == "exile")));
-
-            // Blinkmaster: Returned to battlefield from Exile (29)
-            let is_flicker = (previous_zone == Some(29) || self.instance_flicker_pending.contains(&instance_id)) && previous_zone != Some(28);
+            self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "dies" || act == "exile" || act == "blink")));
+            // Blinkmaster: Returned to battlefield from Exile (29) or Limbo (30)
+            let is_flicker = (previous_zone == Some(29) || previous_zone == Some(30) || self.instance_flicker_pending.contains(&instance_id)) && previous_zone != Some(28);
             self.instance_flicker_pending.remove(&instance_id);
             if is_flicker {
                 if seat_id == self.player_seat_id && !is_token && !self.token_grp_ids.contains(&resolved_grp_id) {
@@ -741,6 +741,7 @@ impl MatchAssembler {
                         add_tiered_title(&mut entry.titles, "Blinkmaster", tier);
                     }
                 }
+                event_type = Some("blink".to_string());
             }
 
             // Immortal: Returned to battlefield from Graveyard (33)
@@ -774,7 +775,7 @@ impl MatchAssembler {
                             .copied()
                     });
                 if let Some(s_grp) = spawner_grp {
-                    if !self.token_grp_ids.contains(&s_grp) {
+                    if s_grp > 0 && !self.token_grp_ids.contains(&s_grp) {
                         let entry = self.impactful_cards.entry(s_grp).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         entry.tokens_spawned += 1;
@@ -785,7 +786,7 @@ impl MatchAssembler {
                     }
                 }
             }
-        } else if (zone_id == 27 || (zone_id == 28 && previous_zone != Some(27))) && previous_zone != Some(zone_id) {
+        } else if event_type.is_none() && (zone_id == 27 || (zone_id == 28 && previous_zone != Some(27))) && previous_zone != Some(zone_id) {
             // Entered stack (cast), or entered battlefield directly without passing through stack (lands, puts, non-token creatures)
             event_type = Some("play".to_string());
 
@@ -843,7 +844,7 @@ impl MatchAssembler {
                 self.turn_event_seqs.push(self.feed_seq);
                 self.feed_seq += 1;
 
-                return Some((resolved_grp_id, seat_id, etype));
+                return Some((resolved_grp_id, seat_id, etype.clone()));
             }
         }
 
@@ -1226,7 +1227,11 @@ impl MatchAssembler {
         }
 
         if affector_seat == 0 {
-            affector_seat = self.player_seat_id;
+            if self.player_cards_seen.contains_key(&affector_grp) {
+                affector_seat = self.player_seat_id;
+            } else if self.opp_cards_seen.contains_key(&affector_grp) {
+                affector_seat = if self.player_seat_id == 1 { 2 } else { 1 };
+            }
         }
 
         let target_grp = self.instance_map.get(&target_id).copied().unwrap_or(0);
@@ -1279,6 +1284,45 @@ impl MatchAssembler {
             if let Some(parent_id) = self.ability_parent_map.get(&affector_id).copied() {
                 if let Some(pgid) = self.instance_map.get(&parent_id).copied() { affector_grp = pgid; }
                 if affector_seat == 0 { affector_seat = self.instance_owner_map.get(&parent_id).copied().unwrap_or(0); }
+            }
+        }
+
+        // Handle Mill events (library to graveyard or category Mill)
+        if category.eq_ignore_ascii_case("Mill") || (zone_src == 36 && zone_dest == 37) {
+            let count = affected_ids.len();
+            let seat = if affector_seat > 0 { affector_seat } else { self.player_seat_id };
+            
+            // Check if last turn event was a mill from the same source on the same turn
+            if let Some(last) = self.turn_events.last_mut() {
+                if last.turn_number == self.current_turn && last.seat_id == seat && last.grp_id == affector_grp && last.event_type.starts_with("mill:") {
+                    let existing: usize = last.event_type.split(':').nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                    last.event_type = format!("mill:{}", existing + count);
+                    return;
+                }
+            }
+
+            self.turn_events.push(MatchTurnEventRecord {
+                turn_number: self.current_turn,
+                seat_id: seat,
+                event_type: format!("mill:{}", count),
+                grp_id: affector_grp,
+                instance_id: Some(affector_id),
+                timestamp: Utc::now().to_rfc3339(),
+            });
+            self.turn_event_seqs.push(self.feed_seq);
+            self.feed_seq += 1;
+            return;
+        }
+
+        // Handle Flicker tracking (return to battlefield from exile/limbo)
+        if category.eq_ignore_ascii_case("Return") && zone_dest == 28 {
+            for target_id in affected_ids {
+                self.instance_flicker_pending.insert(*target_id);
+            }
+        }
+        if category.eq_ignore_ascii_case("Exile") && zone_src == 28 && (zone_dest == 29 || zone_dest == 30) {
+            for target_id in affected_ids {
+                self.instance_flicker_pending.insert(*target_id);
             }
         }
 
@@ -1679,11 +1723,12 @@ impl MatchAssembler {
             self.evaluate_ironclad();
 
             let turn_events = std::mem::take(&mut self.turn_events);
+            self.pending_counter_events.clear();
 
-            let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.iter()
+            let impactful_records: Vec<MatchImpactfulRecord> = self.impactful_cards.drain()
                 .filter(|(_, stats)| stats.total_damage > 0 || stats.cards_drawn > 0 || stats.counters_added > 0 || !stats.titles.is_empty())
                 .map(|(grp_id, stats)| MatchImpactfulRecord {
-                    grp_id: *grp_id,
+                    grp_id,
                     seat_id: stats.seat_id,
                     total_damage: stats.total_damage,
                     max_hit: stats.max_hit,
@@ -2756,6 +2801,46 @@ use super::*;
 
         let kroxa = impactful.iter().find(|i| i.grp_id == 88888).expect("Kroxa");
         assert!(kroxa.titles.contains(&"Immortal (Bronze)".to_string()), "Kroxa must earn Immortal (Bronze) for 3 reanimations");
+    }
+
+    #[test]
+    fn test_flicker_limbo_and_mill_events() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-flicker-mill".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 2, &[(1, 20), (2, 20)], 1);
+
+        // Aang (grp 97481, inst 70) flickers through Limbo (30) 3 times: 28 -> 30 -> 28
+        for turn in 3..=5 {
+            assembler.update_game_state(Some(turn as u64), turn, &[(1, 20), (2, 20)], 1);
+            assembler.process_game_object(70, Some(97481), Some(1), 28, true, false, None);
+            assembler.process_game_object(70, Some(97481), Some(1), 30, true, false, None);
+            let res = assembler.process_game_object(70, Some(97481), Some(1), 28, true, false, None);
+            assert_eq!(res, Some((97481, 1, "blink".to_string())), "Returning from limbo must emit blink");
+        }
+
+        // Opponent casts Terisian Mindbreaker and mills 10 cards across 2 batch transfers on Turn 6
+        assembler.update_game_state(Some(6), 6, &[(1, 20), (2, 20)], 2);
+        // Terisian Mindbreaker is on battlefield
+        assembler.process_game_object(963, Some(82567), Some(2), 28, true, false, None);
+        // Zone transfer annotations for mill
+        assembler.process_zone_transfer_event(963, &[101, 102, 103, 104, 105], "Mill", 36, 37);
+        assembler.process_zone_transfer_event(963, &[106, 107, 108, 109, 110], "Mill", 36, 37);
+
+        let (_, _, turn_events, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+        let aang = impactful.iter().find(|i| i.grp_id == 97481).expect("Aang");
+        assert!(aang.titles.contains(&"Blinkmaster (Bronze)".to_string()), "Aang must earn Blinkmaster (Bronze) through Limbo flicker");
+
+        let mill_events: Vec<_> = turn_events.iter().filter(|e| e.event_type.starts_with("mill:")).collect();
+        assert_eq!(mill_events.len(), 1, "Consecutive mill events from same source on same turn must consolidate");
+        assert_eq!(mill_events[0].event_type, "mill:10", "10 total cards milled");
+        assert_eq!(mill_events[0].grp_id, 82567, "Attributed to Terisian Mindbreaker");
+        assert_eq!(mill_events[0].seat_id, 2, "Attributed to opponent");
     }
 
     #[test]

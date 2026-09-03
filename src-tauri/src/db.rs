@@ -764,6 +764,7 @@ impl DatabaseManager {
 
     async fn backfill_draw_records_from_logs(pool: &Pool<Sqlite>) {
         let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE grp_id NOT IN (SELECT grp_id FROM cards_cache)").execute(pool).await;
+        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE id IN (SELECT i.id FROM match_impactful_cards i LEFT JOIN match_cards mc ON i.match_id = mc.match_id AND i.grp_id = mc.grp_id WHERE mc.id IS NULL)").execute(pool).await;
 
         let log_path = match crate::tailer::discover_log_path() {
             Some(p) => p,

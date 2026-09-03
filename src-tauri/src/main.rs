@@ -5143,7 +5143,12 @@ async fn dispatch_parsed_event(
                 let mut validated_impactful = impactful.clone();
 
                 // Validate and award Negator titles based on countered spell CMCs from cards_cache
-                for (affector_grp, target_grp) in &assembler.pending_counter_events {
+                let pending_counters = std::mem::take(&mut assembler.pending_counter_events);
+                for (affector_grp, target_grp) in &pending_counters {
+                    // Only award Negator if the spell was cast by hero (exists in card_records and not opponent)
+                    if !card_records.iter().any(|c| !c.is_opponent && c.grp_id == *affector_grp) {
+                        continue;
+                    }
                     let target_cmc: Option<i64> = sqlx::query_scalar(
                         "SELECT cmc FROM cards_cache WHERE grp_id = ?"
                     ).bind(*target_grp as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
