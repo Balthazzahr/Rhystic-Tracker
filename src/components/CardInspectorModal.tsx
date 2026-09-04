@@ -4,7 +4,7 @@ import { CustomDropdown } from './CustomDropdown';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
 import { AchievementBadge } from './AchievementBadge';
-import { setCardStylePref } from '../utils/cardStylePrefs';
+import { setCardStylePref, getCardStylePref, clearCardStylePref } from '../utils/cardStylePrefs';
 import { CardImage } from './CardImage';
 import { cleanCardName } from '../utils/cardImageCache';
 
@@ -110,6 +110,14 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
     setOverlayImgTriedNamed(false);
   }, [cardName, isOpen, overlaySelected]);
 
+  const [styleRev, setStyleRev] = useState(0);
+
+  useEffect(() => {
+    const handleStyleChange = () => setStyleRev((r) => r + 1);
+    window.addEventListener('rhystic-card-style-changed', handleStyleChange);
+    return () => window.removeEventListener('rhystic-card-style-changed', handleStyleChange);
+  }, []);
+
   const aggregatedAchievements = useMemo(() => {
     if (!overlayStats?.lifetime_titles) return [];
     const map = new Map<string, { title: string; highestTier: 'gold' | 'silver' | 'bronze'; totalCount: number }>();
@@ -191,10 +199,59 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
             })()}
 
             {/* Set / Art Selector Underneath */}
-            <div className="mt-3 shrink-0">
-              <p className="text-xs font-mono uppercase tracking-wider text-neutral-400 mb-1">
-                Card Style / Set
-              </p>
+            <div className="mt-3 shrink-0 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-mono uppercase tracking-wider text-neutral-400">
+                  Card Style / Set
+                </p>
+                {(() => {
+                  // styleRev ensures component re-renders when preferences change
+                  void styleRev;
+                  const currentPref = getCardStylePref(cardName);
+                  const isCurrentDefault = Boolean(
+                    currentPref &&
+                    selPrinting &&
+                    normalizeScryfallSetCode(currentPref.setCode) === normalizeScryfallSetCode(selPrinting.set_code) &&
+                    cleanCollectorNumber(currentPref.collectorNumber) === cleanCollectorNumber(selPrinting.collector_number)
+                  );
+
+                  if (isCurrentDefault) {
+                    return (
+                      <button
+                        onClick={() => {
+                          clearCardStylePref(cardName);
+                          onStyleChanged?.();
+                        }}
+                        className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Reset default art to standard MTGA print"
+                      >
+                        <span className="ms ms-ability-adventure text-[10px]" />
+                        <span>Reset Art</span>
+                      </button>
+                    );
+                  }
+
+                  if (selPrinting?.set_code && selPrinting.collector_number) {
+                    return (
+                      <button
+                        onClick={() => {
+                          setCardStylePref(cardName, {
+                            setCode: selPrinting.set_code,
+                            collectorNumber: selPrinting.collector_number,
+                            grpId: selPrinting.grp_id || null,
+                          });
+                          onStyleChanged?.();
+                        }}
+                        className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 border border-white/20 bg-white/[0.04] hover:bg-white/[0.1] text-neutral-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+                        title="Set this printing as your persistent default art across all screens"
+                      >
+                        <span>Set as Default</span>
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
               <CustomDropdown
                 options={
                   overlayPrintings.length === 0
@@ -214,25 +271,6 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
                   setOverlaySelected(val || null);
                   setOverlayImgFailed(false);
                   setOverlayImgTriedNamed(false);
-                  if (val) {
-                    const p = overlayPrintings.find((pp) => printingKey(pp) === val);
-                    if (p?.set_code && p.collector_number) {
-                      setCardStylePref(cardName, {
-                        setCode: p.set_code,
-                        collectorNumber: p.collector_number,
-                      });
-                      onStyleChanged?.();
-                      window.dispatchEvent(
-                        new CustomEvent('rhystic-card-style-changed', {
-                          detail: {
-                            name: cardName,
-                            setCode: p.set_code,
-                            collectorNumber: p.collector_number,
-                          },
-                        })
-                      );
-                    }
-                  }
                 }}
                 palette={palette}
               />

@@ -3,9 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { AchievementBadge } from "../../AchievementBadge";
-
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+import { CardImage } from "../../CardImage";
 
 export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
   widget,
@@ -95,14 +93,10 @@ export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
 
             {/* Right: Card artwork crop thumbnail */}
             <div className="w-8 h-8 shrink-0 overflow-hidden border border-white/15 shadow-sm bg-neutral-900 rounded-xs">
-              <img
-                src={scryfallArtUrl(item.cardName)}
-                alt={item.cardName}
+              <CardImage
+                name={item.cardName}
+                version="art_crop"
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                loading="lazy"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.visibility = "hidden";
-                }}
               />
             </div>
           </div>

@@ -3,6 +3,8 @@ import {
   ensureLocalImage,
   normalizeScryfallSetCode,
   cleanCollectorNumber,
+  cleanCardNameForScryfall,
+  invalidateCardImageCache,
   srcCache,
 } from '../utils/cardImageCache';
 
@@ -208,6 +210,33 @@ export function CardImage({ name, version = 'art_crop', printing, className, sty
     return () => { cancelled = true; mountedRef.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, version, cacheKey]);
+
+  // Reactively re-fetch image when a global card style preference change occurs for this card
+  useEffect(() => {
+    if (printing) return; // Explicit printing prop takes precedence over default preference
+    const handleCardStyleChange = (e: any) => {
+      const changedName = e?.detail?.name;
+      if (
+        changedName &&
+        cleanCardNameForScryfall(changedName) === cleanCardNameForScryfall(name)
+      ) {
+        setSrc(null);
+        setFailed(false);
+        (async () => {
+          const url = await ensureLocalImage(name, version);
+          if (mountedRef.current) {
+            if (url) {
+              setSrc(url);
+            } else {
+              setFailed(true);
+            }
+          }
+        })();
+      }
+    };
+    window.addEventListener('rhystic-card-style-changed', handleCardStyleChange);
+    return () => window.removeEventListener('rhystic-card-style-changed', handleCardStyleChange);
+  }, [name, version, printing]);
 
   // Retry the local-cache check if the file was somehow missing.
   const retry = () => {

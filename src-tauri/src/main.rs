@@ -8,6 +8,7 @@ mod deck_list;
 mod settings;
 mod deck_legitimacy;
 mod dashboard;
+mod client_loc;
 
 use tokio::sync::mpsc;
 use std::path::PathBuf;
@@ -3141,34 +3142,109 @@ struct AvatarExtractResult {
     message: String,
 }
 
+/// Directory where custom background images uploaded by the user are stored.
+fn background_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let bg_dir = dir.join("backgrounds");
+    std::fs::create_dir_all(&bg_dir).map_err(|e| e.to_string())?;
+    Ok(bg_dir)
+}
+
+#[tauri::command]
+fn save_custom_background(app: tauri::AppHandle, filename: String, data: Vec<u8>) -> Result<String, String> {
+    let dir = background_cache_dir(&app)?;
+    // Sanitize filename to avoid directory traversal
+    let safe_name: String = filename.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    let safe_name = if safe_name.is_empty() { "background.webp".to_string() } else { safe_name };
+    let path = dir.join(&safe_name);
+    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn get_preferred_prints(
+    db_manager: tauri::State<'_, std::sync::Arc<DatabaseManager>>,
+) -> Result<std::collections::HashMap<String, (String, String, Option<i64>)>, String> {
+    db_manager.get_preferred_prints().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_preferred_print(
+    db_manager: tauri::State<'_, std::sync::Arc<DatabaseManager>>,
+    card_name: String,
+    set_code: String,
+    collector_number: String,
+    grp_id: Option<i64>,
+) -> Result<(), String> {
+    db_manager.set_preferred_print(&card_name, &set_code, &collector_number, grp_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn clear_preferred_print(
+    db_manager: tauri::State<'_, std::sync::Arc<DatabaseManager>>,
+    card_name: String,
+) -> Result<(), String> {
+    db_manager.clear_preferred_print(&card_name).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<AvatarExtractResult, String> {
     let out_dir = avatar_cache_dir(&app)?;
     std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
 
-    // Try running extractor script if python is available
-    let script_candidates = [
+    // Derive active MTGA raw directory or log path
+    let raw_dir = crate::card_db::find_latest_raw_card_db()
+        .and_then(|f| f.parent().map(|p| p.to_path_buf()));
+    let raw_arg = raw_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+
+    // Try locating extractor script
+    let mut script_candidates = vec![
         PathBuf::from("/home/davepople/Projects/Rhystic Tracker/src-tauri/scripts/extract_mtga_avatars.py"),
         std::env::current_exe().unwrap_or_default().parent().unwrap_or(std::path::Path::new("")).join("scripts/extract_mtga_avatars.py"),
     ];
 
-    let py_bins = ["/tmp/unity_env/bin/python3", "python3", "python"];
+    if let Ok(res_dir) = app.path().resource_dir() {
+        script_candidates.push(res_dir.join("scripts/extract_mtga_avatars.py"));
+    }
 
-    for script in &script_candidates {
-        if script.exists() {
-            for py in &py_bins {
-                let status = std::process::Command::new(py)
-                    .arg(script)
-                    .arg("")
-                    .arg(&out_dir)
-                    .status();
-                if let Ok(s) = status {
-                    if s.success() {
-                        break;
-                    }
+    let script_path = script_candidates.into_iter().find(|p| p.exists());
+    if script_path.is_none() {
+        return Ok(AvatarExtractResult {
+            success: false,
+            count: 0,
+            message: "Avatar extractor script ('extract_mtga_avatars.py') could not be found.".to_string(),
+        });
+    }
+    let script = script_path.unwrap();
+
+    let py_bins = ["/tmp/unity_env/bin/python3", "python3", "python"];
+    let mut script_ran = false;
+    let mut last_error = String::new();
+
+    for py in &py_bins {
+        let output = std::process::Command::new(py)
+            .arg(&script)
+            .arg(&raw_arg)
+            .arg(&out_dir)
+            .output();
+
+        match output {
+            Ok(out) => {
+                script_ran = true;
+                if out.status.success() {
+                    last_error.clear();
+                    break;
+                } else {
+                    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                    last_error = format!("{} {}", stdout.trim(), stderr.trim());
                 }
             }
-            break;
+            Err(e) => {
+                last_error = format!("Failed to launch {}: {}", py, e);
+            }
         }
     }
 
@@ -3179,6 +3255,22 @@ async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<Avata
             .count() as u32,
         Err(_) => 0,
     };
+
+    if !script_ran {
+        return Ok(AvatarExtractResult {
+            success: false,
+            count,
+            message: "Python 3 is required to extract MTGA avatars. Please ensure python3 with UnityPy and Pillow is installed.".to_string(),
+        });
+    }
+
+    if count == 0 && !last_error.is_empty() {
+        return Ok(AvatarExtractResult {
+            success: false,
+            count: 0,
+            message: format!("Avatar extraction failed: {}", last_error),
+        });
+    }
 
     Ok(AvatarExtractResult {
         success: true,
@@ -4303,6 +4395,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
         };
 
         let mut target_name: Option<String> = None;
+        let mut target_card_type: Option<String> = None;
         if event_type.starts_with("damage:") {
             let parts: Vec<&str> = event_type.split(':').collect();
             let (_amt, tid, tgt_gid) = if parts.len() >= 5 {
@@ -4329,6 +4422,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
                 opp_name.clone()
             } else if tgt_gid > 0 {
                 if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), tgt_gid).await {
+                    target_card_type = meta.card_type;
                     meta.name
                 } else {
                     format!("Target #{}", tid)
@@ -4337,6 +4431,41 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
                 format!("Target #{}", tid)
             };
             target_name = Some(t_name);
+        } else if event_type.starts_with("counterspell:") {
+            if let Some(target_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), target_grp).await {
+                    target_name = Some(meta.name);
+                    target_card_type = meta.card_type;
+                }
+            }
+        } else if event_type.starts_with("countered:") {
+            if let Some(affector_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), affector_grp).await {
+                    target_name = Some(meta.name);
+                    target_card_type = meta.card_type;
+                }
+            }
+        } else if event_type.starts_with("destroy:") {
+            if let Some(affector_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), affector_grp).await {
+                    target_name = Some(meta.name);
+                    target_card_type = meta.card_type;
+                }
+            }
+        } else if event_type.starts_with("bounce:") {
+            if let Some(target_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), target_grp).await {
+                    target_name = Some(meta.name);
+                    target_card_type = meta.card_type;
+                }
+            }
+        } else if event_type.starts_with("sacrifice:") {
+            if let Some(target_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), target_grp).await {
+                    target_name = Some(meta.name);
+                    target_card_type = meta.card_type;
+                }
+            }
         }
 
         events.push(serde_json::json!({
@@ -4349,6 +4478,7 @@ async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, St
             "name": display_name,
             "source_name": name,
             "target_name": target_name,
+            "target_card_type": target_card_type,
             "card_type": card_type,
             "mana_cost": mana_cost,
             "amount": amount,
@@ -4523,11 +4653,59 @@ async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Resu
                     (name, card_type)
                 };
 
+                let mut target_name: Option<String> = None;
+                let mut target_card_type: Option<String> = None;
+                let mut source_name: Option<String> = None;
+                let mut count: Option<usize> = None;
+
+                if e.event_type.starts_with("counterspell:") {
+                    if let Some(tgid) = e.event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                        if let Ok(Some(meta)) = card_db::get_card_metadata(db_for_names.pool(), tgid).await {
+                            target_name = Some(meta.name);
+                            target_card_type = meta.card_type;
+                        }
+                    }
+                } else if e.event_type.starts_with("countered:") {
+                    if let Some(agid) = e.event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                        if let Ok(Some(meta)) = card_db::get_card_metadata(db_for_names.pool(), agid).await {
+                            source_name = Some(meta.name);
+                            target_card_type = meta.card_type;
+                        }
+                    }
+                } else if e.event_type.starts_with("destroy:") {
+                    if let Some(agid) = e.event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                        if let Ok(Some(meta)) = card_db::get_card_metadata(db_for_names.pool(), agid).await {
+                            target_name = Some(meta.name);
+                            target_card_type = meta.card_type;
+                        }
+                    }
+                } else if e.event_type.starts_with("bounce:") {
+                    if let Some(tgid) = e.event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                        if let Ok(Some(meta)) = card_db::get_card_metadata(db_for_names.pool(), tgid).await {
+                            target_name = Some(meta.name);
+                            target_card_type = meta.card_type;
+                        }
+                    }
+                } else if e.event_type.starts_with("sacrifice:") {
+                    if let Some(tgid) = e.event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
+                        if let Ok(Some(meta)) = card_db::get_card_metadata(db_for_names.pool(), tgid).await {
+                            target_name = Some(meta.name);
+                            target_card_type = meta.card_type;
+                        }
+                    }
+                } else if e.event_type.starts_with("mill:") {
+                    count = e.event_type.split(':').nth(1).and_then(|s| s.parse::<usize>().ok());
+                }
+
                 merged.push((*seq, serde_json::json!({
                     "type": e.event_type,
                     "seat_id": e.seat_id,
                     "is_player": e.seat_id == assembler.player_seat_id,
                     "name": name,
+                    "target_name": target_name,
+                    "target_card_type": target_card_type,
+                    "source_name": source_name,
+                    "count": count,
                     "card_type": card_type,
                     "grp_id": e.grp_id,
                     "turn": e.turn_number,
@@ -5000,12 +5178,14 @@ async fn record_match_deck_audit(
     db_manager: &DatabaseManager,
     assembler: &MatchAssembler,
     match_id: &str,
+    resolved_deck_name: Option<&str>,
 ) {
     if assembler.last_assigned_deck_event {
+        let deck_title = resolved_deck_name.unwrap_or(PRESET_EVENT_DECK_NAME);
         let _ = db_manager
             .upsert_match_deck(
                 match_id,
-                Some(PRESET_EVENT_DECK_NAME),
+                Some(deck_title),
                 None,
                 true,
                 Some("assigned-deck event (no deck submitted)"),
@@ -5013,7 +5193,9 @@ async fn record_match_deck_audit(
             .await;
         return;
     }
-    let deck_name = assembler.cached_deck_name.clone();
+    let deck_name = resolved_deck_name
+        .map(|s| s.to_string())
+        .or_else(|| assembler.cached_deck_name.clone());
     let deck_id = assembler.cached_deck_id.clone();
     let (preset, reason) = match deck_name.as_deref() {
         Some(name) => match crate::deck_legitimacy::preset_deck_reason(name) {
@@ -5131,13 +5313,19 @@ async fn dispatch_parsed_event(
         }
         ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
             if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+                let hero_gids: Vec<i64> = card_records.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
                 if record.player_deck_name.is_empty() || record.player_deck_name == "Selected Deck" {
-                    let hero_gids: Vec<i64> = card_records.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
                     if let Ok(Some(resolved_name)) = db_manager.resolve_deck_for_cards(&hero_gids, record.player_commander_id.map(|c| c as i64)).await {
                         record.player_deck_name = resolved_name.clone();
                         assembler.cached_deck_name = Some(resolved_name.clone());
                         assembler.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&resolved_name).is_none();
                     }
+                }
+                if record.player_deck_name == PRESET_EVENT_DECK_NAME || record.player_deck_name.to_lowercase().starts_with("jump in") {
+                    let resolved = db_manager.resolve_event_deck_name(&record.format_name, &hero_gids).await;
+                    record.player_deck_name = resolved.clone();
+                    assembler.cached_deck_name = Some(resolved);
+                    assembler.match_legitimate = false;
                 }
 
                 let mut validated_impactful = impactful.clone();
@@ -5217,7 +5405,7 @@ async fn dispatch_parsed_event(
                     validated_impactful.len()
                 );
                 let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &validated_impactful).await;
-                record_match_deck_audit(db_manager, assembler, &record.match_id).await;
+                record_match_deck_audit(db_manager, assembler, &record.match_id, Some(&record.player_deck_name)).await;
             }
         }
         ParsedEvent::Unknown => {}
@@ -5561,7 +5749,11 @@ fn main() {
             set_always_on_top,
             get_dashboard_layout,
             save_dashboard_layout,
-            reset_dashboard_layout
+            reset_dashboard_layout,
+            save_custom_background,
+            get_preferred_prints,
+            set_preferred_print,
+            clear_preferred_print
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

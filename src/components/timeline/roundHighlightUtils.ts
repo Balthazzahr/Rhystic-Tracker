@@ -10,6 +10,7 @@ export interface TimelineAction {
   grp_id?: number;
   name?: string;
   target_name?: string;
+  target_card_type?: string;
   card_type?: string;
   mana_cost?: string;
   amount?: number;
@@ -52,7 +53,15 @@ export function scoreAction(ev: TimelineAction, isOutOfTurn: boolean = false): n
     evType === 'dies' ||
     evType === 'mulligan' ||
     evType === 'bottom' ||
-    evType.startsWith('counter') ||
+    evType === 'discard' ||
+    evType === 'sacrifice' ||
+    evType.startsWith('sacrifice:') ||
+    evType === 'bounce' ||
+    evType.startsWith('bounce:') ||
+    evType.startsWith('destroy') ||
+    evType === 'command_zone' ||
+    evType.startsWith('countered') ||
+    evType.startsWith('counter:') ||
     evType.startsWith('life')
   ) {
     return 0;

@@ -19,6 +19,7 @@ import { AchievementDetailModal } from "./AchievementDetailModal";
 import { getAchievementMeta } from "../utils/achievementBadges";
 import logoSvg from "../assets/RhysticTrackerLogo.svg";
 import iconSvg from "../assets/RhysticTrackerICON.svg";
+import { CardImage } from "./CardImage";
 
 interface ManaTheme {
   id: string;
@@ -80,12 +81,6 @@ interface DashboardViewProps {
   dashboardMode?: "2.0" | "legacy";
   setDashboardMode?: (mode: "2.0" | "legacy") => void;
 }
-
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
-
-const scryfallCardUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
 
 const localDateKey = (d: Date): string => {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -1299,16 +1294,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         />
                         {deckArt && (
                           <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
-                            <img
-                              src={scryfallArtUrl(deckArt)}
-                              alt={m.player_deck_name}
+                            <CardImage
+                              name={deckArt}
+                              version="art_crop"
                               className="w-full h-full object-cover"
-                              loading="lazy"
-                              onError={(e) => {
-                                (
-                                  e.target as HTMLImageElement
-                                ).style.visibility = "hidden";
-                              }}
                             />
                           </div>
                         )}
@@ -1351,15 +1340,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                   );
                                 }}
                               >
-                                <img
-                                  src={scryfallArtUrl(k.name)}
-                                  alt={k.name}
+                                <CardImage
+                                  name={k.name}
+                                  version="art_crop"
                                   className="w-full h-full object-cover"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.visibility = "hidden";
-                                  }}
                                 />
                               </div>
                             </CardNameTooltip>
@@ -1441,7 +1425,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="flex gap-4 items-start">
                   {spotlightMarquee && (
                     <div
-                      className="w-[184px] h-[257px] shrink-0 overflow-hidden cursor-zoom-in group shadow-2xl transition-transform hover:scale-105 border border-white/10 bg-neutral-900"
+                      className="w-[110px] h-[154px] shrink-0 overflow-hidden border border-white/15 cursor-zoom-in hover:scale-105 transition-transform shadow-lg bg-neutral-900"
                       onClick={(e) => {
                         e.stopPropagation();
                         onShowCard(
@@ -1453,15 +1437,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         );
                       }}
                     >
-                      <img
-                        src={scryfallCardUrl(spotlightMarquee.name)}
-                        alt={spotlightMarquee.name}
+                      <CardImage
+                        name={spotlightMarquee.name}
+                        version="normal"
                         className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.visibility =
-                            "hidden";
-                        }}
                       />
                     </div>
                   )}
@@ -1516,16 +1495,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                     );
                                   }}
                                 >
-                                  <img
-                                    src={scryfallCardUrl(k.name)}
-                                    alt={k.name}
+                                  <CardImage
+                                    name={k.name}
+                                    version="normal"
                                     className="w-full h-full object-cover"
-                                    loading="lazy"
-                                    onError={(e) => {
-                                      const target =
-                                        e.target as HTMLImageElement;
-                                      target.src = scryfallArtUrl(k.name);
-                                    }}
                                   />
                                 </div>
                               </CardNameTooltip>
@@ -1751,15 +1724,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {item.cardName}
                       </span>
                       <div className="w-8 h-8 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
-                        <img
-                          src={scryfallArtUrl(item.cardName)}
-                          alt={item.cardName}
+                        <CardImage
+                          name={item.cardName}
+                          version="art_crop"
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                          loading="lazy"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.visibility =
-                              "hidden";
-                          }}
                         />
                       </div>
                     </div>
@@ -1805,15 +1773,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           #{i + 1}
                         </span>
                         <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 bg-neutral-900">
-                          <img
-                            src={scryfallArtUrl(entry.card_name)}
-                            alt={entry.card_name}
+                          <CardImage
+                            name={entry.card_name}
+                            version="art_crop"
                             className="w-full h-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.visibility =
-                                "hidden";
-                            }}
                           />
                         </div>
                         <span className="font-medium text-neutral-200 group-hover:text-white truncate">

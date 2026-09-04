@@ -19,13 +19,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ManaPip } from './ManaPip';
 import { CardNameTooltip } from './CardNameTooltip';
-
-// Helper: Scryfall card art crop URL
-const scryfallArtUrl = (name: string): string => {
-  if (!name) return '';
-  const clean = name.split(' // ')[0].trim();
-  return `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(clean)}&format=image&version=art_crop`;
-};
+import { CardImage } from './CardImage';
 
 // Date Formatters matching Dashboard
 const formatTimeAgo = (ts: string): string => {
@@ -669,14 +663,10 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
           <div className="flex items-center gap-2.5 min-w-0 pr-2">
             {deckArt && (
               <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
-                <img
-                  src={scryfallArtUrl(deckArt)}
-                  alt=""
+                <CardImage
+                  name={deckArt}
+                  version="art_crop"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                  loading="lazy"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.visibility = 'hidden';
-                  }}
                 />
               </div>
             )}
@@ -719,14 +709,10 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
           <div className="flex items-center gap-2.5 min-w-0 pr-2">
             {deckArt && (
               <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
-                <img
-                  src={scryfallArtUrl(deckArt)}
-                  alt=""
+                <CardImage
+                  name={deckArt}
+                  version="art_crop"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                  loading="lazy"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.visibility = 'hidden';
-                  }}
                 />
               </div>
             )}
@@ -840,14 +826,10 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                         }
                       }}
                     >
-                      <img
-                        src={scryfallArtUrl(k.name)}
-                        alt={k.name}
+                      <CardImage
+                        name={k.name}
+                        version="art_crop"
                         className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.visibility = 'hidden';
-                        }}
                       />
                     </div>
                   </CardNameTooltip>
@@ -918,9 +900,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
               <div className="flex items-center justify-center gap-1.5">
                 {pCmd && (
                   <CardNameTooltip name={pCmd}>
-                    <img
-                      src={scryfallArtUrl(pCmd)}
-                      alt=""
+                    <CardImage
+                      name={pCmd}
+                      version="art_crop"
                       className="w-5 h-5 rounded-full object-cover border border-white/20"
                     />
                   </CardNameTooltip>
@@ -928,9 +910,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                 {pCmd && oCmd && <span className="text-[10px] text-neutral-500 font-mono">vs</span>}
                 {oCmd && (
                   <CardNameTooltip name={oCmd}>
-                    <img
-                      src={scryfallArtUrl(oCmd)}
-                      alt=""
+                    <CardImage
+                      name={oCmd}
+                      version="art_crop"
                       className="w-5 h-5 rounded-full object-cover border border-rose-500/40"
                     />
                   </CardNameTooltip>

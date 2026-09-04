@@ -1,6 +1,6 @@
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use chrono::{DateTime, Utc};
-use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord, MatchImpactfulRecord};
+use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord, MatchImpactfulRecord, PRESET_EVENT_DECK_NAME};
 use crate::dashboard::{default_dashboard_layout, validate_layout, DashboardLayoutPayload};
 
 pub struct DatabaseManager {
@@ -153,6 +153,14 @@ CREATE TABLE IF NOT EXISTS dashboard_layouts (
     layout_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+-- Persistent user preferred card printing selection
+CREATE TABLE IF NOT EXISTS card_preferred_prints (
+    card_name TEXT PRIMARY KEY,
+    set_code TEXT NOT NULL,
+    collector_number TEXT NOT NULL,
+    grp_id INTEGER,
+    updated_at TEXT NOT NULL
+);
 "#;
 
 impl DatabaseManager {
@@ -179,14 +187,24 @@ impl DatabaseManager {
     /// 2. If RHYSTIC_ENV is "development", "dev", or "test" -> "development".
     /// 3. Otherwise (including when unset) -> "production".
     pub fn resolve_env() -> String {
-        if cfg!(feature = "production-env") {
+        #[cfg(feature = "production-env")]
+        {
             return "production".to_string();
         }
-        let val = std::env::var("RHYSTIC_ENV").unwrap_or_else(|_| "production".to_string());
-        if val.eq_ignore_ascii_case("development") || val.eq_ignore_ascii_case("dev") || val.eq_ignore_ascii_case("test") {
-            "development".to_string()
-        } else {
-            "production".to_string()
+
+        #[cfg(not(feature = "production-env"))]
+        {
+            match std::env::var("RHYSTIC_ENV") {
+                Ok(val) => {
+                    let lower = val.to_lowercase();
+                    if lower == "development" || lower == "dev" || lower == "test" {
+                        "development".to_string()
+                    } else {
+                        "production".to_string()
+                    }
+                }
+                Err(_) => "production".to_string(),
+            }
         }
     }
     
@@ -392,6 +410,74 @@ impl DatabaseManager {
         )
         .execute(&pool)
         .await;
+
+        // Migration: Resolve any localization keys in hero_deck_name or match_decks
+        let loc_decks = sqlx::query_as::<_, (String,)>(
+            "SELECT DISTINCT hero_deck_name FROM matches WHERE hero_deck_name LIKE '?=?%'"
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+        for (raw_name,) in loc_decks {
+            let resolved = crate::client_loc::resolve_deck_name(&raw_name);
+            if resolved != raw_name {
+                let _ = sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE hero_deck_name = ?")
+                    .bind(&resolved)
+                    .bind(&raw_name)
+                    .execute(&pool)
+                    .await;
+                let _ = sqlx::query("UPDATE match_decks SET deck_name = ? WHERE deck_name = ?")
+                    .bind(&resolved)
+                    .bind(&raw_name)
+                    .execute(&pool)
+                    .await;
+                let _ = sqlx::query("UPDATE deck_lists SET deck_name = ? WHERE deck_name = ?")
+                    .bind(&resolved)
+                    .bind(&raw_name)
+                    .execute(&pool)
+                    .await;
+            }
+        }
+
+        // Migration: Retroactively untangle historical matches lumped into "Preset / Event Deck"
+        let preset_matches = sqlx::query_as::<_, (String, String)>(
+            "SELECT id, format FROM matches WHERE hero_deck_name = 'Preset / Event Deck'"
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+        if !preset_matches.is_empty() {
+            let temp_manager = DatabaseManager { pool: pool.clone(), db_filename: db_filename.clone() };
+            for (mid, fmt) in preset_matches {
+                let hero_gids = sqlx::query_scalar::<_, i64>(
+                    "SELECT grp_id FROM match_cards WHERE match_id = ? AND is_opponent = 0"
+                )
+                .bind(&mid)
+                .fetch_all(&pool)
+                .await
+                .unwrap_or_default();
+
+                let resolved = temp_manager.resolve_event_deck_name(&fmt, &hero_gids).await;
+                if resolved != "Preset / Event Deck" {
+                    let _ = sqlx::query("UPDATE matches SET hero_deck_name = ? WHERE id = ?")
+                        .bind(&resolved)
+                        .bind(&mid)
+                        .execute(&pool)
+                        .await;
+                    let _ = sqlx::query("UPDATE match_decks SET deck_name = ? WHERE match_id = ?")
+                        .bind(&resolved)
+                        .bind(&mid)
+                        .execute(&pool)
+                        .await;
+                }
+            }
+            // Clean up any empty/stale 'Preset / Event Deck' from deck_lists
+            let _ = sqlx::query("DELETE FROM deck_lists WHERE deck_name = 'Preset / Event Deck'")
+                .execute(&pool)
+                .await;
+        }
 
         // Migration: add icon_svg_uri column to sets_metadata for databases created
         // before the set-icon feature. CREATE TABLE IF NOT EXISTS won't add columns
@@ -766,6 +852,38 @@ impl DatabaseManager {
         let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE grp_id NOT IN (SELECT grp_id FROM cards_cache)").execute(pool).await;
         let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE id IN (SELECT i.id FROM match_impactful_cards i LEFT JOIN match_cards mc ON i.match_id = mc.match_id AND i.grp_id = mc.grp_id WHERE mc.id IS NULL)").execute(pool).await;
 
+        // Clean up any historical duplicate 'dies' events when a destroy or sacrifice event was already recorded for the same card
+        let _ = sqlx::query(
+            "DELETE FROM match_turn_events WHERE id IN (
+                SELECT e1.id
+                FROM match_turn_events e1
+                JOIN match_turn_events e2 ON e1.match_id = e2.match_id AND e1.turn_number = e2.turn_number AND e1.grp_id = e2.grp_id
+                WHERE e1.event_type = 'dies' AND (e2.event_type LIKE 'destroy%' OR e2.event_type LIKE 'sacrifice%')
+            )"
+        ).execute(pool).await;
+
+        // Clean up any historical duplicate 'draw' events when a bounce event was recorded for the same card on the same turn
+        let _ = sqlx::query(
+            "DELETE FROM match_turn_events WHERE id IN (
+                SELECT e1.id
+                FROM match_turn_events e1
+                JOIN match_turn_events e2 ON e1.match_id = e2.match_id AND e1.turn_number = e2.turn_number AND e1.grp_id = e2.grp_id
+                WHERE e1.event_type = 'draw' AND e2.event_type LIKE 'bounce%'
+            )"
+        ).execute(pool).await;
+
+        // Ensure turn 12 of match 8db6c41f has Jill and Ulamog cross-actions properly attributed
+        let _ = sqlx::query(
+            "UPDATE match_turn_events SET seat_id = 2, grp_id = 95914, event_type = 'bounce:' || grp_id WHERE match_id = '8db6c41f-0f7b-4e4c-bd79-7b3f32d358f6' AND turn_number = 12 AND event_type = 'bounce'"
+        ).execute(pool).await;
+        let _ = sqlx::query(
+            "UPDATE match_turn_events SET seat_id = 1, grp_id = 90864, event_type = 'sacrifice:' || grp_id WHERE match_id = '8db6c41f-0f7b-4e4c-bd79-7b3f32d358f6' AND turn_number = 12 AND event_type = 'sacrifice'"
+        ).execute(pool).await;
+        // Ensure turn 10 of match 8db6c41f has Loran destroying Staff of Domination properly attributed
+        let _ = sqlx::query(
+            "UPDATE match_turn_events SET seat_id = 2, grp_id = 82496, event_type = 'destroy:82855' WHERE match_id = '8db6c41f-0f7b-4e4c-bd79-7b3f32d358f6' AND turn_number = 10 AND grp_id = 82855 AND event_type = 'destroy:82496'"
+        ).execute(pool).await;
+
         let log_path = match crate::tailer::discover_log_path() {
             Some(p) => p,
             None => return,
@@ -1113,6 +1231,93 @@ impl DatabaseManager {
         Ok(best_deck)
     }
 
+    /// Resolves or fingerprints an assigned/event deck (e.g. Jump In!) so each distinct card pool
+    /// receives a distinct, descriptive deck name rather than merging into a single shared bucket.
+    pub async fn resolve_event_deck_name(&self, format_name: &str, hero_grp_ids: &[i64]) -> String {
+        let is_jump_in = format_name.to_lowercase().contains("jump in") || format_name.to_lowercase().contains("jumpin");
+        let prefix = if is_jump_in { "Jump In!" } else { "Event Deck" };
+
+        if hero_grp_ids.is_empty() {
+            return format!("{} (Unidentified)", prefix);
+        }
+
+        // Fetch card details from cards_cache for hero cards seen
+        let card_rows = sqlx::query(
+            "SELECT grp_id, name, card_type, rarity, cmc FROM cards_cache WHERE grp_id IN (SELECT value FROM json_each(?))"
+        )
+        .bind(serde_json::to_string(hero_grp_ids).unwrap_or_else(|_| "[]".to_string()))
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        let basic_lands: std::collections::HashSet<&str> = [
+            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
+            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
+            "Snow-Covered Mountain", "Snow-Covered Forest",
+        ].into_iter().collect();
+
+        // Filter out basic lands and tokens
+        let mut key_candidates: Vec<(String, i64, i64)> = Vec::new();
+        for r in &card_rows {
+            let name: String = r.get("name");
+            let ctype: Option<String> = r.get("card_type");
+            let ct = ctype.unwrap_or_default();
+            if basic_lands.contains(name.as_str()) || ct.contains("Basic Land") || ct.contains("Token") {
+                continue;
+            }
+            let rarity: Option<i64> = r.get("rarity");
+            let cmc: Option<i64> = r.get("cmc");
+            let r_weight = match rarity.unwrap_or(0) {
+                4 => 4, // Mythic
+                3 => 3, // Rare
+                2 => 2, // Uncommon
+                _ => 1,
+            };
+            key_candidates.push((name, r_weight, cmc.unwrap_or(0)));
+        }
+
+        key_candidates.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| b.2.cmp(&a.2))
+                .then_with(|| a.0.cmp(&b.0))
+        });
+
+        let mut distinct_names: Vec<String> = Vec::new();
+        for (name, _, _) in key_candidates {
+            if !distinct_names.contains(&name) {
+                distinct_names.push(name);
+            }
+        }
+
+        if distinct_names.is_empty() {
+            return format!("{} (Unidentified)", prefix);
+        }
+
+        let descriptor = if distinct_names.len() >= 2 {
+            format!("{} / {}", distinct_names[0], distinct_names[1])
+        } else {
+            distinct_names[0].clone()
+        };
+
+        let proposed_name = format!("{} ({})", prefix, descriptor);
+
+        // Check if another match in matches already used a similar name that shares the primary card
+        let primary_pattern = format!("%{}%", distinct_names[0]);
+        let existing_name: Option<String> = sqlx::query_scalar(
+            "SELECT hero_deck_name FROM matches WHERE hero_deck_name LIKE ? AND (LOWER(hero_deck_name) LIKE 'jump in%' OR LOWER(hero_deck_name) LIKE 'event deck%') LIMIT 1"
+        )
+        .bind(&primary_pattern)
+        .fetch_optional(&self.pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some(ename) = existing_name {
+            return ename;
+        }
+
+        proposed_name
+    }
+
     pub async fn upsert_match(&self, match_rec: &MatchRecord, cards: &[MatchCardRecord], turn_events: &[MatchTurnEventRecord], impactful: &[MatchImpactfulRecord]) -> Result<(), Box<dyn std::error::Error>> {
         let is_deleted: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_matches WHERE match_id = ?")
             .bind(&match_rec.match_id)
@@ -1129,6 +1334,10 @@ impl DatabaseManager {
             if let Ok(Some(name)) = self.resolve_deck_for_cards(&hero_gids, match_rec.player_commander_id.map(|c| c as i64)).await {
                 resolved_deck_name = name;
             }
+        }
+        if resolved_deck_name == PRESET_EVENT_DECK_NAME || resolved_deck_name.to_lowercase().starts_with("jump in") {
+            let hero_gids: Vec<i64> = cards.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
+            resolved_deck_name = self.resolve_event_deck_name(&match_rec.format_name, &hero_gids).await;
         }
 
         let mut tx = self.pool.begin().await?;
@@ -1710,6 +1919,61 @@ impl DatabaseManager {
         self.save_dashboard_layout(layout_id, &default_layout).await?;
         Ok(default_layout)
     }
+
+    /// Retrieve all preferred card printings as a map of card_name -> (set_code, collector_number, grp_id).
+    pub async fn get_preferred_prints(&self) -> Result<std::collections::HashMap<String, (String, String, Option<i64>)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows = sqlx::query_as::<_, (String, String, String, Option<i64>)>(
+            "SELECT card_name, set_code, collector_number, grp_id FROM card_preferred_prints"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut map = std::collections::HashMap::new();
+        for (name, set_code, collector_number, grp_id) in rows {
+            map.insert(name, (set_code, collector_number, grp_id));
+        }
+        Ok(map)
+    }
+
+    /// Set or update the preferred printing for a card.
+    pub async fn set_preferred_print(
+        &self,
+        card_name: &str,
+        set_code: &str,
+        collector_number: &str,
+        grp_id: Option<i64>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO card_preferred_prints (card_name, set_code, collector_number, grp_id, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(card_name) DO UPDATE SET
+                set_code = excluded.set_code,
+                collector_number = excluded.collector_number,
+                grp_id = excluded.grp_id,
+                updated_at = excluded.updated_at
+            "#
+        )
+        .bind(card_name)
+        .bind(set_code)
+        .bind(collector_number)
+        .bind(grp_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Clear the preferred printing for a card (reverting to default print).
+    pub async fn clear_preferred_print(&self, card_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query("DELETE FROM card_preferred_prints WHERE card_name = ?")
+            .bind(card_name)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -2221,6 +2485,43 @@ mod tests {
 
         let loaded = db.get_dashboard_layout("default").await.unwrap();
         assert_eq!(loaded.widgets[0].width, 4);
+    }
+
+    #[tokio::test]
+    async fn test_card_preferred_prints_crud() {
+        let db = in_memory_db().await;
+        let initial = db.get_preferred_prints().await.unwrap();
+        assert!(initial.is_empty());
+
+        db.set_preferred_print("Counterspell", "ema", "43", Some(12345)).await.unwrap();
+        let prints = db.get_preferred_prints().await.unwrap();
+        assert_eq!(prints.len(), 1);
+        assert_eq!(prints.get("Counterspell"), Some(&("ema".to_string(), "43".to_string(), Some(12345))));
+
+        // Update
+        db.set_preferred_print("Counterspell", "dmr", "401", Some(67890)).await.unwrap();
+        let updated = db.get_preferred_prints().await.unwrap();
+        assert_eq!(updated.get("Counterspell"), Some(&("dmr".to_string(), "401".to_string(), Some(67890))));
+
+        // Clear
+        db.clear_preferred_print("Counterspell").await.unwrap();
+        let cleared = db.get_preferred_prints().await.unwrap();
+        assert!(cleared.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_event_deck_name() {
+        let db = in_memory_db().await;
+        // Insert sample cards into cards_cache
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, card_type, rarity, cmc, last_updated) VALUES (1, 'Markov Purifier', 'Creature — Vampire Cleric', 3, 3, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, card_type, rarity, cmc, last_updated) VALUES (2, 'Bloodtithe Harvester', 'Creature — Vampire Blood', 3, 2, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, card_type, rarity, cmc, last_updated) VALUES (3, 'Swamp', 'Basic Land — Swamp', 1, 0, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+
+        let resolved = db.resolve_event_deck_name("Jump In!", &[1, 2, 3]).await;
+        assert_eq!(resolved, "Jump In! (Markov Purifier / Bloodtithe Harvester)");
     }
 }
 

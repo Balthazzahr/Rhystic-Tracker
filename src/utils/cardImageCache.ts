@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { getCardStylePref } from './cardStylePrefs';
 
 // Normalize MTGA set codes to Scryfall set codes (e.g. DAR -> DOM)
 export function normalizeScryfallSetCode(code?: string | null): string {
@@ -126,9 +127,34 @@ export class LruMap<K, V> {
     }
     this.map.set(key, val);
   }
+
+  delete(key: K): boolean {
+    return this.map.delete(key);
+  }
+
+  clear(): void {
+    this.map.clear();
+  }
 }
 
 export const srcCache = new LruMap<string, string>(MAX_SRC_CACHE);
+
+export function invalidateCardImageCache(cardName: string): void {
+  const clean = cleanCardNameForScryfall(cardName);
+  const versions = ['art_crop', 'normal', 'small'] as const;
+  for (const v of versions) {
+    srcCache.delete(`${v}:${clean}`);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('rhystic-card-style-changed', (e: any) => {
+    const cardName = e?.detail?.name;
+    if (cardName) {
+      invalidateCardImageCache(cardName);
+    }
+  });
+}
 
 // Optional image compression via offscreen HTML5 Canvas before writing to disk
 async function compressImageBlob(blob: Blob, quality = 0.80): Promise<Uint8Array> {
@@ -172,9 +198,11 @@ export async function ensureLocalImage(
   version: 'art_crop' | 'normal' | 'small',
   printing?: { setCode?: string | null; collectorNumber?: string | null },
 ): Promise<string | null> {
-  const normSet = normalizeScryfallSetCode(printing?.setCode);
-  const cleanCn = cleanCollectorNumber(printing?.collectorNumber);
   const cleanName = cleanCardNameForScryfall(name);
+  // If no explicit printing is requested, check if user set a preferred default print
+  const effectivePrinting = printing ?? getCardStylePref(cleanName) ?? undefined;
+  const normSet = normalizeScryfallSetCode(effectivePrinting?.setCode);
+  const cleanCn = cleanCollectorNumber(effectivePrinting?.collectorNumber);
   const cacheName = normSet && cleanCn
     ? `${cleanName}|${normSet}|${cleanCn}`
     : cleanName;

@@ -62,6 +62,10 @@ pub fn preset_deck_reason(name: &str) -> Option<&'static str> {
         || lower.contains("arenadirecttoken") {
         return Some("token/cosmetic entry");
     }
+    if lower.starts_with("jump in") || lower.contains("jump in!") || lower.starts_with("event deck") || lower == "preset / event deck" {
+        return Some("jump in / event deck preset");
+    }
+
     match trimmed {
         "Home" | "Default" | "Play" | "Ladder" | "Alchemy_Ladder" | "Explorer_Play"
         | "Historic_Play" | "Timeless_Ladder" | "DualColorPrecons" => {

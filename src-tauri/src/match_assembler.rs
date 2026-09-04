@@ -270,14 +270,16 @@ impl MatchAssembler {
     }
 
     pub fn register_deck_catalog(&mut self, decks: Vec<(String, String, Option<u32>, Vec<u32>)>) {
-        for (did, dname, cmd, main) in decks {
+        for (did, raw_dname, cmd, main) in decks {
             if !did.is_empty() {
+                let is_preset = crate::deck_legitimacy::preset_deck_reason(&raw_dname).is_some();
+                let dname = crate::client_loc::resolve_deck_name(&raw_dname);
                 self.known_decks.insert(did.clone(), (dname.clone(), cmd, main));
                 if self.cached_deck_id.as_deref() == Some(&did) {
                     if self.cached_deck_name.is_none() || self.cached_deck_name.as_deref() == Some("Selected Deck") {
                         if !dname.is_empty() {
                             self.cached_deck_name = Some(dname.clone());
-                            self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&dname).is_none();
+                            self.match_legitimate = !is_preset && crate::deck_legitimacy::preset_deck_reason(&dname).is_none();
                         }
                     }
                     if self.cached_commander_id.is_none() && cmd.is_some() {
@@ -555,9 +557,12 @@ impl MatchAssembler {
             }
         }
 
+        let is_preset = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_some();
+        let deck_name = crate::client_loc::resolve_deck_name(&deck_name);
+
         if !deck_name.is_empty() {
             self.cached_deck_name = Some(deck_name.clone());
-            self.match_legitimate = crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
+            self.match_legitimate = !is_preset && crate::deck_legitimacy::preset_deck_reason(&deck_name).is_none();
         }
         if let Some(did) = &deck_id {
             self.cached_deck_id = Some(did.clone());
@@ -761,7 +766,8 @@ impl MatchAssembler {
         if is_hand && (previous_zone != Some(zone_id) || learning_grp_now) {
             // Card returned to hand -> clear previous play history for recastability
             self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "play" || act == "dies" || act == "exile")));
-            if !from_non_draw {
+            let already_bounced = self.turn_events.iter().any(|e| e.turn_number == self.current_turn && (e.grp_id == resolved_grp_id || e.event_type == format!("bounce:{}", resolved_grp_id)));
+            if !from_non_draw && previous_zone != Some(28) && !already_bounced {
                 event_type = Some("draw".to_string());
             }
         } else if is_token && zone_id == 28 {
@@ -808,7 +814,14 @@ impl MatchAssembler {
             }
         } else if previous_zone == Some(28) && (zone_id == 33 || zone_id == 37) {
             // Battlefield -> Graveyard (33) or Pending (37) = Dies / Destroyed / Sacrificed
-            event_type = Some("dies".to_string());
+            let already_handled = self.turn_events.iter().any(|e| {
+                e.turn_number == self.current_turn
+                    && (e.grp_id == resolved_grp_id || e.event_type == format!("sacrifice:{}", resolved_grp_id))
+                    && (e.event_type.starts_with("destroy") || e.event_type.starts_with("sacrifice") || e.event_type.starts_with("countered"))
+            });
+            if !already_handled {
+                event_type = Some("dies".to_string());
+            }
         } else if previous_zone == Some(28) && zone_id == 29 {
             // Battlefield -> Exile (29) = Exiled
             event_type = Some("exile".to_string());
@@ -1235,7 +1248,22 @@ impl MatchAssembler {
         }
 
         let target_grp = self.instance_map.get(&target_id).copied().unwrap_or(0);
+        let mut target_seat = self.instance_owner_map.get(&target_id).copied().unwrap_or(0);
+        if target_seat == 0 {
+            if self.player_cards_seen.contains_key(&target_grp) {
+                target_seat = self.player_seat_id;
+            } else if self.opp_cards_seen.contains_key(&target_grp) {
+                target_seat = if self.player_seat_id == 1 { 2 } else { 1 };
+            } else if affector_seat > 0 {
+                target_seat = if affector_seat == self.player_seat_id {
+                    if self.player_seat_id == 1 { 2 } else { 1 }
+                } else {
+                    self.player_seat_id
+                };
+            }
+        }
 
+        // Negator achievement: strictly for hero casting the counterspell
         if affector_seat == self.player_seat_id && affector_grp > 0 && !self.token_grp_ids.contains(&affector_grp) {
             let entry = self.impactful_cards.entry(affector_grp).or_default();
             if entry.seat_id == 0 { entry.seat_id = affector_seat; }
@@ -1259,11 +1287,14 @@ impl MatchAssembler {
             if target_grp > 0 {
                 self.pending_counter_events.push((affector_grp, target_grp));
             }
+        }
 
+        // 1. Emit turn event for the countering spell/ability
+        if affector_grp > 0 && affector_seat > 0 {
             self.turn_events.push(MatchTurnEventRecord {
                 turn_number: self.current_turn,
                 seat_id: affector_seat,
-                event_type: format!("counter:{}", target_grp),
+                event_type: format!("counterspell:{}", target_grp),
                 grp_id: affector_grp,
                 instance_id: Some(affector_id),
                 timestamp: Utc::now().to_rfc3339(),
@@ -1271,10 +1302,27 @@ impl MatchAssembler {
             self.turn_event_seqs.push(self.feed_seq);
             self.feed_seq += 1;
         }
+
+        // 2. Emit turn event for the countered spell
+        if target_grp > 0 && target_seat > 0 {
+            self.turn_events.push(MatchTurnEventRecord {
+                turn_number: self.current_turn,
+                seat_id: target_seat,
+                event_type: format!("countered:{}", affector_grp),
+                grp_id: target_grp,
+                instance_id: Some(target_id),
+                timestamp: Utc::now().to_rfc3339(),
+            });
+            self.turn_event_seqs.push(self.feed_seq);
+            self.feed_seq += 1;
+
+            // Suppress duplicate generic 'dies' event when this countered card goes to graveyard
+            self.recorded_actions.insert((self.current_turn, target_id, "dies".to_string()));
+        }
     }
 
     pub fn process_zone_transfer_event(&mut self, affector_id: u32, affected_ids: &[u32], category: &str, zone_src: u32, zone_dest: u32) {
-        if affector_id == 0 || affected_ids.is_empty() {
+        if affected_ids.is_empty() {
             return;
         }
         let mut affector_grp = self.instance_map.get(&affector_id).copied().unwrap_or(0);
@@ -1311,6 +1359,162 @@ impl MatchAssembler {
             });
             self.turn_event_seqs.push(self.feed_seq);
             self.feed_seq += 1;
+            return;
+        }
+
+        // Handle Discard events (category Discard or hand 31/35 -> graveyard 33/37)
+        if category.eq_ignore_ascii_case("Discard") || ((zone_src == 31 || zone_src == 35) && (zone_dest == 33 || zone_dest == 37) && (category.is_empty() || category.eq_ignore_ascii_case("None"))) {
+            for tgt_id in affected_ids {
+                let tgt_grp = self.instance_map.get(tgt_id).copied().unwrap_or(0);
+                let mut tgt_seat = self.instance_owner_map.get(tgt_id).copied().unwrap_or(0);
+                if tgt_seat == 0 {
+                    tgt_seat = if zone_src == 31 || zone_dest == 33 { 1 } else { 2 };
+                }
+                if tgt_grp > 0 && tgt_seat > 0 {
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: self.current_turn,
+                        seat_id: tgt_seat,
+                        event_type: "discard".to_string(),
+                        grp_id: tgt_grp,
+                        instance_id: Some(*tgt_id),
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
+                    self.feed_seq += 1;
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "dies".to_string()));
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "discard".to_string()));
+                }
+            }
+            return;
+        }
+
+        // Handle Sacrifice events (category Sacrifice)
+        if category.eq_ignore_ascii_case("Sacrifice") {
+            for tgt_id in affected_ids {
+                let tgt_grp = self.instance_map.get(tgt_id).copied().unwrap_or(0);
+                let mut tgt_seat = self.instance_owner_map.get(tgt_id).copied().unwrap_or(0);
+                if tgt_seat == 0 {
+                    tgt_seat = if zone_dest == 33 { 1 } else { 2 };
+                }
+                if tgt_grp > 0 && tgt_seat > 0 {
+                    let (ev_seat, ev_grp, ev_type) = if affector_seat > 0 && affector_seat != tgt_seat && affector_grp > 0 {
+                        (affector_seat, affector_grp, format!("sacrifice:{}", tgt_grp))
+                    } else {
+                        (tgt_seat, tgt_grp, "sacrifice".to_string())
+                    };
+
+                    // Purge any prior 'dies' event for this card on the current turn to avoid duplicate display
+                    self.turn_events.retain(|e| !(e.turn_number == self.current_turn && e.grp_id == tgt_grp && e.event_type == "dies"));
+
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: self.current_turn,
+                        seat_id: ev_seat,
+                        event_type: ev_type,
+                        grp_id: ev_grp,
+                        instance_id: Some(*tgt_id),
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
+                    self.feed_seq += 1;
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "dies".to_string()));
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "sacrifice".to_string()));
+                }
+            }
+            return;
+        }
+
+        // Handle Destroy events (category Destroy)
+        if category.eq_ignore_ascii_case("Destroy") {
+            for tgt_id in affected_ids {
+                let tgt_grp = self.instance_map.get(tgt_id).copied().unwrap_or(0);
+                let mut tgt_seat = self.instance_owner_map.get(tgt_id).copied().unwrap_or(0);
+                if tgt_seat == 0 {
+                    tgt_seat = if zone_dest == 33 { 1 } else { 2 };
+                }
+                if tgt_grp > 0 && tgt_seat > 0 {
+                    let (ev_seat, ev_grp, ev_type) = if affector_seat > 0 && affector_seat != tgt_seat && affector_grp > 0 {
+                        (affector_seat, affector_grp, format!("destroy:{}", tgt_grp))
+                    } else {
+                        let ev_type = if affector_grp > 0 {
+                            format!("destroy:{}", affector_grp)
+                        } else {
+                            "destroy".to_string()
+                        };
+                        (tgt_seat, tgt_grp, ev_type)
+                    };
+
+                    // Purge any prior 'dies' event for this card on the current turn to avoid duplicate display
+                    self.turn_events.retain(|e| !(e.turn_number == self.current_turn && e.grp_id == tgt_grp && e.event_type == "dies"));
+
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: self.current_turn,
+                        seat_id: ev_seat,
+                        event_type: ev_type,
+                        grp_id: ev_grp,
+                        instance_id: Some(*tgt_id),
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
+                    self.feed_seq += 1;
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "dies".to_string()));
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "destroy".to_string()));
+                }
+            }
+        }
+
+        // Handle Bounce to Hand (return to hand: battlefield 28 -> 31/35 with category Return)
+        if category.eq_ignore_ascii_case("Return") && (zone_dest == 31 || zone_dest == 35) {
+            for tgt_id in affected_ids {
+                let tgt_grp = self.instance_map.get(tgt_id).copied().unwrap_or(0);
+                let mut tgt_seat = self.instance_owner_map.get(tgt_id).copied().unwrap_or(0);
+                if tgt_seat == 0 {
+                    tgt_seat = if zone_dest == 31 { 1 } else { 2 };
+                }
+                if tgt_grp > 0 && tgt_seat > 0 {
+                    let (ev_seat, ev_grp, ev_type) = if affector_seat > 0 && affector_seat != tgt_seat && affector_grp > 0 {
+                        (affector_seat, affector_grp, format!("bounce:{}", tgt_grp))
+                    } else {
+                        (tgt_seat, tgt_grp, "bounce".to_string())
+                    };
+
+                    // Purge any prior 'draw' event for this card on the current turn to avoid duplicate display
+                    self.turn_events.retain(|e| !(e.turn_number == self.current_turn && e.grp_id == tgt_grp && e.event_type == "draw"));
+
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: self.current_turn,
+                        seat_id: ev_seat,
+                        event_type: ev_type,
+                        grp_id: ev_grp,
+                        instance_id: Some(*tgt_id),
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
+                    self.feed_seq += 1;
+                    self.recorded_actions.insert((self.current_turn, *tgt_id, "draw".to_string()));
+                }
+            }
+            return;
+        }
+
+        // Handle Commander returning to Command Zone (category SBA_Commander or zone_dest 26)
+        if category.eq_ignore_ascii_case("SBA_Commander") || zone_dest == 26 {
+            for tgt_id in affected_ids {
+                let tgt_grp = self.instance_map.get(tgt_id).copied().unwrap_or(0);
+                let tgt_seat = self.instance_owner_map.get(tgt_id).copied().unwrap_or(0);
+                let seat = if tgt_seat > 0 { tgt_seat } else { self.player_seat_id };
+                if tgt_grp > 0 {
+                    self.turn_events.push(MatchTurnEventRecord {
+                        turn_number: self.current_turn,
+                        seat_id: seat,
+                        event_type: "command_zone".to_string(),
+                        grp_id: tgt_grp,
+                        instance_id: Some(*tgt_id),
+                        timestamp: Utc::now().to_rfc3339(),
+                    });
+                    self.turn_event_seqs.push(self.feed_seq);
+                    self.feed_seq += 1;
+                }
+            }
             return;
         }
 
@@ -2706,9 +2910,76 @@ use super::*;
         // Tale's End counters The Great Henge
         assembler.process_counterspell_event(1115, 1112, None);
 
-        let (_, _, _, impactful) = assembler.complete_match(2, "Concede").expect("complete");
+        let (_, _, turn_events, impactful) = assembler.complete_match(2, "Concede").expect("complete");
         let tales_end = impactful.iter().find(|i| i.grp_id == 69862).expect("Tale's End impactful record");
         assert!(tales_end.titles.contains(&"Negator (Silver)".to_string()), "Tale's End must receive Negator (Silver) for countering CMC 9");
+        assert!(turn_events.iter().any(|e| e.event_type == "counterspell:70308" && e.grp_id == 69862 && e.seat_id == 2), "Hero Tale's End should emit counterspell:70308");
+        assert!(turn_events.iter().any(|e| e.event_type == "countered:69862" && e.grp_id == 70308 && e.seat_id == 1), "Opponent The Great Henge should emit countered:69862");
+    }
+
+    #[test]
+    fn test_zone_transfers_discard_sacrifice_destroy_bounce_command_zone() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-zt-actions".to_string(), "Brawl".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 3, &[(1, 20), (2, 20)], 1);
+
+        // 1. Discard: Hero discards card (instance 101, grp 50001) from hand (31) to GY (33)
+        assembler.process_game_object(101, Some(50001), Some(1), 31, true, false, None);
+        assembler.process_zone_transfer_event(0, &[101], "Discard", 31, 33);
+
+        // 2. Sacrifice: Hero sacrifices Bloodstained Mire (instance 102, grp 50002) from battlefield (28) to GY (33)
+        assembler.process_game_object(102, Some(50002), Some(1), 28, true, false, None);
+        assembler.process_zone_transfer_event(102, &[102], "Sacrifice", 28, 33);
+
+        // 3. Destroy: Opponent casts Wrath of God (instance 201, grp 60001) destroying Hero's creature (instance 103, grp 50003)
+        assembler.process_game_object(201, Some(60001), Some(2), 27, true, false, None);
+        assembler.process_game_object(103, Some(50003), Some(1), 28, true, false, None);
+        assembler.process_zone_transfer_event(201, &[103], "Destroy", 28, 33);
+
+        // 4. Bounce: Opponent bounces Hero creature (instance 104, grp 50004) from battlefield (28) to hand (31)
+        assembler.process_game_object(104, Some(50004), Some(1), 28, true, false, None);
+        assembler.process_zone_transfer_event(0, &[104], "Return", 28, 31);
+
+        // 5. Commander: Hero Commander (instance 105, grp 50005) returns to Command Zone (26)
+        assembler.process_game_object(105, Some(50005), Some(1), 33, true, false, None);
+        assembler.process_zone_transfer_event(0, &[105], "SBA_Commander", 33, 26);
+
+        // 6. Opponent counters Hero spell: Hero casts spell (inst 106, grp 50006), Opponent casts Counterspell (inst 202, grp 60002)
+        assembler.process_game_object(106, Some(50006), Some(1), 27, true, false, None);
+        assembler.process_game_object(202, Some(60002), Some(2), 27, true, false, None);
+        assembler.process_counterspell_event(202, 106, None);
+
+        // 7. Cross-Player Bounce: Hero Jill (inst 110, grp 50010, seat 1) bounces Opponent creature (inst 210, grp 60010, seat 2)
+        assembler.process_game_object(110, Some(50010), Some(1), 28, true, false, None);
+        assembler.process_game_object(210, Some(60010), Some(2), 28, true, false, None);
+        assembler.process_zone_transfer_event(110, &[210], "Return", 28, 35);
+
+        // 8. Cross-Player Sacrifice: Opponent Ulamog (inst 220, grp 60020, seat 2) forces Hero creature (inst 120, grp 50020, seat 1) to sacrifice
+        assembler.process_game_object(220, Some(60020), Some(2), 27, true, false, None);
+        assembler.process_game_object(120, Some(50020), Some(1), 28, true, false, None);
+        assembler.process_zone_transfer_event(220, &[120], "Sacrifice", 28, 33);
+
+        let (_, _, turn_events, _) = assembler.complete_match(1, "Concede").expect("complete");
+
+        assert!(turn_events.iter().any(|e| e.event_type == "discard" && e.grp_id == 50001 && e.seat_id == 1), "Discard event recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "sacrifice" && e.grp_id == 50002 && e.seat_id == 1), "Self Sacrifice event recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "destroy:50003" && e.grp_id == 60001 && e.seat_id == 2), "Destroy event recorded with source and target");
+        assert!(turn_events.iter().any(|e| e.event_type == "bounce" && e.grp_id == 50004 && e.seat_id == 1), "Self Bounce event recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "command_zone" && e.grp_id == 50005 && e.seat_id == 1), "Command Zone event recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "counterspell:50006" && e.grp_id == 60002 && e.seat_id == 2), "Opponent Counterspell recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "countered:60002" && e.grp_id == 50006 && e.seat_id == 1), "Hero spell Countered recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "bounce:60010" && e.grp_id == 50010 && e.seat_id == 1), "Hero Jill cross-bounce recorded");
+        assert!(turn_events.iter().any(|e| e.event_type == "sacrifice:50020" && e.grp_id == 60020 && e.seat_id == 2), "Opponent Ulamog cross-sacrifice recorded");
+
+        // Verify deduplication: no 'dies' recorded for 50003 (destroyed) or 50020 (sacrificed)
+        assert!(!turn_events.iter().any(|e| e.grp_id == 50003 && e.event_type == "dies"), "No duplicate dies for destroyed card");
+        assert!(!turn_events.iter().any(|e| e.grp_id == 50020 && e.event_type == "dies"), "No duplicate dies for sacrificed card");
     }
 
     #[test]

@@ -454,6 +454,77 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
       );
     }
 
+    if (e.type?.startsWith('counterspell')) {
+      return (
+        <div
+          key={idx}
+          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        >
+          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-cyan-950/50 text-cyan-300 border-cyan-500/30 shrink-0">
+            COUNTER
+          </span>
+          <span
+            className="truncate font-sans font-medium text-neutral-100 hover:text-white hover:underline cursor-pointer transition-colors text-xs flex items-center gap-1"
+            onClick={() => e.name && onShowCard?.({ name: e.name }, false)}
+          >
+            <span>{e.name}{ownerTag}</span>
+            {e.target_name && (
+              <>
+                <span className="text-neutral-500 text-[10px] shrink-0">→</span>
+                <span className="truncate text-cyan-200/80 text-xs font-sans">{e.target_name}</span>
+              </>
+            )}
+          </span>
+          {getCardTypeBadge(e.card_type)}
+        </div>
+      );
+    }
+
+    if (e.type?.startsWith('countered')) {
+      return (
+        <div
+          key={idx}
+          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        >
+          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-rose-950/50 text-rose-300 border-rose-500/40 shrink-0">
+            COUNTERED
+          </span>
+          <span
+            className="truncate font-sans font-medium text-neutral-100 hover:text-white hover:underline cursor-pointer transition-colors text-xs flex items-center gap-1"
+            onClick={() => e.name && onShowCard?.({ name: e.name }, false)}
+          >
+            <span>{e.name}{ownerTag}</span>
+            {e.source_name && (
+              <span className="truncate text-rose-300/80 text-xs font-sans">(by {e.source_name})</span>
+            )}
+          </span>
+          {getCardTypeBadge(e.card_type)}
+        </div>
+      );
+    }
+
+    if (e.type?.startsWith('mill')) {
+      const parts = e.type.split(':');
+      const count = e.count || parseInt(parts[1] || '1', 10);
+      return (
+        <div
+          key={idx}
+          className="text-xs font-mono flex items-center gap-2 py-1 px-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+        >
+          <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-indigo-950/50 text-indigo-300 border-indigo-500/30 shrink-0">
+            MILL {count}
+          </span>
+          <span
+            className="truncate font-sans font-medium text-neutral-100 hover:text-white hover:underline cursor-pointer transition-colors text-xs flex items-center gap-1.5"
+            onClick={() => e.name && onShowCard?.({ name: e.name }, false)}
+          >
+            <span>{e.name}{ownerTag}</span>
+          </span>
+          {getCardTypeBadge(e.card_type)}
+        </div>
+      );
+    }
+
     let badgeText = 'PLAY';
     let badgeStyle = 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30';
     if (e.type === 'mulligan') {
@@ -474,6 +545,24 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     } else if (e.type === 'exile') {
       badgeText = 'EXILE';
       badgeStyle = 'bg-purple-950/50 text-purple-300 border-purple-500/30';
+    } else if (e.type === 'blink' || e.type === 'return') {
+      badgeText = 'BLINK';
+      badgeStyle = 'bg-cyan-950/50 text-cyan-300 border-cyan-500/30';
+    } else if (e.type === 'discard') {
+      badgeText = 'DISCARD';
+      badgeStyle = 'bg-amber-950/50 text-amber-300 border-amber-500/30';
+    } else if (e.type === 'sacrifice') {
+      badgeText = 'SACRIFICE';
+      badgeStyle = 'bg-stone-900/60 text-stone-300 border-stone-500/40';
+    } else if (e.type?.startsWith('destroy')) {
+      badgeText = 'DESTROY';
+      badgeStyle = 'bg-stone-900/80 text-stone-300 border-stone-500/50';
+    } else if (e.type === 'bounce') {
+      badgeText = 'BOUNCE';
+      badgeStyle = 'bg-sky-950/50 text-sky-300 border-sky-500/30';
+    } else if (e.type === 'command_zone') {
+      badgeText = activePlayerIsHero ? '← CMD ZONE' : 'CMD ZONE →';
+      badgeStyle = 'bg-amber-950/50 text-amber-300 border-amber-500/30';
     }
 
     const countBadge = e.count && e.count > 1 ? ` × ${e.count}` : '';
@@ -516,6 +605,33 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
       const parts = e.type.split(':');
       const counterName = parts[1] || '+1/+1';
       return `${counterName} COUNTER (${e.name})`;
+    }
+    if (e.type?.startsWith('counterspell')) {
+      return `COUNTER (${e.name}${e.target_name ? ` → ${e.target_name}` : ''})`;
+    }
+    if (e.type?.startsWith('countered')) {
+      return `COUNTERED (${e.name}${e.source_name ? ` by ${e.source_name}` : ''})`;
+    }
+    if (e.type?.startsWith('mill')) {
+      return `MILL (${e.name})`;
+    }
+    if (e.type === 'blink') {
+      return `BLINK (${e.name})`;
+    }
+    if (e.type === 'discard') {
+      return `DISCARD (${e.name})`;
+    }
+    if (e.type === 'sacrifice') {
+      return `SACRIFICE (${e.name})`;
+    }
+    if (e.type?.startsWith('destroy')) {
+      return `DESTROY (${e.name})`;
+    }
+    if (e.type === 'bounce') {
+      return `BOUNCE (${e.name})`;
+    }
+    if (e.type === 'command_zone') {
+      return `CMD ZONE (${e.name})`;
     }
     if (e.type === 'token') {
       return `TOKEN (${e.name})`;

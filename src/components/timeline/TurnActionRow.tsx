@@ -109,6 +109,27 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
     );
   };
 
+  // Target Card Type Badge (Icon for target of destroy/bounce/sacrifice/damage)
+  const renderTargetCardTypeBadge = () => {
+    const cardType = action.target_card_type;
+    if (!cardType) return null;
+    const match = Object.entries(CARD_TYPE_CONFIG).find(([k]) =>
+      cardType.toLowerCase().includes(k.toLowerCase())
+    );
+    if (!match) return null;
+    const [, info] = match;
+    return (
+      <div className="relative group/type flex items-center justify-center shrink-0">
+        <span className="inline-flex items-center justify-center p-1 border shrink-0 border-white/10 bg-white/[0.03] text-neutral-300 rounded hover:bg-white/[0.08] transition-colors cursor-help">
+          <i className={`ms ${info.icon} text-[11px] leading-none`} style={{ color: info.color }} />
+        </span>
+        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover/type:flex items-center px-1.5 py-0.5 bg-neutral-900 border border-white/20 text-[10px] font-sans font-medium text-neutral-200 shadow-xl pointer-events-none whitespace-nowrap z-50 rounded">
+          {cardType}
+        </div>
+      </div>
+    );
+  };
+
   // Action Badge Pill
   const renderActionBadge = () => {
     if (evType.startsWith('life')) {
@@ -161,7 +182,56 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
         </span>
       );
     }
-    if (evType.startsWith('counter')) {
+    if (evType.startsWith('counterspell')) {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-cyan-950/40 text-cyan-300 border-cyan-500/40 shrink-0">
+          COUNTER
+        </span>
+      );
+    }
+    if (evType.startsWith('countered')) {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-rose-950/50 text-rose-300 border-rose-500/40 shrink-0">
+          COUNTERED
+        </span>
+      );
+    }
+    if (evType === 'discard') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/30 text-amber-300 border-amber-500/30 shrink-0">
+          DISCARD
+        </span>
+      );
+    }
+    if (evType === 'sacrifice') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-stone-900/60 text-stone-300 border-stone-500/40 shrink-0">
+          SACRIFICE
+        </span>
+      );
+    }
+    if (evType.startsWith('destroy')) {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-neutral-900 text-stone-300 border-stone-500/50 shrink-0">
+          DESTROY
+        </span>
+      );
+    }
+    if (evType === 'bounce') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-sky-950/30 text-sky-300 border-sky-500/30 shrink-0">
+          BOUNCE
+        </span>
+      );
+    }
+    if (evType === 'command_zone') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-amber-950/40 text-amber-300 border-amber-500/40 shrink-0">
+          {isPlayer ? '← CMD ZONE' : 'CMD ZONE →'}
+        </span>
+      );
+    }
+    if (evType.startsWith('counter:')) {
       const parts = (action.event_type || action.type || '').split(':');
       let counterLabel = 'COUNTER';
       if (parts.length >= 3) {
@@ -250,7 +320,7 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
   };
 
   // =========================================================================
-  // 1. COMBAT & TARGETED DAMAGE ACTIONS (PERFECTLY ALIGNED 3-ZONE GRID)
+  // 1. COMBAT & CROSS-BOARD VECTOR ACTIONS (DAMAGE, BOUNCE, SACRIFICE)
   // =========================================================================
   const isTargetHero =
     targetName === 'You' ||
@@ -263,7 +333,12 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
 
   const isSelfDamage = (isPlayer && isTargetHero) || (!isPlayer && isTargetOpponent);
 
-  if (evType.startsWith('damage') && !isSelfDamage) {
+  const isDamageAction = evType.startsWith('damage') && !isSelfDamage;
+  const isCrossBounce = (evType === 'bounce' || evType.startsWith('bounce:')) && Boolean(targetName);
+  const isCrossSacrifice = (evType === 'sacrifice' || evType.startsWith('sacrifice:')) && Boolean(targetName);
+  const isCrossDestroy = (evType === 'destroy' || evType.startsWith('destroy:')) && Boolean(targetName);
+
+  if (isDamageAction || isCrossBounce || isCrossSacrifice || isCrossDestroy) {
     const isTargetPlayer = isTargetHero || isTargetOpponent;
 
     const lifeChangeStr =
@@ -276,8 +351,27 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
         ? `❤️ -${damageAmount} → ${action.heroLifeAfter}`
         : `❤️ -${damageAmount}`;
 
-    const arrowColorClass = isPlayer ? 'bg-[#76A382]' : 'bg-red-500';
-    const arrowheadColorClass = isPlayer ? 'text-[#76A382]' : 'text-red-500';
+    let arrowColorClass = isPlayer ? 'bg-[#76A382]' : 'bg-red-500';
+    let arrowheadColorClass = isPlayer ? 'text-[#76A382]' : 'text-red-500';
+    let centerBoxClass = 'bg-neutral-900 border border-red-500/50 text-red-400';
+    let centerBoxText = `${damageAmount} DMG`;
+
+    if (isCrossBounce) {
+      arrowColorClass = 'bg-sky-500';
+      arrowheadColorClass = 'text-sky-400';
+      centerBoxClass = 'bg-sky-950/90 border border-sky-500/50 text-sky-300';
+      centerBoxText = 'BOUNCE';
+    } else if (isCrossSacrifice) {
+      arrowColorClass = 'bg-neutral-600';
+      arrowheadColorClass = 'text-neutral-400';
+      centerBoxClass = 'bg-neutral-900 border border-stone-500/60 text-stone-300';
+      centerBoxText = 'SACRIFICE';
+    } else if (isCrossDestroy) {
+      arrowColorClass = 'bg-neutral-600';
+      arrowheadColorClass = 'text-neutral-400';
+      centerBoxClass = 'bg-neutral-900 border border-stone-500/60 text-stone-300';
+      centerBoxText = 'DESTROY';
+    }
 
     return (
       <div
@@ -289,7 +383,7 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
           {/* ZONE 1: OPPONENT SIDE (Left zone, fixed width w-[280px] sm:w-[320px], right-aligned to touch arrow) */}
           <div className="w-[280px] sm:w-[320px] shrink-0 flex items-center justify-end gap-2 pr-2 min-w-0">
             {isPlayer ? (
-              // Hero attacked Opponent
+              // Hero attacked or targeted Opponent -> Target is on Left (Opponent)
               isTargetPlayer ? (
                 // Target is Opponent Player -> [Life Change] DeathNDespair (Opponent)
                 <>
@@ -301,17 +395,26 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
                   </span>
                 </>
               ) : (
-                // Target is Opponent's Creature (e.g. Diversion Unit defending)
+                // Target is Opponent's Card (Creature, Bounced card, Destroyed card, etc.)
                 <>
-                  <span className="text-xs font-sans font-bold text-[#D57C69] truncate">
+                  {isDamageAction && !isTargetPlayer && !action.target_card_type && (
+                    <span className="text-[10px] font-sans text-neutral-400 shrink-0">(Creature)</span>
+                  )}
+                  {renderTargetCardTypeBadge()}
+                  <span className="text-xs font-sans font-bold text-[#D57C69] truncate" title={targetName}>
                     {targetName}
                   </span>
-                  <span className="text-[10px] font-sans text-neutral-400 shrink-0">(Creature)</span>
                 </>
               )
             ) : (
-              // Opponent attacked Hero (e.g. Diversion Unit attacking)
+              // Opponent attacked or targeted Hero -> Actor is on Left (Opponent)
               <>
+                {isOutOfTurn && (
+                  <span className="inline-flex items-center justify-center shrink-0" title="Cast at instant speed / Flash">
+                    <i className="ms ms-instant text-[12px] text-sky-400 leading-none" />
+                  </span>
+                )}
+                {renderCardTypeBadge()}
                 <span
                   onClick={handleCardClick}
                   className={`text-xs font-sans font-semibold text-neutral-100 hover:text-[#D57C69] truncate ${
@@ -321,17 +424,11 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
                 >
                   {displayName}
                 </span>
-                {renderCardTypeBadge()}
-                {isOutOfTurn && (
-                  <span className="inline-flex items-center justify-center shrink-0" title="Cast at instant speed / Flash">
-                    <i className="ms ms-instant text-[12px] text-sky-400 leading-none" />
-                  </span>
-                )}
               </>
             )}
           </div>
 
-          {/* ZONE 2: COMBAT VECTOR ARROW (20% shorter: w-28 sm:w-36 with absolute centered damage box) */}
+          {/* ZONE 2: COMBAT VECTOR ARROW (w-28 sm:w-36 with absolute centered box) */}
           <div className="w-28 sm:w-36 shrink-0 h-6 flex items-center justify-center relative select-none mx-2">
             {/* The continuous line across the entire width */}
             <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
@@ -340,16 +437,16 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
               {!isPlayer && <span className={`${arrowheadColorClass} text-xs leading-none shrink-0 font-bold -ml-0.5`}>▶</span>}
             </div>
 
-            {/* The damage number box in the exact dead center of Zone 2 */}
-            <span className="relative z-10 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase bg-neutral-900 border border-red-500/50 text-red-400 shrink-0 tabular-nums">
-              {damageAmount} DMG
+            {/* The action badge/number box in the exact dead center of Zone 2 */}
+            <span className={`relative z-10 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase shrink-0 tabular-nums ${centerBoxClass}`}>
+              {centerBoxText}
             </span>
           </div>
 
           {/* ZONE 3: HERO SIDE (Right zone, fixed width w-[280px] sm:w-[320px], left-aligned starting from the arrow) */}
           <div className="w-[280px] sm:w-[320px] shrink-0 flex items-center justify-start gap-2 pl-2 min-w-0">
             {isPlayer ? (
-              // Hero is the attacker (e.g. Stoic Sphinx, Lord of the Eagles)
+              // Hero is the actor
               <>
                 <span
                   onClick={handleCardClick}
@@ -368,7 +465,7 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
                 )}
               </>
             ) : (
-              // Opponent attacked Hero -> Target is Hero or Hero's Creature
+              // Opponent targeted Hero -> Target is on Right (Hero)
               isTargetPlayer ? (
                 <>
                   <span className="text-xs font-sans font-bold text-[#76A382] truncate">
@@ -379,12 +476,14 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
                   </span>
                 </>
               ) : (
-                // Target is Hero's Creature (e.g. The Lord of the Eagles defending)
                 <>
-                  <span className="text-xs font-sans font-bold text-[#76A382] truncate">
+                  <span className="text-xs font-sans font-bold text-[#76A382] truncate" title={targetName}>
                     {targetName}
                   </span>
-                  <span className="text-[10px] font-sans text-neutral-400 shrink-0">(Creature)</span>
+                  {renderTargetCardTypeBadge()}
+                  {isDamageAction && !isTargetPlayer && !action.target_card_type && (
+                    <span className="text-[10px] font-sans text-neutral-400 shrink-0">(Creature)</span>
+                  )}
                 </>
               )
             )}
@@ -420,14 +519,24 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
             </span>
           )}
 
-          {/* Target name if ability target */}
+          {/* Target name if ability target or counter attribution */}
           {targetName && (
-            <span className="text-[11px] font-sans text-neutral-400 shrink-0 flex items-center gap-1">
-              <span className="text-neutral-600">→</span>
-              <span className="text-neutral-300 font-medium truncate max-w-[140px]" title={targetName}>
-                {targetName}
+            evType.startsWith('countered') ? (
+              <span className="text-[11px] font-sans text-rose-300/80 shrink-0">
+                (countered by {targetName})
               </span>
-            </span>
+            ) : evType.startsWith('destroy') ? (
+              <span className="text-[11px] font-sans text-red-300/80 shrink-0">
+                (destroyed by {targetName})
+              </span>
+            ) : (
+              <span className="text-[11px] font-sans text-neutral-400 shrink-0 flex items-center gap-1">
+                <span className="text-neutral-600">→</span>
+                <span className="text-neutral-300 font-medium truncate max-w-[140px]" title={targetName}>
+                  {targetName}
+                </span>
+              </span>
+            )
           )}
 
           {/* Card or Action Name */}
@@ -494,14 +603,24 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
           {displayName}
         </span>
 
-        {/* Target name if ability target */}
+        {/* Target name if ability target or counter attribution */}
         {targetName && (
-          <span className="text-[11px] font-sans text-neutral-400 shrink-0 flex items-center gap-1">
-            <span className="text-neutral-600">→</span>
-            <span className="text-neutral-300 font-medium truncate max-w-[140px]" title={targetName}>
-              {targetName}
+          evType.startsWith('countered') ? (
+            <span className="text-[11px] font-sans text-rose-300/80 shrink-0">
+              (countered by {targetName})
             </span>
-          </span>
+          ) : evType.startsWith('destroy') ? (
+            <span className="text-[11px] font-sans text-red-300/80 shrink-0">
+              (destroyed by {targetName})
+            </span>
+          ) : (
+            <span className="text-[11px] font-sans text-neutral-400 shrink-0 flex items-center gap-1">
+              <span className="text-neutral-600">→</span>
+              <span className="text-neutral-300 font-medium truncate max-w-[140px]" title={targetName}>
+                {targetName}
+              </span>
+            </span>
+          )
         )}
 
         {/* Life total if life event */}

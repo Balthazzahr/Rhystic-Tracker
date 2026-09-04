@@ -3,9 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
-
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+import { CardImage } from "../../CardImage";
 
 const CATEGORIES = [
   {
@@ -143,14 +141,10 @@ export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = ({
                 #{i + 1}
               </span>
               <div className="w-5 h-5 shrink-0 overflow-hidden border border-white/10 bg-neutral-900 rounded-xs">
-                <img
-                  src={scryfallArtUrl(entry.card_name)}
-                  alt={entry.card_name}
+                <CardImage
+                  name={entry.card_name}
+                  version="art_crop"
                   className="w-full h-full object-cover"
-                  loading="lazy"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.visibility = "hidden";
-                  }}
                 />
               </div>
               <span className="font-medium text-neutral-200 group-hover:text-white truncate">

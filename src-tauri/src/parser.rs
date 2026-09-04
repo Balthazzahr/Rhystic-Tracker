@@ -139,7 +139,8 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                     for course in courses {
                         if let Some(sum) = course.get("CourseDeckSummary").or_else(|| course.get("courseDeckSummary")) {
                             let did = sum.get("DeckId").or_else(|| sum.get("deckId")).and_then(|d| d.as_str()).unwrap_or("").to_string();
-                            let dname = sum.get("Name").or_else(|| sum.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
+                            let raw_dname = sum.get("Name").or_else(|| sum.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
+                            let dname = crate::client_loc::resolve_deck_name(&raw_dname);
                             let mut main_deck = Vec::new();
                             let mut cmd_id = None;
                             if let Some(deck) = course.get("CourseDeck").or_else(|| course.get("courseDeck")) {
@@ -233,8 +234,9 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                 // If we extracted a deck name, deck ID, or main deck cards, emit DeckSubmitted
                 if !deck_name.is_empty() || !main_deck.is_empty() || deck_id.is_some() {
                     let total_cards = main_deck.len();
+                    let resolved_deck_name = crate::client_loc::resolve_deck_name(&deck_name);
                     return ParsedEvent::DeckSubmitted {
-                        deck_name,
+                        deck_name: resolved_deck_name,
                         total_cards,
                         main_deck,
                         commander_id,

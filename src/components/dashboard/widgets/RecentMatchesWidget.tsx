@@ -2,9 +2,7 @@ import React, { useMemo } from "react";
 import { Swords } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
-
-const scryfallArtUrl = (name: string) =>
-  `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=art_crop`;
+import { CardImage } from "../../CardImage";
 
 const formatTimeAgo = (ts: string): string => {
   const d = new Date(ts);
@@ -135,15 +133,10 @@ export const RecentMatchesWidget: React.FC<WidgetProps> = ({
                 {/* Deck Preview Art Icon */}
                 {deckArt && (
                   <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/15 shadow-sm bg-neutral-900 rounded-xs">
-                    <img
-                      src={scryfallArtUrl(deckArt)}
-                      alt={m.player_deck_name}
+                    <CardImage
+                      name={deckArt}
+                      version="art_crop"
                       className="w-full h-full object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.visibility =
-                          "hidden";
-                      }}
                     />
                   </div>
                 )}

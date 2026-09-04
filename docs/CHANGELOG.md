@@ -2,6 +2,26 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.4.2] - 2026-09-04
+
+### 🖼️ Persistent Default Card Art & Custom Art Pipeline
+- **App-Wide Custom Art Preferences**: Wired saved default print selections from the Card Inspector across the entire app, replacing static Scryfall lookups in the Featured Leaderboards, Recent Achievements, Recent Matches, Deck Spotlight, and Match History.
+- **Card Inspector Art Selection Decoupled**: Previewing alternate printings in the Card Inspector no longer prematurely triggers "Reset Art"; users can browse printings freely and explicitly click "Set Default Art" to save their preferred print.
+- **Dynamic Reactive Image Cache Sync**: Emitted `rhystic-card-style-changed` events upon saving or resetting print preferences, triggering instant zero-reload updates across all active `<CardImage>` components.
+
+### 🍱 Precon & Starter Deck Normalization
+- **Official Starter Deck Names**: Resolved raw internal slugs for Starter Deck precons into their official human-readable names via MTGA localization and precon catalogs.
+
+### 🎴 Jump In! & Event Deck Isolation
+- **Distinct Event Decks**: Fingerprinted preset/event decks with dynamic pools per match, preventing subsequent Jump In! runs from erroneously merging into a single monolithic decklist.
+
+### 👤 Avatar Discovery & Sync Resiliency
+- **Wine Prefix & Dynamic Asset Discovery**: Enhanced avatar discovery paths to support non-Steam/Lutris environments without assuming static Steam App ID folder hierarchies, adding explicit diagnostics on sync failure.
+
+### ⚔️ Timeline & Mulligan Tracking Refinements
+- **Mulligan Detection & Hand Ingestion**: Fixed mulligan cycle tracking across single and multiple mulligans.
+- **Damage Badge & Arrow Directionality**: Added clear directional combat arrows and aligned damage badges for clean face and permanent combat resolution.
+
 ## [1.4.1] - 2026-09-03
 
 ### ⚔️ Match Timeline & Inspector Polish

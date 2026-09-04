@@ -122,27 +122,35 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
   }, []);
 
   // Fetch + cache a preset card URL (deduplicates concurrent in-flight requests)
-  const resolveAndCachePreset = useCallback(async (cardName: string): Promise<string | null> => {
-    if (presetCacheRef.current.has(cardName)) {
-      return presetCacheRef.current.get(cardName)!;
+  const resolveAndCachePreset = useCallback(async (presetVal: string): Promise<string | null> => {
+    if (presetCacheRef.current.has(presetVal)) {
+      return presetCacheRef.current.get(presetVal)!;
     }
-    if (presetInFlightRef.current.has(cardName)) {
-      return presetInFlightRef.current.get(cardName)!;
+    if (presetInFlightRef.current.has(presetVal)) {
+      return presetInFlightRef.current.get(presetVal)!;
     }
 
     const resolvePromise = (async () => {
       try {
-        const localUrl = await ensureLocalImage(cardName, 'art_crop');
+        let localUrl: string | null = null;
+        if (presetVal.startsWith('custom:')) {
+          const filePath = presetVal.slice(7);
+          const { convertFileSrc } = await import('@tauri-apps/api/core');
+          localUrl = convertFileSrc(filePath);
+        } else {
+          localUrl = await ensureLocalImage(presetVal, 'art_crop');
+        }
+
         if (!localUrl) return null;
         await preloadAndDecodeImage(localUrl);
-        presetCacheRef.current.set(cardName, localUrl);
+        presetCacheRef.current.set(presetVal, localUrl);
         return localUrl;
       } finally {
-        presetInFlightRef.current.delete(cardName);
+        presetInFlightRef.current.delete(presetVal);
       }
     })();
 
-    presetInFlightRef.current.set(cardName, resolvePromise);
+    presetInFlightRef.current.set(presetVal, resolvePromise);
     return resolvePromise;
   }, []);
 

@@ -297,6 +297,33 @@ export function DeckDetailView({
     }
   }, [isOpen, deckName, detail]);
 
+  // If the card style changes for the deck's active background or cover art, refresh background art
+  useEffect(() => {
+    if (!isOpen || !deckName) return;
+    const handleStyleChange = (e: any) => {
+      const changedName = e?.detail?.name;
+      let candidateName: string | null = null;
+      if (detail?.custom_bg_art_name) {
+        candidateName = detail.custom_bg_art_name;
+      } else if (detail?.custom_art_name) {
+        candidateName = detail.custom_art_name;
+      } else if (detail?.commander_name) {
+        candidateName = detail.commander_name;
+      }
+      if (
+        candidateName &&
+        changedName &&
+        candidateName.toLowerCase() === changedName.toLowerCase()
+      ) {
+        ensureLocalImage(candidateName, 'art_crop').then((url) => {
+          if (url) setBgImageUrl(url);
+        });
+      }
+    };
+    window.addEventListener('rhystic-card-style-changed', handleStyleChange);
+    return () => window.removeEventListener('rhystic-card-style-changed', handleStyleChange);
+  }, [isOpen, deckName, detail]);
+
   useEffect(() => {
     if (!chooseArtOpen || !deckName) return;
     let cancelled = false;

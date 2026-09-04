@@ -199,6 +199,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [bgSearchSelected, setBgSearchSelected] = useState<any>(null);
   const bgSearchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [bgSearchType, setBgSearchType] = useState<'card' | 'custom'>('card');
+  const [bgCustomUploading, setBgCustomUploading] = useState(false);
+  const [bgCustomError, setBgCustomError] = useState<string | null>(null);
+
   const handleSetBgMode = (mode: 'random' | 'preset' | 'none') => {
     setBgMode(mode);
     localStorage.setItem('bgMode', mode);
@@ -207,10 +211,88 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleOpenBgSearch = (tabId: string) => {
     setBgSearchTab(tabId);
+    setBgSearchType('card');
     setBgSearchQuery('');
     setBgSearchResults([]);
     setBgSearchSelected(null);
+    setBgCustomError(null);
     setBgSearchOpen(true);
+  };
+
+  const handleCustomImageUpload = async () => {
+    try {
+      setBgCustomUploading(true);
+      setBgCustomError(null);
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp', 'avif'] }],
+      });
+
+      if (!selected || typeof selected !== 'string') {
+        setBgCustomUploading(false);
+        return;
+      }
+
+      // Read file bytes via fetch/convertFileSrc
+      const { convertFileSrc } = await import('@tauri-apps/api/core');
+      const fileUrl = convertFileSrc(selected);
+      const resp = await fetch(fileUrl);
+      const blob = await resp.blob();
+
+      // Downscale to max 1920x1080 via offscreen canvas
+      const img = new Image();
+      const loadPromise = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to decode image'));
+      });
+      img.src = URL.createObjectURL(blob);
+      await loadPromise;
+
+      const MAX_W = 1920;
+      const MAX_H = 1080;
+      let targetW = img.width;
+      let targetH = img.height;
+
+      if (targetW > MAX_W || targetH > MAX_H) {
+        const ratio = Math.min(MAX_W / targetW, MAX_H / targetH);
+        targetW = Math.round(targetW * ratio);
+        targetH = Math.round(targetH * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+      URL.revokeObjectURL(img.src);
+
+      const outBlob = await new Promise<Blob | null>((res) => {
+        canvas.toBlob((b) => res(b), 'image/webp', 0.85);
+      });
+      if (!outBlob) throw new Error('Failed to encode image to WebP');
+
+      const arrayBuf = await outBlob.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuf);
+      const filename = `bg_${bgSearchTab}_${Date.now()}.webp`;
+
+      const savedPath = await invoke<string>('save_custom_background', {
+        filename,
+        data: Array.from(uint8),
+      });
+
+      // Save custom preset formatted as custom:<filePath>
+      const updated = { ...bgPresets, [bgSearchTab]: `custom:${savedPath}` };
+      setBgPresets(updated);
+      localStorage.setItem('bgPresets', JSON.stringify(updated));
+      window.dispatchEvent(new Event('rhystic_settings_changed'));
+      setBgSearchOpen(false);
+    } catch (err: any) {
+      console.error('Failed to process custom background image:', err);
+      setBgCustomError(err?.message || String(err));
+    } finally {
+      setBgCustomUploading(false);
+    }
   };
 
   const handleBgSearchChange = (q: string) => {
@@ -1487,7 +1569,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             <div className="flex items-center gap-2 shrink-0">
                               {cardName ? (
                                 <span className="text-[11px] font-mono text-neutral-200 truncate max-w-[140px]">
-                                  {cardName}
+                                  {cardName.startsWith('custom:') ? '🖼️ Custom Image' : cardName}
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-mono text-neutral-500 italic">Random</span>
@@ -2051,9 +2133,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           >
             {/* Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <h3 className="text-sm font-sans font-bold uppercase tracking-wide text-white">
-                Set Background — {BG_WINDOWS.find(w => w.id === bgSearchTab)?.label}
-              </h3>
+              <div>
+                <h3 className="text-sm font-sans font-bold uppercase tracking-wide text-white">
+                  Set Background — {BG_WINDOWS.find(w => w.id === bgSearchTab)?.label}
+                </h3>
+                <div className="flex items-center gap-3 mt-2">
+                  <button
+                    onClick={() => setBgSearchType('card')}
+                    className={`text-xs font-mono uppercase tracking-wider pb-0.5 border-b-2 transition-colors cursor-pointer ${
+                      bgSearchType === 'card'
+                        ? 'text-white border-white'
+                        : 'text-neutral-400 border-transparent hover:text-neutral-200'
+                    }`}
+                  >
+                    Card Library
+                  </button>
+                  <button
+                    onClick={() => setBgSearchType('custom')}
+                    className={`text-xs font-mono uppercase tracking-wider pb-0.5 border-b-2 transition-colors cursor-pointer ${
+                      bgSearchType === 'custom'
+                        ? 'text-white border-white'
+                        : 'text-neutral-400 border-transparent hover:text-neutral-200'
+                    }`}
+                  >
+                    Custom Image
+                  </button>
+                </div>
+              </div>
               <button
                 onClick={() => setBgSearchOpen(false)}
                 className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
@@ -2062,71 +2168,110 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
 
-            {/* Search input */}
-            <div className="px-4 py-3 border-b border-white/10">
-              <div className="relative h-8 flex items-center">
-                <Search className="w-3.5 h-3.5 absolute left-3 text-neutral-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search full card library..."
-                  value={bgSearchQuery}
-                  onChange={(e) => handleBgSearchChange(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {/* Results */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {bgSearchResults.length === 0 && bgSearchQuery.length > 0 && (
-                <div className="py-12 text-center text-xs font-mono text-neutral-500">
-                  No cards found for "{bgSearchQuery}"
-                </div>
-              )}
-              {bgSearchResults.map((card: any) => (
-                <button
-                  key={card.grp_id || card.name}
-                  onClick={() => setBgSearchSelected(card)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-white/5 transition-colors cursor-pointer ${
-                    bgSearchSelected?.name === card.name
-                      ? 'bg-white/[0.1] border-white/20'
-                      : 'hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <div className="w-8 h-8 border border-white/10 bg-neutral-900 overflow-hidden shrink-0">
-                    <CardImage
-                      name={card.name}
-                      version="art_crop"
-                      className="w-full h-full"
-                      alt=""
+            {bgSearchType === 'card' ? (
+              <>
+                {/* Search input */}
+                <div className="px-4 py-3 border-b border-white/10">
+                  <div className="relative h-8 flex items-center">
+                    <Search className="w-3.5 h-3.5 absolute left-3 text-neutral-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search full card library..."
+                      value={bgSearchQuery}
+                      onChange={(e) => handleBgSearchChange(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
+                      autoFocus
                     />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-sans font-semibold text-neutral-100 truncate">{card.name}</p>
-                    <p className="text-[10px] font-mono text-neutral-500 truncate">{card.set_name || card.set_code || ''}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+                </div>
 
-            {/* Footer: Confirm */}
-            <div className="p-4 border-t border-white/10 flex justify-end gap-2 bg-neutral-900/60">
-              <button
-                onClick={() => setBgSearchOpen(false)}
-                className="px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              {bgSearchSelected && (
-                <button
-                  onClick={() => handleConfirmBgPreset(bgSearchSelected.name)}
-                  className="px-4 py-1.5 text-xs font-mono uppercase tracking-wider font-bold text-white border border-white/30 bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
-                >
-                  Confirm
-                </button>
-              )}
-            </div>
+                {/* Results */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  {bgSearchResults.length === 0 && bgSearchQuery.length > 0 && (
+                    <div className="py-12 text-center text-xs font-mono text-neutral-500">
+                      No cards found for "{bgSearchQuery}"
+                    </div>
+                  )}
+                  {bgSearchResults.map((card: any) => (
+                    <button
+                      key={card.grp_id || card.name}
+                      onClick={() => setBgSearchSelected(card)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-white/5 transition-colors cursor-pointer ${
+                        bgSearchSelected?.name === card.name
+                          ? 'bg-white/[0.1] border-white/20'
+                          : 'hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      <div className="w-8 h-8 border border-white/10 bg-neutral-900 overflow-hidden shrink-0">
+                        <CardImage
+                          name={card.name}
+                          version="art_crop"
+                          className="w-full h-full"
+                          alt=""
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-sans font-semibold text-neutral-100 truncate">{card.name}</p>
+                        <p className="text-[10px] font-mono text-neutral-500 truncate">{card.set_name || card.set_code || ''}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Footer: Confirm */}
+                <div className="p-4 border-t border-white/10 flex justify-end gap-2 bg-neutral-900/60">
+                  <button
+                    onClick={() => setBgSearchOpen(false)}
+                    className="px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  {bgSearchSelected && (
+                    <button
+                      onClick={() => handleConfirmBgPreset(bgSearchSelected.name)}
+                      className="px-4 py-1.5 text-xs font-mono uppercase tracking-wider font-bold text-white border border-white/30 bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+                    >
+                      Confirm
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="p-6 space-y-4">
+                <p className="text-xs font-sans text-neutral-300">
+                  Choose any custom image file (PNG, JPG, WebP) from your computer. The image is automatically scaled down (max 1920×1080) and compressed to ensure fast rendering with blurred glass styling.
+                </p>
+
+                {bgCustomError && (
+                  <div className="p-3 border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs font-mono">
+                    {bgCustomError}
+                  </div>
+                )}
+
+                <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-white/15 bg-white/[0.02] hover:bg-white/[0.04] transition-colors rounded-none">
+                  <ImageIcon className="w-10 h-10 text-neutral-400 mb-3" />
+                  <button
+                    onClick={handleCustomImageUpload}
+                    disabled={bgCustomUploading}
+                    className="px-4 py-2 border border-white/30 bg-white/10 hover:bg-white/20 text-white text-xs font-mono uppercase tracking-wider font-bold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {bgCustomUploading ? 'Optimizing & Saving…' : 'Select Image File…'}
+                  </button>
+                  <span className="text-[10px] font-mono text-neutral-500 mt-2">
+                    Supports PNG, JPG, JPEG, WebP, AVIF
+                  </span>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => setBgSearchOpen(false)}
+                    className="px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
