@@ -28,6 +28,7 @@ pub struct MatchRecord {
     pub opponent_platform: Option<String>,
     pub opponent_avatar: Option<String>,
     pub result_reason: Option<String>,
+    pub min_player_life: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +85,11 @@ pub struct CardDamageStats {
     pub permanents_stolen: u32,
     pub times_flickered: u32,
     pub times_reanimated: u32,
+    pub times_reanimated_others: u32,
+    pub cards_milled: u32,
+    pub permanents_bounced: u32,
+    pub opponent_discards: u32,
+    pub spell_copies: u32,
     pub tokens_spawned: u32,
     pub max_turn_mana: u32,
     pub damage_absorbed_on_block: i32,
@@ -93,27 +99,36 @@ pub struct CardDamageStats {
     pub toughness_boosted: i32,
 }
 
+pub fn tier_rank_num(tier: &str) -> i32 {
+    let lower = tier.to_lowercase();
+    if lower.contains("legendary") {
+        6
+    } else if lower.contains("platinum") || lower.contains("titanium") {
+        5
+    } else if lower.contains("gold") {
+        4
+    } else if lower.contains("silver") {
+        3
+    } else if lower.contains("bronze") {
+        2
+    } else if lower.contains("iron") {
+        1
+    } else {
+        2 // default fallback to bronze
+    }
+}
+
 pub fn add_tiered_title(titles: &mut Vec<String>, base_title: &str, tier: &str) {
     if tier.is_empty() {
         return;
     }
     let title = format!("{} ({})", base_title, tier);
-    let rank = match tier.to_lowercase().as_str() {
-        "gold" => 3,
-        "silver" => 2,
-        _ => 1,
-    };
+    let rank = tier_rank_num(tier);
     let already_has_higher_or_equal = titles.iter().any(|t| {
         if !t.starts_with(base_title) {
             return false;
         }
-        let current_rank = if t.contains("Gold") || t.contains("gold") {
-            3
-        } else if t.contains("Silver") || t.contains("silver") {
-            2
-        } else {
-            1
-        };
+        let current_rank = tier_rank_num(t);
         current_rank >= rank
     });
     if !already_has_higher_or_equal {
@@ -158,6 +173,7 @@ pub struct MatchAssembler {
     /// legitimate match. Drained by the tailer into collection_cards.
     pub collection_draws: Vec<u32>,
     pub current_player_life: i32,
+    pub min_player_life: i32,
     pub current_opp_life: i32,
     pub player_mulligans: u32,
     pub opponent_mulligans: u32,
@@ -216,6 +232,7 @@ impl MatchAssembler {
             last_assigned_deck_event: false,
             collection_draws: Vec::new(),
             current_player_life: 20,
+            min_player_life: 20,
             current_opp_life: 20,
             opp_life_before_combat: 20,
             current_turn_hero_hits: Vec::new(),
@@ -301,6 +318,7 @@ impl MatchAssembler {
         let default_life = if is_brawl { 25 } else { 20 };
 
         self.current_player_life = default_life;
+        self.min_player_life = default_life;
         self.current_opp_life = default_life;
         self.opp_life_before_combat = default_life;
         self.current_turn_hero_hits.clear();
@@ -404,6 +422,7 @@ impl MatchAssembler {
             opponent_avatar: None,
             duration_seconds: 0,
             result_reason: None,
+            min_player_life: None,
             hero_seat_id: self.player_seat_id,
         });
     }
@@ -492,6 +511,9 @@ impl MatchAssembler {
         }
         if let Some(zone) = self.instance_zone_map.get(&orig_id).copied() {
             self.instance_zone_map.insert(new_id, zone);
+        }
+        if self.instance_flicker_pending.contains(&orig_id) {
+            self.instance_flicker_pending.insert(new_id);
         }
     }
 
@@ -733,31 +755,85 @@ impl MatchAssembler {
         let mut event_type = None;
         if zone_id == 28 {
             self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "dies" || act == "exile" || act == "blink")));
-            // Blinkmaster: Returned to battlefield from Exile (29) or Limbo (30)
-            let is_flicker = (previous_zone == Some(29) || previous_zone == Some(30) || self.instance_flicker_pending.contains(&instance_id)) && previous_zone != Some(28);
+            // Blinkmaster: Returned to battlefield from Exile (29) or Limbo (30) or flagged pending flicker
+            let is_flicker = self.instance_flicker_pending.contains(&instance_id) || ((previous_zone == Some(29) || previous_zone == Some(30)) && previous_zone != Some(28));
             self.instance_flicker_pending.remove(&instance_id);
             if is_flicker {
                 if seat_id == self.player_seat_id && !is_token && !self.token_grp_ids.contains(&resolved_grp_id) {
                     let entry = self.impactful_cards.entry(resolved_grp_id).or_default();
                     if entry.seat_id == 0 { entry.seat_id = seat_id; }
                     entry.times_flickered += 1;
-                    if entry.times_flickered >= 3 {
-                        let tier = if entry.times_flickered >= 7 { "Gold" } else if entry.times_flickered >= 5 { "Silver" } else { "Bronze" };
+                    if entry.times_flickered >= 2 {
+                        let tier = if entry.times_flickered >= 15 {
+                            "Legendary"
+                        } else if entry.times_flickered >= 10 {
+                            "Platinum"
+                        } else if entry.times_flickered >= 7 {
+                            "Gold"
+                        } else if entry.times_flickered >= 5 {
+                            "Silver"
+                        } else if entry.times_flickered >= 3 {
+                            "Bronze"
+                        } else {
+                            "Iron"
+                        };
                         add_tiered_title(&mut entry.titles, "Blinkmaster", tier);
                     }
                 }
                 event_type = Some("blink".to_string());
             }
 
-            // Immortal: Returned to battlefield from Graveyard (33)
+            // Immortal & Reanimator: Returned to battlefield from Graveyard (33)
             if previous_zone == Some(33) {
                 if seat_id == self.player_seat_id && !is_token && !self.token_grp_ids.contains(&resolved_grp_id) {
                     let entry = self.impactful_cards.entry(resolved_grp_id).or_default();
                     if entry.seat_id == 0 { entry.seat_id = seat_id; }
                     entry.times_reanimated += 1;
-                    if entry.times_reanimated >= 3 {
-                        let tier = if entry.times_reanimated >= 7 { "Gold" } else if entry.times_reanimated >= 5 { "Silver" } else { "Bronze" };
+                    if entry.times_reanimated >= 2 {
+                        let tier = if entry.times_reanimated >= 7 {
+                            "Legendary"
+                        } else if entry.times_reanimated >= 6 {
+                            "Platinum"
+                        } else if entry.times_reanimated >= 5 {
+                            "Gold"
+                        } else if entry.times_reanimated >= 4 {
+                            "Silver"
+                        } else if entry.times_reanimated >= 3 {
+                            "Bronze"
+                        } else {
+                            "Iron"
+                        };
                         add_tiered_title(&mut entry.titles, "Immortal", tier);
+                    }
+                }
+
+                // Reanimator: Attributed to the spell/engine card that brought this permanent back
+                if seat_id == self.player_seat_id {
+                    let reanimating_source = self.ability_parent_map.get(&instance_id).copied()
+                        .and_then(|p| self.instance_map.get(&p).copied());
+                    if let Some(src_grp) = reanimating_source {
+                        // Avoid self-reanimation counting as Reanimator engine (self-reanimation is Immortal)
+                        if src_grp > 0 && src_grp != resolved_grp_id && !self.token_grp_ids.contains(&src_grp) {
+                            let entry = self.impactful_cards.entry(src_grp).or_default();
+                            if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                            entry.times_reanimated_others += 1;
+                            if entry.times_reanimated_others >= 3 {
+                                let tier = if entry.times_reanimated_others >= 10 {
+                                    "Legendary"
+                                } else if entry.times_reanimated_others >= 7 {
+                                    "Platinum"
+                                } else if entry.times_reanimated_others >= 6 {
+                                    "Gold"
+                                } else if entry.times_reanimated_others >= 5 {
+                                    "Silver"
+                                } else if entry.times_reanimated_others >= 4 {
+                                    "Bronze"
+                                } else {
+                                    "Iron"
+                                };
+                                add_tiered_title(&mut entry.titles, "Reanimator", tier);
+                            }
+                        }
                     }
                 }
             }
@@ -769,6 +845,38 @@ impl MatchAssembler {
             let already_bounced = self.turn_events.iter().any(|e| e.turn_number == self.current_turn && (e.grp_id == resolved_grp_id || e.event_type == format!("bounce:{}", resolved_grp_id)));
             if !from_non_draw && previous_zone != Some(28) && !already_bounced {
                 event_type = Some("draw".to_string());
+            }
+        } else if zone_id == 27 {
+            // Stack (Zone 27): Normal spell casts or copied spells
+            event_type = Some("play".to_string());
+
+            // Rider of the Storm: Instant/sorcery copied in a turn (storm or copy abilities)
+            // Copied spells on the stack appear as tokens (is_token == true) in Zone 27
+            if is_token && seat_id == self.player_seat_id {
+                let parent_grp = self.ability_parent_map.get(&instance_id)
+                    .and_then(|p| self.instance_map.get(p).copied())
+                    .unwrap_or(resolved_grp_id);
+                if parent_grp > 0 {
+                    let entry = self.impactful_cards.entry(parent_grp).or_default();
+                    if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                    entry.spell_copies += 1;
+                    if entry.spell_copies >= 3 {
+                        let tier = if entry.spell_copies >= 10 {
+                            "Legendary"
+                        } else if entry.spell_copies >= 7 {
+                            "Platinum"
+                        } else if entry.spell_copies >= 6 {
+                            "Gold"
+                        } else if entry.spell_copies >= 5 {
+                            "Silver"
+                        } else if entry.spell_copies >= 4 {
+                            "Bronze"
+                        } else {
+                            "Iron"
+                        };
+                        add_tiered_title(&mut entry.titles, "Rider of the Storm", tier);
+                    }
+                }
             }
         } else if is_token && zone_id == 28 {
             // Token created directly on the battlefield
@@ -785,8 +893,20 @@ impl MatchAssembler {
                         let entry = self.impactful_cards.entry(s_grp).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         entry.tokens_spawned += 1;
-                        if entry.tokens_spawned >= 20 {
-                            let tier = if entry.tokens_spawned >= 50 { "Gold" } else if entry.tokens_spawned >= 35 { "Silver" } else { "Bronze" };
+                        if entry.tokens_spawned >= 10 {
+                            let tier = if entry.tokens_spawned >= 100 {
+                                "Legendary"
+                            } else if entry.tokens_spawned >= 50 {
+                                "Platinum"
+                            } else if entry.tokens_spawned >= 40 {
+                                "Gold"
+                            } else if entry.tokens_spawned >= 30 {
+                                "Silver"
+                            } else if entry.tokens_spawned >= 20 {
+                                "Bronze"
+                            } else {
+                                "Iron"
+                            };
                             add_tiered_title(&mut entry.titles, "Swarmer", tier);
                         }
                     }
@@ -805,8 +925,20 @@ impl MatchAssembler {
                         let entry = self.impactful_cards.entry(parent_grp).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         entry.cards_stolen += 1;
-                        if entry.cards_stolen >= 3 {
-                            let tier = if entry.cards_stolen >= 7 { "Gold" } else if entry.cards_stolen >= 5 { "Silver" } else { "Bronze" };
+                        if entry.cards_stolen >= 2 {
+                            let tier = if entry.cards_stolen >= 10 {
+                                "Legendary"
+                            } else if entry.cards_stolen >= 8 {
+                                "Platinum"
+                            } else if entry.cards_stolen >= 5 {
+                                "Gold"
+                            } else if entry.cards_stolen >= 4 {
+                                "Silver"
+                            } else if entry.cards_stolen >= 3 {
+                                "Bronze"
+                            } else {
+                                "Iron"
+                            };
                             add_tiered_title(&mut entry.titles, "Cat Burglar", tier);
                         }
                     }
@@ -915,25 +1047,37 @@ impl MatchAssembler {
 
         // Award Heavy Hitter achievement titles with single-match magnitude tiering (Hero non-token cards only)
         if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && !self.token_instance_ids.contains(&instance_id) {
-            if magnitude >= 10 {
-                let hm_tier = if magnitude >= 30 {
-                    "Gold"
+            if magnitude >= 8 {
+                let hm_tier = if magnitude >= 50 {
+                    "Legendary"
+                } else if magnitude >= 30 {
+                    "Platinum"
                 } else if magnitude >= 20 {
+                    "Gold"
+                } else if magnitude >= 12 {
                     "Silver"
-                } else {
+                } else if magnitude >= 10 {
                     "Bronze"
+                } else {
+                    "Iron"
                 };
                 let hm_title = format!("Haymaker ({})", hm_tier);
                 entry.titles.retain(|t| !t.starts_with("Haymaker"));
                 entry.titles.push(hm_title);
             }
-            if entry.total_damage >= 25 {
-                let jg_tier = if entry.total_damage >= 60 {
-                    "Gold"
+            if entry.total_damage >= 20 {
+                let jg_tier = if entry.total_damage >= 100 {
+                    "Legendary"
+                } else if entry.total_damage >= 50 {
+                    "Platinum"
                 } else if entry.total_damage >= 40 {
+                    "Gold"
+                } else if entry.total_damage >= 30 {
                     "Silver"
-                } else {
+                } else if entry.total_damage >= 25 {
                     "Bronze"
+                } else {
+                    "Iron"
                 };
                 let jg_title = format!("Juggernaut ({})", jg_tier);
                 entry.titles.retain(|t| !t.starts_with("Juggernaut"));
@@ -1067,14 +1211,20 @@ impl MatchAssembler {
         }
         entry.cards_drawn += count as i64;
 
-        // Award Rhystic Tracker achievement if hero card draws 5 or more extra cards in match (non-token only)
-        if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && entry.cards_drawn >= 5 {
-            let rt_tier = if entry.cards_drawn >= 12 {
-                "Gold"
+        // Award Rhystic Tracker achievement if hero card draws 4 or more extra cards in match (non-token only)
+        if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && entry.cards_drawn >= 4 {
+            let rt_tier = if entry.cards_drawn >= 15 {
+                "Legendary"
+            } else if entry.cards_drawn >= 12 {
+                "Platinum"
             } else if entry.cards_drawn >= 8 {
+                "Gold"
+            } else if entry.cards_drawn >= 6 {
                 "Silver"
-            } else {
+            } else if entry.cards_drawn >= 5 {
                 "Bronze"
+            } else {
+                "Iron"
             };
             let rt_title = format!("Rhystic Tracker ({})", rt_tier);
             entry.titles.retain(|t| !t.starts_with("Rhystic Tracker"));
@@ -1118,26 +1268,38 @@ impl MatchAssembler {
             entry.toughness_boosted += amount as i32;
 
             if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) && !self.token_instance_ids.contains(&target_instance_id) {
-                // Ozolithic!: 10+ (Bronze), 15+ (Silver), 20+ (Gold) [+1/+1 counters only]
-                if entry.counters_added >= 10 {
-                    let o_tier = if entry.counters_added >= 20 {
+                // Ozolithic!: 5+ (Iron), 10+ (Bronze), 14+ (Silver), 20+ (Gold), 30+ (Platinum), 50+ (Legendary) [+1/+1 counters only]
+                if entry.counters_added >= 5 {
+                    let o_tier = if entry.counters_added >= 50 {
+                        "Legendary"
+                    } else if entry.counters_added >= 30 {
+                        "Platinum"
+                    } else if entry.counters_added >= 20 {
                         "Gold"
-                    } else if entry.counters_added >= 15 {
+                    } else if entry.counters_added >= 14 {
                         "Silver"
-                    } else {
+                    } else if entry.counters_added >= 10 {
                         "Bronze"
+                    } else {
+                        "Iron"
                     };
                     add_tiered_title(&mut entry.titles, "Ozolithic!", o_tier);
                 }
 
-                // Hardened: 7+ (Bronze), 12+ (Silver), 20+ (Gold) [Toughness increase via counters/buffs/equipment]
-                if entry.toughness_boosted >= 7 {
-                    let h_tier = if entry.toughness_boosted >= 20 {
+                // Hardened: +5 (Iron), +7 (Bronze), +10 (Silver), +15 (Gold), +20 (Platinum), +30 (Legendary) [Toughness increase via counters/buffs/equipment]
+                if entry.toughness_boosted >= 5 {
+                    let h_tier = if entry.toughness_boosted >= 30 {
+                        "Legendary"
+                    } else if entry.toughness_boosted >= 20 {
+                        "Platinum"
+                    } else if entry.toughness_boosted >= 15 {
                         "Gold"
-                    } else if entry.toughness_boosted >= 12 {
+                    } else if entry.toughness_boosted >= 10 {
                         "Silver"
-                    } else {
+                    } else if entry.toughness_boosted >= 7 {
                         "Bronze"
+                    } else {
+                        "Iron"
                     };
                     add_tiered_title(&mut entry.titles, "Hardened", h_tier);
                 }
@@ -1171,13 +1333,19 @@ impl MatchAssembler {
             if entry.seat_id == 0 { entry.seat_id = seat_id; }
             entry.toughness_boosted += toughness_delta;
 
-            if entry.toughness_boosted >= 7 {
-                let h_tier = if entry.toughness_boosted >= 20 {
+            if entry.toughness_boosted >= 5 {
+                let h_tier = if entry.toughness_boosted >= 30 {
+                    "Legendary"
+                } else if entry.toughness_boosted >= 20 {
+                    "Platinum"
+                } else if entry.toughness_boosted >= 15 {
                     "Gold"
-                } else if entry.toughness_boosted >= 12 {
+                } else if entry.toughness_boosted >= 10 {
                     "Silver"
-                } else {
+                } else if entry.toughness_boosted >= 7 {
                     "Bronze"
+                } else {
+                    "Iron"
                 };
                 add_tiered_title(&mut entry.titles, "Hardened", h_tier);
             }
@@ -1206,13 +1374,19 @@ impl MatchAssembler {
                     let entry = self.impactful_cards.entry(grp_id).or_default();
                     if entry.seat_id == 0 { entry.seat_id = seat_id; }
                     entry.life_drained += delta.abs() as i64;
-                    if entry.life_drained >= 10 {
+                    if entry.life_drained >= 5 {
                         let tier = if entry.life_drained >= 30 {
-                            "Gold"
+                            "Legendary"
+                        } else if entry.life_drained >= 25 {
+                            "Platinum"
                         } else if entry.life_drained >= 20 {
+                            "Gold"
+                        } else if entry.life_drained >= 15 {
                             "Silver"
-                        } else {
+                        } else if entry.life_drained >= 10 {
                             "Bronze"
+                        } else {
+                            "Iron"
                         };
                         add_tiered_title(&mut entry.titles, "Vampiric", tier);
                     }
@@ -1272,13 +1446,19 @@ impl MatchAssembler {
                 .or_else(|| if target_grp > 0 { self.card_cmc_map.get(&target_grp).copied() } else { None });
 
             if let Some(cmc) = target_cmc {
-                if cmc >= 5 {
+                if cmc >= 4 {
                     let tier = if cmc >= 10 {
-                        "Gold"
+                        "Legendary"
+                    } else if cmc >= 8 {
+                        "Platinum"
                     } else if cmc >= 7 {
+                        "Gold"
+                    } else if cmc >= 6 {
                         "Silver"
-                    } else {
+                    } else if cmc >= 5 {
                         "Bronze"
+                    } else {
+                        "Iron"
                     };
                     add_tiered_title(&mut entry.titles, "Negator", tier);
                 }
@@ -1340,6 +1520,29 @@ impl MatchAssembler {
             let count = affected_ids.len();
             let seat = if affector_seat > 0 { affector_seat } else { self.player_seat_id };
             
+            // Brain Freeze: Cumulative cards milled (self-mill OR opponent mill) by this spell or permanent
+            if seat == self.player_seat_id && affector_grp > 0 && !self.token_grp_ids.contains(&affector_grp) {
+                let entry = self.impactful_cards.entry(affector_grp).or_default();
+                if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                entry.cards_milled += count as u32;
+                if entry.cards_milled >= 10 {
+                    let tier = if entry.cards_milled >= 50 {
+                        "Legendary"
+                    } else if entry.cards_milled >= 40 {
+                        "Platinum"
+                    } else if entry.cards_milled >= 30 {
+                        "Gold"
+                    } else if entry.cards_milled >= 20 {
+                        "Silver"
+                    } else if entry.cards_milled >= 15 {
+                        "Bronze"
+                    } else {
+                        "Iron"
+                    };
+                    add_tiered_title(&mut entry.titles, "Brain Freeze", tier);
+                }
+            }
+
             // Check if last turn event was a mill from the same source on the same turn
             if let Some(last) = self.turn_events.last_mut() {
                 if last.turn_number == self.current_turn && last.seat_id == seat && last.grp_id == affector_grp && last.event_type.starts_with("mill:") {
@@ -1371,6 +1574,29 @@ impl MatchAssembler {
                     tgt_seat = if zone_src == 31 || zone_dest == 33 { 1 } else { 2 };
                 }
                 if tgt_grp > 0 && tgt_seat > 0 {
+                    // Thought Seizer: Opponent cards forced to discard from hand by hero's effect
+                    if affector_seat == self.player_seat_id && tgt_seat != self.player_seat_id && affector_grp > 0 && !self.token_grp_ids.contains(&affector_grp) {
+                        let entry = self.impactful_cards.entry(affector_grp).or_default();
+                        if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                        entry.opponent_discards += 1;
+                        if entry.opponent_discards >= 3 {
+                            let tier = if entry.opponent_discards >= 10 {
+                                "Legendary"
+                            } else if entry.opponent_discards >= 7 {
+                                "Platinum"
+                            } else if entry.opponent_discards >= 6 {
+                                "Gold"
+                            } else if entry.opponent_discards >= 5 {
+                                "Silver"
+                            } else if entry.opponent_discards >= 4 {
+                                "Bronze"
+                            } else {
+                                "Iron"
+                            };
+                            add_tiered_title(&mut entry.titles, "Thought Seizer", tier);
+                        }
+                    }
+
                     self.turn_events.push(MatchTurnEventRecord {
                         turn_number: self.current_turn,
                         seat_id: tgt_seat,
@@ -1471,6 +1697,29 @@ impl MatchAssembler {
                     tgt_seat = if zone_dest == 31 { 1 } else { 2 };
                 }
                 if tgt_grp > 0 && tgt_seat > 0 {
+                    // Bouncer: Opponent permanents returned from battlefield to hand by hero's effect
+                    if affector_seat == self.player_seat_id && tgt_seat != self.player_seat_id && affector_grp > 0 && !self.token_grp_ids.contains(&affector_grp) {
+                        let entry = self.impactful_cards.entry(affector_grp).or_default();
+                        if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
+                        entry.permanents_bounced += 1;
+                        if entry.permanents_bounced >= 4 {
+                            let tier = if entry.permanents_bounced >= 10 {
+                                "Legendary"
+                            } else if entry.permanents_bounced >= 8 {
+                                "Platinum"
+                            } else if entry.permanents_bounced >= 7 {
+                                "Gold"
+                            } else if entry.permanents_bounced >= 6 {
+                                "Silver"
+                            } else if entry.permanents_bounced >= 5 {
+                                "Bronze"
+                            } else {
+                                "Iron"
+                            };
+                            add_tiered_title(&mut entry.titles, "Bouncer", tier);
+                        }
+                    }
+
                     let (ev_seat, ev_grp, ev_type) = if affector_seat > 0 && affector_seat != tgt_seat && affector_grp > 0 {
                         (affector_seat, affector_grp, format!("bounce:{}", tgt_grp))
                     } else {
@@ -1564,40 +1813,58 @@ impl MatchAssembler {
             if opp_wiped > entry.max_opp_wiped { entry.max_opp_wiped = opp_wiped; }
             if total_wiped > entry.max_total_wiped { entry.max_total_wiped = total_wiped; }
 
-            // Sweeper: Destroyed/exiled 8+ (Bronze), 12+ (Silver), 18+ (Gold) opponent permanents
-            if opp_wiped >= 8 {
-                let tier = if opp_wiped >= 18 {
+            // Sweeper: 6 (Iron), 7 (Bronze), 8 (Silver), 10 (Gold), 15 (Platinum), 20 (Legendary)
+            if opp_wiped >= 6 {
+                let tier = if opp_wiped >= 20 {
+                    "Legendary"
+                } else if opp_wiped >= 15 {
+                    "Platinum"
+                } else if opp_wiped >= 10 {
                     "Gold"
-                } else if opp_wiped >= 12 {
+                } else if opp_wiped >= 8 {
                     "Silver"
-                } else {
+                } else if opp_wiped >= 7 {
                     "Bronze"
+                } else {
+                    "Iron"
                 };
                 add_tiered_title(&mut entry.titles, "Sweeper", tier);
             }
 
-            // Cataclysm: Destroyed/exiled 12+ (Bronze), 18+ (Silver), 25+ (Gold) total permanents
-            if total_wiped >= 12 {
-                let tier = if total_wiped >= 25 {
-                    "Gold"
+            // Cataclysm: 10 (Iron), 12 (Bronze), 14 (Silver), 18 (Gold), 25 (Platinum), 30 (Legendary)
+            if total_wiped >= 10 {
+                let tier = if total_wiped >= 30 {
+                    "Legendary"
+                } else if total_wiped >= 25 {
+                    "Platinum"
                 } else if total_wiped >= 18 {
+                    "Gold"
+                } else if total_wiped >= 14 {
                     "Silver"
-                } else {
+                } else if total_wiped >= 12 {
                     "Bronze"
+                } else {
+                    "Iron"
                 };
                 add_tiered_title(&mut entry.titles, "Cataclysm", tier);
             }
 
-            // Royal Assassin: targeted elimination of 1-3 opponent creatures
+            // Royal Assassin: 2 (Iron), 3 (Bronze), 4 (Silver), 5 (Gold), 8 (Platinum), 10 (Legendary)
             if opp_wiped >= 1 && opp_wiped <= 3 {
                 entry.creatures_eliminated += opp_wiped as u32;
-                if entry.creatures_eliminated >= 3 {
-                    let tier = if entry.creatures_eliminated >= 7 {
-                        "Gold"
+                if entry.creatures_eliminated >= 2 {
+                    let tier = if entry.creatures_eliminated >= 10 {
+                        "Legendary"
+                    } else if entry.creatures_eliminated >= 8 {
+                        "Platinum"
                     } else if entry.creatures_eliminated >= 5 {
+                        "Gold"
+                    } else if entry.creatures_eliminated >= 4 {
                         "Silver"
-                    } else {
+                    } else if entry.creatures_eliminated >= 3 {
                         "Bronze"
+                    } else {
+                        "Iron"
                     };
                     add_tiered_title(&mut entry.titles, "Royal Assassin", tier);
                 }
@@ -1626,6 +1893,7 @@ impl MatchAssembler {
 
         if seat_id == self.player_seat_id && !self.token_grp_ids.contains(&grp_id) {
             // Mana Dynamo tracking (Hero permanent generating mana in turn)
+            // 4 (Iron), 5 (Bronze), 6 (Silver), 7 (Gold), 8 (Platinum), 10 (Legendary)
             let entry = self.impactful_cards.entry(grp_id).or_default();
             if entry.seat_id == 0 { entry.seat_id = seat_id; }
             let turn_val = self.turn_mana_by_instance.entry(permanent_instance_id).or_insert(0);
@@ -1633,18 +1901,25 @@ impl MatchAssembler {
             if *turn_val > entry.max_turn_mana {
                 entry.max_turn_mana = *turn_val;
             }
-            if entry.max_turn_mana >= 5 {
-                let tier = if entry.max_turn_mana >= 15 {
-                    "Gold"
+            if entry.max_turn_mana >= 4 {
+                let tier = if entry.max_turn_mana >= 10 {
+                    "Legendary"
                 } else if entry.max_turn_mana >= 8 {
+                    "Platinum"
+                } else if entry.max_turn_mana >= 7 {
+                    "Gold"
+                } else if entry.max_turn_mana >= 6 {
                     "Silver"
-                } else {
+                } else if entry.max_turn_mana >= 5 {
                     "Bronze"
+                } else {
+                    "Iron"
                 };
                 add_tiered_title(&mut entry.titles, "Mana Dynamo", tier);
             }
         } else if seat_id != self.player_seat_id {
             // Opponent paid mana -> only attribute if affector_id maps to a hero permanent via ability_parent_map
+            // 2 (Iron), 4 (Bronze), 6 (Silver), 8 (Gold), 10 (Platinum), 20 (Legendary)
             if let Some(parent_id) = self.ability_parent_map.get(&affector_id) {
                 let parent_seat = self.instance_owner_map.get(parent_id).copied().unwrap_or(0);
                 let parent_grp = self.instance_map.get(parent_id).copied().unwrap_or(0);
@@ -1652,13 +1927,19 @@ impl MatchAssembler {
                     let entry = self.impactful_cards.entry(parent_grp).or_default();
                     if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                     entry.taxes_paid_by_opp += count;
-                    if entry.taxes_paid_by_opp >= 4 {
-                        let tier = if entry.taxes_paid_by_opp >= 10 {
+                    if entry.taxes_paid_by_opp >= 2 {
+                        let tier = if entry.taxes_paid_by_opp >= 20 {
+                            "Legendary"
+                        } else if entry.taxes_paid_by_opp >= 10 {
+                            "Platinum"
+                        } else if entry.taxes_paid_by_opp >= 8 {
                             "Gold"
-                        } else if entry.taxes_paid_by_opp >= 7 {
+                        } else if entry.taxes_paid_by_opp >= 6 {
                             "Silver"
-                        } else {
+                        } else if entry.taxes_paid_by_opp >= 4 {
                             "Bronze"
+                        } else {
+                            "Iron"
                         };
                         add_tiered_title(&mut entry.titles, "Tax Collector", tier);
                     }
@@ -1668,8 +1949,9 @@ impl MatchAssembler {
     }
 
     pub fn evaluate_ironclad(&mut self) {
+        // 8 (Iron), 10 (Bronze), 12 (Silver), 16 (Gold), 20 (Platinum), 25 (Legendary)
         for (inst_id, damage) in &self.turn_damage_taken_by_instance {
-            if *damage >= 10 {
+            if *damage >= 8 {
                 let grp_id = self.instance_map.get(inst_id).copied().unwrap_or(0);
                 let current_zone = self.instance_zone_map.get(inst_id).copied().unwrap_or(0);
                 let seat_id = self.instance_owner_map.get(inst_id).copied().unwrap_or(0);
@@ -1680,12 +1962,18 @@ impl MatchAssembler {
                     if *damage > entry.damage_absorbed_on_block {
                         entry.damage_absorbed_on_block = *damage;
                     }
-                    let tier = if *damage >= 20 {
+                    let tier = if *damage >= 25 {
+                        "Legendary"
+                    } else if *damage >= 20 {
+                        "Platinum"
+                    } else if *damage >= 16 {
                         "Gold"
-                    } else if *damage >= 15 {
+                    } else if *damage >= 12 {
                         "Silver"
-                    } else {
+                    } else if *damage >= 10 {
                         "Bronze"
+                    } else {
+                        "Iron"
                     };
                     add_tiered_title(&mut entry.titles, "Ironclad", tier);
                 }
@@ -1761,6 +2049,7 @@ impl MatchAssembler {
 
                 if is_hero {
                     self.current_player_life = *life;
+                    self.min_player_life = self.min_player_life.min(*life);
                 } else {
                     self.current_opp_life = *life;
                 }
@@ -1776,6 +2065,7 @@ impl MatchAssembler {
             m.result = if is_win { "win".to_string() } else { "loss".to_string() };
             m.turns = self.current_turn;
             m.player_life_end = Some(self.current_player_life);
+            m.min_player_life = Some(self.min_player_life);
             m.opponent_life_end = Some(self.current_opp_life);
             m.player_commander_id = self.cached_commander_id;
             m.player_mulligans = Some(self.player_mulligans);
@@ -1837,88 +2127,92 @@ impl MatchAssembler {
                         }
                     }
 
-                    for (grp, amt, _) in &lethal_hits {
+                    for (grp, amt, life_before) in &lethal_hits {
                         if self.token_grp_ids.contains(grp) {
                             continue;
                         }
                         let entry = self.impactful_cards.entry(*grp).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
-                        let exec_tier = if *amt >= 15 {
-                            "Gold"
-                        } else if *amt >= 10 {
-                            "Silver"
-                        } else if *amt >= 7 {
+                        // Executioner: lethal hit where opp life before was:
+                        // Opp <= 6 (Iron), Opp <= 7 (Bronze), Opp <= 9 (Silver), Opp <= 14 (Gold), Opp <= 20 (Platinum), Opp <= 25 (Legendary)
+                        let pre_opp_life = *life_before;
+                        let exec_tier = if pre_opp_life <= 6 {
+                            "Iron"
+                        } else if pre_opp_life <= 7 {
                             "Bronze"
+                        } else if pre_opp_life <= 9 {
+                            "Silver"
+                        } else if pre_opp_life <= 14 {
+                            "Gold"
+                        } else if pre_opp_life <= 20 {
+                            "Platinum"
+                        } else if pre_opp_life <= 25 {
+                            "Legendary"
                         } else {
                             ""
                         };
                         if !exec_tier.is_empty() {
-                            let exec_title = format!("Executioner ({})", exec_tier);
-                            // Avoid overwriting a higher tier if already present
-                            let already_has_higher = entry.titles.iter().any(|t| {
-                                if !t.starts_with("Executioner") { return false; }
-                                if exec_tier == "Bronze" { return t.contains("Silver") || t.contains("Gold"); }
-                                if exec_tier == "Silver" { return t.contains("Gold"); }
-                                false
-                            });
-                            if !already_has_higher {
-                                entry.titles.retain(|t| !t.starts_with("Executioner"));
-                                entry.titles.push(exec_title);
-                            }
+                            add_tiered_title(&mut entry.titles, "Executioner", exec_tier);
                         }
                     }
 
                     // Overkill calculation: individual creature must single-handedly account for the excess overkill threshold beyond pre-combat life
+                    // 5 (Iron), 7 (Bronze), 10 (Silver), 15 (Gold), 30 (Platinum), 50 (Legendary)
                     for (grp, amt, life_before) in &lethal_hits {
                         if self.token_grp_ids.contains(grp) {
                             continue;
                         }
                         let pre_life = (*life_before).max(0);
                         let ind_overkill = *amt - pre_life;
-                        if ind_overkill >= 7 {
-                            let ok_tier = if ind_overkill >= 15 {
+                        if ind_overkill >= 5 {
+                            let ok_tier = if ind_overkill >= 50 {
+                                "Legendary"
+                            } else if ind_overkill >= 30 {
+                                "Platinum"
+                            } else if ind_overkill >= 15 {
                                 "Gold"
                             } else if ind_overkill >= 10 {
                                 "Silver"
-                            } else {
+                            } else if ind_overkill >= 7 {
                                 "Bronze"
+                            } else {
+                                "Iron"
                             };
-                            let ok_title = format!("Over-Killer ({})", ok_tier);
                             let entry = self.impactful_cards.entry(*grp).or_default();
                             if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
-                            let already_has_higher = entry.titles.iter().any(|t| {
-                                if !t.starts_with("Over-Killer") { return false; }
-                                if ok_tier == "Bronze" { return t.contains("Silver") || t.contains("Gold"); }
-                                if ok_tier == "Silver" { return t.contains("Gold"); }
-                                false
-                            });
-                            if !already_has_higher {
-                                entry.titles.retain(|t| !t.starts_with("Over-Killer"));
-                                entry.titles.push(ok_title);
-                            }
+                            add_tiered_title(&mut entry.titles, "Over-Killer", ok_tier);
                         }
                     }
                 } else if reason.to_lowercase().contains("concede") {
                     // Scoop Inducer candidate: evaluated by round and opponent life (non-token only)
+                    // Iron: <= T8 / >= 20 life
+                    // Bronze: <= T7 / >= 20 life
+                    // Silver: <= T6 / >= 25 life
+                    // Gold: <= T5 / >= 25 life
+                    // Platinum: <= T4 / >= 26 life
+                    // Legendary: <= T3 / >= 30 life
                     if let Some(last_play) = self.turn_events.iter().rev().find(|e| e.seat_id == self.player_seat_id && e.event_type == "play" && !self.token_grp_ids.contains(&e.grp_id) && e.turn_number >= self.current_turn.saturating_sub(1)) {
                         let entry = self.impactful_cards.entry(last_play.grp_id).or_default();
                         if entry.seat_id == 0 { entry.seat_id = self.player_seat_id; }
                         let round = (self.current_turn + 1) / 2;
                         let opp_life = self.current_opp_life;
-                        let tier = if round <= 4 && opp_life >= 25 {
-                            Some("Gold")
+                        let tier = if round <= 3 && opp_life >= 30 {
+                            Some("Legendary")
+                        } else if round <= 4 && opp_life >= 26 {
+                            Some("Platinum")
                         } else if round <= 5 && opp_life >= 25 {
+                            Some("Gold")
+                        } else if round <= 6 && opp_life >= 25 {
                             Some("Silver")
-                        } else if round <= 6 && opp_life >= 20 {
+                        } else if round <= 7 && opp_life >= 20 {
                             Some("Bronze")
+                        } else if round <= 8 && opp_life >= 20 {
+                            Some("Iron")
                         } else {
                             None
                         };
                         if let Some(t) = tier {
-                            let title = format!("Scoop Inducer ({})", t);
-                            if !entry.titles.iter().any(|t| t.starts_with("Scoop Inducer")) {
-                                entry.titles.push(title);
-                            }
+                            add_tiered_title(&mut entry.titles, "Scoop Inducer", t);
                         }
                     }
                 }
@@ -2333,14 +2627,14 @@ use super::*;
 
         // Trigger draw 3 cards
         assembler.process_draw_event(50, 3);
-        // Trigger draw 3 more cards (total 6 -> Rhystic Tracker Bronze)
+        // Trigger draw 3 more cards (total 6 -> Rhystic Tracker Silver)
         assembler.process_draw_event(50, 3);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
         let rhystic_entry = impactful.iter().find(|i| i.grp_id == 12345).expect("Rhystic Study should be impactful");
 
         assert_eq!(rhystic_entry.cards_drawn, 6, "Rhystic Study should have 6 cards drawn");
-        assert!(rhystic_entry.titles.iter().any(|t| t == "Rhystic Tracker (Bronze)"), "Should award Rhystic Tracker (Bronze) badge");
+        assert!(rhystic_entry.titles.iter().any(|t| t == "Rhystic Tracker (Silver)"), "Should award Rhystic Tracker (Silver) badge");
     }
 
     #[test]
@@ -2437,10 +2731,10 @@ use super::*;
         let imp_scavenger = impactful.iter().find(|i| i.grp_id == 501).expect("scavenger exists");
         let imp_vendor = impactful.iter().find(|i| i.grp_id == 502).expect("vendor exists");
 
-        // Both individually dealt 10-14 damage, so both should be Silver Executioner (NOT Gold)
-        assert!(imp_scavenger.titles.iter().any(|t| t == "Executioner (Silver)"), "Scavenger dealt 10 DMG -> Executioner (Silver)");
-        assert!(imp_vendor.titles.iter().any(|t| t == "Executioner (Silver)"), "Spellbook Vendor dealt 12 DMG -> Executioner (Silver)");
-        assert!(!imp_vendor.titles.iter().any(|t| t.contains("Gold")), "Spellbook Vendor must NOT receive Gold Executioner");
+        // Both individually dealt 10-14 damage vs 17 pre-combat life, so both should be Platinum Executioner (pre_opp_life <= 20)
+        assert!(imp_scavenger.titles.iter().any(|t| t == "Executioner (Platinum)"), "Scavenger dealt 10 DMG vs 17 pre-life -> Executioner (Platinum)");
+        assert!(imp_vendor.titles.iter().any(|t| t == "Executioner (Platinum)"), "Spellbook Vendor dealt 12 DMG vs 17 pre-life -> Executioner (Platinum)");
+        assert!(!imp_vendor.titles.iter().any(|t| t.contains("Legendary")), "Spellbook Vendor must NOT receive Legendary Executioner");
     }
 
     #[test]
@@ -2537,7 +2831,7 @@ use super::*;
 
         let voice_entry = impactful.iter().find(|i| i.grp_id == 78901).expect("Voice should be impactful");
         assert_eq!(voice_entry.counters_added, 20);
-        assert!(voice_entry.titles.iter().any(|t| t == "Hardened (Gold)"), "Should award Hardened (Gold)");
+        assert!(voice_entry.titles.iter().any(|t| t == "Hardened (Platinum)"), "Should award Hardened (Platinum)");
         assert!(voice_entry.titles.iter().any(|t| t == "Ozolithic! (Gold)"), "Should award Ozolithic! (Gold)");
     }
 
@@ -2567,7 +2861,7 @@ use super::*;
 
         assert_eq!(excalibur_entry.counters_added, 0, "Charge counters must not be counted as +1/+1 counters");
         assert!(!excalibur_entry.titles.iter().any(|t| t.starts_with("Ozolithic!")), "Excalibur must NOT receive Ozolithic!");
-        assert!(excalibur_entry.titles.iter().any(|t| t == "Hardened (Silver)"), "Excalibur MUST receive Hardened (Silver) for +15 toughness increase");
+        assert!(excalibur_entry.titles.iter().any(|t| t == "Hardened (Gold)"), "Excalibur MUST receive Hardened (Gold) for +15 toughness increase");
     }
 
     #[test]
@@ -2912,7 +3206,7 @@ use super::*;
 
         let (_, _, turn_events, impactful) = assembler.complete_match(2, "Concede").expect("complete");
         let tales_end = impactful.iter().find(|i| i.grp_id == 69862).expect("Tale's End impactful record");
-        assert!(tales_end.titles.contains(&"Negator (Silver)".to_string()), "Tale's End must receive Negator (Silver) for countering CMC 9");
+        assert!(tales_end.titles.contains(&"Negator (Platinum)".to_string()), "Tale's End must receive Negator (Platinum) for countering CMC 9");
         assert!(turn_events.iter().any(|e| e.event_type == "counterspell:70308" && e.grp_id == 69862 && e.seat_id == 2), "Hero Tale's End should emit counterspell:70308");
         assert!(turn_events.iter().any(|e| e.event_type == "countered:69862" && e.grp_id == 70308 && e.seat_id == 1), "Opponent The Great Henge should emit countered:69862");
     }
@@ -3001,7 +3295,7 @@ use super::*;
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
         let artist = impactful.iter().find(|i| i.grp_id == 55555).expect("Blood Artist impactful");
-        assert!(artist.titles.contains(&"Vampiric (Silver)".to_string()), "Blood Artist must earn Vampiric (Silver) for 22 drained life");
+        assert!(artist.titles.contains(&"Vampiric (Gold)".to_string()), "Blood Artist must earn Vampiric (Gold) for 22 drained life");
     }
 
     #[test]
@@ -3030,13 +3324,13 @@ use super::*;
             affected.push(400 + i);
         }
 
-        // Wrath destroys all 18 permanents (14 opp -> Sweeper Silver, 18 total -> Cataclysm Silver)
+        // Wrath destroys all 18 permanents (14 opp -> Sweeper Gold, 18 total -> Cataclysm Gold)
         assembler.process_zone_transfer_event(200, &affected, "Destroy", 28, 33);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
         let wrath = impactful.iter().find(|i| i.grp_id == 11111).expect("Wrath record");
-        assert!(wrath.titles.contains(&"Sweeper (Silver)".to_string()), "Wrath must earn Sweeper (Silver)");
-        assert!(wrath.titles.contains(&"Cataclysm (Silver)".to_string()), "Wrath must earn Cataclysm (Silver)");
+        assert!(wrath.titles.contains(&"Sweeper (Gold)".to_string()), "Wrath must earn Sweeper (Gold)");
+        assert!(wrath.titles.contains(&"Cataclysm (Gold)".to_string()), "Wrath must earn Cataclysm (Gold)");
     }
 
     #[test]
@@ -3115,6 +3409,52 @@ use super::*;
     }
 
     #[test]
+    fn test_instantaneous_same_packet_blink_and_blinkmaster() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-instant-blink".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        // Turn 1: Avacyn's Pilgrim (grp 86662, inst 10) enters battlefield
+        assembler.process_game_object(10, Some(86662), Some(1), 28, true, false, None);
+
+        // Turn 2, 3, 4: Soulherder blinks Avacyn's Pilgrim 3 times in-place using MTGA's exact packet pattern:
+        // ObjectIdChanged -> ZoneTransfer (Exile) -> ObjectIdChanged -> ZoneTransfer (Return) -> GameObject (28)
+        let mut current_inst = 10;
+        for turn in 2..=4 {
+            assembler.update_game_state(Some(turn as u64), turn, &[(1, 20), (2, 20)], 1);
+            let exile_inst = current_inst + 100;
+            let return_inst = current_inst + 200;
+
+            // 1. ObjectIdChanged 10 -> 110
+            assembler.handle_object_id_changed(current_inst, exile_inst);
+            // 2. ZoneTransfer Exile
+            assembler.process_zone_transfer_event(999, &[exile_inst], "Exile", 28, 29);
+            // 3. ObjectIdChanged 110 -> 210
+            assembler.handle_object_id_changed(exile_inst, return_inst);
+            // 4. ZoneTransfer Return
+            assembler.process_zone_transfer_event(999, &[return_inst], "Return", 29, 28);
+            // 5. GameObject arrives in zone 28
+            let res = assembler.process_game_object(return_inst, Some(86662), Some(1), 28, true, false, None);
+            assert_eq!(res, Some((86662, 1, "blink".to_string())), "Instantaneous blink must emit blink event");
+
+            current_inst = return_inst;
+        }
+
+        let (_, _, turn_events, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+        let pilgrim = impactful.iter().find(|i| i.grp_id == 86662).expect("Pilgrim");
+        assert!(pilgrim.titles.contains(&"Blinkmaster (Bronze)".to_string()), "Pilgrim must earn Blinkmaster (Bronze) for 3 instant flickers");
+
+        let blink_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "blink" && e.grp_id == 86662).collect();
+        assert_eq!(blink_events.len(), 3, "Exactly 3 blink events recorded in timeline");
+    }
+
+    #[test]
     fn test_achievement_swarmer_and_mana_dynamo() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
@@ -3145,7 +3485,7 @@ use super::*;
         assert!(scute.titles.contains(&"Swarmer (Bronze)".to_string()), "Scute Swarm must earn Swarmer (Bronze) for 25 tokens");
 
         let caged = impactful.iter().find(|i| i.grp_id == 44444).expect("Caged Sun");
-        assert!(caged.titles.contains(&"Mana Dynamo (Silver)".to_string()), "Caged Sun must earn Mana Dynamo (Silver) for 10 mana burst");
+        assert!(caged.titles.contains(&"Mana Dynamo (Legendary)".to_string()), "Caged Sun must earn Mana Dynamo (Legendary) for 10 mana burst");
     }
 
     #[test]
@@ -3230,7 +3570,7 @@ use super::*;
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Concede").expect("complete");
         let nykthos = impactful.iter().find(|i| i.grp_id == 45678).expect("Nykthos must be impactful");
-        assert!(nykthos.titles.contains(&"Mana Dynamo (Silver)".to_string()), "Single land generating 8 burst mana must earn Mana Dynamo (Silver)");
+        assert!(nykthos.titles.contains(&"Mana Dynamo (Platinum)".to_string()), "Single land generating 8 burst mana must earn Mana Dynamo (Platinum)");
     }
 
     #[test]
@@ -3308,5 +3648,79 @@ use super::*;
         let sphinx = impactful.iter().find(|i| i.grp_id == 90417).expect("Stoic Sphinx impactful");
         assert!(!sphinx.titles.iter().any(|t| t.starts_with("Vampiric")), "Stoic Sphinx must NOT receive Vampiric from combat damage");
         assert_eq!(sphinx.damage_combat, 5);
+    }
+
+    #[test]
+    fn test_new_card_achievements_and_min_player_life() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-new-ach".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        // Player life dips to 3 on turn 3
+        assembler.update_game_state(Some(2), 3, &[(1, 3), (2, 20)], 2);
+        assert_eq!(assembler.min_player_life, 3, "min_player_life must track dip to 3");
+
+        // Player life heals to 15 on turn 4
+        assembler.update_game_state(Some(3), 4, &[(1, 15), (2, 20)], 1);
+        assert_eq!(assembler.min_player_life, 3, "min_player_life must preserve the lowest dip");
+
+        // 1. Brain Freeze: Mill 26 cards across match via grp 4001 (Brain Freeze) -> Silver (>= 25)
+        assembler.process_game_object(101, Some(4001), Some(1), 27, true, false, None);
+        let milled_ids: Vec<u32> = (1..=26).collect();
+        assembler.process_zone_transfer_event(101, &milled_ids, "Mill", 36, 37);
+
+        // 2. Bouncer: Bounce 11 opponent permanents via grp 4002 (Cyclonic Rift) -> Silver (>= 10)
+        assembler.process_game_object(102, Some(4002), Some(1), 27, true, false, None);
+        for opp_inst in 201..=211 {
+            assembler.process_game_object(opp_inst, Some(8000 + opp_inst), Some(2), 28, true, false, None);
+            assembler.process_zone_transfer_event(102, &[opp_inst], "Return", 28, 35);
+        }
+
+        // 3. Thought Seizer: Discard 6 cards from opponent hand via grp 4003 (Thoughtseize) -> Silver (>= 6)
+        assembler.process_game_object(103, Some(4003), Some(1), 27, true, false, None);
+        for opp_hand_inst in 301..=306 {
+            assembler.process_game_object(opp_hand_inst, Some(9000 + opp_hand_inst), Some(2), 35, true, false, None);
+            assembler.process_zone_transfer_event(103, &[opp_hand_inst], "Discard", 35, 37);
+        }
+
+        // 4. Reanimator: Reanimate 6 creatures from graveyard via grp 4004 (Reanimate) -> Silver (>= 6)
+        assembler.process_game_object(104, Some(4004), Some(1), 27, true, false, None);
+        for reanim_inst in 401..=406 {
+            let reanim_grp = 5000 + reanim_inst;
+            assembler.register_ability_parent(reanim_inst, 104);
+            assembler.process_game_object(reanim_inst, Some(reanim_grp), Some(1), 33, true, false, None);
+            assembler.process_game_object(reanim_inst, Some(reanim_grp), Some(1), 28, true, false, None);
+        }
+
+        // 5. Rider of the Storm: Copy 6 spells on stack via grp 4005 (Flusterstorm) -> Silver (>= 6)
+        assembler.process_game_object(105, Some(4005), Some(1), 27, true, false, None);
+        for copy_inst in 501..=506 {
+            assembler.register_ability_parent(copy_inst, 105);
+            assembler.process_game_object(copy_inst, Some(4005), Some(1), 27, false, true, None);
+        }
+
+        let (rec, _, _, impactful) = assembler.complete_match(1, "Damage").expect("complete");
+        assert_eq!(rec.min_player_life, Some(3));
+
+        let bf = impactful.iter().find(|i| i.grp_id == 4001).expect("Brain Freeze");
+        assert!(bf.titles.contains(&"Brain Freeze (Silver)".to_string()), "Brain Freeze must have Silver title");
+
+        let bouncer = impactful.iter().find(|i| i.grp_id == 4002).expect("Bouncer");
+        assert!(bouncer.titles.contains(&"Bouncer (Legendary)".to_string()), "Bouncer must have Legendary title");
+
+        let ts = impactful.iter().find(|i| i.grp_id == 4003).expect("Thought Seizer");
+        assert!(ts.titles.contains(&"Thought Seizer (Gold)".to_string()), "Thought Seizer must have Gold title");
+
+        let reanim = impactful.iter().find(|i| i.grp_id == 4004).expect("Reanimator");
+        assert!(reanim.titles.contains(&"Reanimator (Gold)".to_string()), "Reanimator must have Gold title");
+
+        let storm = impactful.iter().find(|i| i.grp_id == 4005).expect("Rider of the Storm");
+        assert!(storm.titles.contains(&"Rider of the Storm (Gold)".to_string()), "Rider of the Storm must have Gold title");
     }
 }

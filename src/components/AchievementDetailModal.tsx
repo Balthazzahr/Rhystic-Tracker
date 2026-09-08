@@ -12,6 +12,45 @@ export interface AchievementDetailModalProps {
   palette?: any;
 }
 
+// Spectrum sampled directly from the Legendary badge rim in ALLBADGES.xcf
+const LEGENDARY_COLORS = [
+  '#f7a865', // L - warm gold/orange
+  '#fdb856', // E - golden amber
+  '#fdce4c', // G - bright yellow-gold
+  '#f5869a', // E - rose pink
+  '#f0789b', // N - vibrant rose
+  '#e670ac', // D - magenta rose
+  '#c2578d', // A - rich orchid
+  '#7e46a1', // R - violet purple
+  '#734ba1', // Y - deep royal purple
+  '#46b6e8', // (space / transition)
+  '#46b6e8', // T - electric cyan/blue
+  '#68bdf0', // I - sky cerulean
+  '#8bbef5', // E - soft ice blue
+  '#f271a7', // R - final rose accent
+];
+
+export const LegendaryTierTitle: React.FC<{ showIcon?: boolean }> = ({ showIcon = true }) => {
+  const text = "LEGENDARY TIER";
+  return (
+    <span className="text-xs font-bold font-display uppercase tracking-wider flex items-center gap-1.5 drop-shadow-sm">
+      {showIcon && <span className="ms ms-ability-duels-renowned text-xs text-[#f0789b]" />}
+      <span className="inline-flex">
+        {text.split('').map((char, i) => (
+          <span
+            key={i}
+            style={{
+              color: LEGENDARY_COLORS[i % LEGENDARY_COLORS.length],
+            }}
+          >
+            {char === ' ' ? '\u00A0' : char}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+};
+
 export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
   achievement,
   onClose,
@@ -34,13 +73,20 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
   const accentColor = palette?.accent || '#A855F7';
   const meta = getAchievementMeta(achievement.achievement);
 
-  const isTierAchieved = (targetTier: 'gold' | 'silver' | 'bronze') => {
+  const tierRankMap: Record<string, number> = {
+    legendary: 6,
+    platinum: 5,
+    gold: 4,
+    silver: 3,
+    bronze: 2,
+    iron: 1,
+  };
+
+  const isTierAchieved = (targetTier: string) => {
     if (!achievement || achievement.total_awards === 0 || achievement.is_unearned) return false;
-    const tier = achievement.highest_tier?.toLowerCase();
-    if (tier === 'gold') return true;
-    if (tier === 'silver') return targetTier === 'silver' || targetTier === 'bronze';
-    if (tier === 'bronze') return targetTier === 'bronze';
-    return false;
+    const currRank = tierRankMap[achievement.highest_tier?.toLowerCase()] || 0;
+    const targetRank = tierRankMap[targetTier.toLowerCase()] || 0;
+    return currRank >= targetRank;
   };
 
   return createPortal(
@@ -74,10 +120,16 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
               <>
                 <span
                   className={`text-[12px] font-mono font-bold px-2.5 py-0.5 border uppercase tracking-wider ${
-                    achievement.highest_tier === 'gold'
+                    achievement.highest_tier === 'legendary'
+                      ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/60 shadow-sm'
+                      : achievement.highest_tier === 'platinum'
+                      ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/60 shadow-sm'
+                      : achievement.highest_tier === 'gold'
                       ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-sm'
                       : achievement.highest_tier === 'silver'
                       ? 'bg-slate-400/25 text-slate-200 border-slate-400/60 shadow-sm'
+                      : achievement.highest_tier === 'iron'
+                      ? 'bg-zinc-700/40 text-zinc-200 border-zinc-500/60 shadow-sm'
                       : 'bg-amber-900/35 text-amber-200 border-amber-700/60 shadow-sm'
                   }`}
                 >
@@ -166,20 +218,21 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span
                                   className={`text-[9px] font-mono font-bold px-1.5 py-0.2 border uppercase ${
-                                    c.highest_tier === 'gold'
+                                    c.highest_tier === 'legendary'
+                                      ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/40'
+                                      : c.highest_tier === 'platinum'
+                                      ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/40'
+                                      : c.highest_tier === 'gold'
                                       ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                                       : c.highest_tier === 'silver'
                                       ? 'bg-slate-400/15 text-slate-200 border-slate-400/30'
+                                      : c.highest_tier === 'iron'
+                                      ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/30'
                                       : 'bg-amber-900/25 text-amber-200 border-amber-700/30'
                                   }`}
                                 >
                                   {c.highest_tier || achievement.highest_tier || 'bronze'}
                                 </span>
-                                {c.max_val > 0 && (
-                                  <span className="text-[10px] font-mono text-neutral-400">
-                                    Best: <strong className="text-white">{c.max_val}</strong>
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -187,10 +240,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                           {/* Trigger Multiplier Count Pill */}
                           <div className="shrink-0 flex flex-col items-end gap-0.5">
                             <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/[0.04] text-white">
-                              {awardCount > 1 ? `×${awardCount}` : '1×'}
-                            </span>
-                            <span className="text-[8.5px] font-mono uppercase tracking-wider text-neutral-500">
-                              Triggered
+                              {awardCount} {awardCount === 1 ? 'trigger' : 'triggers'}
                             </span>
                           </div>
                         </div>
@@ -219,6 +269,50 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   <span className="text-xs font-mono font-bold uppercase tracking-wider text-white">
                     Tier Milestones
                   </span>
+                </div>
+
+                {/* Legendary Tier */}
+                <div
+                  className={`p-2.5 border transition-all ${
+                    isTierAchieved('legendary')
+                      ? 'bg-gradient-to-r from-amber-950/30 via-rose-950/40 to-purple-950/40 border-rose-400/50 shadow-sm'
+                      : 'bg-black/20 border-white/10 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <LegendaryTierTitle showIcon={true} />
+                    {isTierAchieved('legendary') && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border bg-rose-500/20 text-rose-200 border-rose-400/40 uppercase">
+                        Achieved
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
+                    {meta?.tierDescriptions?.legendary || meta?.criteria?.legendary}
+                  </p>
+                </div>
+
+                {/* Platinum Tier */}
+                <div
+                  className={`p-2.5 border transition-all ${
+                    isTierAchieved('platinum')
+                      ? 'bg-[#4fbbb4]/10 border-[#4fbbb4]/50 shadow-sm'
+                      : 'bg-black/20 border-white/10 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold font-display uppercase tracking-wide text-[#4fbbb4] flex items-center gap-1.5">
+                      <span className="ms ms-ability-duels-renowned text-xs text-[#4fbbb4]" /> Platinum Tier
+                    </span>
+                    {isTierAchieved('platinum') && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/40 uppercase">
+                        Achieved
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
+                    {meta?.tierDescriptions?.platinum || meta?.criteria?.platinum}
+                  </p>
                 </div>
 
                 {/* Gold Tier */}
@@ -287,6 +381,29 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   </div>
                   <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
                     {meta?.tierDescriptions?.bronze || meta?.criteria?.bronze}
+                  </p>
+                </div>
+
+                {/* Iron Tier */}
+                <div
+                  className={`p-2.5 border transition-all ${
+                    isTierAchieved('iron')
+                      ? 'bg-zinc-800/30 border-zinc-600/50 shadow-sm'
+                      : 'bg-black/20 border-white/10 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold font-display uppercase tracking-wide text-zinc-300 flex items-center gap-1.5">
+                      <span className="ms ms-ability-duels-renowned text-xs text-zinc-400" /> Iron Tier
+                    </span>
+                    {isTierAchieved('iron') && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border bg-zinc-700/30 text-zinc-200 border-zinc-600/40 uppercase">
+                        Achieved
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] font-sans text-neutral-300 leading-relaxed">
+                    {meta?.tierDescriptions?.iron || meta?.criteria?.iron}
                   </p>
                 </div>
               </div>

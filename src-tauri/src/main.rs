@@ -1443,6 +1443,16 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         (None, None)
     };
 
+    let deck_achievements_raw = db.get_deck_achievements(&deck_name).await.unwrap_or_default();
+    let deck_achievements: Vec<serde_json::Value> = deck_achievements_raw.into_iter().map(|(ach_id, tier, achieved_at, match_id)| {
+        serde_json::json!({
+            "achievement_id": ach_id,
+            "tier": tier,
+            "achieved_at": achieved_at,
+            "match_id": match_id
+        })
+    }).collect();
+
     Ok(serde_json::json!({
         "deck_name": deck_name,
         "total": total,
@@ -1465,7 +1475,40 @@ async fn get_deck_detail(deck_name: String) -> Result<serde_json::Value, String>
         "mana_distribution": color_dist,
         "card_achievements_grouped": grouped_by_achievement,
         "top_card_achievements": top_card_achievements,
+        "deck_achievements": deck_achievements,
     }))
+}
+
+#[tauri::command]
+async fn get_deck_achievements(deck_name: String) -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let raw = db.get_deck_achievements(&deck_name).await.map_err(|e| e.to_string())?;
+    let res: Vec<serde_json::Value> = raw.into_iter().map(|(ach_id, tier, achieved_at, match_id)| {
+        serde_json::json!({
+            "deck_name": deck_name,
+            "achievement_id": ach_id,
+            "tier": tier,
+            "achieved_at": achieved_at,
+            "match_id": match_id
+        })
+    }).collect();
+    Ok(serde_json::json!(res))
+}
+
+#[tauri::command]
+async fn get_all_deck_achievements() -> Result<serde_json::Value, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let raw = db.get_all_deck_achievements().await.map_err(|e| e.to_string())?;
+    let res: Vec<serde_json::Value> = raw.into_iter().map(|(deck_name, ach_id, tier, achieved_at, match_id)| {
+        serde_json::json!({
+            "deck_name": deck_name,
+            "achievement_id": ach_id,
+            "tier": tier,
+            "achieved_at": achieved_at,
+            "match_id": match_id
+        })
+    }).collect();
+    Ok(serde_json::json!(res))
 }
 
 #[tauri::command]
@@ -1490,22 +1533,40 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
 
     fn parse_title_and_tier(raw: &str) -> (String, String) {
         let trimmed = raw.trim();
-        if trimmed.to_lowercase().contains("(gold)") {
-          (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
-        } else if trimmed.to_lowercase().contains("(silver)") {
-          (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
-        } else if trimmed.to_lowercase().contains("(bronze)") {
-          (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+        let lower = trimmed.to_lowercase();
+        if lower.contains("(legendary)") {
+            (trimmed.replace("(Legendary)", "").replace("(legendary)", "").trim().to_string(), "legendary".to_string())
+        } else if lower.contains("(platinum)") || lower.contains("(titanium)") {
+            (trimmed.replace("(Platinum)", "").replace("(platinum)", "").replace("(Titanium)", "").replace("(titanium)", "").trim().to_string(), "platinum".to_string())
+        } else if lower.contains("(gold)") {
+            (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
+        } else if lower.contains("(silver)") {
+            (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
+        } else if lower.contains("(bronze)") {
+            (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+        } else if lower.contains("(iron)") {
+            (trimmed.replace("(Iron)", "").replace("(iron)", "").trim().to_string(), "iron".to_string())
         } else {
-          (trimmed.to_string(), "bronze".to_string())
+            (trimmed.to_string(), "bronze".to_string())
         }
     }
 
     fn tier_rank(tier: &str) -> i32 {
-        match tier.to_lowercase().as_str() {
-            "gold" => 3,
-            "silver" => 2,
-            _ => 1,
+        let lower = tier.to_lowercase();
+        if lower.contains("legendary") {
+            6
+        } else if lower.contains("platinum") || lower.contains("titanium") {
+            5
+        } else if lower.contains("gold") {
+            4
+        } else if lower.contains("silver") {
+            3
+        } else if lower.contains("bronze") {
+            2
+        } else if lower.contains("iron") {
+            1
+        } else {
+            2
         }
     }
 
@@ -1517,21 +1578,27 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         rarity: Option<String>,
         set_code: Option<String>,
         count: i64,
+        legendary_count: i64,
+        platinum_count: i64,
         gold_count: i64,
         silver_count: i64,
         bronze_count: i64,
+        iron_count: i64,
         highest_tier: String,
         first_earned_at: Option<String>,
         last_earned_at: Option<String>,
     }
 
-    // HashMap: achievement_title -> (total, highest, first_earned, gold, silver, bronze, cards_map)
-    let mut ach_map: std::collections::HashMap<String, (i64, String, Option<String>, i64, i64, i64, std::collections::HashMap<i64, CardStats>)> = std::collections::HashMap::new();
+    // HashMap: achievement_title -> (total, highest, first_earned, legendary, platinum, gold, silver, bronze, iron, cards_map)
+    let mut ach_map: std::collections::HashMap<String, (i64, String, Option<String>, i64, i64, i64, i64, i64, i64, std::collections::HashMap<i64, CardStats>)> = std::collections::HashMap::new();
 
     let mut total_honors_count = 0i64;
+    let mut legendary_count = 0i64;
+    let mut platinum_count = 0i64;
     let mut gold_count = 0i64;
     let mut silver_count = 0i64;
     let mut bronze_count = 0i64;
+    let mut iron_count = 0i64;
 
     for row in rows {
         let grp_id: i64 = row.get("grp_id");
@@ -1549,20 +1616,27 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                 let (clean_title, tier) = parse_title_and_tier(&raw);
                 total_honors_count += 1;
                 match tier.as_str() {
+                    "legendary" => legendary_count += 1,
+                    "platinum" => platinum_count += 1,
                     "gold" => gold_count += 1,
                     "silver" => silver_count += 1,
+                    "iron" => iron_count += 1,
                     _ => bronze_count += 1,
                 }
 
-                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, "bronze".to_string(), match_timestamp.clone(), 0, 0, 0, std::collections::HashMap::new()));
+                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, "bronze".to_string(), match_timestamp.clone(), 0, 0, 0, 0, 0, 0, std::collections::HashMap::new()));
                 entry.0 += 1;
                 if tier_rank(&tier) > tier_rank(&entry.1) {
                     entry.1 = tier.clone();
                 }
                 match tier.as_str() {
-                    "gold" => entry.3 += 1,
-                    "silver" => entry.4 += 1,
-                    _ => entry.5 += 1,
+                    "legendary" => entry.3 += 1,
+                    "platinum" => entry.4 += 1,
+                    "gold" => entry.5 += 1,
+                    "silver" => entry.6 += 1,
+                    "bronze" => entry.7 += 1,
+                    "iron" => entry.8 += 1,
+                    _ => entry.7 += 1,
                 }
                 if let Some(ref ts) = match_timestamp {
                     match &entry.2 {
@@ -1572,7 +1646,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     }
                 }
 
-                let card_entry = entry.6.entry(grp_id).or_insert_with(|| CardStats {
+                let card_entry = entry.9.entry(grp_id).or_insert_with(|| CardStats {
                     grp_id,
                     card_name: card_name.clone(),
                     mana_cost: mana_cost.clone(),
@@ -1580,17 +1654,24 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     rarity: rarity.clone(),
                     set_code: set_code.clone(),
                     count: 0,
+                    legendary_count: 0,
+                    platinum_count: 0,
                     gold_count: 0,
                     silver_count: 0,
                     bronze_count: 0,
+                    iron_count: 0,
                     highest_tier: "bronze".to_string(),
                     first_earned_at: match_timestamp.clone(),
                     last_earned_at: match_timestamp.clone(),
                 });
                 card_entry.count += 1;
                 match tier.as_str() {
+                    "legendary" => card_entry.legendary_count += 1,
+                    "platinum" => card_entry.platinum_count += 1,
                     "gold" => card_entry.gold_count += 1,
                     "silver" => card_entry.silver_count += 1,
+                    "bronze" => card_entry.bronze_count += 1,
+                    "iron" => card_entry.iron_count += 1,
                     _ => card_entry.bronze_count += 1,
                 }
                 if let Some(ts) = &match_timestamp {
@@ -1608,7 +1689,7 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         }
     }
 
-    let mut achievements: Vec<serde_json::Value> = ach_map.into_iter().map(|(title, (total_awards, highest_tier, first_earned, ac_gold, ac_silver, ac_bronze, cards_map))| {
+    let mut achievements: Vec<serde_json::Value> = ach_map.into_iter().map(|(title, (total_awards, highest_tier, first_earned, ac_leg, ac_plat, ac_gold, ac_silver, ac_bronze, ac_iron, cards_map))| {
         let mut cards: Vec<serde_json::Value> = cards_map.into_values().map(|c| {
             serde_json::json!({
                 "grp_id": c.grp_id,
@@ -1618,9 +1699,12 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
                 "rarity": c.rarity,
                 "set_code": c.set_code,
                 "count": c.count,
+                "legendary_count": c.legendary_count,
+                "platinum_count": c.platinum_count,
                 "gold_count": c.gold_count,
                 "silver_count": c.silver_count,
                 "bronze_count": c.bronze_count,
+                "iron_count": c.iron_count,
                 "highest_tier": c.highest_tier,
                 "first_earned_at": c.first_earned_at,
                 "earned_at": c.last_earned_at
@@ -1628,32 +1712,47 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
         }).collect();
 
         cards.sort_by(|a, b| {
+            let leg_a = a.get("legendary_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let leg_b = b.get("legendary_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let p_a = a.get("platinum_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let p_b = b.get("platinum_count").and_then(|v| v.as_i64()).unwrap_or(0);
             let g_a = a.get("gold_count").and_then(|v| v.as_i64()).unwrap_or(0);
             let g_b = b.get("gold_count").and_then(|v| v.as_i64()).unwrap_or(0);
             let s_a = a.get("silver_count").and_then(|v| v.as_i64()).unwrap_or(0);
             let s_b = b.get("silver_count").and_then(|v| v.as_i64()).unwrap_or(0);
             let b_a = a.get("bronze_count").and_then(|v| v.as_i64()).unwrap_or(0);
             let b_b = b.get("bronze_count").and_then(|v| v.as_i64()).unwrap_or(0);
-            g_b.cmp(&g_a).then_with(|| s_b.cmp(&s_a)).then_with(|| b_b.cmp(&b_a)).then_with(|| {
-                let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-                let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-                cnt_b.cmp(&cnt_a)
-            })
+            let i_a = a.get("iron_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let i_b = b.get("iron_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            leg_b.cmp(&leg_a)
+                .then_with(|| p_b.cmp(&p_a))
+                .then_with(|| g_b.cmp(&g_a))
+                .then_with(|| s_b.cmp(&s_a))
+                .then_with(|| b_b.cmp(&b_a))
+                .then_with(|| i_b.cmp(&i_a))
+                .then_with(|| {
+                    let cnt_b = b.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let cnt_a = a.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
+                    cnt_b.cmp(&cnt_a)
+                })
         });
 
         serde_json::json!({
             "achievement": title,
             "total_awards": total_awards,
             "highest_tier": highest_tier,
+            "legendary_count": ac_leg,
+            "platinum_count": ac_plat,
             "gold_count": ac_gold,
             "silver_count": ac_silver,
             "bronze_count": ac_bronze,
+            "iron_count": ac_iron,
             "first_earned_at": first_earned,
             "cards": cards
         })
     }).collect();
 
-    // Priority Sort: Gold > Silver > Bronze, then total_awards descending
+    // Priority Sort: Highest tier descending, then total_awards descending
     achievements.sort_by(|a, b| {
         let t_a = a.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
         let t_b = b.get("highest_tier").and_then(|v| v.as_str()).unwrap_or("bronze");
@@ -1666,11 +1765,14 @@ async fn get_global_achievements() -> Result<serde_json::Value, String> {
 
     Ok(serde_json::json!({
         "total_unlocked": achievements.len(),
-        "total_possible": 21,
+        "total_possible": 26,
         "total_honors": total_honors_count,
+        "legendary_count": legendary_count,
+        "platinum_count": platinum_count,
         "gold_count": gold_count,
         "silver_count": silver_count,
         "bronze_count": bronze_count,
+        "iron_count": iron_count,
         "achievements": achievements
     }))
 }
@@ -5207,6 +5309,95 @@ async fn record_match_deck_audit(
     let _ = db_manager.upsert_match_deck(match_id, deck_name.as_deref(), deck_id.as_deref(), preset, reason).await;
 }
 
+/// Evaluates and awards deck-level achievements upon match completion
+async fn evaluate_deck_achievements(
+    db_manager: &DatabaseManager,
+    record: &match_assembler::MatchRecord,
+    min_player_life: i32,
+) {
+    if record.result != "win" {
+        return;
+    }
+    let deck_name = &record.player_deck_name;
+    if deck_name.is_empty() || deck_name == "Selected Deck" || deck_name == PRESET_EVENT_DECK_NAME {
+        return;
+    }
+    if crate::deck_legitimacy::preset_deck_reason(deck_name).is_some() {
+        return;
+    }
+
+    let match_id = Some(record.match_id.as_str());
+
+    // 1. On a Roll: Consecutive match win streak with this deck
+    // Fetch recent match results for this deck before this match
+    let recent_results: Vec<String> = sqlx::query_scalar(
+        "SELECT result FROM matches WHERE hero_deck_name = ? AND id != ? ORDER BY timestamp DESC LIMIT 20"
+    )
+    .bind(deck_name)
+    .bind(&record.match_id)
+    .fetch_all(db_manager.pool())
+    .await
+    .unwrap_or_default();
+
+    let mut streak = 1usize; // including this win
+    for res in recent_results {
+        if res.eq_ignore_ascii_case("win") {
+            streak += 1;
+        } else {
+            break;
+        }
+    }
+
+    if streak >= 2 {
+        let tier = if streak >= 5 { "gold" } else if streak >= 3 { "silver" } else { "bronze" };
+        let _ = db_manager.record_deck_achievement(deck_name, "on_a_roll", tier, match_id).await;
+    }
+
+    // 2. Comeback Kid: Won match after player life dipped to critical danger
+    if min_player_life <= 8 {
+        let tier = if min_player_life <= 2 { "gold" } else if min_player_life <= 5 { "silver" } else { "bronze" };
+        let _ = db_manager.record_deck_achievement(deck_name, "comeback_kid", tier, match_id).await;
+    }
+
+    // 3. Blitzkrieg: Lightning-fast win in few turns (strictly excluding opponent concedes)
+    let is_concede = record.result_reason.as_deref()
+        .map(|r| r.to_lowercase().contains("concede") || r.to_lowercase().contains("scoop"))
+        .unwrap_or(false);
+
+    if !is_concede && record.turns > 0 && record.turns <= 7 {
+        let tier = if record.turns <= 4 { "gold" } else if record.turns <= 5 { "silver" } else { "bronze" };
+        let _ = db_manager.record_deck_achievement(deck_name, "blitzkrieg", tier, match_id).await;
+    }
+
+    // 4. Iron Fortress: Ending match with huge player life total
+    if let Some(end_life) = record.player_life_end {
+        if end_life >= 30 {
+            let tier = if end_life >= 100 { "gold" } else if end_life >= 50 { "silver" } else { "bronze" };
+            let _ = db_manager.record_deck_achievement(deck_name, "iron_fortress", tier, match_id).await;
+        }
+    }
+
+    // 5. Marathon Master: Won on turn 8+, 12+, 16+
+    if record.turns >= 8 {
+        let tier = if record.turns >= 16 { "gold" } else if record.turns >= 12 { "silver" } else { "bronze" };
+        let _ = db_manager.record_deck_achievement(deck_name, "marathon", tier, match_id).await;
+    }
+
+    // 6. Deck Dominance: Lifetime career match wins with this deck
+    let total_career_wins: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM matches WHERE hero_deck_name = ? AND result = 'win'"
+    )
+    .bind(deck_name)
+    .fetch_one(db_manager.pool())
+    .await
+    .unwrap_or(1);
+
+    if total_career_wins >= 3 {
+        let tier = if total_career_wins >= 10 { "gold" } else if total_career_wins >= 5 { "silver" } else { "bronze" };
+        let _ = db_manager.record_deck_achievement(deck_name, "dominance", tier, match_id).await;
+    }
+}
+
 async fn dispatch_parsed_event(
     event: ParsedEvent,
     assembler: &mut MatchAssembler,
@@ -5265,6 +5456,9 @@ async fn dispatch_parsed_event(
                 for (ability_id, parent_id) in step.ability_associations {
                     assembler.register_ability_parent(ability_id, parent_id);
                 }
+                for (affector_id, affected_ids, category, zone_src, zone_dest) in step.zone_transfer_events {
+                    assembler.process_zone_transfer_event(affector_id, &affected_ids, &category, zone_src, zone_dest);
+                }
                 for (instance_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name) in step.objects {
                     assembler.process_game_object(instance_id, grp_id, owner_seat, zone_id, is_card, is_token, token_name);
                 }
@@ -5293,9 +5487,6 @@ async fn dispatch_parsed_event(
                 }
                 for (affector_id, target_id) in step.counter_spell_events {
                     assembler.process_counterspell_event(affector_id, target_id, None);
-                }
-                for (affector_id, affected_ids, category, zone_src, zone_dest) in step.zone_transfer_events {
-                    assembler.process_zone_transfer_event(affector_id, &affected_ids, &category, zone_src, zone_dest);
                 }
                 for (affector_id, count) in step.mana_paid_events {
                     assembler.process_mana_paid_event(affector_id, count);
@@ -5342,13 +5533,19 @@ async fn dispatch_parsed_event(
                     ).bind(*target_grp as i64).fetch_optional(db_manager.pool()).await.unwrap_or(None);
 
                     if let Some(cmc) = target_cmc {
-                        if cmc >= 5 {
+                        if cmc >= 4 {
                             let tier = if cmc >= 10 {
-                                "Gold"
+                                "Legendary"
+                            } else if cmc >= 8 {
+                                "Platinum"
                             } else if cmc >= 7 {
+                                "Gold"
+                            } else if cmc >= 6 {
                                 "Silver"
-                            } else {
+                            } else if cmc >= 5 {
                                 "Bronze"
+                            } else {
+                                "Iron"
                             };
                             if let Some(imp) = validated_impactful.iter_mut().find(|i| i.grp_id == *affector_grp) {
                                 match_assembler::add_tiered_title(&mut imp.titles, "Negator", tier);
@@ -5406,6 +5603,8 @@ async fn dispatch_parsed_event(
                 );
                 let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &validated_impactful).await;
                 record_match_deck_audit(db_manager, assembler, &record.match_id, Some(&record.player_deck_name)).await;
+                let min_life = record.min_player_life.unwrap_or(assembler.min_player_life);
+                evaluate_deck_achievements(db_manager, &record, min_life).await;
             }
         }
         ParsedEvent::Unknown => {}
@@ -5741,6 +5940,8 @@ fn main() {
             set_raw_path,
             get_global_achievements,
             get_global_leaderboards,
+            get_deck_achievements,
+            get_all_deck_achievements,
             set_deck_custom_art,
             reset_deck_custom_art,
             set_deck_custom_bg_art,

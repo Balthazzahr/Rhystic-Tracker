@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.4.2**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux or macOS environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
+Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.4.3**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux or macOS environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
 
 ---
 
@@ -214,12 +214,12 @@ GDK_BACKEND=x11 rhystic-tracker
 
 To safeguard your daily match history and collection, Rhystic Tracker uses strict environment isolation:
 
-| Environment | Launcher | Database | App Icon | Purpose |
-| :--- | :--- | :--- | :--- | :--- |
-| **🚀 Production** | `./launch.sh` / Desktop App | `~/.config/rhystic-tracker/rhystic.db` | Standard Quill Logo | Daily driver companion for active MTGA gameplay |
-| **🧪 Test / Dev** | `./launch-test.sh` | `~/.config/rhystic-tracker/rhystic_dev.db` | Witch's Hat Badge | Development, bug verification, and layout testing |
+| Environment | Launcher | Binary Path | Database | App Icon | Purpose |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **🚀 Production** | `./launch.sh` / Desktop App | `~/.local/bin/rhystic-tracker` | `~/.config/rhystic-tracker/rhystic.db` | Standard Quill Logo | Daily driver companion for active MTGA gameplay |
+| **🧪 Test / Dev** | `./launch-test.sh` | `./src-tauri/target/release/rhystic-tracker` | `~/.config/rhystic-tracker/rhystic_dev.db` | Witch's Hat Badge | Development, bug verification, and layout testing |
 
-> 🛡️ **Auto-Snapshotting**: Whenever `./launch-test.sh` runs, it automatically takes a fresh snapshot of `rhystic.db` $\rightarrow$ `rhystic_dev.db`. You can test new builds against real match data without any risk of corrupting production records.
+> 🛡️ **Auto-Snapshotting & Isolation**: Whenever `./launch-test.sh` runs, it automatically takes a fresh snapshot of `rhystic.db` $\rightarrow$ `rhystic_dev.db`. All new features, bug fixes, and development builds remain strictly confined to the test environment until milestone sign-off. The production launcher (`./launch.sh`) strictly runs `~/.local/bin/rhystic-tracker` and never touches workspace dev builds.
 
 ---
 

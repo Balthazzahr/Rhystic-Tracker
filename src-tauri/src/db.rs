@@ -161,6 +161,17 @@ CREATE TABLE IF NOT EXISTS card_preferred_prints (
     grp_id INTEGER,
     updated_at TEXT NOT NULL
 );
+-- Deck-level achievements earned by decks across match history
+CREATE TABLE IF NOT EXISTS deck_achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deck_name TEXT NOT NULL,
+    achievement_id TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    achieved_at TEXT NOT NULL,
+    match_id TEXT,
+    UNIQUE(deck_name, achievement_id, tier)
+);
+CREATE INDEX IF NOT EXISTS idx_deck_achievements_deck ON deck_achievements(deck_name);
 "#;
 
 impl DatabaseManager {
@@ -549,6 +560,22 @@ impl DatabaseManager {
             let _ = sqlx::query("ALTER TABLE match_impactful_cards ADD COLUMN cards_drawn INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
             println!("[DB MIGRATION] Added cards_drawn column to match_impactful_cards table");
         }
+
+        // Migration: Ensure deck_achievements table and index exist
+        let _ = sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS deck_achievements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deck_name TEXT NOT NULL,
+                achievement_id TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                achieved_at TEXT NOT NULL,
+                match_id TEXT,
+                UNIQUE(deck_name, achievement_id, tier)
+            );
+            CREATE INDEX IF NOT EXISTS idx_deck_achievements_deck ON deck_achievements(deck_name);
+            "#
+        ).execute(&pool).await;
 
         // Migration: deduplicate any duplicate rows in match_cards, match_turn_events,
         // and match_impactful_cards caused by previous multi-instance or non-idempotent upserts.
@@ -1564,6 +1591,7 @@ impl DatabaseManager {
                 opponent_platform: row.try_get("opponent_platform").ok(),
                 opponent_avatar: row.try_get("opponent_avatar").ok(),
                 result_reason: row.try_get("result_reason").ok(),
+                min_player_life: None,
             }
         }).collect();
 
@@ -1974,6 +2002,70 @@ impl DatabaseManager {
             .await?;
         Ok(())
     }
+
+    /// Record an earned deck achievement (idempotent, upgrades tier).
+    pub async fn record_deck_achievement(
+        &self,
+        deck_name: &str,
+        achievement_id: &str,
+        tier: &str,
+        match_id: Option<&str>,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let res = sqlx::query(
+            r#"
+            INSERT INTO deck_achievements (deck_name, achievement_id, tier, achieved_at, match_id)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(deck_name, achievement_id, tier) DO NOTHING
+            "#
+        )
+        .bind(deck_name)
+        .bind(achievement_id)
+        .bind(tier)
+        .bind(&now)
+        .bind(match_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(res.rows_affected() > 0)
+    }
+
+    /// Get all deck achievements for a specific deck.
+    pub async fn get_deck_achievements(
+        &self,
+        deck_name: &str,
+    ) -> Result<Vec<(String, String, String, Option<String>)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows = sqlx::query_as::<_, (String, String, String, Option<String>)>(
+            r#"
+            SELECT achievement_id, tier, achieved_at, match_id
+            FROM deck_achievements
+            WHERE deck_name = ?
+            ORDER BY achieved_at DESC
+            "#
+        )
+        .bind(deck_name)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    /// Get all deck achievements globally across all decks.
+    pub async fn get_all_deck_achievements(
+        &self,
+    ) -> Result<Vec<(String, String, String, String, Option<String>)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>)>(
+            r#"
+            SELECT deck_name, achievement_id, tier, achieved_at, match_id
+            FROM deck_achievements
+            ORDER BY achieved_at DESC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
 }
 
 #[cfg(test)]
@@ -2266,6 +2358,7 @@ mod tests {
             opponent_platform: Some("iOS".to_string()),
             opponent_avatar: Some("Avatar_Ajani".to_string()),
             result_reason: Some("Conceded".to_string()),
+            min_player_life: Some(20),
         };
 
         let cards = vec![
@@ -2387,6 +2480,7 @@ mod tests {
             opponent_platform: None,
             opponent_avatar: None,
             result_reason: Some("Conceded".to_string()),
+            min_player_life: Some(25),
         };
         db.upsert_match(&match_rec, &[], &[], &[]).await.unwrap();
 

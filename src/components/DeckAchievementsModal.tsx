@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Award } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { AchievementBadge } from './AchievementBadge';
+import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { CardImage } from './CardImage';
-import { getAchievementMeta } from '../utils/achievementBadges';
+import { getAchievementMeta, getDeckAchievementMeta, AchievementTier } from '../utils/achievementBadges';
 
 interface DeckAchievementsModalProps {
   isOpen: boolean;
@@ -29,6 +31,27 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
   onShowCard,
 }) => {
   const [activeTab, setActiveTab] = useState<'card' | 'deck'>('card');
+  const [deckAchievements, setDeckAchievements] = useState<Array<{
+    achievement_id: string;
+    tier: AchievementTier;
+    match_id: string;
+    earned_at: string;
+  }>>([]);
+  const [loadingDeckAch, setLoadingDeckAch] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !deckName) return;
+    setLoadingDeckAch(true);
+    invoke<Array<any>>('get_deck_achievements', { deckName })
+      .then((res) => {
+        setDeckAchievements(res || []);
+      })
+      .catch((err) => {
+        console.error('Failed to load deck achievements for', deckName, err);
+        setDeckAchievements([]);
+      })
+      .finally(() => setLoadingDeckAch(false));
+  }, [isOpen, deckName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -98,46 +121,43 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
         {/* Floating Top Header (No background frame, deck art aligned inline with title) */}
         <div className="w-full flex items-center justify-between px-1 pb-3 relative z-20">
           <div className="flex items-center gap-3.5 min-w-0">
-            {/* Medium-Sized Deck Art Square with Muted Border */}
-            <div className="w-12 h-12 border border-white/20 bg-neutral-950 shadow-[0_8px_20px_rgba(0,0,0,0.85)] overflow-hidden flex items-center justify-center shrink-0">
-              {effectiveDeckArt ? (
+            {/* Deck Art Badge */}
+            {effectiveDeckArt && (
+              <div
+                className="w-12 h-12 rounded-full border border-white/20 overflow-hidden shrink-0 shadow-lg bg-black/40 flex items-center justify-center"
+                style={{ borderColor: `${accentColor}80` }}
+              >
                 <CardImage
                   name={effectiveDeckArt}
                   version="art_crop"
-                  className="w-full h-full object-cover"
+                  alt={deckName}
+                  className="w-full h-full object-cover scale-110"
                 />
-              ) : (
-                <div className="w-full h-full bg-neutral-900 flex items-center justify-center">
-                  <span className="font-display font-bold text-xs uppercase tracking-wider text-neutral-400">
-                    {deckName.slice(0, 2)}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3 flex-wrap min-w-0">
-              <h2 className="text-[28px] font-display font-bold uppercase tracking-[0.14em] text-white drop-shadow-lg truncate">
-                {deckName} Achievements
+              </div>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-2xl font-display font-bold uppercase tracking-wider text-white truncate drop-shadow-md">
+                {deckName}
               </h2>
-              <span className="text-[12px] font-mono font-bold px-2.5 py-0.5 border border-amber-500/30 bg-amber-500/10 text-amber-300 tabular-nums">
-                {totalHonors} {totalHonors === 1 ? 'Honor' : 'Honors Total'}
+              <span className="text-[11px] font-mono tracking-widest text-neutral-400 uppercase">
+                Deck Honors & Achievements
               </span>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white border border-white/10 transition-all cursor-pointer shrink-0 ml-4"
+            className="p-2 text-neutral-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors cursor-pointer border border-white/10"
             title="Close (Esc)"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Main Modal Window (Transparent Frosted Glass) */}
-        <div className="w-full max-h-[78vh] flex flex-col bg-neutral-950/75 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden relative z-10">
-          {/* Subheader Tab Selector inside window */}
-          <div className="px-5 py-2.5 border-b border-white/10 bg-white/[0.03] flex items-center justify-between shrink-0">
+        {/* Modal Container */}
+        <div className="w-full max-h-[82vh] bg-neutral-950/95 border border-white/10 rounded-xl flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl">
+          {/* Sub-header Navigation Tabs */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-white/[0.02]">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setActiveTab('card')}
@@ -158,31 +178,90 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
                 }`}
               >
                 <span>Deck Achievements</span>
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 border border-amber-500/30 bg-amber-500/10 text-amber-300">
-                  SOON
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                  {deckAchievements.length}
                 </span>
               </button>
             </div>
 
             <span className="text-[11px] font-mono text-neutral-400">
-              {cleanGroups.length} {cleanGroups.length === 1 ? 'Category' : 'Categories'}
+              {activeTab === 'card'
+                ? `${cleanGroups.length} ${cleanGroups.length === 1 ? 'Category' : 'Categories'}`
+                : `${deckAchievements.length} ${deckAchievements.length === 1 ? 'Milestone' : 'Milestones'}`}
             </span>
           </div>
 
           {/* Content Body */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
             {activeTab === 'deck' ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-                <div className="w-14 h-14 bg-white/[0.02] border border-white/10 flex items-center justify-center text-neutral-500 mx-auto">
-                  <span className="ms ms-ability-adventure text-3xl" style={{ color: accentColor }} />
+              loadingDeckAch ? (
+                <div className="py-20 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
+                  Loading deck achievements...
                 </div>
-                <h4 className="text-base font-display font-bold uppercase tracking-wide text-white">
-                  Deck-Level Achievements
-                </h4>
-                <p className="text-xs font-sans text-neutral-400 max-w-md leading-relaxed">
-                  Deck Win Streaks, Comeback King, Archetype Dominance, and Tribal Mastery achievements for <strong className="text-white">{deckName}</strong> are currently in active design.
-                </p>
-              </div>
+              ) : deckAchievements.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+                  <div className="w-14 h-14 bg-white/[0.02] border border-white/10 flex items-center justify-center text-neutral-500 mx-auto">
+                    <span className="ms ms-ability-adventure text-3xl" style={{ color: accentColor }} />
+                  </div>
+                  <h4 className="text-base font-display font-bold uppercase tracking-wide text-white">
+                    No Deck Achievements Yet
+                  </h4>
+                  <p className="text-xs font-sans text-neutral-400 max-w-md leading-relaxed">
+                    Pilot <strong className="text-white">{deckName}</strong> in MTGA matches to unlock milestones for win streaks, comeback victories, blitz finishes, and flawless endurance!
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {deckAchievements.map((ach) => {
+                    const meta = getDeckAchievementMeta(ach.achievement_id);
+                    const dateStr = ach.earned_at
+                      ? new Date(ach.earned_at).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })
+                      : 'Recently';
+
+                    return (
+                      <div
+                        key={`${ach.achievement_id}_${ach.tier}`}
+                        className="border border-white/10 bg-black/40 p-4 flex flex-col items-center text-center space-y-2.5 relative group hover:border-white/25 transition-colors"
+                      >
+                        <DeckAchievementBadge
+                          title={ach.achievement_id}
+                          tier={ach.tier}
+                          deckName={deckName}
+                          size="2xl"
+                          showTitle={false}
+                          showCount={false}
+                          showTooltip={true}
+                        />
+                        <div className="w-full">
+                          <h4 className="font-display font-bold text-sm uppercase tracking-wide text-white truncate">
+                            {meta.title}
+                          </h4>
+                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 border uppercase tracking-wider ${
+                            ach.tier === 'gold'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                              : ach.tier === 'silver'
+                              ? 'bg-slate-400/15 text-slate-200 border-slate-400/35'
+                              : 'bg-amber-900/25 text-amber-200 border-amber-700/35'
+                          }`}>
+                            {ach.tier}
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] font-sans text-neutral-300 leading-relaxed">
+                          {meta.tierDescriptions[ach.tier] || meta.description}
+                        </p>
+                        <div className="w-full pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-neutral-500">
+                          <span>Earned</span>
+                          <span className="text-neutral-400">{dateStr}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : cleanGroups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center space-y-2.5">
                 <div className="w-12 h-12 bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500">

@@ -2,6 +2,18 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.4.3] - 2026-09-09
+
+### 🏆 Achievements Architecture & 6-Tier Progression
+- **6-Tier Achievement Hierarchy**: Expanded all 26 card achievements from 3 tiers to 6 distinct competitive tiers: `Iron`, `Bronze`, `Silver`, `Gold`, `Platinum`, and `Legendary`.
+- **Regenerated Shield Badges & Master Assets**: Absorbed layered high-resolution heraldic shields from `/home/davepople/Pictures/Badges/ALLBADGES.xcf` into high-performance pre-composed WebP and PNG assets.
+- **Dynamic Per-Letter Legendary Spectrum**: Rendered `"LEGENDARY TIER"` titles letter-by-letter with authentic spectral hues sampled directly from the Legendary badge rim (`#f7a865` through `#f271a7`).
+- **Platinum Shield Palette Refresh**: Updated Platinum tier theme tokens, badge glows, and milestone tags to `#4fbbb4` (light blue-teal).
+- **Hero Badge Enlargement & Card View Centering**: Enlarged hero badge footprints across card views and inspector modals with centered alignment.
+- **Restored Table View Visual Consistency**: Aligned the Achievements Table View header and container to the unified design standard established in Match History, Card Library, and Deck Library (`h-[34px] px-4 text-xs font-sans font-bold text-white` floating header over frosted table body).
+- **Expanded Table Columns & First Earned Fix**: Added `Platinum` and `Legend` milestone counter columns and fixed the timestamp binding so `First Earned` accurately displays match completion dates.
+- **Card Inspector Deep-Linking**: Clicking an achievement badge within any card inspector cleanly navigates to the Achievements view and immediately opens that achievement's detail view.
+
 ## [1.4.2] - 2026-09-04
 
 ### 🖼️ Persistent Default Card Art & Custom Art Pipeline

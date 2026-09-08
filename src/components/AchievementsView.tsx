@@ -4,11 +4,15 @@ import { invoke } from '@tauri-apps/api/core';
 import { X, Sparkles, Search, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, GripVertical, RotateCcw, Check, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { AchievementDetailModal } from './AchievementDetailModal';
-import { getAchievementMeta, ACHIEVEMENTS_REGISTRY } from '../utils/achievementBadges';
+import { DeckAchievementBadge } from './DeckAchievementBadge';
+import { DeckAchievementDetailModal } from './DeckAchievementDetailModal';
+import { getAchievementMeta, ACHIEVEMENTS_REGISTRY, getDeckAchievementMeta, DECK_ACHIEVEMENTS_REGISTRY, AchievementTier } from '../utils/achievementBadges';
 import CardImage from './CardImage';
 
 interface AchievementsViewProps {
   palette: any;
+  initialAchievement?: string | null;
+  onClearInitialAchievement?: () => void;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
 }
 
@@ -24,10 +28,13 @@ export interface AchievementColumnDef {
 const DEFAULT_ACH_COLUMNS: AchievementColumnDef[] = [
   { key: 'achievement', label: 'Achievement', description: 'Achievement name with mini emblem badge', visible: true, width: 'w-60 shrink-0', align: 'left' },
   { key: 'cards_achieved', label: 'Cards Achieved', description: 'Mini art previews of the top earning cards (click to inspect)', visible: true, width: 'flex-1 min-w-[200px]', align: 'center' },
-  { key: 'highest_tier', label: 'Highest Tier', description: 'Highest achievement tier earned (Gold / Silver / Bronze)', visible: true, width: 'w-28 shrink-0', align: 'center' },
+  { key: 'highest_tier', label: 'Highest Tier', description: 'Highest achievement tier earned', visible: true, width: 'w-28 shrink-0', align: 'center' },
+  { key: 'legendary', label: 'Legend', description: 'Times the Legendary tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
+  { key: 'platinum', label: 'Platinum', description: 'Times the Platinum tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
   { key: 'gold', label: 'Gold', description: 'Times the Gold tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
   { key: 'silver', label: 'Silver', description: 'Times the Silver tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
   { key: 'bronze', label: 'Bronze', description: 'Times the Bronze tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
+  { key: 'iron', label: 'Iron', description: 'Times the Iron tier has been earned', visible: false, width: 'w-16 shrink-0', align: 'center' },
   { key: 'first_earned', label: 'First Earned', description: 'Date the achievement was first earned', visible: true, width: 'w-28 shrink-0', align: 'center' },
   { key: 'cards', label: 'Cards', description: 'Distinct decorated cards count', visible: true, width: 'w-20 shrink-0', align: 'center' },
 ];
@@ -46,11 +53,19 @@ function getContrastTextColor(hexColor?: string): string {
 }
 
 
-export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onShowCard }) => {
-  const [activeCategory, setActiveCategory] = useState<'card' | 'deck'>('card');
+export const AchievementsView: React.FC<AchievementsViewProps> = ({
+  palette,
+  initialAchievement,
+  onClearInitialAchievement,
+  onShowCard,
+}) => {
+  const [activeCategory] = useState<'card'>('card');
   const [loading, setLoading] = useState(true);
   const [achievementsData, setAchievementsData] = useState<any>(null);
+  const [deckAchievementsData, setDeckAchievementsData] = useState<Array<any>>([]);
+  const [loadingDeck, setLoadingDeck] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState<any>(null);
+  const [selectedDeckAchievement, setSelectedDeckAchievement] = useState<any>(null);
   const [showUnearned, setShowUnearned] = useState<boolean>(() => {
     const saved = localStorage.getItem('rhystic_achievements_show_unearned');
     return saved === 'true';
@@ -63,6 +78,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
 
   useEffect(() => {
     loadAchievements();
+    loadDeckAchievements();
   }, []);
 
   // Global Escape key listener to dismiss drill-down modal
@@ -70,13 +86,14 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedAchievement(null);
+        setSelectedDeckAchievement(null);
       }
     };
-    if (selectedAchievement) {
+    if (selectedAchievement || selectedDeckAchievement) {
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [selectedAchievement]);
+  }, [selectedAchievement, selectedDeckAchievement]);
 
   const loadAchievements = async () => {
     setLoading(true);
@@ -87,6 +104,19 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
       console.error('Failed to load global achievements:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDeckAchievements = async () => {
+    setLoadingDeck(true);
+    try {
+      const res = await invoke<Array<any>>('get_all_deck_achievements');
+      setDeckAchievementsData(res || []);
+    } catch (err) {
+      console.error('Failed to load all deck achievements:', err);
+      setDeckAchievementsData([]);
+    } finally {
+      setLoadingDeck(false);
     }
   };
 
@@ -115,6 +145,104 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
 
     return [...unlockedList, ...unearnedList];
   }, [unlockedList, showUnearned]);
+
+  // Deck achievements display list grouped by milestone ID
+  const deckDisplayList = useMemo(() => {
+    // Group all earned deck achievements by achievement_id
+    const grouped = new Map<string, {
+      achievement_id: string;
+      highest_tier: AchievementTier;
+      decks: Array<{ deck_name: string; tier: AchievementTier; earned_at: string; match_id: string }>;
+    }>();
+
+    const tierRank: Record<string, number> = { gold: 3, silver: 2, bronze: 1 };
+
+    for (const entry of deckAchievementsData) {
+      const aid = entry.achievement_id;
+      if (!grouped.has(aid)) {
+        grouped.set(aid, {
+          achievement_id: aid,
+          highest_tier: entry.tier as AchievementTier,
+          decks: [],
+        });
+      }
+      const g = grouped.get(aid)!;
+      g.decks.push({
+        deck_name: entry.deck_name,
+        tier: entry.tier as AchievementTier,
+        earned_at: entry.earned_at,
+        match_id: entry.match_id,
+      });
+      if ((tierRank[entry.tier] || 1) > (tierRank[g.highest_tier] || 1)) {
+        g.highest_tier = entry.tier as AchievementTier;
+      }
+    }
+
+    const list: Array<any> = [];
+
+    // Always iterate through all 6 DECK_ACHIEVEMENTS_REGISTRY entries
+    for (const meta of Object.values(DECK_ACHIEVEMENTS_REGISTRY)) {
+      const earned = grouped.get(meta.id);
+      if (earned) {
+        list.push({
+          achievement_id: meta.id,
+          achievement: meta.title,
+          highest_tier: earned.highest_tier,
+          decks: earned.decks,
+          is_unearned: false,
+          meta,
+        });
+      } else if (showUnearned) {
+        list.push({
+          achievement_id: meta.id,
+          achievement: meta.title,
+          highest_tier: 'bronze' as AchievementTier,
+          decks: [],
+          is_unearned: true,
+          meta,
+        });
+      }
+    }
+
+    // Apply search filter if present
+    if (achSearch.trim()) {
+      const q = achSearch.toLowerCase().trim();
+      return list.filter((item) => {
+        return (
+          item.achievement.toLowerCase().includes(q) ||
+          item.meta.category.toLowerCase().includes(q) ||
+          item.meta.description.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    return list;
+  }, [deckAchievementsData, showUnearned, achSearch]);
+
+  // Open initialAchievement if passed via prop (e.g. from CardInspectorModal deep-link)
+  useEffect(() => {
+    if (!initialAchievement || displayList.length === 0) return;
+    const meta = getAchievementMeta(initialAchievement);
+    const existing = displayList.find((a: any) => {
+      const aMeta = getAchievementMeta(a.achievement);
+      return aMeta.id === meta.id || a.achievement.toLowerCase() === initialAchievement.toLowerCase() || aMeta.title.toLowerCase() === initialAchievement.toLowerCase();
+    });
+    if (existing) {
+      setSelectedAchievement(existing);
+    } else {
+      setSelectedAchievement({
+        achievement: meta.title,
+        highest_tier: 'bronze',
+        total_awards: 0,
+        cards: [],
+        is_unearned: true,
+        meta,
+      });
+    }
+    if (onClearInitialAchievement) {
+      onClearInitialAchievement();
+    }
+  }, [initialAchievement, displayList, onClearInitialAchievement]);
 
   // Global listener for deep-linking into specific achievement drill-down
   useEffect(() => {
@@ -169,12 +297,19 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
       if (!raw) return DEFAULT_ACH_COLUMNS;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ACH_COLUMNS;
-      const map = new Map(parsed.map((c: any) => [c.key, c]));
+      const seenKeys = new Set<string>();
       const result: AchievementColumnDef[] = [];
       for (const saved of parsed) {
         const def = DEFAULT_ACH_COLUMNS.find((d) => d.key === saved.key);
         if (def) {
+          seenKeys.add(def.key);
           result.push({ ...def, visible: typeof saved.visible === 'boolean' ? saved.visible : def.visible });
+        }
+      }
+      // Include any newly added default columns (like legendary or platinum) that weren't in saved
+      for (const def of DEFAULT_ACH_COLUMNS) {
+        if (!seenKeys.has(def.key)) {
+          result.push({ ...def });
         }
       }
       return result.length > 0 ? result : DEFAULT_ACH_COLUMNS;
@@ -356,32 +491,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
           )}
         </div>
 
-        {/* 2. Category Segmented Toggle */}
-        <div className="flex items-center bg-white/[0.03] p-0.5 gap-0.5">
-          <button
-            onClick={() => setActiveCategory('card')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
-              activeCategory === 'card'
-                ? 'bg-white/[0.12] text-white shadow-sm font-bold'
-                : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
-            }`}
-          >
-            <span>Card</span>
-          </button>
-          <button
-            onClick={() => setActiveCategory('deck')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
-              activeCategory === 'deck'
-                ? 'bg-white/[0.12] text-white shadow-sm font-bold'
-                : 'opacity-40 hover:opacity-90 hover:bg-white/[0.05] text-neutral-400'
-            }`}
-          >
-            <span>Deck</span>
-            <span className="text-[9px] font-mono px-1 border border-white/10 bg-white/5 text-neutral-400 ml-0.5 leading-tight">
-              Soon
-            </span>
-          </button>
-        </div>
+
 
         <div className="flex-1" />
 
@@ -420,17 +530,15 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
         </div>
 
         {/* 5. Earned/All Eye Toggle */}
-        {activeCategory === 'card' && (
-          <button
-            onClick={() => setShowUnearned(!showUnearned)}
-            className={`flex items-center justify-center px-2.5 py-1.5 bg-transparent hover:bg-white/[0.08] active:scale-95 transition-all cursor-pointer ${
-              showUnearned ? 'text-white' : 'text-neutral-300 hover:text-white'
-            }`}
-            title={showUnearned ? 'Show only earned achievements' : 'Show all achievements'}
-          >
-            {showUnearned ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4 opacity-40" />}
-          </button>
-        )}
+        <button
+          onClick={() => setShowUnearned(!showUnearned)}
+          className={`flex items-center justify-center px-2.5 py-1.5 bg-transparent hover:bg-white/[0.08] active:scale-95 transition-all cursor-pointer ${
+            showUnearned ? 'text-white' : 'text-neutral-300 hover:text-white'
+          }`}
+          title={showUnearned ? 'Show only earned achievements' : 'Show all achievements'}
+        >
+          {showUnearned ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4 opacity-40" />}
+        </button>
       </div>
 
       {/* 3. MAIN CONTENT AREA */}
@@ -458,65 +566,99 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
             </div>
           ) : achView === 'cards' ? (
             /* Card View: paginated grid */
-            <>
-              <div ref={setCardWrapRef} className="flex-1 min-h-0 overflow-hidden">
-                <div ref={wheelRef} className="h-full min-h-0 flex flex-wrap items-start justify-start content-start gap-5 w-full">
+            <div ref={setCardWrapRef} className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+                <div
+                  className="grid justify-center gap-5"
+                  style={{
+                    gridTemplateColumns: `repeat(${cols}, ${CARD_W}px)`,
+                  }}
+                >
                   {displayedCards.map((ach: any) => {
                     const meta = getAchievementMeta(ach.achievement);
-                    const topCard = ach.cards?.[0];
-                    const topCardName = topCard?.card_name || topCard?.name;
-                    const isUnearnedItem = ach.is_unearned || ach.total_awards === 0;
-                    const cardsCount = ach.cards?.length || 0;
+                    const isUnearned = !!ach.is_unearned;
 
                     return (
                       <div
                         key={ach.achievement}
                         onClick={() => setSelectedAchievement(ach)}
-                        className={`w-[325px] h-[370px] shrink-0 p-4 border transition-colors duration-200 flex flex-col items-center justify-between cursor-pointer text-center group ${
-                          isUnearnedItem
-                            ? 'bg-neutral-950/30 border-white/5 hover:border-white/20 opacity-55'
-                            : 'bg-neutral-950/50 backdrop-blur-md border-white/10 hover:border-white/30'
+                        className={`group relative flex flex-col justify-between p-4 border transition-all cursor-pointer select-none bg-neutral-900/40 hover:bg-neutral-900/80 hover:border-white/30 hover:shadow-xl ${
+                          isUnearned
+                            ? 'border-white/5 opacity-50 grayscale hover:grayscale-0 hover:opacity-90'
+                            : 'border-white/10'
                         }`}
+                        style={{ width: `${CARD_W}px`, height: `${CARD_H}px` }}
                       >
-                        <div className="w-full flex items-center justify-between gap-2 pb-2 border-b border-white/10">
-                          <h4 className="text-[18px] font-bold font-sans uppercase tracking-wide text-white truncate text-left flex-1" title={meta.title}>
+                        {/* Top: Embellished Header with Tier and Category */}
+                        <div className="w-full flex items-center justify-between pb-2 border-b border-white/10">
+                          <h4 className="text-[17px] font-bold font-sans uppercase tracking-wide text-white truncate text-left flex-1" title={meta.title}>
                             {meta.title}
                           </h4>
-                          {isUnearnedItem ? (
-                            <span className="text-[9.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border border-white/10 bg-white/5 text-neutral-400 shrink-0">Unearned</span>
+                          {isUnearned ? (
+                            <span className="text-[9.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 border border-white/10 bg-white/5 text-neutral-400 shrink-0">
+                              Unearned
+                            </span>
                           ) : (
                             <span className={`text-[9.5px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider shrink-0 ${
-                              ach.highest_tier === 'gold' ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                              ach.highest_tier === 'legendary' ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/50 shadow-sm'
+                              : ach.highest_tier === 'platinum' ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/50 shadow-sm'
+                              : ach.highest_tier === 'gold' ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
                               : ach.highest_tier === 'silver' ? 'bg-slate-400/15 text-slate-200 border-slate-400/35'
+                              : ach.highest_tier === 'iron' ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/35'
                               : 'bg-amber-900/25 text-amber-200 border-amber-700/35'
-                            }`}>{ach.highest_tier}</span>
+                            }`}>
+                              {ach.highest_tier}
+                            </span>
                           )}
                         </div>
-                        <div className={`w-[210px] h-[185px] flex items-center justify-center my-auto transition-transform duration-300 ease-out group-hover:scale-[1.20] group-hover:drop-shadow-[0_0_25px_rgba(255,255,255,0.15)] origin-center ${isUnearnedItem ? 'opacity-35 grayscale' : ''}`}>
-                          <AchievementBadge title={ach.achievement} tier={ach.highest_tier} count={ach.total_awards} size="hero" showTitle={false} showCount={false} showTooltip={false} />
+
+                        {/* Middle: Centered Large Hero Badge Footprint */}
+                        <div className={`flex-1 w-full min-h-0 flex items-center justify-center my-1 transition-transform duration-300 group-hover:scale-105 ${isUnearned ? 'opacity-35 grayscale' : ''}`}>
+                          <AchievementBadge
+                            title={ach.achievement}
+                            tier={ach.highest_tier}
+                            count={ach.total_awards}
+                            size="hero"
+                            showTitle={false}
+                            showCount={false}
+                            showTooltip={false}
+                          />
                         </div>
+
+                        {/* Awards Description */}
                         <div className="space-y-0.5 mb-1">
-                          {isUnearnedItem ? (
+                          {isUnearned ? (
                             <p className="text-[11px] font-mono text-neutral-500">Click to inspect criteria</p>
                           ) : (
                             <p className="text-[11px] font-mono text-neutral-400 tabular-nums">
-                              Awarded to <span className="text-white font-bold">{cardsCount}</span> {cardsCount === 1 ? 'card' : 'cards'} ({ach.total_awards}× total)
+                              Awarded to <span className="text-white font-bold">{ach.cards?.length || 0}</span> {ach.cards?.length === 1 ? 'card' : 'cards'} ({ach.total_awards || 1}× total)
                             </p>
                           )}
                         </div>
+
+                        {/* Bottom: Restored MVP Card Preview */}
                         <div className="w-full pt-2 border-t border-white/10 flex items-center justify-between gap-2 text-xs font-mono">
-                          {isUnearnedItem ? (
-                            <div className="flex items-center justify-center w-full text-neutral-500 text-[11px] font-mono py-0.5"><span>Locked · Not yet earned</span></div>
+                          {isUnearned ? (
+                            <div className="flex items-center justify-center w-full text-neutral-500 text-[11px] font-mono py-0.5">
+                              <span>Locked · Not yet earned</span>
+                            </div>
                           ) : (
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              {topCardName && (
+                              {ach.cards?.[0] && (
                                 <div className="w-8 h-8 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm">
-                                  <CardImage name={topCardName} version="art_crop" alt={topCardName} className="w-full h-full object-cover" />
+                                  <CardImage
+                                    name={ach.cards[0].card_name || ach.cards[0].name}
+                                    version="art_crop"
+                                    alt={ach.cards[0].card_name || ach.cards[0].name}
+                                    className="w-full h-full object-cover"
+                                  />
                                 </div>
                               )}
                               <div className="min-w-0 flex-1 text-left">
                                 <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-wider block leading-none">MVP</span>
-                                <span className="text-[13px] font-bold font-sans uppercase text-white truncate block tracking-wide" title={topCardName}>{topCardName || '—'}</span>
+                                <span className="text-[12.5px] font-bold font-sans uppercase text-white truncate block tracking-wide" title={ach.cards?.[0]?.card_name || ach.cards?.[0]?.name}>
+                                  {ach.cards?.[0]?.card_name || ach.cards?.[0]?.name || '—'}
+                                </span>
                               </div>
                             </div>
                           )}
@@ -526,10 +668,10 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                   })}
                 </div>
               </div>
-            </>
+            </div>
           ) : (
-            /* Table View: floating header + rows */
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
+            /* Table View */
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Floating Table Header */}
               <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
                 {visibleColumns.map((col) => (
@@ -538,14 +680,18 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                   </div>
                 ))}
               </div>
-              {/* Main Data Table Body */}
-              <div className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-white/5">
+
+              {/* Table Body */}
+              <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0">
+                <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
+                  {/* Table Rows */}
                   {displayedCards.map((ach: any) => {
                     const meta = getAchievementMeta(ach.achievement);
-                    const isUnearnedItem = ach.is_unearned || ach.total_awards === 0;
-                    const firstEarned = ach.first_earned_at ? new Date(ach.first_earned_at) : null;
-                    const dateStr = firstEarned ? `${firstEarned.toLocaleString('en-US', { month: 'short', day: 'numeric' })} '${String(firstEarned.getFullYear()).slice(2)}` : '—';
+                    const isUnearnedItem = !!ach.is_unearned;
+                    const rawDate = ach.first_earned_at || ach.first_earned;
+                    const dateStr = rawDate
+                      ? new Date(rawDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                      : '—';
                     const topEarners = (ach.cards || []).slice(0, 5);
 
                     return (
@@ -577,16 +723,22 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
                                     <span className="text-xs font-mono text-neutral-600">—</span>
                                   ) : (
                                     <span className={`text-[10.5px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
-                                      ach.highest_tier === 'gold' ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                                      ach.highest_tier === 'legendary' ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/50 shadow-sm'
+                                      : ach.highest_tier === 'platinum' ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/50 shadow-sm'
+                                      : ach.highest_tier === 'gold' ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
                                       : ach.highest_tier === 'silver' ? 'bg-slate-400/15 text-slate-200 border-slate-400/35'
+                                      : ach.highest_tier === 'iron' ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/35'
                                       : 'bg-amber-900/25 text-amber-200 border-amber-700/35'
                                     }`}>{ach.highest_tier}</span>
                                   )}
                                 </div>
                               );
+                            case 'legendary':
+                            case 'platinum':
                             case 'gold':
                             case 'silver':
                             case 'bronze':
+                            case 'iron':
                               const tierVal = ach[`${col.key}_count`] ?? ach[col.key] ?? 0;
                               return (
                                 <div key={col.key} className={cellClass}>
@@ -660,12 +812,15 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
             </div>
           )}
 
-          {/* Pagination Footer */}
+          {/* Floating Pagination Footer */}
           {filteredList.length > 0 && (
             <div className="shrink-0 flex items-center gap-3 pt-2">
               <div className="flex-1 flex justify-start">
                 <button
-                  onClick={() => setPage(1)}
+                  onClick={() => {
+                    pageDirRef.current = 'prev';
+                    setPage(1);
+                  }}
                   disabled={safePage <= 1}
                   className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
                   title="First page"
@@ -701,17 +856,22 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
           )}
         </>
       ) : (
-        /* Deck Achievements Placeholder */
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-1 min-h-0">
-          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 max-w-lg mx-auto">
-            <div className="w-16 h-16 flex items-center justify-center border border-white/10 bg-white/[0.02]">
-              <span className="ms ms-ability-adventure text-3xl" style={{ color: accentColor }} />
-            </div>
-            <h3 className="text-xl font-display font-bold uppercase tracking-wide text-white">Deck Achievements</h3>
-            <p className="text-xs font-sans text-neutral-400 leading-relaxed max-w-md">
-              Deck-level milestones, win streaks, comeback victories, and archetype dominance achievements are currently in active design.
-            </p>
+        /* Deck Achievements View — Coming Soon */
+        <div className="flex-1 flex flex-col items-center justify-center min-h-0 py-24 text-center select-none space-y-4">
+          <div className="w-16 h-16 bg-white/[0.03] border border-white/10 flex items-center justify-center text-amber-400 mx-auto shadow-xl">
+            <span className="ms ms-ability-adventure text-3xl opacity-80" />
           </div>
+          <div className="space-y-1">
+            <h3 className="text-xl font-display font-bold tracking-wider uppercase text-white">
+              Deck Achievements
+            </h3>
+            <span className="inline-block text-[10px] font-mono font-bold uppercase tracking-widest px-2.5 py-0.5 border border-amber-500/40 bg-amber-500/10 text-amber-300">
+              Coming Soon
+            </span>
+          </div>
+          <p className="text-xs font-sans text-neutral-400 max-w-md mx-auto leading-relaxed">
+            Deck milestone honors, win streaks, and tactical endurance badges are currently in forge and will debut in an upcoming update!
+          </p>
         </div>
       )}
 
@@ -721,6 +881,14 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({ palette, onS
           achievement={selectedAchievement}
           onClose={() => setSelectedAchievement(null)}
           onShowCard={onShowCard}
+          palette={palette}
+        />
+      )}
+
+      {selectedDeckAchievement && (
+        <DeckAchievementDetailModal
+          achievement={selectedDeckAchievement}
+          onClose={() => setSelectedDeckAchievement(null)}
           palette={palette}
         />
       )}

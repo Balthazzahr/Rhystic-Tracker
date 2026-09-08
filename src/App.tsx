@@ -276,8 +276,13 @@ export default function App() {
   }, []);
 
   // Global handler to switch to Achievements tab and dismiss card modals when inspecting an achievement
+  const [initialAchievementName, setInitialAchievementName] = useState<string | null>(null);
   useEffect(() => {
-    const handleOpenAch = () => {
+    const handleOpenAch = (e: any) => {
+      const achName = e.detail?.name || e.detail?.achievement;
+      if (achName) {
+        setInitialAchievementName(achName);
+      }
       setActiveTab('achievements');
       setDeckCardOverlay(null);
       setCardTrophyModalOpen(false);
@@ -1789,6 +1794,8 @@ export default function App() {
         {activeTab === 'achievements' && (
           <AchievementsView
             palette={palette}
+            initialAchievement={initialAchievementName}
+            onClearInitialAchievement={() => setInitialAchievementName(null)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
           />
         )}
