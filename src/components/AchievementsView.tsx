@@ -8,6 +8,7 @@ import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { DeckAchievementDetailModal } from './DeckAchievementDetailModal';
 import { getAchievementMeta, ACHIEVEMENTS_REGISTRY, getDeckAchievementMeta, DECK_ACHIEVEMENTS_REGISTRY, AchievementTier } from '../utils/achievementBadges';
 import CardImage from './CardImage';
+import { PaginationFooter } from './common/PaginationFooter';
 
 interface AchievementsViewProps {
   palette: any;
@@ -814,45 +815,25 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
 
           {/* Floating Pagination Footer */}
           {filteredList.length > 0 && (
-            <div className="shrink-0 flex items-center gap-3 pt-2">
-              <div className="flex-1 flex justify-start">
-                <button
-                  onClick={() => {
-                    pageDirRef.current = 'prev';
-                    setPage(1);
-                  }}
-                  disabled={safePage <= 1}
-                  className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-                  title="First page"
-                >
-                  <Home className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => goPage('prev')}
-                  disabled={safePage <= 1}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
-                </button>
-                <span className="text-xs font-mono text-neutral-400 px-2">
-                  Page <span className="text-white font-bold">{safePage}</span> of <span className="text-neutral-400">{totalPages}</span>
-                </span>
-                <button
-                  onClick={() => goPage('next')}
-                  disabled={safePage >= totalPages}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-                >
-                  Next <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="flex-1 flex justify-end">
+            <PaginationFooter
+              currentPage={safePage}
+              totalPages={totalPages}
+              onPageChange={(p, dir) => {
+                if (p === 1 && dir === 'prev') {
+                  pageDirRef.current = 'prev';
+                  setPage(1);
+                } else if (dir) {
+                  goPage(dir);
+                } else {
+                  setPage(p);
+                }
+              }}
+              rightSummary={
                 <span className="text-xs font-mono text-neutral-400 tabular-nums">
                   <span className="text-white font-bold">{totalUnlocked.toLocaleString()}</span> of {totalPossible.toLocaleString()} achievements earned
                 </span>
-              </div>
-            </div>
+              }
+            />
           )}
         </>
       ) : (

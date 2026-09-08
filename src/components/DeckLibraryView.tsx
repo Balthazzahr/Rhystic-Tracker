@@ -26,6 +26,7 @@ import CardImage from './CardImage';
 import { CardNameTooltip } from './CardNameTooltip';
 import { ManaPip } from './ManaPip';
 import { DeckBoxCard, DeckBoxClipDef } from './DeckBoxCard';
+import { PaginationFooter } from './common/PaginationFooter';
 
 const NerdIcon = ({ glyph, className = '', style }: { glyph: string; className?: string; style?: React.CSSProperties }) => (
   <i className={`nf ${glyph} ${className}`} style={style} aria-hidden="true" />
@@ -992,46 +993,20 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       )}
 
       {/* Footer: pagination controls + total decks count */}
-      <div className="shrink-0 flex items-center gap-3 pt-2">
-        {activeTotalPages > 1 && (
-          <>
-            <div className="flex-1 flex justify-start">
-              <button
-                onClick={() => setDeckPage(1)}
-                disabled={safeDeckPage <= 1}
-                className="flex items-center justify-center p-1.5 text-xs font-bold bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-400 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-                title="First page"
-              >
-                <Home className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => goDeckPage('prev')}
-                disabled={safeDeckPage <= 1}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Prev
-              </button>
-              <span className="text-xs font-mono text-neutral-400 px-2">
-                Page <span className="text-white font-bold">{safeDeckPage}</span> of <span className="text-neutral-400">{activeTotalPages}</span>
-              </span>
-              <button
-                onClick={() => goDeckPage('next')}
-                disabled={safeDeckPage >= activeTotalPages}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] active:scale-95 text-neutral-300 hover:text-white transition-all disabled:opacity-20 cursor-pointer"
-              >
-                Next <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </>
-        )}
-        <div className="flex-1 flex justify-end">
-          <span className="text-xs font-mono text-neutral-400 tabular-nums">
-            <span className="text-white font-bold">{filteredDecks.length.toLocaleString()}</span> {filteredDecks.length === 1 ? 'deck' : 'decks'} recorded
-          </span>
-        </div>
-      </div>
+      <PaginationFooter
+        currentPage={safeDeckPage}
+        totalPages={activeTotalPages}
+        onPageChange={(p, dir) => {
+          if (dir) {
+            goDeckPage(dir);
+          } else {
+            setDeckPage(p);
+          }
+        }}
+        totalCount={filteredDecks.length}
+        unitLabel="deck"
+        countSuffix="recorded"
+      />
 
       {/* 4. ADVANCED DECK FILTERS MODAL */}
       {showAdvModal && (
