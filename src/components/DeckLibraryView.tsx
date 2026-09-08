@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Search,
   X,
   SlidersHorizontal,
   Columns3,
@@ -26,7 +25,7 @@ import CardImage from './CardImage';
 import { CardNameTooltip } from './CardNameTooltip';
 import { ManaPip } from './ManaPip';
 import { DeckBoxCard, DeckBoxClipDef } from './DeckBoxCard';
-import { PaginationFooter } from './common/PaginationFooter';
+import { PaginationFooter, GlassSearchInput } from './common';
 
 const NerdIcon = ({ glyph, className = '', style }: { glyph: string; className?: string; style?: React.CSSProperties }) => (
   <i className={`nf ${glyph} ${className}`} style={style} aria-hidden="true" />
@@ -572,25 +571,11 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
       <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
         {/* Search */}
-        <div className="relative w-64 shrink-0 h-8 flex items-center">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search decks, commanders..."
-            value={deckSearch}
-            onChange={(e) => setDeckSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-          />
-          {deckSearch.length > 0 && (
-            <button
-              onClick={() => setDeckSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        <GlassSearchInput
+          placeholder="Search decks, commanders..."
+          value={deckSearch}
+          onChange={setDeckSearch}
+        />
 
         {/* Color pips: multi-select */}
         <div className="flex items-center gap-1.5 pl-0.5">

@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Search,
   SlidersHorizontal,
   Columns3,
   ChevronUp,
@@ -20,7 +19,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ManaPip } from './ManaPip';
 import { CardNameTooltip } from './CardNameTooltip';
 import { CardImage } from './CardImage';
-import { PaginationFooter } from './common/PaginationFooter';
+import { PaginationFooter, GlassSearchInput } from './common';
 
 // Date Formatters matching Dashboard
 const formatTimeAgo = (ts: string): string => {
@@ -965,25 +964,12 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
       <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
         {/* 1. Search Filter */}
-        <div className="relative w-64 shrink-0 h-8 flex items-center">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search deck, opponent..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-              title="Clear search filter"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        <GlassSearchInput
+          placeholder="Search deck, opponent..."
+          value={searchTerm}
+          onChange={setSearchTerm}
+          clearTitle="Clear search filter"
+        />
 
         {/* 2. Mana Color Pips Filter (Exact Color Identity Matching) */}
         <div className="flex items-center gap-1.5 pl-0.5">

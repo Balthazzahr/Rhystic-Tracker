@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { X, Sparkles, Search, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, GripVertical, RotateCcw, Check, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { X, Sparkles, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, GripVertical, RotateCcw, Check, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { AchievementDetailModal } from './AchievementDetailModal';
 import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { DeckAchievementDetailModal } from './DeckAchievementDetailModal';
 import { getAchievementMeta, ACHIEVEMENTS_REGISTRY, getDeckAchievementMeta, DECK_ACHIEVEMENTS_REGISTRY, AchievementTier } from '../utils/achievementBadges';
 import CardImage from './CardImage';
-import { PaginationFooter } from './common/PaginationFooter';
+import { PaginationFooter, GlassSearchInput } from './common';
 
 interface AchievementsViewProps {
   palette: any;
@@ -472,25 +472,11 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
       {/* 2. TOP FILTER & CONTROLS TOOLBAR */}
       <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
         {/* 1. Search Filter */}
-        <div className="relative w-64 shrink-0 h-8 flex items-center">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search achievements or cards..."
-            value={achSearch}
-            onChange={(e) => setAchSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-          />
-          {achSearch && (
-            <button
-              onClick={() => setAchSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        <GlassSearchInput
+          placeholder="Search achievements or cards..."
+          value={achSearch}
+          onChange={setAchSearch}
+        />
 
 
 

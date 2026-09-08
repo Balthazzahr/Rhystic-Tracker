@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { Search, X, Maximize2 } from 'lucide-react';
+import { X, Maximize2 } from 'lucide-react';
+import { GlassSearchInput } from './common';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
 import CardImage from './CardImage';
@@ -197,25 +198,11 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
 
       {/* 2. TOP FILTER / SEARCH TOOLBAR */}
       <div className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap">
-        <div className="relative w-64 shrink-0 h-8 flex items-center">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search for card..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-          />
-          {isSearchActive && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        <GlassSearchInput
+          placeholder="Search for card..."
+          value={searchQuery}
+          onChange={setSearchQuery}
+        />
       </div>
 
       {/* 3. MAIN SCROLLABLE CONTENT */}
@@ -523,25 +510,13 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
             <div className="w-full h-[78vh] max-h-[800px] flex flex-col bg-neutral-950/75 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden relative z-10">
               {/* Subheader banner inside window */}
               <div className="px-5 py-2.5 border-b border-white/10 bg-white/[0.03] flex items-center justify-between gap-4 shrink-0">
-                <div className="relative flex-1 max-w-sm h-8 flex items-center">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder={`Search all cards in ${expandedCategory.title}...`}
-                    value={expandedSearchQuery}
-                    onChange={(e) => setExpandedSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-                    autoFocus
-                  />
-                  {expandedSearchQuery && (
-                    <button
-                      onClick={() => setExpandedSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                <GlassSearchInput
+                  className="flex-1 max-w-sm"
+                  placeholder={`Search all cards in ${expandedCategory.title}...`}
+                  value={expandedSearchQuery}
+                  onChange={setExpandedSearchQuery}
+                  autoFocus
+                />
 
                 <div className="flex items-center gap-3 text-xs font-mono text-neutral-400 shrink-0">
                   <span className="hidden sm:inline text-neutral-400">{expandedCategory.subtitle}</span>

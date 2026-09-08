@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import {
-  Search,
   Minus,
   Plus,
   ChevronLeft,
@@ -23,7 +22,7 @@ import {
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
-import { PaginationFooter } from './common/PaginationFooter';
+import { PaginationFooter, GlassSearchInput } from './common';
 import { getCardStylePref } from '../utils/cardStylePrefs';
 import { ManaPip } from './ManaPip';
 import { ManaFontPip } from './ManaFontPip';
@@ -1075,25 +1074,11 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
         className="shrink-0 flex items-center gap-2.5 pb-1 flex-wrap"
       >
         {/* Search */}
-        <div className="relative w-64 shrink-0 h-8 flex items-center">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search cards..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
-          />
-          {search.length > 0 && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        <GlassSearchInput
+          placeholder="Search cards..."
+          value={search}
+          onChange={setSearch}
+        />
 
         {/* Color pips: multi-select, toggles selectedColors. */}
         <div className="flex items-center gap-1.5 pl-0.5">
