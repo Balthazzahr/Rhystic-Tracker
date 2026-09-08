@@ -2,6 +2,8 @@ use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use chrono::{DateTime, Utc};
 use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord, MatchImpactfulRecord, PRESET_EVENT_DECK_NAME};
 use crate::dashboard::{default_dashboard_layout, validate_layout, DashboardLayoutPayload};
+use crate::card_db;
+use crate::parser;
 
 pub struct DatabaseManager {
     pool: Pool<Sqlite>,
@@ -90,6 +92,8 @@ CREATE TABLE IF NOT EXISTS match_impactful_cards (
 );
 CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
 CREATE INDEX IF NOT EXISTS idx_match_turn_events_match_id ON match_turn_events(match_id);
+CREATE INDEX IF NOT EXISTS idx_match_cards_match_id ON match_cards(match_id);
+CREATE INDEX IF NOT EXISTS idx_matches_timestamp ON matches(timestamp DESC);
 CREATE TABLE IF NOT EXISTS deck_lists (
     deck_name TEXT PRIMARY KEY,
     cards_json TEXT NOT NULL,
@@ -174,6 +178,37 @@ CREATE TABLE IF NOT EXISTS deck_achievements (
 CREATE INDEX IF NOT EXISTS idx_deck_achievements_deck ON deck_achievements(deck_name);
 "#;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EnrichedMatchRecord {
+    pub match_id: String,
+    pub timestamp: DateTime<Utc>,
+    pub date_str: String,
+    pub format_name: String,
+    pub result: String,
+    pub result_reason: Option<String>,
+    pub duration_seconds: u32,
+    pub turns: u32,
+    pub going_first: bool,
+    pub hero_seat_id: u32,
+    pub player_deck_name: String,
+    pub player_commander_id: Option<u32>,
+    pub player_commander_name: Option<String>,
+    pub player_life_end: Option<i32>,
+    pub player_mulligans: Option<u32>,
+    pub hero_platform: Option<String>,
+    pub hero_avatar: Option<String>,
+    pub opponent_name: Option<String>,
+    pub opponent_commander_id: Option<u32>,
+    pub opponent_commander_name: Option<String>,
+    pub opponent_mulligans: Option<u32>,
+    pub opponent_life_end: Option<i32>,
+    pub opponent_platform: Option<String>,
+    pub opponent_avatar: Option<String>,
+    pub mana_curve: Vec<i64>,
+    pub deck_colors: Vec<String>,
+    pub opponent_colors: Vec<String>,
+}
+
 impl DatabaseManager {
     pub fn pool(&self) -> &Pool<Sqlite> {
         &self.pool
@@ -227,7 +262,7 @@ impl DatabaseManager {
         // reach the production `rhystic.db` (or even the dev `rhystic_dev.db`),
         // regardless of RHYSTIC_ENV or dirs::config_dir(). Each call gets a
         // unique subdir so parallel tests never share a DB file.
-        let mut db_dir = if cfg!(test) {
+        let db_dir = if cfg!(test) {
             use std::sync::atomic::{AtomicU64, Ordering};
             static COUNTER: AtomicU64 = AtomicU64::new(0);
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1598,6 +1633,168 @@ impl DatabaseManager {
         Ok(matches)
     }
 
+    /// Returns enriched match records including mana curve and color identity,
+    /// strictly bounded to the requested matches via WHERE mc.match_id IN (...).
+    pub async fn get_enriched_recent_matches(&self, limit: i64) -> Result<Vec<EnrichedMatchRecord>, Box<dyn std::error::Error>> {
+        let raw_matches = self.get_recent_matches(limit).await?;
+        if raw_matches.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Bulk join query scoped STRICTLY to the target matches
+        let bulk_rows = sqlx::query(
+            r#"
+            SELECT mc.match_id, mc.is_opponent, c.mana_cost, c.color_identity, c.colors, c.card_type, mc.count
+            FROM match_cards mc
+            JOIN cards_cache c ON mc.grp_id = c.grp_id
+            WHERE mc.match_id IN (
+                SELECT id FROM matches ORDER BY timestamp DESC LIMIT ?
+            )
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        use std::collections::{HashMap, HashSet};
+        struct MatchCardAggregate {
+            curve: Vec<i64>,
+            colors: HashSet<String>,
+            opponent_colors: HashSet<String>,
+        }
+
+        let mut map: HashMap<String, MatchCardAggregate> = HashMap::new();
+
+        for r in bulk_rows {
+            let match_id: String = r.get("match_id");
+            let is_opponent: bool = r.get("is_opponent");
+            let mana_cost: Option<String> = r.get("mana_cost");
+            let color_identity: Option<String> = r.get("color_identity");
+            let colors: Option<String> = r.get("colors");
+            let card_type: Option<String> = r.get("card_type");
+            let count: i64 = r.get("count");
+
+            let entry = map.entry(match_id).or_insert_with(|| MatchCardAggregate {
+                curve: vec![0i64; 9],
+                colors: HashSet::new(),
+                opponent_colors: HashSet::new(),
+            });
+
+            let is_land_token = card_type.as_deref()
+                .map(|t| { let lt = t.to_lowercase(); lt.contains("land") || lt.contains("token") })
+                .unwrap_or(false);
+            if let Some(cost) = &mana_cost {
+                if !is_land_token && !cost.is_empty() {
+                    let cmc = card_db::parse_mtga_cmc(cost);
+                    let bin = match cmc as usize {
+                        0 => 0, 1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7,
+                        _ => 8,
+                    };
+                    entry.curve[bin] += count;
+                }
+            }
+
+            if !is_opponent {
+                for source_str in [color_identity, colors].into_iter().flatten() {
+                    for ch in source_str.chars() {
+                        if !ch.is_ascii_alphanumeric() {
+                            continue;
+                        }
+                        match ch {
+                            '1' | 'W' | 'w' => { entry.colors.insert("W".to_string()); },
+                            '2' | 'U' | 'u' => { entry.colors.insert("U".to_string()); },
+                            '3' | 'B' | 'b' => { entry.colors.insert("B".to_string()); },
+                            '4' | 'R' | 'r' => { entry.colors.insert("R".to_string()); },
+                            '5' | 'G' | 'g' => { entry.colors.insert("G".to_string()); },
+                            _ => {}
+                        }
+                    }
+                }
+            } else {
+                for source_str in [color_identity, colors].into_iter().flatten() {
+                    for ch in source_str.chars() {
+                        if !ch.is_ascii_alphanumeric() {
+                            continue;
+                        }
+                        match ch {
+                            '1' | 'W' | 'w' => { entry.opponent_colors.insert("W".to_string()); },
+                            '2' | 'U' | 'u' => { entry.opponent_colors.insert("U".to_string()); },
+                            '3' | 'B' | 'b' => { entry.opponent_colors.insert("B".to_string()); },
+                            '4' | 'R' | 'r' => { entry.opponent_colors.insert("R".to_string()); },
+                            '5' | 'G' | 'g' => { entry.opponent_colors.insert("G".to_string()); },
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result = Vec::new();
+        let order = ["W", "U", "B", "R", "G"];
+
+        for m in raw_matches {
+            let agg = map.remove(&m.match_id);
+            let curve = agg.as_ref().map(|a| a.curve.clone()).unwrap_or_else(|| vec![0i64; 9]);
+
+            let mut colors_arr: Vec<String> = agg
+                .as_ref()
+                .map(|a| a.colors.iter().cloned().collect())
+                .unwrap_or_default();
+            colors_arr.sort_by_key(|c| order.iter().position(|&x| x == c).unwrap_or(99));
+
+            let mut opponent_colors_arr: Vec<String> = agg
+                .map(|a| a.opponent_colors.into_iter().collect())
+                .unwrap_or_default();
+            opponent_colors_arr.sort_by_key(|c| order.iter().position(|&x| x == c).unwrap_or(99));
+
+            let clean_format = parser::normalize_format(&m.format_name);
+
+            result.push(EnrichedMatchRecord {
+                match_id: m.match_id,
+                timestamp: m.timestamp,
+                date_str: m.date_str,
+                format_name: clean_format,
+                result: m.result,
+                result_reason: m.result_reason,
+                duration_seconds: m.duration_seconds,
+                turns: m.turns,
+                going_first: m.going_first,
+                hero_seat_id: m.hero_seat_id,
+                player_deck_name: m.player_deck_name,
+                player_commander_id: m.player_commander_id,
+                player_commander_name: m.player_commander_name,
+                player_life_end: m.player_life_end,
+                player_mulligans: m.player_mulligans,
+                hero_platform: m.hero_platform,
+                hero_avatar: m.hero_avatar,
+                opponent_name: m.opponent_name,
+                opponent_commander_id: m.opponent_commander_id,
+                opponent_commander_name: m.opponent_commander_name,
+                opponent_mulligans: m.opponent_mulligans,
+                opponent_life_end: m.opponent_life_end,
+                opponent_platform: m.opponent_platform,
+                opponent_avatar: m.opponent_avatar,
+                mana_curve: curve,
+                deck_colors: colors_arr,
+                opponent_colors: opponent_colors_arr,
+            });
+        }
+
+        Ok(result)
+    }
+
+    /// Returns the exact count of match_cards rows associated with the most recent `limit` matches.
+    pub async fn get_recent_match_cards_count(&self, limit: i64) -> Result<i64, Box<dyn std::error::Error>> {
+        let row = sqlx::query(
+            "SELECT count(*) as cnt FROM match_cards WHERE match_id IN (SELECT id FROM matches ORDER BY timestamp DESC LIMIT ?)"
+        )
+        .bind(limit)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.get("cnt"))
+    }
+
     pub async fn get_deck_stats(&self) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
         let rows = sqlx::query(
             r#"
@@ -2616,6 +2813,85 @@ mod tests {
 
         let resolved = db.resolve_event_deck_name("Jump In!", &[1, 2, 3]).await;
         assert_eq!(resolved, "Jump In! (Markov Purifier / Bloodtithe Harvester)");
+    }
+
+    #[tokio::test]
+    async fn test_get_enriched_recent_matches_where_clause() {
+        let db = in_memory_db().await;
+
+        // Seed card cache
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, card_type, rarity, last_updated) VALUES (101, 'Llanowar Elves', 'oG', 1, 'G', 'G', 'Creature', 1, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, card_type, rarity, last_updated) VALUES (102, 'Counterspell', 'oUoU', 2, 'U', 'U', 'Instant', 2, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, card_type, rarity, last_updated) VALUES (103, 'Lightning Bolt', 'oR', 1, 'R', 'R', 'Instant', 2, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+
+        // Seed 3 matches (match-3 is newest, match-1 is oldest)
+        sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_deck_name) VALUES ('m1', '2026-01-01T10:00:00Z', '2026-01-01', 'Standard', 'win', 60, 4, 1, 'Red Deck')")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_deck_name) VALUES ('m2', '2026-01-02T10:00:00Z', '2026-01-02', 'Standard', 'loss', 120, 6, 0, 'Blue Deck')")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_deck_name) VALUES ('m3', '2026-01-03T10:00:00Z', '2026-01-03', 'Standard', 'win', 180, 5, 1, 'Green Deck')")
+            .execute(db.pool()).await.unwrap();
+
+        // Seed match cards
+        sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES ('m1', 103, 0, 3)")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES ('m2', 102, 0, 2)")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES ('m3', 101, 0, 4)")
+            .execute(db.pool()).await.unwrap();
+
+        // Request only the 1 newest match (m3)
+        let results = db.get_enriched_recent_matches(1).await.unwrap();
+        assert_eq!(results.len(), 1);
+        let m = &results[0];
+        assert_eq!(m.match_id, "m3");
+        assert_eq!(m.player_deck_name, "Green Deck");
+        assert_eq!(m.deck_colors, vec!["G".to_string()]);
+        assert_eq!(m.mana_curve[1], 4);
+        assert_eq!(m.mana_curve[2], 0);
+
+        // Request 2 newest matches (m3 and m2)
+        let results_2 = db.get_enriched_recent_matches(2).await.unwrap();
+        assert_eq!(results_2.len(), 2);
+        assert_eq!(results_2[0].match_id, "m3");
+        assert_eq!(results_2[1].match_id, "m2");
+        assert_eq!(results_2[1].deck_colors, vec!["U".to_string()]);
+        assert_eq!(results_2[1].mana_curve[2], 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_recent_match_cards_scoped_not_full_table() {
+        let db = in_memory_db().await;
+
+        // Seed 5 matches with 2 cards each = 10 total match_cards
+        for i in 1..=5 {
+            let m_id = format!("match_{}", i);
+            let ts = format!("2026-01-0{}T10:00:00Z", i);
+            sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first) VALUES (?, ?, '2026-01-01', 'Brawl', 'win', 100, 5, 1)")
+                .bind(&m_id).bind(&ts).execute(db.pool()).await.unwrap();
+
+            sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES (?, 100, 0, 1)")
+                .bind(&m_id).execute(db.pool()).await.unwrap();
+            sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES (?, 101, 1, 1)")
+                .bind(&m_id).execute(db.pool()).await.unwrap();
+        }
+
+        // Verify total rows in match_cards is 10
+        let total_cards: (i64,) = sqlx::query_as("SELECT count(*) FROM match_cards")
+            .fetch_one(db.pool()).await.unwrap();
+        assert_eq!(total_cards.0, 10);
+
+        // Request cards for only the 2 most recent matches
+        let scoped_cards_count = db.get_recent_match_cards_count(2).await.unwrap();
+        // Should return only 4 rows (2 cards * 2 matches), NOT the full table of 10
+        assert_eq!(scoped_cards_count, 4);
+
+        // Request cards for 1 match
+        let scoped_1 = db.get_recent_match_cards_count(1).await.unwrap();
+        assert_eq!(scoped_1, 2);
     }
 }
 
