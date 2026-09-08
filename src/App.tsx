@@ -1,44 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  Swords, 
-  Activity, 
   Layers, 
-  ChevronLeft, 
-  ChevronRight,
-  Sparkles,
-  BookOpen,
-  Settings,
-  CheckCircle2,
-  XCircle,
-  BarChart3,
-  Search,
-  Filter,
-  ListFilter,
-  Clock,
-  X,
-  LayoutDashboard,
-  Table2,
-  LayoutGrid,
-  Trash2,
-  ZoomIn,
-  ZoomOut,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Award,
+  PanelLeftClose, 
+  PanelLeftOpen, 
 } from 'lucide-react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ManaPip } from './components/ManaPip';
-import { ManaFontPip } from './components/ManaFontPip';
-import { parseMtgaManaCost } from './utils/manaUtils';
-import { getCardStylePref, setCardStylePref } from './utils/cardStylePrefs';
+import { getCardStylePref } from './utils/cardStylePrefs';
 import { SettingsView } from './components/SettingsView';
-import { CustomDropdown } from './components/CustomDropdown';
 import { CardItem } from './components/CardBreakdown';
-import { HoverArtPreview } from './components/HoverArtPreview';
 import { FullMatchInfoModal } from './components/FullMatchInfoModal';
-import { AchievementBadge } from './components/AchievementBadge';
 import { OpponentH2HModal } from './components/OpponentH2HModal';
 import { DeckDetailView } from './components/DeckDetailView';
 import { DashboardView } from './components/DashboardView';
@@ -221,7 +193,6 @@ export default function App() {
       return DEFAULT_SIDEBAR_ICONS;
     }
   });
-  const [showIconPreviewModal, setShowIconPreviewModal] = useState<boolean>(false);
 
   const updateSidebarIcon = (tabId: string, iconClass: string) => {
     const updated = { ...sidebarIcons, [tabId]: iconClass };
@@ -315,10 +286,6 @@ export default function App() {
     return () => window.removeEventListener('open-setup-wizard', handleOpenWizard);
   }, []);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [formatFilter, setFormatFilter] = useState<string>('ALL');
-  const [timeFilter, setTimeFilter] = useState<string>('ALL');
-  const [resultFilter, setResultFilter] = useState<string>('ALL');
   const [matchHistorySearch, setMatchHistorySearch] = useState('');
 
   // Match Inspection & Real Data State
@@ -326,7 +293,6 @@ export default function App() {
   const [matchCount, setMatchCount] = useState<number>(0);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [selectedMatchCards, setSelectedMatchCards] = useState<CardItem[]>([]);
-  const [hoveredCard, setHoveredCard] = useState<CardItem | null>(null);
   const [isFullInfoOpen, setIsFullInfoOpen] = useState<boolean>(false);
   const [targetOpponentName, setTargetOpponentName] = useState<string | null>(null);
   const [isH2HOpen, setIsH2HOpen] = useState<boolean>(false);
@@ -378,32 +344,6 @@ export default function App() {
     setOverlayImgTriedNamed(false);
     setDeckCardOverlay({ card, isCommander });
   };
-  const [deckSearch, setDeckSearch] = useState('');
-  const [deckColorFilter, setDeckColorFilter] = useState<string[]>([]);
-
-  // Deck Library view mode: 'cards' (default) or 'table', persisted locally.
-  const [deckView, setDeckView] = useState<'cards' | 'table'>(() => {
-    const saved = localStorage.getItem('deckLibraryView');
-    return saved === 'table' ? 'table' : 'cards';
-  });
-  const [deckCardSort, setDeckCardSort] = useState<string>(() => localStorage.getItem('deckCardSort') || 'deck_name');
-  const [deckCardSortDir, setDeckCardSortDir] = useState<'asc' | 'desc'>(() => (localStorage.getItem('deckCardSortDir') === 'desc' ? 'desc' : 'asc'));
-  useEffect(() => {
-    localStorage.setItem('deckCardSort', deckCardSort);
-    localStorage.setItem('deckCardSortDir', deckCardSortDir);
-  }, [deckCardSort, deckCardSortDir]);
-
-  // Deck card size: two levels (small / large) matching the Card Library.
-  // Small = fixed landscape footprint; large = fills the grid height with a
-  // fixed number of landscape rows, width derived from the ratio.
-  const [deckCardSize, setDeckCardSize] = useState<'small' | 'large'>(() => {
-    const saved = localStorage.getItem('deckCardSize');
-    return saved === 'small' ? 'small' : 'large';
-  });
-  useEffect(() => {
-    localStorage.setItem('deckCardSize', deckCardSize);
-  }, [deckCardSize]);
-
   // Dashboard view mode: '2.0' (default) or 'legacy', persisted locally.
   const [dashboardMode, setDashboardMode] = useState<'2.0' | 'legacy'>(() => {
     const saved = localStorage.getItem('rhystic_dashboard_mode');
@@ -413,59 +353,12 @@ export default function App() {
     setDashboardMode(mode);
     localStorage.setItem('rhystic_dashboard_mode', mode);
   };
-  // Measure the available area of the card grid to derive the card size.
-  const cardAreaRef = useRef<HTMLDivElement>(null);
-  const [cardArea, setCardArea] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  useEffect(() => {
-    const el = cardAreaRef.current;
-    if (!el) return;
-    const measure = () => {
-      const r = el.getBoundingClientRect();
-      setCardArea((prev) => {
-        const w = Math.round(r.width);
-        const h = Math.round(r.height);
-        if (prev.w === w && prev.h === h) return prev;
-        return { w, h };
-      });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [deckView, activeTab]);
-  // Landscape deck card ratio (wider than tall). Small uses a fixed footprint
-  // with DECK_SMALL_ROWS rows; large fills the height with DECK_LARGE_ROWS rows
-  // and widens slightly (up to DECK_LARGE_WIDEN) to reduce side padding.
-  const DECK_RATIO = 3 / 2;
-  const DECK_LARGE_ROWS = 4;
-  const DECK_SMALL_ROWS = 6;
-  const DECK_GAP = 16;
-  const DECK_WRAP_PAD = 0; // grid has no vertical padding
-  const DECK_LARGE_HEIGHT_SHRINK = 0.97; // small height reduction (no-overflow margin)
-  const DECK_LARGE_WIDEN = 1.15; // allow cards to be up to 15% wider than 3:2
-  const deckLargeCardH = cardArea.h > (DECK_LARGE_ROWS - 1) * DECK_GAP + DECK_WRAP_PAD
-    ? ((cardArea.h - (DECK_LARGE_ROWS - 1) * DECK_GAP - DECK_WRAP_PAD) / DECK_LARGE_ROWS) * DECK_LARGE_HEIGHT_SHRINK
-    : 0;
-  const deckLargeCardW = deckLargeCardH > 0
-    ? Math.min(deckLargeCardH * DECK_RATIO * DECK_LARGE_WIDEN, deckLargeCardH * DECK_RATIO + 60)
-    : 0;
-  // Small: fixed 260px wide landscape footprint.
-  const deckSmallCardW = 260;
-  const deckSmallCardH = Math.round(deckSmallCardW / DECK_RATIO);
-  const deckRows = deckCardSize === 'small' ? DECK_SMALL_ROWS : DECK_LARGE_ROWS;
-  const deckCardW = deckCardSize === 'small' ? deckSmallCardW : deckLargeCardW;
-  const deckCardH = deckCardSize === 'small' ? deckSmallCardH : deckLargeCardH;
-
-  useEffect(() => {
-    localStorage.setItem('deckLibraryView', deckView);
-  }, [deckView]);
 
   // Hover state for theme selector preview
   const [hoveredThemeId, setHoveredThemeId] = useState<string | null>(null);
 
-  // Workspace Container Width Reference for Container-Based Column Collapsing
+  // Workspace Container Reference
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const [workspaceWidth, setWorkspaceWidth] = useState<number>(1000);
 
   // Mana Theme Engine State (persisted)
   const [activeThemeId, setActiveThemeId] = useState<string>(() => {
@@ -846,13 +739,7 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-      if (workspaceRef.current) {
-        setWorkspaceWidth(workspaceRef.current.clientWidth);
-      }
-    };
-    handleResize();
+    const handleResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -865,240 +752,6 @@ export default function App() {
   const selectedMatch = useMemo(() => {
     return matches.find(m => m.match_id === selectedMatchId) || null;
   }, [matches, selectedMatchId]);
-
-  // Deck Win/Loss Streak Calculation for Selected Match
-  const deckStreak = useMemo(() => {
-    if (!selectedMatch) return null;
-    const deckMatches = matches.filter(m => m.player_deck_name === selectedMatch.player_deck_name);
-    const selIdx = deckMatches.findIndex(m => m.match_id === selectedMatch.match_id);
-    if (selIdx === -1) return null;
-
-    const streakType = selectedMatch.result;
-    let count = 0;
-    for (let i = selIdx; i < deckMatches.length; i++) {
-      if (deckMatches[i].result === streakType) {
-        count++;
-      } else {
-        break;
-      }
-    }
-    return { type: streakType, count };
-  }, [matches, selectedMatch]);
-
-  // Filter Computations
-  const filteredMatches = useMemo(() => {
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay()); // Sunday start
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-
-    return matches.filter(m => {
-      const matchesSearch = 
-        m.player_deck_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.format_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (m.opponent_name && m.opponent_name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      const matchesFormat = formatFilter === 'ALL' || m.format_name.toUpperCase() === formatFilter.toUpperCase();
-      const matchesResult = resultFilter === 'ALL' || m.result.toLowerCase() === resultFilter.toLowerCase();
-
-      const matchDate = new Date(m.timestamp);
-      let matchesTime = true;
-      if (timeFilter === 'TODAY') {
-        matchesTime = matchDate >= startOfToday;
-      } else if (timeFilter === '7D' || timeFilter === 'WEEK') {
-        matchesTime = matchDate.getTime() >= now.getTime() - 7 * 86400000;
-      } else if (timeFilter === '14D') {
-        matchesTime = matchDate.getTime() >= now.getTime() - 14 * 86400000;
-      } else if (timeFilter === '30D' || timeFilter === 'MONTH') {
-        matchesTime = matchDate.getTime() >= now.getTime() - 30 * 86400000;
-      } else if (timeFilter === '12M' || timeFilter === 'YEAR') {
-        matchesTime = matchDate.getTime() >= now.getTime() - 365 * 86400000;
-      }
-
-      return matchesSearch && matchesFormat && matchesResult && matchesTime;
-    });
-  }, [matches, searchTerm, formatFilter, resultFilter, timeFilter]);
-
-  // Aggregate stats over the filtered dataset
-  const winsCount = useMemo(() => filteredMatches.filter(m => m.result === 'win').length, [filteredMatches]);
-  const lossesCount = useMemo(() => filteredMatches.filter(m => m.result === 'loss').length, [filteredMatches]);
-  const winrateVal = filteredMatches.length > 0 ? ((winsCount / filteredMatches.length) * 100).toFixed(1) : '0.0';
-
-  // Filtered deck list: by search term, color identity, and sort.
-  const filteredDecks = useMemo(() => {
-    const WUBRG = ['W', 'U', 'B', 'R', 'G'];
-    const colorRank = (c: string[]) => {
-      if (!c || c.length === 0) return 999;
-      let min = 999;
-      for (const ch of c) {
-        const idx = WUBRG.indexOf(ch);
-        if (idx !== -1 && idx < min) min = idx;
-      }
-      return min;
-    };
-
-    const list = deckOverview.filter(d => {
-      const q = deckSearch.toLowerCase();
-      const matchesDeckName = d.deck_name.toLowerCase().includes(q);
-      const matchesCommanderSearch = (d.commanders || []).some((c: any) => (c.name || '').toLowerCase().includes(q));
-      const matchesSearch = q === '' || matchesDeckName || matchesCommanderSearch;
-
-      // Color filter: EXACT match on the full color identity.
-      // - 'C' (colorless) selected -> only decks with 0 resolved colors
-      // - otherwise the deck's colors must exactly equal the selected set
-      let matchesColor = true;
-      if (deckColorFilter.length > 0) {
-        if (deckColorFilter.includes('C')) {
-          matchesColor = (d.colors || []).length === 0;
-        } else {
-          const deckCols = [...(d.colors || [])].sort();
-          const selCols = [...deckColorFilter.filter(c => c !== 'C')].sort();
-          matchesColor = deckCols.length === selCols.length && deckCols.every((c, i) => c === selCols[i]);
-        }
-      }
-
-      return matchesSearch && matchesColor;
-    });
-
-    const dir = deckCardSortDir === 'asc' ? 1 : -1;
-    list.sort((a, b) => {
-      let cmp = 0;
-      switch (deckCardSort) {
-        case 'deck_name':
-          cmp = (a.deck_name || '').localeCompare(b.deck_name || '');
-          break;
-        case 'colors':
-          cmp = colorRank(a.colors) - colorRank(b.colors);
-          break;
-        case 'format': {
-          const af = (a.formats || [])[0]?.format || '';
-          const bf = (b.formats || [])[0]?.format || '';
-          cmp = af.localeCompare(bf);
-          break;
-        }
-        case 'games':
-          cmp = (a.total_matches || 0) - (b.total_matches || 0);
-          break;
-        case 'record': {
-          const aw = a.wins || 0, al = a.losses || 0;
-          const bw = b.wins || 0, bl = b.losses || 0;
-          cmp = (aw - al) - (bw - bl);
-          break;
-        }
-        case 'winrate': {
-          const awr = parseFloat(a.winrate) || 0;
-          const bwr = parseFloat(b.winrate) || 0;
-          cmp = awr - bwr;
-          break;
-        }
-        default:
-          cmp = (a.total_matches || 0) - (b.total_matches || 0);
-      }
-      return cmp * dir;
-    });
-    return list;
-  }, [deckOverview, deckSearch, deckColorFilter, deckCardSort, deckCardSortDir]);
-
-  // Card view uses the same filtered+sorted deck list as the table.
-  const sortedCardDecks = filteredDecks;
-
-  // Deck card view pagination: show only rows × cols that fit the grid (no
-  // scrolling), and page like the Card Library (incl. mouse wheel).
-  const deckCols = cardArea.w > 0 && deckCardW > 0
-    ? Math.max(1, Math.floor((cardArea.w + DECK_GAP) / (deckCardW + DECK_GAP)))
-    : 1;
-  const deckPageSize = deckCols * deckRows;
-  const [deckPage, setDeckPage] = useState(1);
-  const deckTotalPages = Math.max(1, Math.ceil(sortedCardDecks.length / deckPageSize));
-  const safeDeckPage = Math.min(deckPage, deckTotalPages);
-  const deckDisplayed = sortedCardDecks.slice((safeDeckPage - 1) * deckPageSize, safeDeckPage * deckPageSize);
-
-  // Reset to page 1 when filters/sort/page-size change.
-  const deckPageKey = [
-    deckSearch,
-    deckColorFilter.join(','),
-    deckCardSort,
-    deckCardSortDir,
-    deckView,
-    deckPageSize,
-  ].join('|');
-  useEffect(() => {
-    setDeckPage(1);
-  }, [deckPageKey]);
-
-  // Mouse wheel flips the deck card page (scroll down = next, up = prev).
-  const deckWheelRef = useRef<HTMLDivElement>(null);
-  const deckPageDirRef = useRef<'next' | 'prev'>('next');
-  const goDeckPage = (dir: 'next' | 'prev') => {
-    deckPageDirRef.current = dir;
-    if (dir === 'next') setDeckPage((p) => Math.min(deckTotalPages, p + 1));
-    else setDeckPage((p) => Math.max(1, p - 1));
-  };
-  useEffect(() => {
-    const el = deckWheelRef.current;
-    if (!el || deckView !== 'cards') return;
-    let lock = false;
-    const onWheel = (e: WheelEvent) => {
-      if (lock) return;
-      if (deckTotalPages <= 1) return;
-      if (Math.abs(e.deltaY) < 10) return;
-      e.preventDefault();
-      lock = true;
-      if (e.deltaY > 0) goDeckPage('next');
-      else goDeckPage('prev');
-      setTimeout(() => { lock = false; }, 450);
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [deckView, deckTotalPages]);
-
-  // Deck page-turn animation: same approach as the Card Library — the grid stays
-  // mounted and the animation is replayed via the Web Animations API (cancelling
-  // any in-flight one first) so it never double-fires or overlaps.
-  const deckGridAnimRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = deckGridAnimRef.current;
-    if (!el || deckView !== 'cards') return;
-    el.getAnimations().forEach((a) => a.cancel());
-    const next = deckPageDirRef.current === 'next';
-    el.animate(
-      [
-        { opacity: 0.25, transform: next ? 'translateX(14px)' : 'translateX(-14px)' },
-        { opacity: 1, transform: 'translateX(0)' },
-      ],
-      { duration: 250, easing: 'ease-out' },
-    );
-  }, [deckPage, deckView]);
-
-  // Deck table virtualization (separate from the match history virtualizer)
-  const deckTableParentRef = useRef<HTMLDivElement>(null);
-  const deckRowVirtualizer = useVirtualizer({
-    count: filteredDecks.length,
-    getScrollElement: () => deckTableParentRef.current,
-    estimateSize: () => 92, // Exact row height: 92px
-    overscan: 10,
-  });
-
-  const toggleDeckSort = (key: string) => {
-    if (deckCardSort === key) {
-      setDeckCardSortDir(deckCardSortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setDeckCardSort(key);
-      setDeckCardSortDir('desc');
-    }
-  };
-
-  // Table Virtualization Container Reference
-  const parentRef = useRef<HTMLDivElement>(null);
-
-  const rowVirtualizer = useVirtualizer({
-    count: filteredMatches.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 80, // Exact row height: 80px
-    overscan: 10,
-  });
 
   const manaThemeOptions = [
     { id: 'white', label: 'White (Order)', symbol: 'W', color: '#E8E2CC' },
@@ -1221,32 +874,6 @@ export default function App() {
     );
   };
 
-  // MTGA rarity codes: 0=unknown/token, 1=Land, 2=Common, 3=Uncommon, 4=Rare, 5=Mythic.
-  const cardRarityLabel = (r: number): string => {
-    const labels: Record<number, string> = {
-      1: 'Land',
-      2: 'Common',
-      3: 'Uncommon',
-      4: 'Rare',
-      5: 'Mythic',
-    };
-    return labels[r] ?? '-';
-  };
-
-  // Rarity colors matching the rest of the app: white common, silver uncommon,
-  // gold rare, orange mythic.
-  const cardRarityColor = (r: number): string => {
-    const colors: Record<number, string> = {
-      1: '#9CA3AF',
-      2: '#E5E7EB',
-      3: '#CBD5E1',
-      4: '#D4AF37',
-      5: '#F97316',
-    };
-    return colors[r] ?? '#9CA3AF';
-  };
-  const getRarityColor = cardRarityColor;
-
   // Muted format-chip colors, inspired by the mana pip palette but toned down.
   const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
     const f = (format || '').toLowerCase();
@@ -1347,157 +974,6 @@ export default function App() {
       </CardNameTooltip>
     );
   };
-
-  // Sortable column header: click to toggle asc/desc (no-op when sortKey empty).
-  const renderDeckColHeader = (label: string, sortKey: string) => {
-    const active = sortKey ? deckCardSort === sortKey : false;
-    return (
-      <button
-        onClick={() => sortKey && toggleDeckSort(sortKey)}
-        className="flex items-center gap-1 hover:opacity-100 transition-opacity uppercase text-xs font-semibold"
-        style={{ color: active ? (palette?.accent || '#38BDF8') : palette?.subtext }}
-        title={sortKey ? `Sort by ${label}` : undefined}
-      >
-        {label}
-        {sortKey && (
-          <span className="text-[9px] font-mono opacity-70">
-            {active ? (deckCardSortDir === 'asc' ? '▲' : '▼') : '↕'}
-          </span>
-        )}
-      </button>
-    );
-  };
-
-  // Short result reason shown under the victory/defeat icon in the drawer header:
-  // "Opponent Concede" / "Player Concede" / "Player Lost" / "Opponent Lost".
-  const matchReason = (m: MatchRecord): string => {
-    const reason = m.result_reason || '';
-    if (reason.includes('Concede')) {
-      return m.result === 'win' ? 'Opponent Concede' : 'Player Concede';
-    }
-    if (reason.includes('Timeout')) {
-      return m.result === 'win' ? 'Opponent Timeout' : 'Player Timeout';
-    }
-    return m.result === 'win' ? 'Opponent Lost' : 'Player Lost';
-  };
-
-  // Live HUD deck colors: show "-" until colors are known (rather than a colorless
-  // pip, which implies a genuinely colorless deck). Left-aligned and larger size (18px).
-  const renderLiveDeckColors = (colors?: string[]) => {
-    if (!colors || colors.length === 0) {
-      return <span className="text-xs font-mono opacity-50 block text-left">-</span>;
-    }
-    return renderDeckColorIdentity(colors, 18, 'justify-start');
-  };
-
-  // Helper: Card type classification with Keyrune/mana-font icons and specific palette colors
-  const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; border: string }> = {
-    Creature: { icon: 'ms-creature', color: '#34D399', bg: 'rgba(52, 211, 153, 0.1)', border: 'rgba(52, 211, 153, 0.3)' }, // Green
-    Instant: { icon: 'ms-instant', color: '#F87171', bg: 'rgba(248, 113, 113, 0.1)', border: 'rgba(248, 113, 113, 0.3)' }, // Red
-    Sorcery: { icon: 'ms-sorcery', color: '#FBBF24', bg: 'rgba(251, 191, 36, 0.1)', border: 'rgba(251, 191, 36, 0.3)' }, // Yellow
-    Artifact: { icon: 'ms-artifact', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)', border: 'rgba(148, 163, 184, 0.3)' }, // Cool blue-grey
-    Enchantment: { icon: 'ms-enchantment', color: '#C084FC', bg: 'rgba(192, 132, 252, 0.1)', border: 'rgba(192, 132, 252, 0.3)' }, // Purple
-    Planeswalker: { icon: 'ms-planeswalker', color: '#FB923C', bg: 'rgba(251, 146, 60, 0.1)', border: 'rgba(251, 146, 60, 0.3)' }, // Orange/Rose
-    Battle: { icon: 'ms-battle', color: '#F43F5E', bg: 'rgba(244, 63, 94, 0.1)', border: 'rgba(244, 63, 94, 0.3)' }, // Rose
-    Land: { icon: 'ms-land', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)', border: 'rgba(217, 119, 6, 0.3)' }, // Light brown/amber
-    Token: { icon: 'ms-token', color: '#A1A1AA', bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.3)' },
-    Other: { icon: 'ms-multicolor', color: '#E2E8F0', bg: 'rgba(226, 232, 240, 0.1)', border: 'rgba(226, 232, 240, 0.3)' },
-  };
-
-  const getCardTypeBadge = (rawType?: string) => {
-    if (!rawType) return null;
-    const lower = rawType.toLowerCase();
-    let category = 'Other';
-    if (lower.includes('token')) category = 'Token';
-    else {
-      for (const kw of ['planeswalker', 'battle', 'creature', 'land', 'enchantment', 'artifact', 'instant', 'sorcery']) {
-        if (lower.includes(kw)) {
-          category = kw[0].toUpperCase() + kw.slice(1);
-          break;
-        }
-      }
-    }
-    const conf = CARD_TYPE_CONFIG[category] || CARD_TYPE_CONFIG.Other;
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0"
-        style={{ color: conf.color, backgroundColor: conf.bg, borderColor: conf.border }}
-        title={rawType}
-      >
-        <span className={`ms ${conf.icon} text-[12px] leading-none`} style={{ color: conf.color }} />
-        <span>{category}</span>
-      </span>
-    );
-  };
-
-  // Render a single live action-feed row, handling life-change entries, damage entries,
-  // and card play/draw entries with their badges.
-  const renderFeedItem = (e: { type: string; name?: string; card_type?: string; delta?: number; amount?: number; target_name?: string; damage_type?: string }, idx: number) => {
-    if (e.type === 'life') {
-      const positive = (e.delta ?? 0) >= 0;
-      return (
-        <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
-          <span className={`px-1 rounded text-[10px] font-bold uppercase ${positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-            LIFE {positive ? `+${e.delta}` : e.delta}
-          </span>
-          <span className={`truncate ${positive ? 'text-emerald-300' : 'text-rose-300'}`}>{e.name}</span>
-        </div>
-      );
-    }
-    if (e.type === 'damage') {
-      return (
-        <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
-          <span className="px-1 rounded text-[10px] font-bold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
-            {e.amount} DMG
-          </span>
-          <span className="truncate font-semibold opacity-95" style={{ color: palette?.text }}>
-            {e.name}
-          </span>
-          {getCardTypeBadge(e.card_type)}
-          <span className="opacity-40 text-[10px] shrink-0">→</span>
-          <span className="truncate text-amber-300/90 text-[11px]">
-            {e.target_name}
-          </span>
-        </div>
-      );
-    }
-    let badgeText = 'PLAY';
-    let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-    if (e.type === 'mulligan') {
-      badgeText = 'MULLIGAN';
-      badgeStyle = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
-    } else if (e.type === 'bottom') {
-      badgeText = 'BOTTOM';
-      badgeStyle = 'bg-orange-500/15 text-orange-400 border-orange-500/30';
-    } else if (e.type === 'draw') {
-      badgeText = 'DRAW';
-      badgeStyle = 'bg-purple-500/10 text-purple-400 border-purple-500/30';
-    } else if (e.type === 'token') {
-      badgeText = 'TOKEN';
-      badgeStyle = 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
-    } else if (e.type === 'dies') {
-      badgeText = 'DIES';
-      badgeStyle = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
-    } else if (e.type === 'exile') {
-      badgeText = 'EXILE';
-      badgeStyle = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
-    }
-
-    return (
-      <div key={idx} className="text-xs font-mono flex items-center gap-1.5 py-0.5 border-b border-white/5">
-        <span className={`px-1 rounded text-[10px] font-bold uppercase border shrink-0 ${badgeStyle}`}>
-          {badgeText}
-        </span>
-        <span className="truncate opacity-90">{e.name}</span>
-        {getCardTypeBadge(e.card_type)}
-      </div>
-    );
-  };
-
-  // Container Width Responsive Breakpoints:
-  const showColorsCol = workspaceWidth >= 750;
-  const isShortDate = workspaceWidth < 600;
-  const showCurveCol = workspaceWidth >= 520;
 
   return (
     <div 
