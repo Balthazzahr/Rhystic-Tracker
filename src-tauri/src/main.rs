@@ -3291,6 +3291,8 @@ async fn clear_preferred_print(
     db_manager.clear_preferred_print(&card_name).await.map_err(|e| e.to_string())
 }
 
+const EMBEDDED_AVATAR_EXTRACTOR_SCRIPT: &str = include_str!("../scripts/extract_mtga_avatars.py");
+
 #[tauri::command]
 async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<AvatarExtractResult, String> {
     let out_dir = avatar_cache_dir(&app)?;
@@ -3301,25 +3303,44 @@ async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<Avata
         .and_then(|f| f.parent().map(|p| p.to_path_buf()));
     let raw_arg = raw_dir.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
 
-    // Try locating extractor script
-    let mut script_candidates = vec![
-        PathBuf::from("/home/davepople/Projects/Rhystic Tracker/src-tauri/scripts/extract_mtga_avatars.py"),
-        std::env::current_exe().unwrap_or_default().parent().unwrap_or(std::path::Path::new("")).join("scripts/extract_mtga_avatars.py"),
-    ];
+    let settings = crate::settings::load_settings();
+    let log_path = settings.mtga_log_path
+        .map(PathBuf::from)
+        .or_else(|| crate::tailer::discover_log_path());
+    let log_arg = log_path.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+
+    // Try locating extractor script on disk first
+    let mut script_candidates = Vec::new();
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            script_candidates.push(parent.join("scripts/extract_mtga_avatars.py"));
+            script_candidates.push(parent.join("../scripts/extract_mtga_avatars.py"));
+        }
+    }
 
     if let Ok(res_dir) = app.path().resource_dir() {
         script_candidates.push(res_dir.join("scripts/extract_mtga_avatars.py"));
     }
 
-    let script_path = script_candidates.into_iter().find(|p| p.exists());
-    if script_path.is_none() {
-        return Ok(AvatarExtractResult {
-            success: false,
-            count: 0,
-            message: "Avatar extractor script ('extract_mtga_avatars.py') could not be found.".to_string(),
-        });
+    // Also check standard app config directory
+    if let Ok(cfg_dir) = app.path().app_config_dir() {
+        script_candidates.push(cfg_dir.join("scripts/extract_mtga_avatars.py"));
     }
-    let script = script_path.unwrap();
+
+    let script = if let Some(found) = script_candidates.into_iter().find(|p| p.exists()) {
+        found
+    } else {
+        // Materialize the embedded script to app config dir or temp dir
+        let target_script_dir = match app.path().app_config_dir() {
+            Ok(cfg_dir) => cfg_dir.join("scripts"),
+            Err(_) => std::env::temp_dir().join("rhystic-tracker-scripts"),
+        };
+        let _ = std::fs::create_dir_all(&target_script_dir);
+        let embedded_path = target_script_dir.join("extract_mtga_avatars.py");
+        std::fs::write(&embedded_path, EMBEDDED_AVATAR_EXTRACTOR_SCRIPT)
+            .map_err(|e| format!("Failed to materialize embedded avatar extractor script: {}", e))?;
+        embedded_path
+    };
 
     let py_bins = ["/tmp/unity_env/bin/python3", "python3", "python"];
     let mut script_ran = false;
@@ -3330,6 +3351,7 @@ async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<Avata
             .arg(&script)
             .arg(&raw_arg)
             .arg(&out_dir)
+            .arg(&log_arg)
             .output();
 
         match output {
@@ -3341,7 +3363,8 @@ async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<Avata
                 } else {
                     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
                     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-                    last_error = format!("{} {}", stdout.trim(), stderr.trim());
+                    let combined = format!("{} {}", stdout.trim(), stderr.trim());
+                    last_error = combined.trim().to_string();
                 }
             }
             Err(e) => {

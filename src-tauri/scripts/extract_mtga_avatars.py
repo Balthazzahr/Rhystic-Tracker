@@ -18,7 +18,7 @@ def tight_alpha_crop(img, alpha_threshold=25):
         return img.crop(bbox)
     return img
 
-def extract_avatars(raw_dir=None, out_dir=None):
+def extract_avatars(raw_dir=None, out_dir=None, log_path=None):
     if not out_dir:
         out_dir = os.path.expanduser("~/.config/rhystic-tracker/avatars")
     os.makedirs(out_dir, exist_ok=True)
@@ -35,36 +35,100 @@ def extract_avatars(raw_dir=None, out_dir=None):
             if os.path.exists(cand):
                 downloads_dir = cand
 
+    # Derive from log_path if provided
+    if (not downloads_dir or not os.path.exists(downloads_dir)) and log_path and os.path.exists(log_path):
+        log_dir = os.path.dirname(os.path.abspath(log_path))
+        # Walk up from Player.log looking for MTGA_Data/Downloads or drive_c
+        curr = log_dir
+        for _ in range(8):
+            if not curr or curr == "/":
+                break
+            cand_dl = os.path.join(curr, "MTGA_Data", "Downloads")
+            if os.path.exists(cand_dl):
+                downloads_dir = cand_dl
+                break
+            # If we reach drive_c, inspect standard Program Files folders
+            if os.path.basename(curr) == "drive_c":
+                for sub in [
+                    "Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads",
+                    "Program Files (x86)/Wizards of the Coast/MTGA/MTGA_Data/Downloads",
+                    "Program Files/MTGA/MTGA_Data/Downloads",
+                    "Program Files (x86)/MTGA/MTGA_Data/Downloads",
+                    "MTGA/MTGA_Data/Downloads",
+                    "Games/MTGA/MTGA_Data/Downloads",
+                ]:
+                    c = os.path.join(curr, sub)
+                    if os.path.exists(c):
+                        downloads_dir = c
+                        break
+                if downloads_dir:
+                    break
+            # If in steamapps/compatdata/<appid>/pfx, also look for steamapps/common/MTGA
+            if "steamapps" in curr:
+                parts = curr.split("steamapps")
+                steam_common = os.path.join(parts[0], "steamapps", "common", "MTGA", "MTGA_Data", "Downloads")
+                if os.path.exists(steam_common):
+                    downloads_dir = steam_common
+                    break
+            curr = os.path.dirname(curr)
+
     if not downloads_dir or not os.path.exists(downloads_dir):
+        home = os.path.expanduser("~")
         candidates = [
-            os.path.expanduser("~/.steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
-            os.path.expanduser("~/.steam/root/steamapps/common/MTGA/MTGA_Data/Downloads"),
-            os.path.expanduser("~/Games/magic-the-gathering-arena/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
-            os.path.expanduser("~/.wine/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
-            os.path.expanduser("~/.var/app/com.valvesoftware.Steam/.steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".steam/root/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".local/share/Steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".var/app/com.valvesoftware.Steam/.steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, "Games/magic-the-gathering-arena/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, "Games/mtga/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, "Games/Magic-The-Gathering-Arena/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".local/share/lutris/runners/wine/mtga/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".wine/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            os.path.join(home, ".wine/drive_c/Program Files (x86)/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
         ]
+
+        # Scan Steam compatdata prefixes for non-standard AppIDs (e.g. 2141910, 2308410)
+        steam_roots = [
+            os.path.join(home, ".local/share/Steam"),
+            os.path.join(home, ".steam/steam"),
+            os.path.join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam"),
+        ]
+        for s_root in steam_roots:
+            compat_dir = os.path.join(s_root, "steamapps", "compatdata")
+            if os.path.isdir(compat_dir):
+                for app_id in os.listdir(compat_dir):
+                    candidates.append(os.path.join(compat_dir, app_id, "pfx/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"))
+                    candidates.append(os.path.join(compat_dir, app_id, "pfx/drive_c/Program Files (x86)/Wizards of the Coast/MTGA/MTGA_Data/Downloads"))
+
+        # Scan Bottles
+        bottles_dir = os.path.join(home, ".var/app/com.usebottles.bottles/data/bottles/bottles")
+        if os.path.isdir(bottles_dir):
+            for b in os.listdir(bottles_dir):
+                candidates.append(os.path.join(bottles_dir, b, "drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"))
+
         for c in candidates:
             if os.path.exists(c):
                 downloads_dir = c
                 break
 
     if not downloads_dir:
-        print("Error: Could not locate MTGA Downloads directory", file=sys.stderr)
+        print("Error: Could not locate MTGA Downloads directory. Please set MTGA Raw / Log path in Settings.", file=sys.stderr)
         return 0
 
     try:
         import UnityPy
         from PIL import Image
         UnityPy.config.FALLBACK_UNITY_VERSION = "2022.3.22f1"
-    except ImportError:
-        print("Warning: UnityPy or PIL not installed", file=sys.stderr)
-        return 0
+    except ImportError as e:
+        print(f"Error: Missing Python dependencies ({e}). Please install them via: pip install UnityPy Pillow", file=sys.stderr)
+        sys.exit(2)
 
     alt_files = glob.glob(os.path.join(downloads_dir, "ALT", "ALT_Avatar_*.mtga"))
     bundle_dir = os.path.join(downloads_dir, "AssetBundle")
 
     if not alt_files or not os.path.exists(bundle_dir):
-        print("Error: Missing ALT or AssetBundle directory", file=sys.stderr)
+        print(f"Error: Missing ALT or AssetBundle directory under {downloads_dir}", file=sys.stderr)
         return 0
 
     # 1. Parse ALT for NodeId -> RelativePath and AvatarID -> RelativePath
@@ -124,6 +188,7 @@ def extract_avatars(raw_dir=None, out_dir=None):
     return total_saved
 
 if __name__ == "__main__":
-    raw_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    out_arg = sys.argv[2] if len(sys.argv) > 2 else None
-    extract_avatars(raw_arg, out_arg)
+    raw_arg = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+    out_arg = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+    log_arg = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+    extract_avatars(raw_arg, out_arg, log_arg)

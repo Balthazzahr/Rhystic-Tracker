@@ -103,6 +103,20 @@ echo "  -> Installing binary to $INSTALL_DIR/$EXEC_NAME"
 cp -f "$BIN_SOURCE" "$INSTALL_DIR/$EXEC_NAME"
 chmod +x "$INSTALL_DIR/$EXEC_NAME"
 
+# Install helper scripts (e.g. avatar extractor) if present
+SCRIPT_SOURCE=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/src-tauri/scripts/extract_mtga_avatars.py" ]; then
+    SCRIPT_SOURCE="$SCRIPT_DIR/src-tauri/scripts/extract_mtga_avatars.py"
+elif [ -n "$TEMP_DIR" ] && [ -f "$TEMP_DIR/scripts/extract_mtga_avatars.py" ]; then
+    SCRIPT_SOURCE="$TEMP_DIR/scripts/extract_mtga_avatars.py"
+fi
+
+if [ -n "$SCRIPT_SOURCE" ]; then
+    mkdir -p "$HOME/.config/rhystic-tracker/scripts"
+    cp -f "$SCRIPT_SOURCE" "$HOME/.config/rhystic-tracker/scripts/extract_mtga_avatars.py"
+    chmod +x "$HOME/.config/rhystic-tracker/scripts/extract_mtga_avatars.py"
+fi
+
 # 3. Install App Icon
 ICON_SOURCE=""
 CANDIDATE_DIRS=()

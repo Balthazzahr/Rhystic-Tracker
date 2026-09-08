@@ -2,6 +2,15 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.4.4] - 2026-09-09
+
+### 👤 Avatar Extraction Pipeline Resiliency & Portability (Issue #13)
+- **Embedded Python Extraction Script**: Embedded `extract_mtga_avatars.py` directly into the Rust binary via `include_str!`. Standalone releases, AppImages, and installer scripts automatically materialize the script to `~/.config/rhystic-tracker/scripts/` on demand, eliminating "script could not be found" errors.
+- **Removed Machine-Specific Hardcoded Paths**: Eliminated developer machine absolute paths in favor of portable filesystem discovery.
+- **Custom Steam App IDs & Lutris Prefix Discovery**: Enhanced path discovery to scan arbitrary Steam compatdata App IDs (e.g., `2141910` and `2308410`), Lutris wine runners, and Bottles. Anchored extraction directly to active `Player.log` prefix trees.
+- **Clear Python Dependency Diagnostics**: Added explicit error reporting when `UnityPy` or `Pillow` are missing from the user's Python environment with instructions on how to install them (`pip install UnityPy Pillow`).
+- **Release Packaging Integration**: Included `scripts/extract_mtga_avatars.py` in release tarballs and updated `install.sh` to install helper scripts automatically.
+
 ## [1.4.3] - 2026-09-09
 
 ### 🏆 Achievements Architecture & 6-Tier Progression

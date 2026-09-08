@@ -43,9 +43,10 @@ jobs:
 
       - name: Package Linux Artifact
         run: |
-          mkdir -p dist-release
+          mkdir -p dist-release/scripts
           cp src-tauri/target/release/rhystic-tracker dist-release/rhystic-tracker
-          tar -czvf rhystic-tracker-linux-x86_64.tar.gz -C dist-release rhystic-tracker
+          cp src-tauri/scripts/extract_mtga_avatars.py dist-release/scripts/extract_mtga_avatars.py
+          tar -czvf rhystic-tracker-linux-x86_64.tar.gz -C dist-release rhystic-tracker scripts
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v5
