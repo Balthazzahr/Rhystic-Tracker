@@ -243,7 +243,7 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
             boxShadow: 'inset 0 8px 16px rgba(0, 0, 0, 0.98)',
           }}
         >
-          {/* 3 Revealed Cards with Full Borders and Text (version="normal") */}
+          {/* 3 Revealed Cards with Full Borders and Text (version="small" for memory footprint & crisp thumbnail rendering) */}
           {isHovered && (
             <div className="absolute inset-x-2 top-2 bottom-0 flex items-start justify-between gap-1.5 animate-fadeIn">
               {peekCards.map((c, i) => (
@@ -256,7 +256,7 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
                 >
                   <CardImage
                     name={c.name}
-                    version="normal"
+                    version="small"
                     alt={c.name}
                     className="w-full h-full object-cover object-top"
                   />
