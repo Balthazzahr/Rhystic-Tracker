@@ -2,6 +2,18 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.4.5] - 2026-09-09
+
+### ⚙️ Settings View Modular Deconstruction & Refactoring (Priority 6)
+- **Modular Tab Components**: Decomposed monolithic `SettingsView.tsx` (-1,009 lines / -44.2% code reduction) into isolated, focused tab components in `src/components/settings/`:
+  - `GeneralTab.tsx`: Application behavior, automated match archives, and navigation.
+  - `AppearanceTab.tsx`: 5-color mana themes, glass opacity, mana pip styling, compact card previews, deck box visual flair, and dynamic ambient background artwork.
+  - `ConnectionTab.tsx`: Active `Player.log` tailer path configuration, Best-of-Three sideboard segregation, and known platform install locations.
+  - `StorageTab.tsx`: SQLite database management and backups, card image cache quota controls, avatar cache management, MTGA card universe sync, and Scryfall set metadata catalog.
+  - `AboutTab.tsx`: App metadata, engine and framework specifications, WotC Fan Content policy disclosures, and Scryfall attribution.
+- **Single Source of Truth Constants**: Consolidated shared mana palette definitions (`MTG_COLORS`), background windows registry (`BG_WINDOWS`), and utilities (`formatBytes`) into dedicated shared settings types.
+- **Dead Import & Icon Purge**: Purged 28 unused Lucide icons and obsolete imports from the settings view.
+
 ## [1.4.4] - 2026-09-09
 
 ### 👤 Avatar Extraction Pipeline Resiliency & Portability (Issue #13)
