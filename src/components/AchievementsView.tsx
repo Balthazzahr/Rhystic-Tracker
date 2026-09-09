@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { X, Sparkles, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, GripVertical, RotateCcw, Check, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { X, Sparkles, LayoutGrid, Table2, ChevronLeft, ChevronRight, Home, Columns3, Eye, EyeOff } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { AchievementDetailModal } from './AchievementDetailModal';
 import { DeckAchievementBadge } from './DeckAchievementBadge';
@@ -9,6 +8,8 @@ import { DeckAchievementDetailModal } from './DeckAchievementDetailModal';
 import { getAchievementMeta, ACHIEVEMENTS_REGISTRY, getDeckAchievementMeta, DECK_ACHIEVEMENTS_REGISTRY, AchievementTier } from '../utils/achievementBadges';
 import CardImage from './CardImage';
 import { PaginationFooter, GlassSearchInput } from './common';
+import { useColumnManager } from '../hooks/useColumnManager';
+import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 
 interface AchievementsViewProps {
   palette: any;
@@ -41,17 +42,6 @@ const DEFAULT_ACH_COLUMNS: AchievementColumnDef[] = [
 ];
 
 const ACH_COLUMNS_STORAGE_KEY = 'rhystic_achievements_columns';
-
-function getContrastTextColor(hexColor?: string): string {
-  if (!hexColor) return '#FFFFFF';
-  const cleanHex = hexColor.replace('#', '');
-  if (cleanHex.length < 6) return '#FFFFFF';
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 160 ? '#09090B' : '#FFFFFF';
-}
 
 
 export const AchievementsView: React.FC<AchievementsViewProps> = ({
@@ -292,79 +282,18 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
   useEffect(() => { localStorage.setItem('rhystic_achievements_view', achView); }, [achView]);
 
   // --- Column Configuration State (persisted) ---
-  const [columns, setColumns] = useState<AchievementColumnDef[]>(() => {
-    try {
-      const raw = localStorage.getItem(ACH_COLUMNS_STORAGE_KEY);
-      if (!raw) return DEFAULT_ACH_COLUMNS;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ACH_COLUMNS;
-      const seenKeys = new Set<string>();
-      const result: AchievementColumnDef[] = [];
-      for (const saved of parsed) {
-        const def = DEFAULT_ACH_COLUMNS.find((d) => d.key === saved.key);
-        if (def) {
-          seenKeys.add(def.key);
-          result.push({ ...def, visible: typeof saved.visible === 'boolean' ? saved.visible : def.visible });
-        }
-      }
-      // Include any newly added default columns (like legendary or platinum) that weren't in saved
-      for (const def of DEFAULT_ACH_COLUMNS) {
-        if (!seenKeys.has(def.key)) {
-          result.push({ ...def });
-        }
-      }
-      return result.length > 0 ? result : DEFAULT_ACH_COLUMNS;
-    } catch {
-      return DEFAULT_ACH_COLUMNS;
-    }
+  const {
+    columns,
+    visibleColumns,
+    showColumnModal,
+    setShowColumnModal,
+    toggleColumnVisibility,
+    moveColumn,
+    resetColumns,
+  } = useColumnManager<AchievementColumnDef>({
+    storageKey: ACH_COLUMNS_STORAGE_KEY,
+    defaultColumns: DEFAULT_ACH_COLUMNS,
   });
-  const [showColumnModal, setShowColumnModal] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const saveColumns = (newCols: AchievementColumnDef[]) => {
-    setColumns(newCols);
-    try { localStorage.setItem(ACH_COLUMNS_STORAGE_KEY, JSON.stringify(newCols)); } catch { /* ignore */ }
-  };
-  const resetColumns = () => saveColumns(DEFAULT_ACH_COLUMNS);
-  const toggleColumnVisibility = (key: string) => {
-    saveColumns(columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)));
-  };
-  const moveColumn = (fromIdx: number, toIdx: number) => {
-    if (toIdx < 0 || toIdx >= columns.length || fromIdx === toIdx) return;
-    const updated = [...columns];
-    const [moved] = updated.splice(fromIdx, 1);
-    updated.splice(toIdx, 0, moved);
-    saveColumns(updated);
-  };
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
-  };
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverIndex !== index) setDragOverIndex(index);
-  };
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    const sourceIdx = draggedIndex !== null ? draggedIndex : parseInt(e.dataTransfer.getData('text/plain'), 10);
-    if (!isNaN(sourceIdx) && sourceIdx !== targetIndex) moveColumn(sourceIdx, targetIndex);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-  const handleDragEnd = () => { setDraggedIndex(null); setDragOverIndex(null); };
-
-  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
-
-  // Escape closes column modal
-  useEffect(() => {
-    if (!showColumnModal) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowColumnModal(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showColumnModal]);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -861,144 +790,17 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
       )}
 
       {/* COLUMN CUSTOMIZER MODAL */}
-      {showColumnModal && createPortal(
-        <div
-          onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none animate-fade-in"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
-          >
-            {/* Modal Header */}
-            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Columns3 className="w-5 h-5" style={{ color: accentColor }} />
-                  <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
-                    CUSTOMIZE ACHIEVEMENT COLUMNS
-                  </h2>
-                </div>
-                <p className="text-xs text-neutral-400 mt-1 font-sans">
-                  Toggle column visibility and drag or click arrows to reorder table columns.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-                title="Close (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Scrollable Column List */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
-              {columns.map((col, idx) => {
-                const isDragging = draggedIndex === idx;
-                const isTarget = dragOverIndex === idx && draggedIndex !== null && draggedIndex !== idx;
-                return (
-                  <div
-                    key={col.key}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    onDrop={(e) => handleDrop(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    className={`flex items-center justify-between p-3 border transition-all cursor-move select-none ${
-                      isDragging
-                        ? 'opacity-30 border-dashed border-white/40 scale-[0.98]'
-                        : isTarget
-                        ? 'border-2 scale-[1.02] shadow-xl ring-1'
-                        : col.visible
-                        ? 'bg-white/[0.04] border-white/15 hover:border-white/30'
-                        : 'bg-white/[0.01] border-white/5 opacity-50'
-                    }`}
-                    style={{
-                      borderColor: isTarget ? accentColor : undefined,
-                      backgroundColor: isTarget ? `${accentColor}18` : undefined,
-                      boxShadow: isTarget ? `0 0 15px ${accentColor}44` : undefined,
-                    }}
-                  >
-                    {/* Left: Grip Handle + Checkbox + Column Info */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <GripVertical
-                        className={`w-4 h-4 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
-                          isTarget ? 'text-white' : 'text-neutral-500'
-                        }`}
-                      />
-                      <button
-                        onClick={() => toggleColumnVisibility(col.key)}
-                        className={`w-4 h-4 flex items-center justify-center border text-xs cursor-pointer transition-colors ${
-                          col.visible
-                            ? 'border-white/40 text-white shadow-sm'
-                            : 'border-white/20 text-transparent'
-                        }`}
-                        style={{
-                          backgroundColor: col.visible ? accentColor : 'transparent',
-                          borderColor: col.visible ? accentColor : undefined,
-                        }}
-                      >
-                        {col.visible && <Check className="w-3 h-3 stroke-[3]" />}
-                      </button>
-                      <div className="min-w-0">
-                        <span className="text-xs font-bold font-display uppercase tracking-wider text-white">
-                          {col.label}
-                        </span>
-                        <p className="text-[11px] font-sans text-neutral-400 truncate">
-                          {col.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Right: Reorder Up/Down buttons */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        disabled={idx === 0}
-                        onClick={() => moveColumn(idx, idx - 1)}
-                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Move column left / up"
-                      >
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        disabled={idx === columns.length - 1}
-                        onClick={() => moveColumn(idx, idx + 1)}
-                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Move column right / down"
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <button
-                onClick={resetColumns}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Default</span>
-              </button>
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="px-6 py-2 text-xs font-sans font-bold tracking-wider uppercase shadow-md transition-colors cursor-pointer"
-                style={{
-                  backgroundColor: accentColor,
-                  color: getContrastTextColor(accentColor),
-                }}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <ColumnCustomizerModal
+        isOpen={showColumnModal}
+        onClose={() => setShowColumnModal(false)}
+        title="CUSTOMIZE ACHIEVEMENT COLUMNS"
+        subtitle="Toggle column visibility and drag or click arrows to reorder table columns."
+        columns={columns}
+        accentColor={accentColor}
+        onToggleVisibility={toggleColumnVisibility}
+        onMoveColumn={moveColumn}
+        onResetColumns={resetColumns}
+      />
     </div>
   );
 };
