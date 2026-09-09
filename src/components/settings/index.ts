@@ -3,3 +3,4 @@ export * from './GeneralTab';
 export * from './AppearanceTab';
 export * from './ConnectionTab';
 export * from './StorageTab';
+export * from './AboutTab';
