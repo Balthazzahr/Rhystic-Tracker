@@ -187,8 +187,8 @@ export const LeaderboardsView: React.FC<LeaderboardsViewProps> = ({ palette, onS
         ) : (
           sections.map((sec) => (
             <div key={sec.domainId} className="space-y-0">
-              {/* 3 Columns Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* 3 Columns Grid with Responsive Cascading (1 col on small/medium, 2 cols on desktop/lg, 3 cols on xl+) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {sec.categories.map((cat) => (
                   <LeaderboardPodiumCard
                     key={cat.id}

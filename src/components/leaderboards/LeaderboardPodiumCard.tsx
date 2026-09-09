@@ -124,7 +124,7 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
                           : 'text-neutral-300'
                       }`}
                     >
-                      {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
+                      {item.value}
                     </span>
                   </div>
                 </div>
@@ -202,7 +202,7 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
                             : 'text-neutral-300'
                         }`}
                       >
-                        {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
+                        {item.value}
                       </span>
                     </div>
                   </div>
@@ -255,7 +255,7 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
                             {diffStr} to #3
                           </span>
                           <span className="text-xs font-mono font-bold text-neutral-300 tabular-nums">
-                            {item.value} <span className="text-[9.5px] font-normal opacity-70">{item.unit}</span>
+                            {item.value}
                           </span>
                         </div>
                       </div>
