@@ -1,45 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
-  FolderOpen, 
-  Palette, 
   Database, 
-  ShieldCheck, 
-  Check, 
   Search, 
-  RefreshCw, 
   Sliders, 
-  Download, 
-  Trash2, 
-  HardDrive, 
-  Compass, 
-  Radio, 
   Image as ImageIcon,
-  ExternalLink,
-  Layers,
-  Sparkles,
-  Info,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Terminal,
-  Monitor,
-  Shuffle,
-  ImageOff,
-  Plus,
   X as XIcon,
-  Volume2,
-  VolumeX,
-  Pin,
-  FileSpreadsheet,
   Save,
   Archive,
-  Eye,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { ManaPip } from './ManaPip';
-import { CustomDropdown } from './CustomDropdown';
 import { CardImage } from './CardImage';
 import { APP_VERSION } from '../version';
 import mtgaAvatarCatalog from '../data/mtgaAvatars.json';
@@ -304,14 +274,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [cardDbSyncing, setCardDbSyncing] = useState(false);
   const [cardDbSyncResult, setCardDbSyncResult] = useState<{ success: boolean; count: number; elapsedMs: number; error?: string } | null>(null);
   const [showResetWizardModal, setShowResetWizardModal] = useState(false);
-
-  const formatBytes = (bytes: number) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
 
   useEffect(() => {
     let cancelled = false;
