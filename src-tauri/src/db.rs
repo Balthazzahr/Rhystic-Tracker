@@ -91,9 +91,13 @@ CREATE TABLE IF NOT EXISTS match_impactful_cards (
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_match_id ON match_impactful_cards(match_id);
+CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_hero ON match_impactful_cards(seat_id, grp_id);
 CREATE INDEX IF NOT EXISTS idx_match_turn_events_match_id ON match_turn_events(match_id);
+CREATE INDEX IF NOT EXISTS idx_match_turn_events_seat_type ON match_turn_events(seat_id, event_type, grp_id);
 CREATE INDEX IF NOT EXISTS idx_match_cards_match_id ON match_cards(match_id);
 CREATE INDEX IF NOT EXISTS idx_matches_timestamp ON matches(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_matches_hero_deck_name ON matches(hero_deck_name);
+CREATE INDEX IF NOT EXISTS idx_matches_opponent_name ON matches(opponent_name);
 CREATE TABLE IF NOT EXISTS deck_lists (
     deck_name TEXT PRIMARY KEY,
     cards_json TEXT NOT NULL,
@@ -903,6 +907,12 @@ impl DatabaseManager {
                 }
             }
         }
+
+        // Migration: Ensure query performance indexes exist on existing databases
+        let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_matches_hero_deck_name ON matches(hero_deck_name)").execute(&pool).await;
+        let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_matches_opponent_name ON matches(opponent_name)").execute(&pool).await;
+        let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_hero ON match_impactful_cards(seat_id, grp_id)").execute(&pool).await;
+        let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_turn_events_seat_type ON match_turn_events(seat_id, event_type, grp_id)").execute(&pool).await;
 
         // Backfill draw records from logs additively for any historical matches missing draw stats
         Self::backfill_draw_records_from_logs(&pool).await;
