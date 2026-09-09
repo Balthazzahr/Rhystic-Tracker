@@ -23,7 +23,7 @@ export const WinRateSummaryWidget: React.FC<WidgetProps> = ({
       <div className="flex-1 flex flex-col justify-between">
         <div>
           <div
-            className="text-[40px] font-display font-bold tracking-wide leading-none my-1 tabular-nums"
+            className="text-[40px] font-mono font-bold tracking-wide leading-none my-1 tabular-nums"
             style={{ color: outcomeColor }}
           >
             {stats.allWinRate.toFixed(1)}%

@@ -166,7 +166,7 @@ export const DeckSpotlightWidget: React.FC<WidgetProps> = ({
                 Win Rate
               </div>
               <div
-                className="text-2xl sm:text-3xl font-display font-bold tabular-nums tracking-wide leading-none my-0.5"
+                className="text-2xl sm:text-3xl font-mono font-bold tabular-nums tracking-wide leading-none my-0.5"
                 style={{ color: winRateColor }}
               >
                 {String(spotlight.winrate || "").replace(/%/g, "")}%

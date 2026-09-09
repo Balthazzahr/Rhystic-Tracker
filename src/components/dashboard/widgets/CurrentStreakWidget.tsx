@@ -106,7 +106,7 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = ({
         {/* Above the dots: Streak number + short label */}
         <div>
           <div
-            className="text-2xl sm:text-3xl font-display font-bold tracking-wide leading-none capitalize truncate"
+            className="text-2xl sm:text-3xl font-mono font-bold tracking-wide leading-none capitalize truncate"
             style={{ color: streakColor }}
           >
             {streakHeadline}

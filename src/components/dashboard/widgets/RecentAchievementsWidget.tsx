@@ -80,7 +80,7 @@ export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
                 />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="font-display font-bold text-xs uppercase tracking-wide text-neutral-100 group-hover:text-white truncate">
+                <span className="font-sans font-semibold text-xs uppercase tracking-wide text-neutral-100 group-hover:text-white truncate">
                   {item.achievement}
                 </span>
                 {item.cardName && (

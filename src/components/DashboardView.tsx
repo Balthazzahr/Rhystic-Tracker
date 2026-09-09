@@ -1013,7 +1013,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="text-[11px] font-sans font-medium tracking-[0.18em] uppercase text-neutral-400 opacity-70">
                 ALL-TIME WIN RATE
               </div>
-              <div className="text-[64px] font-display font-bold text-white tracking-tight leading-none my-1 tabular-nums">
+              <div className="text-[64px] font-mono font-bold text-white tracking-tight leading-none my-1 tabular-nums">
                 {stats.allWinRate.toFixed(1)}%
               </div>
               <div className="text-xs font-sans text-neutral-400 opacity-70 font-normal">
@@ -1028,7 +1028,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="text-[11px] font-sans font-medium tracking-[0.18em] uppercase text-neutral-400 opacity-70">
                 TODAY
               </div>
-              <div className="text-[64px] font-display font-bold text-white tracking-tight leading-none my-1 tabular-nums">
+              <div className="text-[64px] font-mono font-bold text-white tracking-tight leading-none my-1 tabular-nums">
                 {stats.todayWinRate.toFixed(1)}%
               </div>
               <div className="text-xs font-sans text-neutral-400 opacity-70 font-normal tabular-nums flex items-center justify-end gap-1.5">
@@ -1064,7 +1064,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* 2. TRENDING WIN RATE (No line under heading, expanded filters, subtle legends/axes) */}
           <div className="flex flex-col shrink-0">
             <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
-              <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+              <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                 TRENDING WIN RATE
               </h2>
               <div className="flex items-center gap-3">
@@ -1256,7 +1256,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* 3. RECENT MATCHES (Fight Matchup X vs Y, Impactful Card Mini Portraits, Aligned Outcome) */}
           <div className="shrink-0 flex flex-col">
             <div className="pb-1.5 border-b border-white/10">
-              <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+              <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                 RECENT MATCHES
               </h2>
             </div>
@@ -1375,7 +1375,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {formatBreakdown.length > 0 && (
             <div className="flex flex-col pt-4 pb-2 border-t border-white/10 shrink-0 space-y-2">
               <div className="flex items-center justify-between">
-                <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+                <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                   FORMAT BREAKDOWN
                 </h2>
               </div>
@@ -1416,7 +1416,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* 1. DECK SPOTLIGHT (Feature Card perfectly matching 2x3 Notable Cards height) */}
           <div className="flex flex-col">
             <div className="pb-1.5 border-b border-white/10">
-              <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+              <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                 DECK SPOTLIGHT
               </h2>
             </div>
@@ -1449,7 +1449,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div>
                       <div
                         onClick={() => onSelectDeck(spotlight.deck_name)}
-                        className="text-[26px] font-display font-bold text-white truncate leading-tight cursor-pointer hover:underline"
+                        className="text-xl sm:text-2xl font-sans font-bold text-white uppercase tracking-wide truncate leading-tight cursor-pointer hover:underline"
                         title={spotlight.deck_name}
                       >
                         {spotlight.deck_name}
@@ -1520,7 +1520,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* 2. FUN FACTS (Expanded Statistics Suite) */}
           <div className="flex flex-col">
             <div className="pb-1.5 border-b border-white/10">
-              <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+              <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                 FUN FACTS
               </h2>
             </div>
@@ -1670,7 +1670,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* 3. RECENT ACHIEVEMENTS (Renamed, Actual Achievement Title, "Achieved on XXXX", Click opens Achievement Previewer) */}
           <div className="flex flex-col">
             <div className="pb-1.5 border-b border-white/10">
-              <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+              <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                 RECENT ACHIEVEMENTS
               </h2>
             </div>
@@ -1741,7 +1741,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {featuredLeaderboard && (
             <div className="flex flex-col">
               <div className="pb-1.5 border-b border-white/10">
-                <h2 className="text-[17px] font-display font-bold tracking-[0.12em] uppercase text-neutral-100">
+                <h2 className="text-xs font-sans font-semibold tracking-wider uppercase text-neutral-300">
                   FEATURED LEADERBOARD
                 </h2>
               </div>
