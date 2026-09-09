@@ -33,7 +33,7 @@ const LEGENDARY_COLORS = [
 export const LegendaryTierTitle: React.FC<{ showIcon?: boolean }> = ({ showIcon = true }) => {
   const text = "LEGENDARY TIER";
   return (
-    <span className="text-xs font-bold font-display uppercase tracking-wider flex items-center gap-1.5 drop-shadow-sm">
+    <span className="text-xs font-bold font-sans uppercase tracking-wider flex items-center gap-1.5 drop-shadow-sm">
       {showIcon && <span className="ms ms-ability-duels-renowned text-xs text-[#f0789b]" />}
       <span className="inline-flex">
         {text.split('').map((char, i) => (
@@ -301,7 +301,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold font-display uppercase tracking-wide text-[#4fbbb4] flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-sans uppercase tracking-wide text-[#4fbbb4] flex items-center gap-1.5">
                       <span className="ms ms-ability-duels-renowned text-xs text-[#4fbbb4]" /> Platinum Tier
                     </span>
                     {isTierAchieved('platinum') && (
@@ -324,7 +324,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold font-display uppercase tracking-wide text-amber-400 flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-sans uppercase tracking-wide text-amber-400 flex items-center gap-1.5">
                       <span className="ms ms-ability-duels-renowned text-xs text-amber-300" /> Gold Tier
                     </span>
                     {isTierAchieved('gold') && (
@@ -347,7 +347,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold font-display uppercase tracking-wide text-slate-200 flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-sans uppercase tracking-wide text-slate-200 flex items-center gap-1.5">
                       <span className="ms ms-ability-duels-renowned text-xs text-slate-300" /> Silver Tier
                     </span>
                     {isTierAchieved('silver') && (
@@ -370,7 +370,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold font-display uppercase tracking-wide text-amber-500 flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-sans uppercase tracking-wide text-amber-500 flex items-center gap-1.5">
                       <span className="ms ms-ability-duels-renowned text-xs text-amber-600" /> Bronze Tier
                     </span>
                     {isTierAchieved('bronze') && (
@@ -393,7 +393,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold font-display uppercase tracking-wide text-zinc-300 flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-sans uppercase tracking-wide text-zinc-300 flex items-center gap-1.5">
                       <span className="ms ms-ability-duels-renowned text-xs text-zinc-400" /> Iron Tier
                     </span>
                     {isTierAchieved('iron') && (

@@ -237,7 +237,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
                           showTooltip={true}
                         />
                         <div className="w-full">
-                          <h4 className="font-display font-bold text-sm uppercase tracking-wide text-white truncate">
+                          <h4 className="font-sans font-bold text-sm uppercase tracking-wide text-white truncate">
                             {meta.title}
                           </h4>
                           <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 border uppercase tracking-wider ${
@@ -293,7 +293,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
                           e.stopPropagation();
                           handleOpenAchievement(group.achievement);
                         }}
-                        className="font-display font-bold uppercase tracking-wide text-sm text-white hover:text-amber-300 hover:underline cursor-pointer transition-colors text-left"
+                        className="font-sans font-bold uppercase tracking-wide text-sm text-white hover:text-amber-300 hover:underline cursor-pointer transition-colors text-left"
                         title="Click to view all cards with this achievement"
                       >
                         {meta.title}

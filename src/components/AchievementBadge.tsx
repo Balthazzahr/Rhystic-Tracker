@@ -178,43 +178,43 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
   const sizeMap = {
     sm: {
       icon: 'w-4 h-[19px]',
-      text: 'text-[11px] font-display font-bold tracking-wider',
+      text: 'text-[11px] font-sans font-bold uppercase tracking-wider',
       count: 'text-[9px] px-1 py-0.1',
       padding: 'px-2 py-0.5',
     },
     md: {
       icon: 'w-5 h-6',
-      text: 'text-xs font-display font-bold tracking-wider',
+      text: 'text-xs font-sans font-bold uppercase tracking-wider',
       count: 'text-[10px] font-mono px-1.5 py-0.2',
       padding: 'px-2.5 py-1',
     },
     lg: {
       icon: 'w-7 h-[34px]',
-      text: 'text-sm font-display font-bold tracking-wider',
+      text: 'text-sm font-sans font-bold uppercase tracking-wider',
       count: 'text-xs font-mono px-2 py-0.5',
       padding: 'px-3.5 py-1.5',
     },
     xl: {
       icon: 'w-12 h-[58px]',
-      text: 'text-base font-display font-bold tracking-wider',
+      text: 'text-base font-sans font-bold uppercase tracking-wider',
       count: 'text-xs font-mono px-2.5 py-1',
       padding: 'px-4 py-2',
     },
     '2xl': {
       icon: 'w-20 h-24',
-      text: 'text-lg font-display font-bold tracking-wider',
+      text: 'text-lg font-sans font-bold uppercase tracking-wider',
       count: 'text-sm font-mono px-3 py-1',
       padding: 'px-5 py-2.5',
     },
     '3xl': {
       icon: 'w-28 h-[136px]',
-      text: 'text-xl font-display font-bold tracking-wider',
+      text: 'text-xl font-sans font-bold uppercase tracking-wider',
       count: 'text-base font-mono px-3.5 py-1',
       padding: 'px-6 py-3',
     },
     hero: {
       icon: 'w-[195px] h-[236px]',
-      text: 'text-2xl font-display font-bold tracking-wider',
+      text: 'text-2xl font-sans font-bold uppercase tracking-wider',
       count: 'text-lg font-mono px-4 py-1.5',
       padding: 'px-8 py-4',
     },
@@ -317,7 +317,7 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
               <div className="w-5 h-6 shrink-0">
                 <AchievementShieldArtBadge tier={activeTier} achievementId={meta.id} artCard={meta.artCard} fallbackTitle={meta.title} />
               </div>
-              <span className="text-xs font-bold font-display uppercase text-white tracking-wide">
+              <span className="text-xs font-bold font-sans uppercase text-white tracking-wide">
                 {meta.title}
               </span>
             </div>
