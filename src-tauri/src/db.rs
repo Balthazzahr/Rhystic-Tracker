@@ -691,6 +691,10 @@ impl DatabaseManager {
                             if name.contains("ranger class") {
                                 titles.retain(|t| !t.starts_with("Swarmer"));
                             }
+                            // Thousand Moons Smithy creates 1 Gnome on ETB/cast, cannot legitimately earn Swarmer in short games
+                            if name.contains("thousand moons smithy") {
+                                titles.retain(|t| !t.starts_with("Swarmer"));
+                            }
                             // Non-land cards with CMC < 5 cannot receive Scoop Inducer
                             if cmc < 5 {
                                 titles.retain(|t| !t.starts_with("Scoop Inducer"));

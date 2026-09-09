@@ -191,6 +191,7 @@ pub struct MatchAssembler {
     pub token_instance_names: HashMap<u32, String>, // instanceId -> token name
     pub token_instance_ids: HashSet<u32>,
     pub token_grp_ids: HashSet<u32>,
+    pub counted_token_instances: HashSet<u32>,
     pub recorded_actions: HashSet<(u32, u32, String)>, // (turn_number, instance_id, event_type)
     pub turn_events: Vec<MatchTurnEventRecord>,
     pub turn_event_seqs: Vec<u64>,
@@ -252,6 +253,7 @@ impl MatchAssembler {
             token_instance_names: HashMap::new(),
             token_instance_ids: HashSet::new(),
             token_grp_ids: HashSet::new(),
+            counted_token_instances: HashSet::new(),
             recorded_actions: HashSet::new(),
             turn_events: Vec::new(),
             turn_event_seqs: Vec::new(),
@@ -345,6 +347,7 @@ impl MatchAssembler {
         self.processed_msg_ids.clear();
         self.token_instance_ids.clear();
         self.token_grp_ids.clear();
+        self.counted_token_instances.clear();
         self.token_spawner_map.clear();
         self.turn_mana_by_instance.clear();
         self.turn_damage_to_seat.clear();
@@ -881,7 +884,8 @@ impl MatchAssembler {
         } else if is_token && zone_id == 28 {
             // Token created directly on the battlefield
             event_type = Some("token".to_string());
-            if seat_id == self.player_seat_id {
+            if seat_id == self.player_seat_id && !self.counted_token_instances.contains(&instance_id) {
+                self.counted_token_instances.insert(instance_id);
                 let spawner_grp = self.token_spawner_map.get(&instance_id).copied()
                     .or_else(|| {
                         self.ability_parent_map.get(&instance_id)

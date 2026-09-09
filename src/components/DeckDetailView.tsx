@@ -775,31 +775,39 @@ export function DeckDetailView({
                         {cleanTopAchievements.slice(0, 3).map((ach: any, idx: number) => (
                           <div 
                             key={`${ach.grp_id}-${ach.achievement}-${idx}`} 
-                            className="flex items-center justify-between gap-2 p-1.5 border border-white/5 bg-white/[0.015] hover:bg-white/[0.05] transition-colors"
+                            onClick={() => setAchievementsModalOpen(true)}
+                            className="flex items-center justify-between gap-2.5 p-2 border border-white/5 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/10 transition-all cursor-pointer group"
+                            title="Click to view deck achievements"
                           >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <AchievementBadge
-                                title={ach.achievement}
-                                tier={ach.tier}
-                                count={ach.count}
-                                size="sm"
-                                showTitle={false}
-                                showCount={false}
-                              />
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="shrink-0 w-5 h-6 flex items-center justify-center">
+                                <AchievementBadge
+                                  title={ach.achievement}
+                                  tier={ach.tier}
+                                  count={ach.count}
+                                  size="md"
+                                  showTitle={false}
+                                  showCount={false}
+                                />
+                              </div>
                               <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold font-sans tracking-wide text-neutral-100 group-hover:text-amber-300 transition-colors truncate leading-tight">
+                                  {ach.achievement}
+                                </div>
                                 <button
-                                  onClick={() => onShowCard({ name: ach.card_name, grp_id: ach.grp_id }, false)}
-                                  className="text-xs font-semibold font-sans truncate block text-left w-full hover:underline leading-tight text-white"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onShowCard({ name: ach.card_name, grp_id: ach.grp_id }, false);
+                                  }}
+                                  className="text-[11px] font-sans text-neutral-400 hover:text-white hover:underline truncate block text-left mt-0.5"
                                   title={ach.card_name}
                                 >
                                   {ach.card_name}
                                 </button>
-                                <span className="text-[10px] font-sans text-neutral-400 block truncate mt-0.5">
-                                  {ach.achievement}
-                                </span>
                               </div>
                             </div>
-                            <span className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.2 border border-white/10 bg-black/40 text-neutral-300">
+                            <span className="shrink-0 text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.5 border border-white/10 bg-black/50 text-neutral-300">
                               {ach.count > 1 ? `×${ach.count}` : '1×'}
                             </span>
                           </div>

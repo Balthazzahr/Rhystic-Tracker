@@ -616,29 +616,6 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
               </button>
             </>
           )}
-
-          <div className="flex items-center bg-white/[0.03] p-0.5 gap-0.5">
-            <button
-              onClick={() => setDashboardMode("2.0")}
-              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
-                dashboardMode === "2.0"
-                  ? "bg-white/[0.10] text-white font-bold"
-                  : "text-neutral-400 hover:text-white"
-              }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setDashboardMode("legacy")}
-              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
-                dashboardMode === "legacy"
-                  ? "bg-white/[0.10] text-white font-bold"
-                  : "text-neutral-400 hover:text-white"
-              }`}
-            >
-              Legacy
-            </button>
-          </div>
         </div>
       </div>
 

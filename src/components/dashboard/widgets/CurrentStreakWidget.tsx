@@ -20,8 +20,28 @@ const formatTimeSince = (ts: string): string => {
   return `${diffDays} ${diffDays === 1 ? "day" : "days"}`;
 };
 
+// Helper to determine contrasting text color (black vs white) based on background hex
+const getContrastTextColor = (hexColor: string): string => {
+  const cleanHex = hexColor.replace("#", "");
+  const fullHex =
+    cleanHex.length === 3
+      ? cleanHex
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : cleanHex;
+  const num = parseInt(fullHex, 16);
+  if (isNaN(num)) return "#FFFFFF";
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  // Standard sRGB luminance calculation
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? "#000000" : "#FFFFFF";
+};
+
 export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
-  widget,
+  widget: _widget,
   stats,
   winLossMatches,
   customColors,
@@ -41,10 +61,8 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
         ? winColor
         : lossColor;
 
-  // Amount of games (dots) to show based on widget column width
-  // 4 games per column: 4 for 1 col, 8 for 2 cols, 12 for 3 cols, 16 for 4 cols
-  const colWidth = widget.width || 4;
-  const maxDots = colWidth * 4;
+  // Display up to 10 matches maximum
+  const maxDots = 10;
 
   // Recent matches in chronological order (oldest -> newest on the right)
   const recentTrail = useMemo(() => {
@@ -54,7 +72,7 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
     return chrono.slice(-maxDots);
-  }, [winLossMatches, maxDots]);
+  }, [winLossMatches]);
 
   // All-time best win streak calculation
   const bestWinStreak = useMemo(() => {
@@ -88,13 +106,6 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
     return formatTimeSince(lastWin.timestamp);
   }, [winLossMatches]);
 
-  // Streak headline label above dots: "X Game(s) Win/Loss Streak"
-  const streakHeadline = useMemo(() => {
-    if (streakCount === 0) return "No Active Streak";
-    const gameWord = streakCount === 1 ? "Game" : "Games";
-    return `${streakCount} ${gameWord} ${isWin ? "Win" : "Loss"} Streak`;
-  }, [streakCount, isWin]);
-
   return (
     <WidgetShell
       title="Current Streak"
@@ -103,23 +114,14 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
       emptyMessage="No matches recorded yet"
     >
       <div className="flex-1 flex flex-col justify-between select-none min-h-0 pt-0.5">
-        {/* Above the dots: Streak number + short label */}
-        <div>
-          <div
-            className="text-2xl sm:text-3xl font-mono font-bold tracking-wide leading-none capitalize truncate"
-            style={{ color: streakColor }}
-          >
-            {streakHeadline}
-          </div>
-        </div>
-
-        {/* Recent-Form Dot Trail Row (Stretches full width dynamically) */}
-        {recentTrail.length > 0 && (
-          <div className="my-auto py-2 w-full">
-            <div className="flex items-center gap-1.5 w-full">
+        {/* Centered Streak Boxes & Right-side Streak Count */}
+        <div className="my-auto flex items-center gap-3 w-full py-2">
+          {recentTrail.length > 0 ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
               {recentTrail.map((m, idx) => {
                 const isMatchWin = m.result === "win";
                 const dotColor = isMatchWin ? winColor : lossColor;
+                const textColor = getContrastTextColor(dotColor);
 
                 // Check if this dot is part of the active streak (the rightmost streakCount games)
                 const isInActiveStreak =
@@ -130,9 +132,9 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
                 return (
                   <div
                     key={m.id || idx}
-                    className={`transition-all rounded-none cursor-pointer flex-1 min-w-0 h-5 sm:h-6 flex items-center justify-center ${
+                    className={`transition-all rounded-none cursor-pointer flex-1 min-w-0 h-10 sm:h-12 flex items-center justify-center ${
                       isInActiveStreak
-                        ? "opacity-100 ring-2 ring-white/90 shadow-md scale-y-105 z-10"
+                        ? "opacity-100 ring-2 ring-white/90 shadow-md z-10"
                         : "opacity-40 hover:opacity-80 border border-white/10"
                     }`}
                     style={{
@@ -142,15 +144,42 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
                       m.deck_name || "Match"
                     } (${new Date(m.timestamp).toLocaleDateString()})`}
                   >
-                    <span className="text-[9px] sm:text-[10px] font-mono font-bold text-white/70 select-none leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
+                    <span
+                      className="text-xs sm:text-sm font-mono font-bold select-none leading-none"
+                      style={{ color: textColor }}
+                    >
                       {isMatchWin ? "W" : "L"}
                     </span>
                   </div>
                 );
               })}
             </div>
+          ) : (
+            <div className="flex-1 text-xs font-mono text-neutral-500 italic">
+              No recent matches
+            </div>
+          )}
+
+          {/* Right of the boxes: number + word (e.g. 4 Wins / 1 Win / 3 Losses) */}
+          <div className="shrink-0 text-right pl-1">
+            <span
+              className="text-lg sm:text-xl font-mono font-bold tracking-tight tabular-nums whitespace-nowrap"
+              style={{ color: streakColor }}
+            >
+              {streakCount === 0
+                ? "No Streak"
+                : `${streakCount} ${
+                    isWin
+                      ? streakCount === 1
+                        ? "Win"
+                        : "Wins"
+                      : streakCount === 1
+                        ? "Loss"
+                        : "Losses"
+                  }`}
+            </span>
           </div>
-        )}
+        </div>
 
         {/* Below the dots: Contextual caption */}
         <div className="text-xs font-sans text-neutral-400 font-normal tabular-nums pt-2 border-t border-white/5 flex items-center justify-between">
