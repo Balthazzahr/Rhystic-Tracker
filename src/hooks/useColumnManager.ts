@@ -5,6 +5,7 @@ export interface BaseColumn {
   label: string;
   description?: string;
   visible: boolean;
+  sortKey?: string;
   [key: string]: any;
 }
 
@@ -34,10 +35,28 @@ export function useColumnManager<T extends BaseColumn>({
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        const parsed: T[] = JSON.parse(saved);
-        const existingKeys = new Set(parsed.map((c) => c.key));
-        const missing = defaultColumns.filter((c) => !existingKeys.has(c.key));
-        return [...parsed, ...missing];
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const map = new Map(parsed.map((c: any) => [c.key, c]));
+          const result: T[] = [];
+
+          for (const s of parsed) {
+            const def = defaultColumns.find((d) => d.key === s.key);
+            if (def) {
+              result.push({
+                ...def,
+                visible: typeof s.visible === 'boolean' ? s.visible : def.visible,
+              });
+            }
+          }
+
+          for (const def of defaultColumns) {
+            if (!map.has(def.key)) {
+              result.push(def);
+            }
+          }
+          return result;
+        }
       }
     } catch (e) {
       console.error(`Failed to load column configuration for ${storageKey}:`, e);

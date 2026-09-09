@@ -190,6 +190,11 @@ export function ColumnCustomizerModal<T extends BaseColumn>({
                   <div>
                     <div className="text-xs font-sans font-bold text-white tracking-wide flex items-center gap-2">
                       <span>{col.label}</span>
+                      {col.sortKey && (
+                        <span className="text-[9px] font-sans font-normal px-1 py-0.2 bg-white/5 border border-white/10 text-neutral-400">
+                          Sortable
+                        </span>
+                      )}
                       {isTarget && (
                         <span
                           className="text-[9px] font-mono uppercase px-1.5 py-0.2 border font-bold"
