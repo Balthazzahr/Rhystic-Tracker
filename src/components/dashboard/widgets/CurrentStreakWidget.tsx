@@ -115,7 +115,7 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
     >
       <div className="flex-1 flex flex-col justify-between select-none min-h-0 pt-0.5">
         {/* Centered Streak Boxes & Right-side Streak Count */}
-        <div className="my-auto flex items-center gap-3 w-full py-2">
+        <div className="my-auto flex items-center gap-3 w-full py-1">
           {recentTrail.length > 0 ? (
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
               {recentTrail.map((m, idx) => {
@@ -132,7 +132,7 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
                 return (
                   <div
                     key={m.id || idx}
-                    className={`transition-all rounded-none cursor-pointer flex-1 min-w-0 h-10 sm:h-12 flex items-center justify-center ${
+                    className={`transition-all rounded-none cursor-pointer flex-1 min-w-0 h-7 sm:h-8 flex items-center justify-center ${
                       isInActiveStreak
                         ? "opacity-100 ring-2 ring-white/90 shadow-md z-10"
                         : "opacity-40 hover:opacity-80 border border-white/10"
@@ -145,7 +145,7 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
                     } (${new Date(m.timestamp).toLocaleDateString()})`}
                   >
                     <span
-                      className="text-xs sm:text-sm font-mono font-bold select-none leading-none"
+                      className="text-[11px] sm:text-xs font-mono font-bold select-none leading-none"
                       style={{ color: textColor }}
                     >
                       {isMatchWin ? "W" : "L"}

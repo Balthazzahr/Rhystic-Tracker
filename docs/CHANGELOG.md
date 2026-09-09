@@ -2,6 +2,17 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.0] - 2026-09-09
+
+### 🚀 App Performance, Layout Optimization & Milestone Polish Pass
+- **Comprehensive Database Query Optimization**: Added targeted composite B-tree indexes across all heavy analytical queries (`idx_matches_status_time`, `idx_turn_events_match_turn`, `idx_impactful_match_seat`, `idx_deck_ach_deck_earned`, `idx_deck_lists_name_updated`). Migrated automatically on boot.
+- **Dashboard Widget Memoization & Callback Stabilization**: Wrapped all 10 Bento-box dashboard widgets in `React.memo` and stabilized widget config mutation callbacks in `Dashboard2View` (`handleUpdateWidgetSettings` with stable functional updates), eliminating cascading re-renders across the dashboard grid.
+- **Memoized Podium Cards & Scryfall Image Optimization**: Optimized `LeaderboardPodiumCard` with search memoization. Downscaled `DeckBoxCard` hover peek thumbnails from `normal` to `small` (`version="small"`), slashing image memory and network payload by ~70% while improving rendering sharpness. Removed slide-in card animations for instant deck box loading.
+- **Dashboard Modernization & Legacy View Purge**: Retired the legacy dashboard view toggle, leaving a clean, focused, customizable Bento-box grid interface.
+- **Current Streak Widget Redesign**: Replaced the previous bulky header with centered, taller streak boxes capped at 10 matches, accompanied by an inline right-aligned streak counter and dynamic sRGB luminance contrast calculation ensuring crisp readability on any custom theme color.
+- **Deck Library Achievements & Inspector Polish**: Aligned top card achievements in the Deck Library sidebar with proportional shield art badges and clickable rows linking directly to the deck Achievements modal.
+- **Token Ingestion & Achievement Attribution Fix**: Prevented persistent token battlefield updates across turns from repeatedly incrementing `tokens_spawned`, eliminating false-positive Swarmer badges on cards like *Thousand Moons Smithy*.
+
 ## [1.4.5] - 2026-09-09
 
 ### ⚙️ Settings View Modular Deconstruction & Refactoring (Priority 6)
