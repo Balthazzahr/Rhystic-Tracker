@@ -65,7 +65,7 @@ export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
             key={`${item.achievement}-${item.cardName}-${idx}`}
             onClick={() => onInspectAchievement?.(item.rawAch)}
             title={`${item.achievement} (${item.cardName})`}
-            className="flex items-center justify-between gap-3 p-2 bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors cursor-pointer group rounded-xs"
+            className="flex items-center justify-between gap-3 p-2 bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors cursor-pointer group rounded-none"
           >
             {/* Left: 2x Large Badge + Achievement Name & Card Name */}
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -92,7 +92,7 @@ export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
             </div>
 
             {/* Right: Card artwork crop thumbnail */}
-            <div className="w-8 h-8 shrink-0 overflow-hidden border border-white/15 shadow-sm bg-neutral-900 rounded-xs">
+            <div className="w-8 h-8 shrink-0 overflow-hidden border border-white/15 shadow-sm bg-neutral-900 rounded-none">
               <CardImage
                 name={item.cardName}
                 version="art_crop"

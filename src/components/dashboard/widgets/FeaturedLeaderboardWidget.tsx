@@ -95,7 +95,7 @@ export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = ({
       <select
         value={selectedKey}
         onChange={(e) => handleCategoryChange(e.target.value)}
-        className="appearance-none bg-white/[0.04] border border-white/10 text-neutral-300 text-[10px] font-sans font-medium px-2 py-0.5 pr-4 rounded-xs cursor-pointer hover:bg-white/[0.08] focus:outline-none focus:border-white/20 max-w-[120px] sm:max-w-none truncate"
+        className="appearance-none bg-white/[0.04] border border-white/10 text-neutral-300 text-[10px] font-sans font-medium px-2 py-0.5 pr-4 rounded-none cursor-pointer hover:bg-white/[0.08] focus:outline-none focus:border-white/20 max-w-[120px] sm:max-w-none truncate"
       >
         {CATEGORIES.map((c) => (
           <option key={c.key} value={c.key} className="bg-neutral-900 text-neutral-200">

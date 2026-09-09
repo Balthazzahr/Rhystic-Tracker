@@ -1300,7 +1300,7 @@ export function DeckDetailView({
 
               {/* Live Art Crop Preview */}
               <div className="w-64 shrink-0 p-4 bg-neutral-900/30 flex flex-col items-center justify-center space-y-3">
-                <div className="w-full aspect-[4/3] border border-white/20 bg-black overflow-hidden shadow-lg relative rounded-sm flex items-center justify-center">
+                <div className="w-full aspect-[4/3] border border-white/20 bg-black overflow-hidden shadow-lg relative rounded-none flex items-center justify-center">
                   {selectedCardArt === '__RANDOM__' ? (
                     <div className="flex flex-col items-center gap-1.5 text-neutral-400">
                       <Sparkles className="w-8 h-8 opacity-60" />

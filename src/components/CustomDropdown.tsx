@@ -85,7 +85,7 @@ export function CustomDropdown({ options, value, onChange, palette }: CustomDrop
         ref={triggerRef}
         type="button"
         onClick={open}
-        className="w-full mt-1 px-3 py-1.5 text-xs font-semibold rounded-xl border flex items-center justify-between transition-all hover:bg-white/5"
+        className="w-full mt-1 px-3 py-1.5 text-xs font-semibold rounded-none border flex items-center justify-between transition-all hover:bg-white/5"
         style={{
           backgroundColor: palette?.mantle || '#12141A',
           color: palette?.text || '#F8FAFC',
@@ -99,7 +99,7 @@ export function CustomDropdown({ options, value, onChange, palette }: CustomDrop
       {isOpen && pos && createPortal(
         <div
           data-rt-dropdown-menu
-          className="fixed z-[200] rounded-xl border shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
+          className="fixed z-[200] rounded-none border shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar bg-neutral-950 border-white/20"
           style={{
             top: pos.top,
             left: pos.left,

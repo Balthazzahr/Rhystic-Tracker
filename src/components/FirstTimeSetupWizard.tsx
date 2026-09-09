@@ -197,7 +197,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none">
       <div 
-        className="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col transition-all duration-300"
+        className="w-full max-w-2xl rounded-none border border-white/20 shadow-2xl overflow-hidden flex flex-col transition-all duration-300"
         style={{ 
           backgroundColor: theme.mantle, 
           borderColor: theme.border,
@@ -256,7 +256,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Status Box */}
               <div 
-                className="p-4 rounded-xl border flex flex-col space-y-3"
+                className="p-4 rounded-none border flex flex-col space-y-3"
                 style={{ backgroundColor: theme.base, borderColor: theme.border }}
               >
                 <div className="flex items-start justify-between">
@@ -270,14 +270,14 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                       <div className="rt-label opacity-90" style={{ color: theme.text || '#FFFFFF' }}>
                         {setupStatus?.log_path ? 'Log File Auto-Detected' : 'Searching for MTGA Log'}
                       </div>
-                      <div className="text-xs text-neutral-300 font-mono break-all mt-1.5 bg-black/40 p-2 rounded border border-white/5">
+                      <div className="text-xs text-neutral-300 font-mono break-all mt-1.5 bg-black/40 p-2 rounded-none border border-white/5">
                         {setupStatus?.log_path || 'No Player.log found in default Steam / Wine / Lutris paths yet.'}
                       </div>
                     </div>
                   </div>
                   <button
                     onClick={handleBrowseLog}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/30 text-white bg-white/5 hover:bg-white/10 transition-colors shrink-0 ml-3 flex items-center gap-1.5"
+                    className="text-xs px-3 py-1.5 rounded-none border border-white/10 hover:border-white/30 text-white bg-white/5 hover:bg-white/10 transition-colors shrink-0 ml-3 flex items-center gap-1.5"
                   >
                     <FolderOpen className="w-3.5 h-3.5 text-sky-400" /> Browse…
                   </button>
@@ -286,7 +286,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Detailed Logging Requirement Tip */}
               <div 
-                className="p-4 rounded-xl border bg-amber-500/10 border-amber-500/30 text-amber-200 text-xs space-y-2"
+                className="p-4 rounded-none border bg-amber-500/10 border-amber-500/30 text-amber-200 text-xs space-y-2"
               >
                 <div className="rt-section-header flex items-center gap-1.5 text-amber-300">
                   <AlertCircle className="w-4 h-4" />
@@ -316,7 +316,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Status & Sync Card */}
               <div 
-                className="p-4 rounded-xl border space-y-4"
+                className="p-4 rounded-none border space-y-4"
                 style={{ backgroundColor: theme.base, borderColor: theme.border }}
               >
                 <div className="flex items-center justify-between">
@@ -336,14 +336,14 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleBrowseRawDir}
-                      className="text-xs px-3 py-2 rounded-xl border border-white/10 hover:border-white/30 text-white bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1.5"
+                      className="text-xs px-3 py-2 rounded-none border border-white/10 hover:border-white/30 text-white bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-1.5"
                     >
                       <FolderOpen className="w-3.5 h-3.5 text-indigo-400" /> Browse Folder…
                     </button>
                     <button
                       onClick={handleSyncDatabase}
                       disabled={syncing}
-                      className="px-4 py-2 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-white flex items-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                      className="px-4 py-2 rounded-none text-xs font-bold font-sans uppercase tracking-wider text-white flex items-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-50"
                       style={{ backgroundColor: theme.primary || theme.accent }}
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
@@ -353,13 +353,13 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                 </div>
 
                 {/* Detected Path Preview */}
-                <div className="text-xs text-neutral-300 font-mono break-all bg-black/40 p-2.5 rounded border border-white/5 space-y-1">
+                <div className="text-xs text-neutral-300 font-mono break-all bg-black/40 p-2.5 rounded-none border border-white/5 space-y-1">
                   <div className="rt-label opacity-60">Detected MTGA Raw Database Location:</div>
                   <div>{setupStatus?.raw_path || 'Scanning standard Steam / Lutris / Wine locations...'}</div>
                 </div>
 
                 {/* Path Structure Tooltip / Guidance */}
-                <div className="p-3.5 rounded-lg border border-white/5 bg-white/[0.02] space-y-1.5">
+                <div className="p-3.5 rounded-none border border-white/5 bg-white/[0.02] space-y-1.5">
                   <div className="rt-section-header text-white flex items-center gap-1.5">
                     <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
                     How MTG Arena Stores Card Data on Linux:
@@ -367,7 +367,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   <p className="rt-narrative-sm opacity-75 leading-relaxed">
                     Regardless of whether you use Steam, Lutris, Bottles, or Wine, MTGA always stores its SQLite card index in:
                     <br />
-                    <code className="font-mono text-neutral-300 bg-black/50 px-1 py-0.5 rounded text-[11px]">.../MTGA/MTGA_Data/Downloads/Raw/Raw_CardDatabase_&lt;hash&gt;.mtga</code>
+                    <code className="font-mono text-neutral-300 bg-black/50 px-1 py-0.5 rounded-none text-[11px]">.../MTGA/MTGA_Data/Downloads/Raw/Raw_CardDatabase_&lt;hash&gt;.mtga</code>
                     <br />
                     If your installation is on a custom external drive, simply use the <strong>Browse Folder</strong> button above to select your <code className="font-mono text-[11px]">.../Raw/</code> directory.
                   </p>
@@ -375,7 +375,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
                 {/* Sync Result Banner */}
                 {syncResult && (
-                  <div className={`p-3 rounded-lg border text-xs flex items-center space-x-2 ${
+                  <div className={`p-3 rounded-none border text-xs flex items-center space-x-2 ${
                     syncResult.success 
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
                       : 'bg-red-500/10 border-red-500/30 text-red-300'
@@ -395,7 +395,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                 )}
 
                 {/* Arena Avatar Library Extraction */}
-                <div className="p-4 rounded-xl border border-white/10 bg-white/[0.02] flex items-center justify-between">
+                <div className="p-4 rounded-none border border-white/10 bg-white/[0.02] flex items-center justify-between">
                   <div>
                     <div className="rt-label opacity-60">Arena Character Avatars</div>
                     <div className="text-sm font-bold font-sans text-white mt-0.5 flex items-center gap-2">
@@ -410,7 +410,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   <button
                     onClick={handleExtractAvatars}
                     disabled={avatarExtracting}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold font-sans uppercase tracking-wider text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    className="px-3 py-1.5 rounded-none text-xs font-bold font-sans uppercase tracking-wider text-white bg-white/10 hover:bg-white/20 border border-white/15 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${avatarExtracting ? 'animate-spin' : ''}`} />
                     {avatarExtracting ? 'Extracting...' : 'Extract Avatars from Client'}
@@ -435,7 +435,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Step-by-Step Decklist Import Box */}
               <div 
-                className="p-4 rounded-xl border space-y-3"
+                className="p-4 rounded-none border space-y-3"
                 style={{ backgroundColor: theme.base, borderColor: theme.border }}
               >
                 <div className="rt-label opacity-90 flex items-center gap-2" style={{ color: theme.text || '#FFFFFF' }}>
@@ -444,19 +444,19 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-                  <div className="p-3 rounded-lg bg-black/40 border border-white/5 space-y-1">
+                  <div className="p-3 rounded-none bg-black/40 border border-white/5 space-y-1">
                     <div className="text-xs font-bold font-sans uppercase tracking-wider text-sky-400">1. In MTG Arena</div>
                     <p className="rt-narrative-sm opacity-75">
                       Open your Decks in MTGA, click your deck, and click the <strong>Export</strong> button at the bottom.
                     </p>
                   </div>
-                  <div className="p-3 rounded-lg bg-black/40 border border-white/5 space-y-1">
+                  <div className="p-3 rounded-none bg-black/40 border border-white/5 space-y-1">
                     <div className="text-xs font-bold font-sans uppercase tracking-wider text-sky-400">2. In Rhystic Tracker</div>
                     <p className="rt-narrative-sm opacity-75">
                       Navigate to the <strong>Deck Library</strong> tab, select your logged deck, and click <strong>True Decklist Import</strong>.
                     </p>
                   </div>
-                  <div className="p-3 rounded-lg bg-black/40 border border-white/5 space-y-1">
+                  <div className="p-3 rounded-none bg-black/40 border border-white/5 space-y-1">
                     <div className="text-xs font-bold font-sans uppercase tracking-wider text-sky-400">3. Paste & Save</div>
                     <p className="rt-narrative-sm opacity-75">
                       Paste the MTGA export format text. Rhystic Tracker validates all cards and registers them into your owned collection!
@@ -464,7 +464,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   </div>
                 </div>
 
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rt-narrative-sm">
+                <div className="p-3 rounded-none bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rt-narrative-sm">
                   <strong>Why True Decklists?</strong> In-game cards created via <em>Heist, Theft, Conjure, or Token Copy</em> mechanics will never pollute your collection or alter your genuine ownership metrics.
                 </div>
               </div>
@@ -486,7 +486,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Nav Features Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3.5 rounded-xl border border-white/5 bg-black/30 space-y-1">
+                <div className="p-3.5 rounded-none border border-white/5 bg-black/30 space-y-1">
                   <div className="font-bold font-sans uppercase tracking-wide text-xs text-white flex items-center gap-2">
                     <LayoutDashboard className="w-4 h-4 text-sky-400" />
                     Dashboard
@@ -496,7 +496,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl border border-white/5 bg-black/30 space-y-1">
+                <div className="p-3.5 rounded-none border border-white/5 bg-black/30 space-y-1">
                   <div className="font-bold font-sans uppercase tracking-wide text-xs text-white flex items-center gap-2">
                     <Swords className="w-4 h-4 text-rose-400" />
                     Live Match HUD
@@ -506,7 +506,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl border border-white/5 bg-black/30 space-y-1">
+                <div className="p-3.5 rounded-none border border-white/5 bg-black/30 space-y-1">
                   <div className="font-bold font-sans uppercase tracking-wide text-xs text-white flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400" />
                     Match History & Inspector
@@ -516,7 +516,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl border border-white/5 bg-black/30 space-y-1">
+                <div className="p-3.5 rounded-none border border-white/5 bg-black/30 space-y-1">
                   <div className="font-bold font-sans uppercase tracking-wide text-xs text-white flex items-center gap-2">
                     <Layers className="w-4 h-4 text-emerald-400" />
                     Deck Library
@@ -526,7 +526,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl border border-white/5 bg-black/30 space-y-1 sm:col-span-2">
+                <div className="p-3.5 rounded-none border border-white/5 bg-black/30 space-y-1 sm:col-span-2">
                   <div className="font-bold font-sans uppercase tracking-wide text-xs text-white flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-indigo-400" />
                     Card Library & Combat Analytics
@@ -554,7 +554,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Theme Picker */}
               <div 
-                className="p-4 rounded-xl border space-y-3"
+                className="p-4 rounded-none border space-y-3"
                 style={{ backgroundColor: theme.base, borderColor: theme.border }}
               >
                 <div className="flex items-center justify-between">
@@ -572,7 +572,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                     <button
                       key={t.id}
                       onClick={() => setActiveThemeId?.(t.id)}
-                      className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${
+                      className={`p-3 rounded-none border flex flex-col items-center gap-2 transition-all cursor-pointer ${
                         activeThemeId === t.id ? 'ring-2 ring-white scale-105 shadow-lg' : 'opacity-70 hover:opacity-100'
                       }`}
                       style={{ backgroundColor: theme.surface, borderColor: theme.border }}
@@ -586,7 +586,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
 
               {/* Ready Confirmation */}
               <div 
-                className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs flex items-center space-x-3"
+                className="p-4 rounded-none border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs flex items-center space-x-3"
               >
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div>
@@ -608,7 +608,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
           {step > 1 ? (
             <button
               onClick={() => setStep(step - 1)}
-              className="px-4 py-2 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-neutral-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 rounded-none text-xs font-bold font-sans uppercase tracking-wider text-neutral-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
@@ -624,7 +624,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
                 }
                 setStep(step + 1);
               }}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-white flex items-center gap-2 transition-all shadow-md active:scale-95"
+              className="px-5 py-2.5 rounded-none text-xs font-bold font-sans uppercase tracking-wider text-white flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer"
               style={{ backgroundColor: theme.primary || theme.accent }}
             >
               Continue <ArrowRight className="w-4 h-4" />
@@ -632,7 +632,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
           ) : (
             <button
               onClick={handleComplete}
-              className="px-6 py-2.5 rounded-xl text-xs font-bold font-sans uppercase tracking-wider text-white flex items-center gap-2 transition-all shadow-lg active:scale-95 bg-emerald-600 hover:bg-emerald-500"
+              className="px-6 py-2.5 rounded-none text-xs font-bold font-sans uppercase tracking-wider text-white flex items-center gap-2 transition-all shadow-lg active:scale-95 bg-emerald-600 hover:bg-emerald-500 cursor-pointer"
             >
               Launch Rhystic Tracker <Sparkles className="w-4 h-4" />
             </button>

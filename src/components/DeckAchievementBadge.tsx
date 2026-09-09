@@ -291,13 +291,13 @@ export const DeckAchievementBadge: React.FC<DeckAchievementBadgeProps> = ({
             top: `${tooltipPos.y}px`,
             transform: 'translate(-50%, -100%)',
           }}
-          className={`z-[9999] pointer-events-none w-64 p-3 bg-neutral-950/95 backdrop-blur-md border ${tierColors.border} ${tierColors.glow} shadow-2xl rounded-sm text-left animate-fade-in`}
+          className={`z-[9999] pointer-events-none w-64 p-3 bg-neutral-950/95 backdrop-blur-md border ${tierColors.border} ${tierColors.glow} shadow-2xl rounded-none text-left animate-fade-in`}
         >
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
             <span className={`text-xs font-display font-bold uppercase tracking-wide ${tierColors.text}`}>
               {cleanTitle}
             </span>
-            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 border ${tierColors.border} ${tierColors.bg} ${tierColors.text} uppercase tracking-wider rounded-sm`}>
+            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 border ${tierColors.border} ${tierColors.bg} ${tierColors.text} uppercase tracking-wider rounded-none`}>
               {tier}
             </span>
           </div>
@@ -307,7 +307,7 @@ export const DeckAchievementBadge: React.FC<DeckAchievementBadgeProps> = ({
           </p>
 
           {meta.criteria[tier] && (
-            <div className="bg-white/5 border border-white/10 px-2 py-1 mb-2 rounded-sm">
+            <div className="bg-white/5 border border-white/10 px-2 py-1 mb-2 rounded-none">
               <span className="text-[10px] font-mono text-neutral-400 block uppercase">Requirement</span>
               <span className="text-[11px] font-sans text-neutral-200 font-medium">
                 {meta.criteria[tier]}

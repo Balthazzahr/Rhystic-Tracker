@@ -65,20 +65,19 @@ export function OpponentH2HModal({
   return (
     <div 
       onClick={onClose}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/75 backdrop-blur-xl animate-fade-in select-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none"
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl h-[75vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden relative backdrop-blur-md"
-        style={{ backgroundColor: `${palette?.mantle || '#12141A'}E6`, borderColor: palette?.border || '#2A2F3D' }}
+        className="w-full max-w-4xl h-[75vh] rounded-none border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden relative backdrop-blur-md"
       >
         {/* Header Bar */}
-        <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ borderColor: palette?.border }}>
+        <div className="p-4 border-b border-white/10 bg-white/[0.02] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <Swords className="w-5 h-5" style={{ color: palette?.accent || '#6B7280' }} />
+            <Swords className="w-5 h-5 text-amber-400" />
             <div>
               <p className="rt-label opacity-60">Head-to-Head Opponent Record</p>
-              <h2 className="rt-card-title tracking-wide" style={{ color: palette?.text }}>
+              <h2 className="rt-card-title tracking-wide text-white">
                 vs {opponentName}
               </h2>
             </div>
@@ -86,8 +85,7 @@ export function OpponentH2HModal({
 
           <button 
             onClick={onClose}
-            className="p-2 rounded-xl border opacity-60 hover:opacity-100 hover:bg-white/5 transition-all"
-            style={{ borderColor: palette?.border }}
+            className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 rounded-none transition-colors cursor-pointer"
             title="Close (Esc)"
           >
             <X className="w-5 h-5" />
@@ -98,25 +96,25 @@ export function OpponentH2HModal({
         <div className="flex-1 overflow-hidden p-6 flex flex-col space-y-6">
           {/* Top Lifetime H2H Summary KPI Cards */}
           <div className="grid grid-cols-4 gap-4 shrink-0">
-            <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+            <div className="p-4 rounded-none border border-white/10 bg-white/[0.02] flex items-center justify-between shadow-sm">
               <div>
                 <p className="rt-label opacity-60">Total Played</p>
-                <h3 className="rt-hero-stat mt-0.5">{stats?.total_matches ?? 0}</h3>
+                <h3 className="rt-hero-stat mt-0.5 text-white">{stats?.total_matches ?? 0}</h3>
               </div>
-              <BarChart3 className="w-5 h-5 opacity-40" style={{ color: palette?.accent }} />
+              <BarChart3 className="w-5 h-5 opacity-40 text-neutral-400" />
             </div>
 
-            <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+            <div className="p-4 rounded-none border border-white/10 bg-white/[0.02] flex items-center justify-between shadow-sm">
               <div>
                 <p className="rt-label opacity-60">H2H Winrate</p>
-                <h3 className="rt-hero-stat mt-0.5" style={{ color: palette?.accent || '#6B7280' }}>
+                <h3 className="rt-hero-stat mt-0.5 text-amber-400">
                   {stats?.winrate ?? '0.0'}%
                 </h3>
               </div>
-              <span className="ms ms-ability-duels-renowned text-xl opacity-40" style={{ color: palette?.accent }} />
+              <span className="ms ms-ability-duels-renowned text-xl opacity-40 text-amber-400" />
             </div>
 
-            <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+            <div className="p-4 rounded-none border border-white/10 bg-white/[0.02] flex items-center justify-between shadow-sm">
               <div>
                 <p className="rt-label opacity-60">Your Wins</p>
                 <h3 className="rt-hero-stat mt-0.5 text-emerald-400">{stats?.wins ?? 0}</h3>
@@ -124,7 +122,7 @@ export function OpponentH2HModal({
               <CheckCircle2 className="w-5 h-5 text-emerald-400/40" />
             </div>
 
-            <div className="p-4 rounded-2xl border flex items-center justify-between shadow-md" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
+            <div className="p-4 rounded-none border border-white/10 bg-white/[0.02] flex items-center justify-between shadow-sm">
               <div>
                 <p className="rt-label opacity-60">Opponent Wins</p>
                 <h3 className="rt-hero-stat mt-0.5 text-rose-400">{stats?.losses ?? 0}</h3>
@@ -134,8 +132,8 @@ export function OpponentH2HModal({
           </div>
 
           {/* Filtered Match History List Against Opponent */}
-          <div className="flex-1 rounded-2xl border overflow-hidden shadow-inner flex flex-col" style={{ backgroundColor: palette?.surface, borderColor: palette?.border }}>
-            <div className="p-3 border-b text-xs font-mono font-bold uppercase tracking-wider opacity-60 flex items-center justify-between" style={{ borderColor: palette?.border }}>
+          <div className="flex-1 rounded-none border border-white/10 bg-black/20 overflow-hidden flex flex-col">
+            <div className="p-3 border-b border-white/10 text-xs font-mono font-bold uppercase tracking-wider text-neutral-400 flex items-center justify-between bg-white/[0.02]">
               <span>Filtered Match History ({matches.length} Games)</span>
               <span>Click row to view full match</span>
             </div>

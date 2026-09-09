@@ -130,7 +130,7 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = ({
                 return (
                   <div
                     key={m.id || idx}
-                    className={`transition-all rounded-xs cursor-pointer flex-1 min-w-0 h-5 sm:h-6 flex items-center justify-center ${
+                    className={`transition-all rounded-none cursor-pointer flex-1 min-w-0 h-5 sm:h-6 flex items-center justify-center ${
                       isInActiveStreak
                         ? "opacity-100 ring-2 ring-white/90 shadow-md scale-y-105 z-10"
                         : "opacity-40 hover:opacity-80 border border-white/10"

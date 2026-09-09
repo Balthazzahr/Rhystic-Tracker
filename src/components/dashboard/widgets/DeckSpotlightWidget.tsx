@@ -178,7 +178,7 @@ export const DeckSpotlightWidget: React.FC<WidgetProps> = ({
 
             {/* Mana Curve Mini Histogram (No curve text, no border, transparent background, taller bars) */}
             {curveData && (
-              <div className="flex items-end gap-1.5 h-14 bg-black/20 px-2 py-1 rounded-xs">
+              <div className="flex items-end gap-1.5 h-14 bg-black/20 px-2 py-1 rounded-none">
                 {curveData.counts.map((count: number, idx: number) => {
                   const cmc = idx + 1;
                   const heightPct =
