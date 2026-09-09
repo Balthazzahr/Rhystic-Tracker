@@ -125,6 +125,9 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
                       }`}
                     >
                       {item.value}
+                      <span className="hidden 2xl:inline text-[9.5px] font-normal opacity-70 ml-1">
+                        {item.unit}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -203,6 +206,9 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
                         }`}
                       >
                         {item.value}
+                        <span className="hidden 2xl:inline text-[9.5px] font-normal opacity-70 ml-1">
+                          {item.unit}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -256,6 +262,9 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
                           </span>
                           <span className="text-xs font-mono font-bold text-neutral-300 tabular-nums">
                             {item.value}
+                            <span className="hidden 2xl:inline text-[9.5px] font-normal opacity-70 ml-1">
+                              {item.unit}
+                            </span>
                           </span>
                         </div>
                       </div>
