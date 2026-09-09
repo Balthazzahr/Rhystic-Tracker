@@ -960,7 +960,7 @@ export function DeckDetailView({
                     className="flex flex-col items-center gap-2 text-center cursor-pointer select-none p-6 border border-dashed border-white/15 hover:border-white/30 transition-colors"
                     onClick={openImport}
                   >
-                    <p className="text-base font-display uppercase tracking-wider text-white">
+                    <p className="text-base font-sans font-bold uppercase tracking-wider text-white">
                       Click to Import Decklist
                     </p>
                     <p className="text-xs font-mono text-neutral-400">
@@ -998,7 +998,7 @@ export function DeckDetailView({
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <h3 className="text-lg font-bold font-display uppercase tracking-wider text-white">
+                <h3 className="text-lg font-bold font-sans uppercase tracking-wider text-white">
                   Import True Decklist
                 </h3>
                 <p className="text-xs font-mono text-neutral-400 mt-0.5">
@@ -1080,7 +1080,7 @@ export function DeckDetailView({
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <h3 className="text-lg font-bold font-display uppercase tracking-wider text-white">
+                <h3 className="text-lg font-bold font-sans uppercase tracking-wider text-white">
                   Export Decklist
                 </h3>
                 <p className="text-xs font-mono text-neutral-400 mt-0.5">
@@ -1177,7 +1177,7 @@ export function DeckDetailView({
                   <Sparkles className="w-4 h-4 text-neutral-400" />
                 )}
                 <div>
-                  <h3 className="text-base font-bold font-display uppercase tracking-wider text-white">
+                  <h3 className="text-base font-bold font-sans uppercase tracking-wider text-white">
                     {artPickerMode === 'cover' ? 'Choose Deck Box Cover Artwork' : 'Choose Deck Background Artwork'}
                   </h3>
                   <p className="text-xs font-mono text-neutral-400 mt-0.5">

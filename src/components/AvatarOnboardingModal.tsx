@@ -66,7 +66,7 @@ export const AvatarOnboardingModal: React.FC<AvatarOnboardingModalProps> = ({ on
             <div className="flex items-center gap-1.5 text-[#E2BF6F] text-xs font-mono font-bold tracking-wider uppercase mb-1">
               <Sparkles className="w-3.5 h-3.5" /> What's New
             </div>
-            <h2 className="text-xl font-bold font-display uppercase tracking-wide text-white leading-tight">
+            <h2 className="text-xl font-bold font-sans uppercase tracking-wide text-white leading-tight">
               Arena Avatars & Platform Telemetry
             </h2>
           </div>
@@ -111,7 +111,7 @@ export const AvatarOnboardingModal: React.FC<AvatarOnboardingModalProps> = ({ on
           <button
             onClick={handleExtract}
             disabled={extracting || extractedCount !== null}
-            className="px-4 py-2 text-xs font-bold font-display uppercase tracking-wider bg-[#4A7856] hover:bg-[#5A8D68] text-white border border-[#76A382]/40 transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+            className="px-4 py-2 text-xs font-bold font-sans uppercase tracking-wider bg-[#4A7856] hover:bg-[#5A8D68] text-white border border-[#76A382]/40 transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${extracting ? 'animate-spin' : ''}`} />
             {extracting ? 'Extracting Avatars...' : 'Extract Avatars from Client'}

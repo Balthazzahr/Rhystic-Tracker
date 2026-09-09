@@ -254,7 +254,7 @@ export const DashboardColorPickerModal: React.FC<DashboardColorPickerModalProps>
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex items-center gap-2.5">
             <Palette className="w-5 h-5 text-sky-400" />
-            <h2 className="text-lg font-display font-bold uppercase tracking-wider text-white">
+            <h2 className="text-lg font-sans font-bold uppercase tracking-wider text-white">
               Customize Module Colors
             </h2>
           </div>

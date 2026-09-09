@@ -120,7 +120,7 @@ export function ColumnCustomizerModal<T extends BaseColumn>({
           <div>
             <div className="flex items-center gap-2">
               <Columns3 className="w-5 h-5" style={{ color: accentColor }} />
-              <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
+              <h2 className="text-lg font-sans font-bold tracking-[0.14em] uppercase text-white">
                 {title}
               </h2>
             </div>

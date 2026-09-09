@@ -191,7 +191,7 @@ export function FullMatchInfoModal({
         </span>
         <button
           onClick={() => onSelectDeck && onSelectDeck(selectedMatch.player_deck_name)}
-          className={`text-xl sm:text-3xl font-bold font-display uppercase tracking-wide text-white hover:underline cursor-pointer leading-tight line-clamp-2 ${
+          className={`text-xl sm:text-3xl font-bold font-sans uppercase tracking-wide text-white hover:underline cursor-pointer leading-tight line-clamp-2 ${
             isLeft ? 'text-left' : 'text-right'
           }`}
           title={`View Deck: ${selectedMatch.player_deck_name}`}
@@ -225,7 +225,7 @@ export function FullMatchInfoModal({
         </span>
         <button
           onClick={() => onSelectOpponent && onSelectOpponent(selectedMatch.opponent_name || 'Opponent')}
-          className={`text-xl sm:text-3xl font-bold font-display uppercase tracking-wide text-neutral-200 hover:text-white hover:underline cursor-pointer leading-tight line-clamp-2 ${
+          className={`text-xl sm:text-3xl font-bold font-sans uppercase tracking-wide text-neutral-200 hover:text-white hover:underline cursor-pointer leading-tight line-clamp-2 ${
             isLeft ? 'text-left' : 'text-right'
           }`}
           title={`View Opponent: ${selectedMatch.opponent_name || 'Opponent'}`}

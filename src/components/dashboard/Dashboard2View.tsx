@@ -771,7 +771,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2.5">
                 <Sparkles className="w-5 h-5 text-amber-400" />
-                <h2 className="text-lg font-display font-bold uppercase tracking-wider text-white">
+                <h2 className="text-lg font-sans font-bold uppercase tracking-wider text-white">
                   Add Widget to Dashboard
                 </h2>
               </div>

@@ -283,7 +283,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
           <div className="hidden min-[920px]:flex w-[410px] max-w-full max-h-[740px] overflow-y-auto custom-scrollbar flex-col gap-4 shrink-0 border border-white/10 bg-neutral-950 p-5 shadow-2xl">
             {/* Header: Title & Mana Cost */}
             <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2.5 shrink-0">
-              <h3 className="text-lg font-bold font-display uppercase tracking-wide text-white leading-tight">
+              <h3 className="text-lg font-bold font-sans uppercase tracking-wide text-white leading-tight">
                 {cardName}
               </h3>
               <span className="shrink-0 flex items-center gap-1">
