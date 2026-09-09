@@ -499,17 +499,17 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => {
               setIsEditMode(!isEditMode);
               setDraggedWidgetId(null);
               setDragOverWidgetId(null);
             }}
-            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-sans font-medium transition-all border ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
               isEditMode
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm font-semibold"
-                : "bg-white/[0.04] text-neutral-300 border-white/10 hover:bg-white/[0.08] hover:text-white"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold"
+                : "bg-transparent hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-transparent"
             }`}
           >
             {isEditMode ? (
@@ -530,16 +530,16 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
               {/* Change Colors Button */}
               <button
                 onClick={() => setIsColorPickerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs font-sans font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] text-emerald-300 border border-transparent hover:border-white/10 active:scale-95 transition-all cursor-pointer"
               >
                 <Palette className="w-3.5 h-3.5" />
-                <span>Change Colors</span>
+                <span>Colors</span>
               </button>
 
               {/* Add Widget Button */}
               <button
                 onClick={() => setIsModulePickerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 text-xs font-sans font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30 transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] text-sky-300 border border-transparent hover:border-white/10 active:scale-95 transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Widget</span>
@@ -547,12 +547,12 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
             </>
           )}
 
-          <div className="flex items-center bg-white/[0.04] p-0.5 border border-white/10">
+          <div className="flex items-center bg-white/[0.03] p-0.5 gap-0.5">
             <button
               onClick={() => setDashboardMode("2.0")}
-              className={`px-3 py-1 text-xs font-sans font-medium transition-all ${
+              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
                 dashboardMode === "2.0"
-                  ? "bg-white/[0.12] text-white shadow-sm font-bold"
+                  ? "bg-white/[0.10] text-white font-bold"
                   : "text-neutral-400 hover:text-white"
               }`}
             >
@@ -560,9 +560,9 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
             </button>
             <button
               onClick={() => setDashboardMode("legacy")}
-              className={`px-3 py-1 text-xs font-sans font-medium transition-all ${
+              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
                 dashboardMode === "legacy"
-                  ? "bg-white/[0.12] text-white shadow-sm font-bold"
+                  ? "bg-white/[0.10] text-white font-bold"
                   : "text-neutral-400 hover:text-white"
               }`}
             >
@@ -602,7 +602,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                     : "opacity-100"
                 } ${
                   isDropTarget
-                    ? "ring-2 ring-amber-400 bg-amber-500/10 shadow-2xl scale-[1.01] z-20"
+                    ? "ring-2 ring-amber-400 bg-amber-500/10 scale-[1.01] z-20"
                     : ""
                 } ${
                   isEditMode && !isDraggingThis && !isDropTarget
@@ -613,7 +613,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                 {/* Swap Target Visual Badge */}
                 {isDropTarget && (
                   <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-none">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-black font-sans font-bold text-xs shadow-xl uppercase tracking-wider rounded-xs animate-bounce">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-black font-sans font-bold text-xs uppercase tracking-wider animate-bounce">
                       <ArrowLeftRight className="w-4 h-4" />
                       <span>Swap with {def.title}</span>
                     </div>
@@ -765,7 +765,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
           onClick={() => setIsModulePickerOpen(false)}
         >
           <div
-            className="bg-neutral-900 border border-white/20 max-w-2xl w-full p-6 shadow-2xl space-y-4"
+            className="bg-neutral-950 border border-white/20 max-w-2xl w-full p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -777,7 +777,8 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
               </div>
               <button
                 onClick={() => setIsModulePickerOpen(false)}
-                className="p-1 text-neutral-400 hover:text-white hover:bg-white/10"
+                className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+                title="Close (Esc)"
               >
                 <X className="w-4 h-4" />
               </button>

@@ -975,12 +975,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {setDashboardMode && (
-          <div className="flex items-center bg-white/[0.04] p-0.5 border border-white/10">
+          <div className="flex items-center bg-white/[0.03] p-0.5 gap-0.5">
             <button
               onClick={() => setDashboardMode("2.0")}
-              className={`px-3 py-1 text-xs font-sans font-medium transition-all ${
+              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
                 dashboardMode === "2.0"
-                  ? "bg-white/[0.12] text-white shadow-sm font-bold"
+                  ? "bg-white/[0.10] text-white font-bold"
                   : "text-neutral-400 hover:text-white"
               }`}
             >
@@ -988,9 +988,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <button
               onClick={() => setDashboardMode("legacy")}
-              className={`px-3 py-1 text-xs font-sans font-medium transition-all ${
+              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
                 dashboardMode === "legacy"
-                  ? "bg-white/[0.12] text-white shadow-sm font-bold"
+                  ? "bg-white/[0.10] text-white font-bold"
                   : "text-neutral-400 hover:text-white"
               }`}
             >

@@ -120,7 +120,7 @@ export const RecentMatchesWidget: React.FC<WidgetProps> = ({
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 {/* Win / Loss Box (Fixed width for identical sizing) */}
                 <div
-                  className="w-12 h-5 rounded-xs flex items-center justify-center font-mono font-bold text-[10px] uppercase tracking-wider shrink-0"
+                  className="w-12 h-5 flex items-center justify-center font-mono font-bold text-[10px] uppercase tracking-wider shrink-0"
                   style={{
                     backgroundColor: `${outcomeColor}22`,
                     color: outcomeColor,
@@ -132,7 +132,7 @@ export const RecentMatchesWidget: React.FC<WidgetProps> = ({
 
                 {/* Deck Preview Art Icon */}
                 {deckArt && (
-                  <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/15 shadow-sm bg-neutral-900 rounded-xs">
+                  <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/15 bg-neutral-900">
                     <CardImage
                       name={deckArt}
                       version="art_crop"
@@ -165,7 +165,7 @@ export const RecentMatchesWidget: React.FC<WidgetProps> = ({
                 </span>
                 {m.format_name && (
                   <span
-                    className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-xs shrink-0"
+                    className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 shrink-0"
                     style={{
                       backgroundColor: fmtChip.bg,
                       color: fmtChip.fg,

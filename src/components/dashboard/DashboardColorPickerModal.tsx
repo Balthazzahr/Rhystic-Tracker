@@ -88,7 +88,7 @@ const ColorSlotRow: React.FC<ColorSlotRowProps> = ({
   const safePickerHex = isValidHex(value) ? value : "#10B981";
 
   return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2 bg-white/[0.02] border border-white/10 rounded-xs hover:border-white/20 transition-colors">
+    <div className="flex items-center justify-between gap-3 px-3 py-2 bg-white/[0.02] border border-white/10 hover:border-white/20 transition-colors">
       <span className="text-xs font-sans text-neutral-300 truncate" title={label}>
         {label}
       </span>
@@ -96,7 +96,7 @@ const ColorSlotRow: React.FC<ColorSlotRowProps> = ({
       <div className="flex items-center gap-2 shrink-0">
         {/* Color Wheel / HSV Native Picker Swatch */}
         <div
-          className="relative w-7 h-7 shrink-0 rounded-xs overflow-hidden border border-white/25 hover:border-white/50 shadow-inner cursor-pointer transition-all"
+          className="relative w-7 h-7 shrink-0 overflow-hidden border border-white/25 hover:border-white/50 shadow-inner cursor-pointer transition-all"
           title="Click to open color chooser"
           style={{ backgroundColor: safePickerHex }}
         >
@@ -118,7 +118,7 @@ const ColorSlotRow: React.FC<ColorSlotRowProps> = ({
           value={textInput}
           onChange={handleTextChange}
           onBlur={handleBlur}
-          className="w-20 px-2 py-1 bg-black/50 border border-white/15 text-xs font-mono uppercase text-white rounded-xs focus:border-sky-400 focus:outline-none tabular-nums"
+          className="w-20 px-2 py-1 bg-black/50 border border-white/15 text-xs font-mono uppercase text-white focus:border-sky-400 focus:outline-none tabular-nums"
           placeholder="#000000"
           maxLength={7}
         />
@@ -127,7 +127,7 @@ const ColorSlotRow: React.FC<ColorSlotRowProps> = ({
         <button
           onClick={handleCopy}
           title="Copy hex value"
-          className="px-2 py-1 border border-white/15 hover:border-white/30 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white rounded-xs transition-colors flex items-center gap-1 text-[11px] font-mono cursor-pointer"
+          className="px-2 py-1 border border-white/15 hover:border-white/30 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors flex items-center gap-1 text-[11px] font-mono cursor-pointer"
         >
           {copied ? (
             <>
@@ -247,7 +247,7 @@ export const DashboardColorPickerModal: React.FC<DashboardColorPickerModalProps>
       onClick={onClose}
     >
       <div
-        className="bg-neutral-900 border border-white/20 max-w-2xl w-full p-6 shadow-2xl space-y-5"
+        className="bg-neutral-950 border border-white/20 max-w-2xl w-full p-6 shadow-2xl space-y-5"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -260,7 +260,8 @@ export const DashboardColorPickerModal: React.FC<DashboardColorPickerModalProps>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+            title="Close (Esc)"
           >
             <X className="w-4 h-4" />
           </button>
@@ -271,7 +272,7 @@ export const DashboardColorPickerModal: React.FC<DashboardColorPickerModalProps>
           {modules.map((mod) => (
             <div
               key={mod.key}
-              className="p-3.5 bg-white/[0.01] border border-white/10 rounded-xs space-y-2.5"
+              className="p-3.5 bg-white/[0.01] border border-white/10 space-y-2.5"
             >
               <div className="text-xs font-sans font-bold uppercase tracking-wider text-neutral-300">
                 {mod.name}

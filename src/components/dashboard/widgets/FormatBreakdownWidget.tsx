@@ -43,7 +43,7 @@ export const FormatBreakdownWidget: React.FC<WidgetProps> = ({
           return (
             <div
               key={f.format}
-              className="flex items-center justify-between text-xs font-sans py-1.5 px-2.5 bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors rounded-xs"
+              className="flex items-center justify-between text-xs font-sans py-1.5 px-2.5 bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors"
             >
               <span className="text-neutral-200 font-medium truncate mr-2">
                 {f.format}

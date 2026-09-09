@@ -124,7 +124,7 @@ export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = ({
           <div
             key={entry.grp_id ?? i}
             onClick={() => onShowCard({ name: entry.card_name, grp_id: entry.grp_id }, false)}
-            className="flex items-center justify-between gap-2 p-1.5 bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors cursor-pointer group text-xs font-sans rounded-xs"
+            className="flex items-center justify-between gap-2 p-1.5 bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] transition-colors cursor-pointer group text-xs font-sans"
           >
             <div className="flex items-center gap-2 min-w-0">
               <span
@@ -140,7 +140,7 @@ export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = ({
               >
                 #{i + 1}
               </span>
-              <div className="w-5 h-5 shrink-0 overflow-hidden border border-white/10 bg-neutral-900 rounded-xs">
+              <div className="w-5 h-5 shrink-0 overflow-hidden border border-white/10 bg-neutral-900">
                 <CardImage
                   name={entry.card_name}
                   version="art_crop"
