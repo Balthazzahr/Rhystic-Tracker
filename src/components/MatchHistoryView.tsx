@@ -2,11 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   SlidersHorizontal,
   Columns3,
-  ChevronUp,
-  ChevronDown,
-  GripVertical,
   X,
-  RotateCcw,
   Check,
   ChevronRight,
   ChevronLeft,
@@ -20,6 +16,8 @@ import { ManaPip } from './ManaPip';
 import { CardNameTooltip } from './CardNameTooltip';
 import { CardImage } from './CardImage';
 import { PaginationFooter, GlassSearchInput } from './common';
+import { useColumnManager } from '../hooks/useColumnManager';
+import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 
 // Date Formatters matching Dashboard
 const formatTimeAgo = (ts: string): string => {
@@ -319,83 +317,19 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   }, [formatOptions]);
 
   // --- Column Customizer State ---
-  const [columns, setColumns] = useState<ColumnDef[]>(() => {
-    try {
-      const saved = localStorage.getItem('rhystic_match_history_columns');
-      if (saved) {
-        const parsed: ColumnDef[] = JSON.parse(saved);
-        // Merge with any new columns that might have been added in updates
-        const existingKeys = new Set(parsed.map((c) => c.key));
-        const missing = DEFAULT_COLUMNS.filter((c) => !existingKeys.has(c.key));
-        return [...parsed, ...missing];
-      }
-    } catch (e) {
-      console.error('Failed to load column configuration:', e);
-    }
-    return DEFAULT_COLUMNS;
+  const {
+    columns,
+    visibleColumns,
+    showColumnModal,
+    setShowColumnModal,
+    toggleColumnVisibility,
+    moveColumn,
+    resetColumns,
+  } = useColumnManager<ColumnDef>({
+    storageKey: 'rhystic_match_history_columns',
+    defaultColumns: DEFAULT_COLUMNS,
+    filterColumn: (col) => allowMatchDeletion || col.key !== 'delete',
   });
-
-  const [showColumnModal, setShowColumnModal] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const saveColumns = (newCols: ColumnDef[]) => {
-    setColumns(newCols);
-    try {
-      localStorage.setItem('rhystic_match_history_columns', JSON.stringify(newCols));
-    } catch (e) {
-      console.error('Failed to persist columns:', e);
-    }
-  };
-
-  const toggleColumnVisibility = (key: string) => {
-    const updated = columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c));
-    saveColumns(updated);
-  };
-
-  const moveColumn = (fromIdx: number, toIdx: number) => {
-    if (toIdx < 0 || toIdx >= columns.length || fromIdx === toIdx) return;
-    const updated = [...columns];
-    const [moved] = updated.splice(fromIdx, 1);
-    updated.splice(toIdx, 0, moved);
-    saveColumns(updated);
-  };
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverIndex !== index) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    const sourceIdx =
-      draggedIndex !== null
-        ? draggedIndex
-        : parseInt(e.dataTransfer.getData('text/plain'), 10);
-    if (!isNaN(sourceIdx) && sourceIdx !== targetIndex) {
-      moveColumn(sourceIdx, targetIndex);
-    }
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const resetColumns = () => {
-    saveColumns(DEFAULT_COLUMNS);
-  };
 
   // Map deck names to key cards for fast lookup
   const deckKeyCardsMap = useMemo(() => {
@@ -595,10 +529,6 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     overscan: 12,
   });
 
-  const visibleColumns = useMemo(
-    () => columns.filter((c) => c.visible && (c.key !== 'delete' || allowMatchDeletion)),
-    [columns, allowMatchDeletion]
-  );
 
   // Mini mana histogram renderer
   const renderMiniHistogram = (curve?: number[]) => {
@@ -1367,162 +1297,18 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* ========================================================================= */}
       {/* 6. CUSTOMIZE COLUMNS MODAL (Drag & Drop + Toggle Visibility + Persistence) */}
       {/* ========================================================================= */}
-      {showColumnModal && (
-        <div
-          onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
-          >
-            {/* Modal Header */}
-            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Columns3 className="w-5 h-5" style={{ color: accentColor }} />
-                  <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
-                    CUSTOMIZE TABLE COLUMNS
-                  </h2>
-                </div>
-                <p className="text-xs text-neutral-400 mt-1 font-sans">
-                  Toggle column visibility and drag or click arrows to reorder table columns.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Scrollable Column List */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
-              {columns
-                .filter((col) => col.key !== 'delete' || allowMatchDeletion)
-                .map((col, idx) => {
-                const isDragging = draggedIndex === idx;
-                const isTarget = dragOverIndex === idx && draggedIndex !== null && draggedIndex !== idx;
-
-                return (
-                  <div
-                    key={col.key}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    onDrop={(e) => handleDrop(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    className={`flex items-center justify-between p-3 border transition-all cursor-move select-none ${
-                      isDragging
-                        ? 'opacity-30 border-dashed border-white/40 scale-[0.98]'
-                        : isTarget
-                        ? 'border-2 scale-[1.02] shadow-xl ring-1'
-                        : col.visible
-                        ? 'bg-white/[0.04] border-white/15 hover:border-white/30'
-                        : 'bg-white/[0.01] border-white/5 opacity-50'
-                    }`}
-                    style={{
-                      borderColor: isTarget ? accentColor : undefined,
-                      backgroundColor: isTarget ? `${accentColor}18` : undefined,
-                      boxShadow: isTarget ? `0 0 15px ${accentColor}44` : undefined,
-                    }}
-                  >
-                    {/* Left: Grip Handle + Checkbox + Column Info */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <GripVertical
-                        className={`w-4 h-4 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
-                          isTarget ? 'text-white' : 'text-neutral-500'
-                        }`}
-                      />
-                      <button
-                        onClick={() => toggleColumnVisibility(col.key)}
-                        className={`w-4 h-4 flex items-center justify-center border text-xs cursor-pointer transition-colors ${
-                          col.visible
-                            ? 'border-white/40 text-white shadow-sm'
-                            : 'border-white/20 text-transparent'
-                        }`}
-                        style={{
-                          backgroundColor: col.visible ? accentColor : 'transparent',
-                          borderColor: col.visible ? accentColor : undefined,
-                        }}
-                      >
-                        {col.visible && (
-                          <Check
-                            className="w-3 h-3 stroke-[3]"
-                            style={{ color: getContrastTextColor(accentColor) }}
-                          />
-                        )}
-                      </button>
-                      <div>
-                        <div className="text-xs font-sans font-bold text-white tracking-wide flex items-center gap-2">
-                          <span>{col.label}</span>
-                          {isTarget && (
-                            <span
-                              className="text-[9px] font-mono uppercase px-1.5 py-0.2 border font-bold"
-                              style={{
-                                color: accentColor,
-                                borderColor: `${accentColor}66`,
-                                backgroundColor: `${accentColor}20`,
-                              }}
-                            >
-                              ⇄ SWAP TO POS #{idx + 1}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10.5px] font-mono text-neutral-400 leading-tight">
-                          {col.description}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Reorder Up/Down buttons */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        disabled={idx === 0}
-                        onClick={() => moveColumn(idx, idx - 1)}
-                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Move column left / up"
-                      >
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        disabled={idx === columns.length - 1}
-                        onClick={() => moveColumn(idx, idx + 1)}
-                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Move column right / down"
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <button
-                onClick={resetColumns}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Default</span>
-              </button>
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="px-6 py-2 text-xs font-sans font-bold tracking-wider uppercase shadow-md transition-colors cursor-pointer"
-                style={{
-                  backgroundColor: accentColor,
-                  color: getContrastTextColor(accentColor),
-                }}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ColumnCustomizerModal
+        isOpen={showColumnModal}
+        onClose={() => setShowColumnModal(false)}
+        title="CUSTOMIZE TABLE COLUMNS"
+        subtitle="Toggle column visibility and drag or click arrows to reorder table columns."
+        columns={columns}
+        accentColor={accentColor}
+        filterColumn={(col) => allowMatchDeletion || col.key !== 'delete'}
+        onToggleVisibility={toggleColumnVisibility}
+        onMoveColumn={moveColumn}
+        onResetColumns={resetColumns}
+      />
 
       {/* ========================================================================= */}
       {/* 7. DELETE MATCH CONFIRMATION MODAL (2-Step Safety Verification)          */}
