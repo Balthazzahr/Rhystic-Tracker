@@ -15,7 +15,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ManaPip } from './ManaPip';
 import { CardNameTooltip } from './CardNameTooltip';
 import { CardImage } from './CardImage';
-import { PaginationFooter, GlassSearchInput } from './common';
+import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 
@@ -986,76 +986,52 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         </button>
       </div>
 
-      {/* 3. TABLE VIEW CONTAINER (Floating Header + Table Body) */}
-      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Floating Table Header */}
-        <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
-          {visibleColumns.map((col) => {
-            const isMatchup = col.key === 'matchup' || col.key === 'deck';
+      {/* 3. TABLE VIEW */}
+      <TableShell
+        columns={visibleColumns}
+        scrollRef={parentRef}
+        empty={pagedMatches.length === 0}
+        emptyIcon={<Swords className="w-8 h-8 opacity-20 mb-2" />}
+        emptyMessage="No matches found matching your active filter criteria."
+      >
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const m = pagedMatches[virtualRow.index];
+            if (!m) return null;
             return (
               <div
-                key={col.key}
-                className={`${col.width || 'flex-1'} px-1.5 ${
-                  isMatchup ? 'text-left' : 'text-center'
-                }`}
-              >
-                {col.label}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Main Data Table Body */}
-        <div className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md flex flex-col overflow-hidden">
-          {/* Virtualized Rows Viewport */}
-          <div ref={parentRef} className="flex-1 overflow-y-auto relative custom-scrollbar divide-y divide-white/5">
-            {pagedMatches.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-neutral-500 font-sans italic">
-                <Swords className="w-8 h-8 opacity-20 mb-2" />
-                <span>No matches found matching your active filter criteria.</span>
-              </div>
-            ) : (
-              <div
+                key={m.match_id}
+                onClick={() => onSelectMatch(m.match_id)}
+                className="absolute top-0 left-0 w-full flex items-center py-2 px-4 border-b border-white/5 transition-colors cursor-pointer group hover:bg-white/[0.04]"
                 style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const m = pagedMatches[virtualRow.index];
-                  if (!m) return null;
+                {visibleColumns.map((col) => {
+                  const isMatchup = col.key === 'matchup' || col.key === 'deck' || col.key === 'opponent';
                   return (
                     <div
-                      key={m.match_id}
-                      onClick={() => onSelectMatch(m.match_id)}
-                      className="absolute top-0 left-0 w-full flex items-center py-2 px-4 border-b border-white/5 transition-colors cursor-pointer group hover:bg-white/[0.04]"
-                      style={{
-                        height: `${virtualRow.size}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
+                      key={col.key}
+                      className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
+                        isMatchup ? 'text-left' : 'text-center flex items-center justify-center'
+                      }`}
                     >
-                      {visibleColumns.map((col) => {
-                        const isMatchup = col.key === 'matchup' || col.key === 'deck' || col.key === 'opponent';
-                        return (
-                          <div
-                            key={col.key}
-                            className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
-                              isMatchup ? 'text-left' : 'text-center flex items-center justify-center'
-                            }`}
-                          >
-                            {renderCellContent(col, m)}
-                          </div>
-                        );
-                      })}
+                      {renderCellContent(col, m)}
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
+            );
+          })}
         </div>
-      </div>
+      </TableShell>
 
       {/* Footer: pagination controls + total match count */}
       <PaginationFooter
