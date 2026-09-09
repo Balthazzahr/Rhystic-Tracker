@@ -404,29 +404,7 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     return () => el.removeEventListener('wheel', onWheel);
   }, [deckView, activeTotalPages]);
 
-  // Page turn animation
-  const deckGridAnimRef = useRef<HTMLDivElement>(null);
-  const prevDeckPageSizeRef = useRef<number>(0);
-  useEffect(() => {
-    const el = deckGridAnimRef.current;
-    if (!el || deckView !== 'cards') return;
-    const layoutChanged = prevDeckPageSizeRef.current > 0 && prevDeckPageSizeRef.current !== gridPageSize;
-    prevDeckPageSizeRef.current = gridPageSize;
-    if (layoutChanged) return; // reflow-driven page clamp — no animation
-    el.getAnimations().forEach((a) => a.cancel());
-    const next = deckPageDirRef.current === 'next';
-    el.style.willChange = 'opacity, transform';
-    const anim = el.animate(
-      [
-        { opacity: 0.2, transform: next ? 'translateX(12px) translateZ(0)' : 'translateX(-12px) translateZ(0)' },
-        { opacity: 1, transform: 'translateX(0) translateZ(0)' },
-      ],
-      { duration: 200, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' },
-    );
-    anim.onfinish = () => {
-      if (el) el.style.willChange = 'auto';
-    };
-  }, [deckPage, deckView, gridPageSize]);
+  // Page turn animation removed per design request: deck boxes now appear instantly with zero animation in/out.
 
   const handleSortColumn = (key?: string) => {
     if (!key) return;
@@ -627,7 +605,6 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
                 className="h-full min-h-0 flex flex-wrap justify-center content-center items-start gap-3"
               >
                 <div
-                  ref={deckGridAnimRef}
                   style={{ transform: 'translateZ(0)' }}
                   className="h-full min-h-0 w-full flex flex-wrap content-center items-start justify-center gap-3"
                 >
