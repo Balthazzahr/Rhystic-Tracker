@@ -37,3 +37,23 @@ export const MTG_COLORS = {
     hoverBg: 'rgba(197, 160, 89, 0.3)',
   },
 };
+
+export interface ManaThemeOption {
+  id: string;
+  label: string;
+  symbol: string;
+  color: string;
+  desc: string;
+}
+
+export const BG_WINDOWS = [
+  { id: 'dashboard', label: 'Dashboard', iconClass: 'ms ms-ability-party' },
+  { id: 'matches', label: 'Match History', iconClass: 'ms ms-battle' },
+  { id: 'decks', label: 'Deck Library', iconClass: 'ms ms-ability-adventure' },
+  { id: 'collection', label: 'Card Library', iconClass: 'ms ms-library' },
+  { id: 'achievements', label: 'Achievements', iconClass: 'ms ms-ability-duels-renowned' },
+  { id: 'leaderboards', label: 'Leaderboards', iconClass: 'ms ms-ability-kicker' },
+  { id: 'live', label: 'Live HUD', iconClass: 'ms ms-instant' },
+  { id: 'settings', label: 'Settings', iconClass: 'ms ms-ability-prototype' },
+];
+
