@@ -1287,7 +1287,7 @@ export default function App() {
         {activeTab === 'leaderboards' && (
           <LeaderboardsView
             palette={palette}
-            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            onShowCard={openCardOverlay}
           />
         )}
       </main>

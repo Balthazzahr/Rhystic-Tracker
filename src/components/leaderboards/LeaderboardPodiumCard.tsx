@@ -13,7 +13,7 @@ interface LeaderboardPodiumCardProps {
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
 }
 
-export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
+export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = React.memo(({
   category,
   isSearchActive,
   cleanQuery,
@@ -283,4 +283,31 @@ export const LeaderboardPodiumCard: React.FC<LeaderboardPodiumCardProps> = ({
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  // 1. If category reference or callback reference changed, re-render
+  if (prev.category !== next.category) return false;
+  if (prev.onExpand !== next.onExpand) return false;
+  if (prev.onShowCard !== next.onShowCard) return false;
+
+  // 2. If search active status or query changed:
+  if (prev.isSearchActive !== next.isSearchActive || prev.cleanQuery !== next.cleanQuery) {
+    // If neither was active and neither is active, no need to re-render
+    if (!prev.isSearchActive && !next.isSearchActive) return true;
+
+    // Check if card match state actually changed for this category
+    const prevHasMatch = prev.isSearchActive && prev.category.data.some((item) =>
+      item.card_name.toLowerCase().includes(prev.cleanQuery)
+    );
+    const nextHasMatch = next.isSearchActive && next.category.data.some((item) =>
+      item.card_name.toLowerCase().includes(next.cleanQuery)
+    );
+
+    // If both match or either matches, re-render to update the display
+    if (prevHasMatch || nextHasMatch) return false;
+
+    // If neither matches (e.g. query typed doesn't affect this category at all), bail out!
+    return true;
+  }
+
+  return true;
+});
