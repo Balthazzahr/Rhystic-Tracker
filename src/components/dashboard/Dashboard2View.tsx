@@ -99,6 +99,76 @@ const reflowRowOnRemoval = (
   return nextRows.flat();
 };
 
+interface DashboardWidgetContainerProps {
+  widget: WidgetInstance;
+  matches: MatchRecord[];
+  winLossMatches: MatchRecord[];
+  stats: DashboardStats;
+  deckOverview: any[];
+  palette: ManaTheme | null;
+  formatOptions: { value: string; label: string }[];
+  timeOptions: { value: string; label: string }[];
+  onSelectMatch: (matchId: string) => void;
+  onSelectDeck: (deckName: string) => void;
+  onShowCard: (
+    card: { name: string; grp_id?: number },
+    isCommander: boolean,
+  ) => void;
+  onInspectAchievement: (ach: any) => void;
+  onUpdateWidgetSettings: (widgetId: string, newSettings: Record<string, any>) => void;
+  customColors: DashboardCustomColors;
+  isLoading: boolean;
+}
+
+const DashboardWidgetContainer: React.FC<DashboardWidgetContainerProps> = React.memo(({
+  widget,
+  matches,
+  winLossMatches,
+  stats,
+  deckOverview,
+  palette,
+  formatOptions,
+  timeOptions,
+  onSelectMatch,
+  onSelectDeck,
+  onShowCard,
+  onInspectAchievement,
+  onUpdateWidgetSettings,
+  customColors,
+  isLoading,
+}) => {
+  const def = WIDGET_REGISTRY[widget.kind];
+  if (!def) return null;
+  const Component = def.component;
+
+  const handleSettingsUpdate = useCallback(
+    (newSettings: Record<string, any>) => {
+      onUpdateWidgetSettings(widget.id, newSettings);
+    },
+    [onUpdateWidgetSettings, widget.id]
+  );
+
+  return (
+    <Component
+      widget={widget}
+      matches={matches}
+      winLossMatches={winLossMatches}
+      stats={stats}
+      deckOverview={deckOverview}
+      palette={palette}
+      formatOptions={formatOptions}
+      timeOptions={timeOptions}
+      onSelectMatch={onSelectMatch}
+      onSelectDeck={onSelectDeck}
+      onShowCard={onShowCard}
+      onInspectAchievement={onInspectAchievement}
+      onUpdateSettings={handleSettingsUpdate}
+      customColors={customColors}
+      isLoading={isLoading}
+    />
+  );
+});
+
 export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
   matches,
   deckOverview,
@@ -696,7 +766,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
 
                 {/* Rendered Widget Container */}
                 <div className={`flex-1 min-h-0 flex flex-col h-full overflow-hidden ${isEditMode ? "pt-7" : ""}`}>
-                  <Component
+                  <DashboardWidgetContainer
                     widget={w}
                     matches={matches}
                     winLossMatches={winLossMatches}
@@ -708,10 +778,8 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                     onSelectMatch={onSelectMatch}
                     onSelectDeck={onSelectDeck}
                     onShowCard={onShowCard}
-                    onInspectAchievement={(ach) => setInspectedAchievement(ach)}
-                    onUpdateSettings={(newSettings) =>
-                      handleUpdateWidgetSettings(w.id, newSettings)
-                    }
+                    onInspectAchievement={setInspectedAchievement}
+                    onUpdateWidgetSettings={handleUpdateWidgetSettings}
                     customColors={customColors}
                     isLoading={isLoadingLayout}
                   />

@@ -3,7 +3,7 @@ import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { Trophy } from "lucide-react";
 
-export const WinRateSummaryWidget: React.FC<WidgetProps> = ({
+export const WinRateSummaryWidget: React.FC<WidgetProps> = React.memo(({
   stats,
   customColors,
   isLoading = false,
@@ -47,4 +47,4 @@ export const WinRateSummaryWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

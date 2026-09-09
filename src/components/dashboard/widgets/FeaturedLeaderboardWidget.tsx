@@ -50,7 +50,7 @@ const CATEGORIES = [
   },
 ];
 
-export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = ({
+export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   onShowCard,
   onUpdateSettings,
@@ -159,4 +159,4 @@ export const FeaturedLeaderboardWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

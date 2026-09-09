@@ -58,7 +58,7 @@ const formatChipColor = (
   return { bg: "#94A3B818", fg: "#CBD5E1", border: "#94A3B838" };
 };
 
-export const RecentMatchesWidget: React.FC<WidgetProps> = ({
+export const RecentMatchesWidget: React.FC<WidgetProps> = React.memo(({
   winLossMatches,
   deckOverview,
   palette,
@@ -182,4 +182,4 @@ export const RecentMatchesWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

@@ -3,7 +3,7 @@ import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { Calendar } from "lucide-react";
 
-export const TodayWidget: React.FC<WidgetProps> = ({
+export const TodayWidget: React.FC<WidgetProps> = React.memo(({
   stats,
   customColors,
   isLoading = false,
@@ -47,4 +47,4 @@ export const TodayWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

@@ -5,7 +5,7 @@ import { WidgetShell } from "../WidgetShell";
 import { AchievementBadge } from "../../AchievementBadge";
 import { CardImage } from "../../CardImage";
 
-export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
+export const RecentAchievementsWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   onInspectAchievement,
 }) => {
@@ -104,4 +104,4 @@ export const RecentAchievementsWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

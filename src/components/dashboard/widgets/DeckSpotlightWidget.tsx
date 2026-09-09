@@ -20,7 +20,7 @@ const renderColorPips = (colors: string[], size: number = 12) => {
   );
 };
 
-export const DeckSpotlightWidget: React.FC<WidgetProps> = ({
+export const DeckSpotlightWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   deckOverview,
   customColors,
@@ -214,4 +214,4 @@ export const DeckSpotlightWidget: React.FC<WidgetProps> = ({
       )}
     </WidgetShell>
   );
-};
+});

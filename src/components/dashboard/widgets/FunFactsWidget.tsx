@@ -21,7 +21,7 @@ const renderColorPips = (colors: string[], size: number = 11) => {
   );
 };
 
-export const FunFactsWidget: React.FC<WidgetProps> = ({
+export const FunFactsWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   winLossMatches,
   deckOverview,
@@ -286,4 +286,4 @@ export const FunFactsWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

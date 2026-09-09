@@ -51,7 +51,7 @@ const dayLabel = (key: string, todayKey: string): string => {
   return `${parseInt(dy, 10)} ${months[parseInt(mo, 10) - 1]}`;
 };
 
-export const WinRateTrendWidget: React.FC<WidgetProps> = ({
+export const WinRateTrendWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   winLossMatches,
   stats,
@@ -536,4 +536,4 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

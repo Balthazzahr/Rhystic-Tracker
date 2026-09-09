@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   Layers, 
   PanelLeftClose, 
@@ -318,7 +318,7 @@ export default function App() {
   // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
   // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
   // local cards cache so the detail panel always has complete info.
-  const openCardOverlay = async (card: any, isCommander: boolean) => {
+  const openCardOverlay = useCallback(async (card: any, isCommander: boolean) => {
     const hasMeta =
       card &&
       (card.cmc !== undefined || card.mana_cost !== undefined) &&
@@ -343,16 +343,26 @@ export default function App() {
     setOverlayImgFailed(false);
     setOverlayImgTriedNamed(false);
     setDeckCardOverlay({ card, isCommander });
-  };
+  }, []);
+
   // Dashboard view mode: '2.0' (default) or 'legacy', persisted locally.
   const [dashboardMode, setDashboardMode] = useState<'2.0' | 'legacy'>(() => {
     const saved = localStorage.getItem('rhystic_dashboard_mode');
     return saved === '2.0' ? '2.0' : 'legacy';
   });
-  const handleSetDashboardMode = (mode: '2.0' | 'legacy') => {
+  const handleSetDashboardMode = useCallback((mode: '2.0' | 'legacy') => {
     setDashboardMode(mode);
     localStorage.setItem('rhystic_dashboard_mode', mode);
-  };
+  }, []);
+
+  const handleSelectMatch = useCallback((matchId: string) => {
+    setSelectedMatchId(matchId);
+    setIsFullInfoOpen(true);
+  }, []);
+
+  const handleSelectDeck = useCallback((deckName: string) => {
+    setSelectedDeckName(deckName);
+  }, []);
 
   // Hover state for theme selector preview
   const [hoveredThemeId, setHoveredThemeId] = useState<string | null>(null);
@@ -1168,12 +1178,9 @@ export default function App() {
               palette={palette}
               formatOptions={formatOptions}
               timeOptions={timeOptions}
-              onSelectMatch={(matchId) => {
-                setSelectedMatchId(matchId);
-                setIsFullInfoOpen(true);
-              }}
-              onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
-              onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+              onSelectMatch={handleSelectMatch}
+              onSelectDeck={handleSelectDeck}
+              onShowCard={openCardOverlay}
               isTestEnv={envInfo?.is_test}
               dashboardMode={dashboardMode}
               setDashboardMode={handleSetDashboardMode}

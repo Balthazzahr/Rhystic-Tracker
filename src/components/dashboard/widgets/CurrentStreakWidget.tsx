@@ -20,7 +20,7 @@ const formatTimeSince = (ts: string): string => {
   return `${diffDays} ${diffDays === 1 ? "day" : "days"}`;
 };
 
-export const CurrentStreakWidget: React.FC<WidgetProps> = ({
+export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   stats,
   winLossMatches,
@@ -183,4 +183,4 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});

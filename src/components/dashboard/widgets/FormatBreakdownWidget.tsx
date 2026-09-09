@@ -3,7 +3,7 @@ import { Layers } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 
-export const FormatBreakdownWidget: React.FC<WidgetProps> = ({
+export const FormatBreakdownWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   winLossMatches,
   palette,
@@ -63,4 +63,4 @@ export const FormatBreakdownWidget: React.FC<WidgetProps> = ({
       </div>
     </WidgetShell>
   );
-};
+});
