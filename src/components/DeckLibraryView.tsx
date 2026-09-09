@@ -20,7 +20,7 @@ import CardImage from './CardImage';
 import { CardNameTooltip } from './CardNameTooltip';
 import { ManaPip } from './ManaPip';
 import { DeckBoxCard, DeckBoxClipDef } from './DeckBoxCard';
-import { PaginationFooter, GlassSearchInput } from './common';
+import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 
@@ -39,19 +39,19 @@ export interface DeckColumnDef {
 }
 
 const DEFAULT_DECK_COLUMNS: DeckColumnDef[] = [
-  { key: 'deck', label: 'Deck', description: 'Deck name and preview art thumbnail', visible: true, width: 'flex-1 min-w-[200px]', align: 'left', sortKey: 'deck_name' },
-  { key: 'key_cards', label: 'Key Cards', description: 'Up to 3 high-impact card art crops', visible: true, width: 'w-32', align: 'center' },
-  { key: 'colors', label: 'Colors', description: 'Color identity mana pips', visible: true, width: 'w-24', align: 'center', sortKey: 'colors' },
-  { key: 'mana_curve', label: 'Curve', description: 'Mana value distribution curve', visible: true, width: 'w-28', align: 'center' },
-  { key: 'format', label: 'Format', description: 'Primary played format tag', visible: true, width: 'w-28', align: 'center', sortKey: 'format' },
-  { key: 'games', label: 'Games', description: 'Total matches recorded', visible: true, width: 'w-20', align: 'center', sortKey: 'games' },
-  { key: 'record', label: 'W / L', description: 'Total wins and losses split', visible: true, width: 'w-20', align: 'center', sortKey: 'record' },
-  { key: 'winrate', label: 'Win Rate', description: 'Percentage of matches won', visible: true, width: 'w-24', align: 'center', sortKey: 'winrate' },
-  { key: 'source', label: 'Source', description: 'True decklist vs match log source', visible: true, width: 'w-16', align: 'center' },
-  { key: 'commanders', label: 'Commanders', description: 'Dominant or registered commander cards', visible: false, width: 'w-36', align: 'left', sortKey: 'commander' },
-  { key: 'last_played', label: 'Last Played', description: 'Date or relative time of the most recent match', visible: false, width: 'w-28', align: 'center', sortKey: 'last_played' },
-  { key: 'wins', label: 'Wins', description: 'Total won matches count', visible: false, width: 'w-16', align: 'center', sortKey: 'wins' },
-  { key: 'losses', label: 'Losses', description: 'Total lost matches count', visible: false, width: 'w-16', align: 'center', sortKey: 'losses' },
+  { key: 'deck', label: 'Deck', description: 'Deck name and preview art thumbnail', visible: true, width: 'flex-[2.5] min-w-[200px]', align: 'left', sortKey: 'deck_name' },
+  { key: 'key_cards', label: 'Key Cards', description: 'Up to 3 high-impact card art crops', visible: true, width: 'flex-[1.2] min-w-[120px]', align: 'center' },
+  { key: 'colors', label: 'Colors', description: 'Color identity mana pips', visible: true, width: 'flex-1 min-w-[90px]', align: 'center', sortKey: 'colors' },
+  { key: 'mana_curve', label: 'Curve', description: 'Mana value distribution curve', visible: true, width: 'flex-[1.2] min-w-[110px]', align: 'center' },
+  { key: 'format', label: 'Format', description: 'Primary played format tag', visible: true, width: 'flex-[1.2] min-w-[110px]', align: 'center', sortKey: 'format' },
+  { key: 'games', label: 'Games', description: 'Total matches recorded', visible: true, width: 'flex-[0.9] min-w-[75px]', align: 'center', sortKey: 'games' },
+  { key: 'record', label: 'W / L', description: 'Total wins and losses split', visible: true, width: 'flex-[0.9] min-w-[75px]', align: 'center', sortKey: 'record' },
+  { key: 'winrate', label: 'Win Rate', description: 'Percentage of matches won', visible: true, width: 'flex-1 min-w-[90px]', align: 'center', sortKey: 'winrate' },
+  { key: 'source', label: 'Source', description: 'True decklist vs match log source', visible: true, width: 'flex-[0.7] min-w-[65px]', align: 'center' },
+  { key: 'commanders', label: 'Commanders', description: 'Dominant or registered commander cards', visible: false, width: 'flex-[2] min-w-[160px]', align: 'left', sortKey: 'commander' },
+  { key: 'last_played', label: 'Last Played', description: 'Date or relative time of the most recent match', visible: false, width: 'flex-[1.2] min-w-[110px]', align: 'center', sortKey: 'last_played' },
+  { key: 'wins', label: 'Wins', description: 'Total won matches count', visible: false, width: 'flex-[0.8] min-w-[65px]', align: 'center', sortKey: 'wins' },
+  { key: 'losses', label: 'Losses', description: 'Total lost matches count', visible: false, width: 'flex-[0.8] min-w-[65px]', align: 'center', sortKey: 'losses' },
 ];
 
 const DECK_COLUMNS_STORAGE_KEY = 'rhystic_deck_columns_v2';
@@ -654,228 +654,192 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
         </div>
       ) : (
         /* TABLE VIEW */
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          {/* Floating Table Header */}
-          <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
-            {visibleColumns.map((col) => {
-              const sortable = col.sortKey != null;
-              const isDeckName = col.key === 'deck';
-              return (
+        <TableShell
+          columns={visibleColumns}
+          sortKey={deckSort}
+          sortDir={deckSortDir}
+          onSortChange={handleSortColumn}
+          accentColor={accentColor}
+          empty={displayedDecks.length === 0}
+          emptyMessage="No decks match the current filters"
+          items={displayedDecks}
+          renderRow={(d) => (
+            <div
+              key={d.deck_name}
+              onClick={() => onSelectDeck(d.deck_name)}
+              className="flex items-center py-2 px-4 transition-colors cursor-pointer group hover:bg-white/[0.04]"
+            >
+              {visibleColumns.map((col) => (
                 <div
                   key={col.key}
-                  className={`${col.width || 'flex-1'} px-1.5 ${
-                    isDeckName ? 'text-left' : 'text-center'
+                  className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
+                    col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
                   }`}
                 >
-                  {sortable ? (
-                    <button
-                      onClick={() => handleSortColumn(col.sortKey)}
-                      className={`group inline-flex items-center gap-1 hover:text-neutral-200 transition-colors cursor-pointer text-white font-bold ${
-                        isDeckName ? 'justify-start' : 'justify-center w-full'
-                      }`}
-                      style={{ color: deckSort === col.sortKey ? accentColor : '#FFFFFF' }}
-                    >
-                      <span>{col.label}</span>
-                      <span className="text-[9px]">{sortArrow(col.sortKey)}</span>
-                    </button>
-                  ) : (
-                    <div className={`flex items-center ${isDeckName ? 'justify-start' : 'justify-center'}`}>
-                      <span>{col.label}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  {(() => {
+                    switch (col.key) {
+                      case 'deck':
+                        return (
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
+                              {renderDeckArt(d, 'w-full h-full')}
+                            </div>
+                            <div className="min-w-0 flex items-center gap-2 truncate">
+                              <span className="font-semibold text-neutral-100 hover:text-white truncate hover:underline cursor-pointer text-[14px]">
+                                {d.deck_name}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteDeck(d.deck_name);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-neutral-500 hover:text-rose-400 transition-opacity cursor-pointer shrink-0"
+                                title="Delete deck"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
 
-          {/* Table Body */}
-          <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0">
-            <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
-              {displayedDecks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-neutral-500 font-sans italic">
-                  <span>No decks match the current filters</span>
-                </div>
-              ) : (
-                displayedDecks.map((d) => (
-                  <div
-                    key={d.deck_name}
-                    onClick={() => onSelectDeck(d.deck_name)}
-                    className="flex items-center py-2 px-4 transition-colors cursor-pointer group hover:bg-white/[0.04]"
-                  >
-                    {visibleColumns.map((col) => (
-                      <div
-                        key={col.key}
-                        className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
-                          col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
-                        }`}
-                      >
-                        {(() => {
-                          switch (col.key) {
-                            case 'deck':
-                              return (
-                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                  <div className="w-7 h-7 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
-                                    {renderDeckArt(d, 'w-full h-full')}
-                                  </div>
-                                  <div className="min-w-0 flex items-center gap-2 truncate">
-                                    <span className="font-semibold text-neutral-100 hover:text-white truncate hover:underline cursor-pointer text-[14px]">
-                                      {d.deck_name}
-                                    </span>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDeleteDeck(d.deck_name);
-                                      }}
-                                      className="opacity-0 group-hover:opacity-100 p-1 text-neutral-500 hover:text-rose-400 transition-opacity cursor-pointer shrink-0"
-                                      title="Delete deck"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-
-                            case 'key_cards':
-                              return (
-                                <div className="flex items-center justify-center gap-1.5">
-                                  {(d.key_cards || []).slice(0, 3).map((k: any) => (
-                                    <CardNameTooltip key={k.grp_id || k.name} name={k.name}>
-                                      <div
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onOpenCardOverlay(k, false);
-                                        }}
-                                        className="w-7 h-7 border border-white/10 overflow-hidden shadow-sm bg-neutral-900 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
-                                      >
-                                        <CardImage
-                                          name={k.name}
-                                          version="art_crop"
-                                          alt={k.name}
-                                          className="w-full h-full object-cover"
-                                        />
-                                      </div>
-                                    </CardNameTooltip>
-                                  ))}
-                                  {(!d.key_cards || d.key_cards.length === 0) && (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  )}
-                                </div>
-                              );
-
-                            case 'colors':
-                              return (
-                                <div className="flex justify-center">
-                                  {renderDeckColorIdentity(d.colors, 16)}
-                                </div>
-                              );
-
-                            case 'mana_curve':
-                              return (
-                                <div className="flex justify-center">
-                                  {renderManaHistogram(d.mana_curve)}
-                                </div>
-                              );
-
-                            case 'format': {
-                              const primaryFormat = d.primary_format || d.formats?.[0]?.format;
-                              if (!primaryFormat) return <span className="text-xs font-mono text-neutral-600">—</span>;
-                              const chip = formatChipColor(primaryFormat);
-                              return (
-                                <div className="flex justify-center">
-                                  <span
-                                    className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap"
-                                    style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
-                                  >
-                                    {primaryFormat}
-                                  </span>
-                                </div>
-                              );
-                            }
-
-                            case 'games':
-                              return (
-                                <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">
-                                  {d.total_matches}
-                                </span>
-                              );
-
-                            case 'record':
-                              return (
-                                <span className="text-xs font-mono tabular-nums">
-                                  <span className="text-emerald-400 font-semibold">{d.wins}</span>
-                                  <span className="text-neutral-600 px-1">/</span>
-                                  <span className="text-rose-400 font-semibold">{d.losses}</span>
-                                </span>
-                              );
-
-                            case 'winrate':
-                              return (
-                                <span
-                                  className="text-xs font-mono font-bold tabular-nums"
-                                  style={{ color: winRateColor(d.winrate) }}
+                      case 'key_cards':
+                        return (
+                          <div className="flex items-center justify-center gap-1.5">
+                            {(d.key_cards || []).slice(0, 3).map((k: any) => (
+                              <CardNameTooltip key={k.grp_id || k.name} name={k.name}>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenCardOverlay(k, false);
+                                  }}
+                                  className="w-7 h-7 border border-white/10 overflow-hidden shadow-sm bg-neutral-900 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
                                 >
-                                  {d.winrate}
-                                </span>
-                              );
-
-                            case 'source':
-                              return (
-                                <span
-                                  className="inline-flex items-center justify-center"
-                                  style={{ color: d.has_list ? '#FBBF24' : '#71717A', fontSize: 13 }}
-                                  title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
-                                >
-                                  <NerdIcon glyph={d.has_list ? 'nf-md-cards' : 'nf-oct-log'} />
-                                </span>
-                              );
-
-                            case 'commanders': {
-                              const cmdName = d.top_commander_name || (d.commanders || [])[0]?.name;
-                              return cmdName ? (
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className="w-7 h-7 border border-white/10 shrink-0 overflow-hidden shadow-sm bg-neutral-900">
-                                    <CardImage name={cmdName} version="art_crop" alt={cmdName} className="w-full h-full object-cover" />
-                                  </div>
-                                  <span className="text-xs font-sans text-neutral-300 truncate">{cmdName}</span>
+                                  <CardImage
+                                    name={k.name}
+                                    version="art_crop"
+                                    alt={k.name}
+                                    className="w-full h-full object-cover"
+                                  />
                                 </div>
-                              ) : (
-                                <span className="text-xs font-mono text-neutral-600">—</span>
-                              );
-                            }
+                              </CardNameTooltip>
+                            ))}
+                            {(!d.key_cards || d.key_cards.length === 0) && (
+                              <span className="text-xs font-mono text-neutral-600">—</span>
+                            )}
+                          </div>
+                        );
 
-                            case 'last_played':
-                              return (
-                                <span className="text-xs font-mono text-neutral-400 tabular-nums">
-                                  {formatRelativeTime(d.last_played)}
-                                </span>
-                              );
+                      case 'colors':
+                        return (
+                          <div className="flex justify-center">
+                            {renderDeckColorIdentity(d.colors, 16)}
+                          </div>
+                        );
 
-                            case 'wins':
-                              return (
-                                <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
-                                  {d.wins ?? 0}
-                                </span>
-                              );
+                      case 'mana_curve':
+                        return (
+                          <div className="flex justify-center">
+                            {renderManaHistogram(d.mana_curve)}
+                          </div>
+                        );
 
-                            case 'losses':
-                              return (
-                                <span className="text-xs font-mono font-bold text-rose-400 tabular-nums">
-                                  {d.losses ?? 0}
-                                </span>
-                              );
+                      case 'format': {
+                        const primaryFormat = d.primary_format || d.formats?.[0]?.format;
+                        if (!primaryFormat) return <span className="text-xs font-mono text-neutral-600">—</span>;
+                        const chip = formatChipColor(primaryFormat);
+                        return (
+                          <div className="flex justify-center">
+                            <span
+                              className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap"
+                              style={{ backgroundColor: chip.bg, borderColor: chip.border, color: chip.fg }}
+                            >
+                              {primaryFormat}
+                            </span>
+                          </div>
+                        );
+                      }
 
-                            default:
-                              return null;
-                          }
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                ))
-              )}
+                      case 'games':
+                        return (
+                          <span className="text-xs font-mono text-neutral-300 tabular-nums font-semibold">
+                            {d.total_matches}
+                          </span>
+                        );
+
+                      case 'record':
+                        return (
+                          <span className="text-xs font-mono tabular-nums">
+                            <span className="text-emerald-400 font-semibold">{d.wins}</span>
+                            <span className="text-neutral-600 px-1">/</span>
+                            <span className="text-rose-400 font-semibold">{d.losses}</span>
+                          </span>
+                        );
+
+                      case 'winrate':
+                        return (
+                          <span
+                            className="text-xs font-mono font-bold tabular-nums"
+                            style={{ color: winRateColor(d.winrate) }}
+                          >
+                            {d.winrate}
+                          </span>
+                        );
+
+                      case 'source':
+                        return (
+                          <span
+                            className="inline-flex items-center justify-center"
+                            style={{ color: d.has_list ? '#FBBF24' : '#71717A', fontSize: 13 }}
+                            title={d.has_list ? 'True decklist uploaded' : 'Logged cards only (no true decklist)'}
+                          >
+                            <NerdIcon glyph={d.has_list ? 'nf-md-cards' : 'nf-oct-log'} />
+                          </span>
+                        );
+
+                      case 'commanders': {
+                        const cmdName = d.top_commander_name || (d.commanders || [])[0]?.name;
+                        return cmdName ? (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 border border-white/10 shrink-0 overflow-hidden shadow-sm bg-neutral-900">
+                              <CardImage name={cmdName} version="art_crop" alt={cmdName} className="w-full h-full object-cover" />
+                            </div>
+                            <span className="text-xs font-sans text-neutral-300 truncate">{cmdName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-mono text-neutral-600">—</span>
+                        );
+                      }
+
+                      case 'last_played':
+                        return (
+                          <span className="text-xs font-mono text-neutral-400 tabular-nums">
+                            {formatRelativeTime(d.last_played)}
+                          </span>
+                        );
+
+                      case 'wins':
+                        return (
+                          <span className="text-xs font-mono font-bold text-emerald-400 tabular-nums">
+                            {d.wins ?? 0}
+                          </span>
+                        );
+
+                      case 'losses':
+                        return (
+                          <span className="text-xs font-mono font-bold text-rose-400 tabular-nums">
+                            {d.losses ?? 0}
+                          </span>
+                        );
+
+                      default:
+                        return null;
+                    }
+                  })()}
+                </div>
+              ))}
             </div>
-          </div>
-        </div>
+          )}
+        />
       )}
 
       {/* Footer: pagination controls + total decks count */}

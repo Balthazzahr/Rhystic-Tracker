@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
-import { PaginationFooter, GlassSearchInput } from './common';
+import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 import { getCardStylePref } from '../utils/cardStylePrefs';
@@ -100,18 +100,18 @@ export interface CollectionColumnDef {
 }
 
 const DEFAULT_COLLECTION_COLUMNS: CollectionColumnDef[] = [
-  { key: 'art', label: 'Art', description: 'Card art crop thumbnail preview', visible: true, width: 'w-[52px]', align: 'center' },
-  { key: 'name', label: 'Name', description: 'Card title', visible: true, width: 'flex-1 min-w-[200px]', align: 'left', sortKey: 'name' },
-  { key: 'mana_cost', label: 'Cost', description: 'Mana casting cost symbols', visible: true, width: 'w-[110px]', align: 'center', sortKey: 'cmc' },
-  { key: 'cmc', label: 'MV', description: 'Converted mana value (CMC)', visible: true, width: 'w-[65px]', align: 'center', sortKey: 'cmc' },
-  { key: 'card_type', label: 'Card Type', description: 'Card type and subtypes', visible: true, width: 'w-[170px]', align: 'center' },
-  { key: 'set', label: 'Set', description: 'Expansion set (sorted by release date)', visible: true, width: 'w-[160px]', align: 'center', sortKey: 'set' },
-  { key: 'rarity', label: 'Rarity', description: 'Card rarity tier', visible: true, width: 'w-[100px]', align: 'center', sortKey: 'rarity' },
-  { key: 'owned', label: 'Owned', description: 'Collected copies control (0–4)', visible: true, width: 'w-[130px]', align: 'center', sortKey: 'count' },
-  { key: 'colors', label: 'Colors', description: 'Card color identity', visible: false, width: 'w-[90px]', align: 'center' },
-  { key: 'collector_number', label: 'CN', description: 'Collector number in set', visible: false, width: 'w-[75px]', align: 'center' },
-  { key: 'released', label: 'Release Date', description: 'Expansion release date', visible: false, width: 'w-[120px]', align: 'center', sortKey: 'released' },
-  { key: 'grp_id', label: 'GRP ID', description: 'MTGA internal card identifier', visible: false, width: 'w-[80px]', align: 'center' },
+  { key: 'art', label: 'Art', description: 'Card art crop thumbnail preview', visible: true, width: 'flex-[0.6] min-w-[52px]', align: 'center' },
+  { key: 'name', label: 'Name', description: 'Card title', visible: true, width: 'flex-[2.5] min-w-[200px]', align: 'left', sortKey: 'name' },
+  { key: 'mana_cost', label: 'Cost', description: 'Mana casting cost symbols', visible: true, width: 'flex-[1.1] min-w-[100px]', align: 'center', sortKey: 'cmc' },
+  { key: 'cmc', label: 'MV', description: 'Converted mana value (CMC)', visible: true, width: 'flex-[0.7] min-w-[60px]', align: 'center', sortKey: 'cmc' },
+  { key: 'card_type', label: 'Card Type', description: 'Card type and subtypes', visible: true, width: 'flex-[1.8] min-w-[160px]', align: 'center' },
+  { key: 'set', label: 'Set', description: 'Expansion set (sorted by release date)', visible: true, width: 'flex-[1.8] min-w-[160px]', align: 'center', sortKey: 'set' },
+  { key: 'rarity', label: 'Rarity', description: 'Card rarity tier', visible: true, width: 'flex-1 min-w-[95px]', align: 'center', sortKey: 'rarity' },
+  { key: 'owned', label: 'Owned', description: 'Collected copies control (0–4)', visible: true, width: 'flex-[1.2] min-w-[120px]', align: 'center', sortKey: 'count' },
+  { key: 'colors', label: 'Colors', description: 'Card color identity', visible: false, width: 'flex-1 min-w-[90px]', align: 'center' },
+  { key: 'collector_number', label: 'CN', description: 'Collector number in set', visible: false, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'released', label: 'Release Date', description: 'Expansion release date', visible: false, width: 'flex-[1.2] min-w-[110px]', align: 'center', sortKey: 'released' },
+  { key: 'grp_id', label: 'GRP ID', description: 'MTGA internal card identifier', visible: false, width: 'flex-[0.8] min-w-[75px]', align: 'center' },
 ];
 
 const getContrastTextColor = (hexColor?: string): string => {
@@ -1186,77 +1186,43 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
         </div>
       ) : (
         /* TABLE VIEW */
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
-          {/* Floating Frozen Table Header */}
-          <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
-            {visibleColumns.map((col) => {
-              const sortable = col.sortKey != null;
-              const isNameCol = col.key === 'name';
-              return (
-                <div
-                  key={col.key}
-                  className={`${col.width || 'flex-1'} px-1.5 ${
-                    isNameCol ? 'text-left' : 'text-center'
-                  }`}
-                >
-                  {sortable ? (
-                    <button
-                      onClick={() => sortByColumn(col.sortKey!)}
-                      className={`group inline-flex items-center gap-1 hover:text-neutral-200 transition-colors cursor-pointer text-white font-bold ${
-                        isNameCol ? 'justify-start' : 'justify-center w-full'
-                      }`}
-                      style={{ color: sort === col.sortKey ? (palette?.accent || '#A855F7') : '#FFFFFF' }}
-                    >
-                      <span>{col.label}</span>
-                      <span className="text-[9px]">{sortArrow(col.sortKey!)}</span>
-                    </button>
-                  ) : (
-                    <div className={`flex items-center ${isNameCol ? 'justify-start' : 'justify-center'}`}>
-                      <span>{col.label}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Table Rows Body Container with Scrollbar */}
-          <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0 relative">
-            <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
-              {displayedCards.map((card) => (
-                <div
-                  key={card.grp_id}
-                  onClick={() => onShowCard({ name: card.name || `Unknown Card (#${card.grp_id})`, grp_id: card.grp_id }, false)}
-                  className="flex items-center py-2 px-4 transition-colors cursor-pointer group hover:bg-white/[0.04]"
-                >
-                  {visibleColumns.map((col) => {
-                    const isNameCol = col.key === 'name';
-                    return (
-                      <div
-                        key={col.key}
-                        className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
-                          isNameCol ? 'text-left' : 'text-center flex items-center justify-center'
-                        }`}
-                      >
-                        {renderCellContent(col, card)}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+        <TableShell
+          columns={visibleColumns}
+          sortKey={sort}
+          sortDir={sortDir}
+          onSortChange={(key) => sortByColumn(key as any)}
+          accentColor={palette?.accent || '#A855F7'}
+          empty={cards.length === 0}
+          emptyMessage="No cards match the current filters"
+          items={displayedCards}
+          renderRow={(card) => (
+            <div
+              key={card.grp_id}
+              onClick={() => onShowCard({ name: card.name || `Unknown Card (#${card.grp_id})`, grp_id: card.grp_id }, false)}
+              className="flex items-center py-2 px-4 transition-colors cursor-pointer group hover:bg-white/[0.04]"
+            >
+              {visibleColumns.map((col) => {
+                const isNameCol = col.key === 'name';
+                return (
+                  <div
+                    key={col.key}
+                    className={`${col.width || 'flex-1'} px-1.5 min-w-0 ${
+                      isNameCol ? 'text-left' : 'text-center flex items-center justify-center'
+                    }`}
+                  >
+                    {renderCellContent(col, card)}
+                  </div>
+                );
+              })}
             </div>
-
-            {loading && displayedCards.length === 0 ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
-                <span className="text-xs font-mono opacity-70">Loading collection…</span>
-              </div>
-            ) : cards.length === 0 ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xs font-mono opacity-40">No cards match the current filters</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
+          )}
+        >
+          {loading && displayedCards.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+              <span className="text-xs font-mono opacity-70">Loading collection…</span>
+            </div>
+          )}
+        </TableShell>
       )}
 
       {/* Footer: pagination controls + total card count */}

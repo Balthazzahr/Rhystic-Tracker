@@ -7,7 +7,7 @@ import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { DeckAchievementDetailModal } from './DeckAchievementDetailModal';
 import { getAchievementMeta, ACHIEVEMENTS_REGISTRY, getDeckAchievementMeta, DECK_ACHIEVEMENTS_REGISTRY, AchievementTier } from '../utils/achievementBadges';
 import CardImage from './CardImage';
-import { PaginationFooter, GlassSearchInput } from './common';
+import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 
@@ -28,17 +28,17 @@ export interface AchievementColumnDef {
 }
 
 const DEFAULT_ACH_COLUMNS: AchievementColumnDef[] = [
-  { key: 'achievement', label: 'Achievement', description: 'Achievement name with mini emblem badge', visible: true, width: 'w-60 shrink-0', align: 'left' },
-  { key: 'cards_achieved', label: 'Cards Achieved', description: 'Mini art previews of the top earning cards (click to inspect)', visible: true, width: 'flex-1 min-w-[200px]', align: 'center' },
-  { key: 'highest_tier', label: 'Highest Tier', description: 'Highest achievement tier earned', visible: true, width: 'w-28 shrink-0', align: 'center' },
-  { key: 'legendary', label: 'Legend', description: 'Times the Legendary tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
-  { key: 'platinum', label: 'Platinum', description: 'Times the Platinum tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
-  { key: 'gold', label: 'Gold', description: 'Times the Gold tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
-  { key: 'silver', label: 'Silver', description: 'Times the Silver tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
-  { key: 'bronze', label: 'Bronze', description: 'Times the Bronze tier has been earned', visible: true, width: 'w-16 shrink-0', align: 'center' },
-  { key: 'iron', label: 'Iron', description: 'Times the Iron tier has been earned', visible: false, width: 'w-16 shrink-0', align: 'center' },
-  { key: 'first_earned', label: 'First Earned', description: 'Date the achievement was first earned', visible: true, width: 'w-28 shrink-0', align: 'center' },
-  { key: 'cards', label: 'Cards', description: 'Distinct decorated cards count', visible: true, width: 'w-20 shrink-0', align: 'center' },
+  { key: 'achievement', label: 'Achievement', description: 'Achievement name with mini emblem badge', visible: true, width: 'flex-[1.8] min-w-[180px]', align: 'left' },
+  { key: 'cards_achieved', label: 'Cards Achieved', description: 'Mini art previews of the top earning cards (click to inspect)', visible: true, width: 'flex-[3] min-w-[200px]', align: 'center' },
+  { key: 'highest_tier', label: 'Highest Tier', description: 'Highest achievement tier earned', visible: true, width: 'flex-[1.1] min-w-[110px]', align: 'center' },
+  { key: 'legendary', label: 'Legend', description: 'Times the Legendary tier has been earned', visible: true, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'platinum', label: 'Platinum', description: 'Times the Platinum tier has been earned', visible: true, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'gold', label: 'Gold', description: 'Times the Gold tier has been earned', visible: true, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'silver', label: 'Silver', description: 'Times the Silver tier has been earned', visible: true, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'bronze', label: 'Bronze', description: 'Times the Bronze tier has been earned', visible: true, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'iron', label: 'Iron', description: 'Times the Iron tier has been earned', visible: false, width: 'flex-[0.8] min-w-[70px]', align: 'center' },
+  { key: 'first_earned', label: 'First Earned', description: 'Date the achievement was first earned', visible: true, width: 'flex-[1.2] min-w-[110px]', align: 'center' },
+  { key: 'cards', label: 'Cards', description: 'Distinct decorated cards count', visible: true, width: 'flex-[0.9] min-w-[80px]', align: 'center' },
 ];
 
 const ACH_COLUMNS_STORAGE_KEY = 'rhystic_achievements_columns';
@@ -587,145 +587,134 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
             </div>
           ) : (
             /* Table View */
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              {/* Floating Table Header */}
-              <div className="flex items-center h-[34px] px-4 shrink-0 select-none text-xs font-sans font-bold text-white">
-                {visibleColumns.map((col) => (
-                  <div key={col.key} className={`${col.width || 'flex-1'} px-1.5 ${col.align === 'left' ? 'text-left' : 'text-center'}`}>
-                    {col.label}
+            <TableShell
+              columns={visibleColumns}
+              empty={displayedCards.length === 0}
+              emptyMessage="No achievements match the current filters"
+              items={displayedCards}
+              renderRow={(ach: any) => {
+                const meta = getAchievementMeta(ach.achievement);
+                const isUnearnedItem = !!ach.is_unearned;
+                const rawDate = ach.first_earned_at || ach.first_earned;
+                const dateStr = rawDate
+                  ? new Date(rawDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '—';
+                const topEarners = (ach.cards || []).slice(0, 5);
+
+                return (
+                  <div
+                    key={ach.achievement}
+                    onClick={() => setSelectedAchievement(ach)}
+                    className={`flex items-center py-2 px-4 transition-colors cursor-pointer group ${
+                      isUnearnedItem ? 'opacity-55 hover:opacity-90' : 'hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    {visibleColumns.map((col) => {
+                      const cellClass = `${col.width || 'flex-1'} px-1.5 min-w-0 ${col.align === 'left' ? 'text-left' : 'text-center flex items-center justify-center'}`;
+                      switch (col.key) {
+                        case 'achievement':
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className={`w-7 h-7 shrink-0 flex items-center justify-center overflow-hidden ${isUnearnedItem ? 'opacity-35 grayscale' : ''}`}>
+                                  <AchievementBadge title={ach.achievement} tier={ach.highest_tier} count={ach.total_awards} size="lg" showTitle={false} showCount={false} />
+                                </div>
+                                <span className="font-semibold text-neutral-100 hover:text-white truncate text-[14px]">{meta.title}</span>
+                              </div>
+                            </div>
+                          );
+                        case 'highest_tier':
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              {isUnearnedItem ? (
+                                <span className="text-xs font-mono text-neutral-600">—</span>
+                              ) : (
+                                <span className={`text-[10.5px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
+                                  ach.highest_tier === 'legendary' ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/50 shadow-sm'
+                                  : ach.highest_tier === 'platinum' ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/50 shadow-sm'
+                                  : ach.highest_tier === 'gold' ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                                  : ach.highest_tier === 'silver' ? 'bg-slate-400/15 text-slate-200 border-slate-400/35'
+                                  : ach.highest_tier === 'iron' ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/35'
+                                  : 'bg-amber-900/25 text-amber-200 border-amber-700/35'
+                                }`}>{ach.highest_tier}</span>
+                              )}
+                            </div>
+                          );
+                        case 'legendary':
+                        case 'platinum':
+                        case 'gold':
+                        case 'silver':
+                        case 'bronze':
+                        case 'iron':
+                          const tierVal = ach[`${col.key}_count`] ?? ach[col.key] ?? 0;
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              {isUnearnedItem ? (
+                                <span className="text-xs font-mono text-neutral-600">—</span>
+                              ) : (
+                                <span className="text-xs font-mono text-neutral-300 tabular-nums">{tierVal}</span>
+                              )}
+                            </div>
+                          );
+                        case 'total':
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              {isUnearnedItem ? (
+                                <span className="text-xs font-mono text-neutral-600">—</span>
+                              ) : (
+                                <span className="text-xs font-mono font-bold text-white tabular-nums">{ach.total_awards || 0}</span>
+                              )}
+                            </div>
+                          );
+                        case 'cards':
+                        case 'decorated_cards':
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              {isUnearnedItem ? (
+                                <span className="text-xs font-mono text-neutral-600">—</span>
+                              ) : (
+                                <span className="text-xs font-mono text-neutral-300 tabular-nums">{ach.cards?.length || 0}</span>
+                              )}
+                            </div>
+                          );
+                        case 'first_earned':
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              <span className="text-xs font-mono text-neutral-400">{dateStr}</span>
+                            </div>
+                          );
+                        case 'cards_achieved':
+                        case 'top_earners':
+                          return (
+                            <div key={col.key} className={cellClass}>
+                              {isUnearnedItem ? (
+                                <span className="text-xs font-mono text-neutral-600">—</span>
+                              ) : (
+                                <div className="flex items-center gap-1.5 overflow-hidden">
+                                  {topEarners.map((c: any) => {
+                                    const cName = c.card_name || c.name || `Card #${c.grp_id}`;
+                                    return (
+                                      <div
+                                        key={c.grp_id || cName}
+                                        className="w-6 h-6 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm"
+                                        title={`${cName} (${c.highest_tier || 'bronze'}, ${c.count || c.award_count || 1}×)`}
+                                      >
+                                        <CardImage name={cName} version="art_crop" alt={cName} className="w-full h-full object-cover" />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
                   </div>
-                ))}
-              </div>
-
-              {/* Table Body */}
-              <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0">
-                <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar flex-1">
-                  {/* Table Rows */}
-                  {displayedCards.map((ach: any) => {
-                    const meta = getAchievementMeta(ach.achievement);
-                    const isUnearnedItem = !!ach.is_unearned;
-                    const rawDate = ach.first_earned_at || ach.first_earned;
-                    const dateStr = rawDate
-                      ? new Date(rawDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                      : '—';
-                    const topEarners = (ach.cards || []).slice(0, 5);
-
-                    return (
-                      <div
-                        key={ach.achievement}
-                        onClick={() => setSelectedAchievement(ach)}
-                        className={`flex items-center py-2 px-4 transition-colors cursor-pointer group ${
-                          isUnearnedItem ? 'opacity-55 hover:opacity-90' : 'hover:bg-white/[0.04]'
-                        }`}
-                      >
-                        {visibleColumns.map((col) => {
-                          const cellClass = `${col.width || 'flex-1'} px-1.5 min-w-0 ${col.align === 'left' ? 'text-left' : 'text-center flex items-center justify-center'}`;
-                          switch (col.key) {
-                            case 'achievement':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                    <div className={`w-7 h-7 shrink-0 flex items-center justify-center overflow-hidden ${isUnearnedItem ? 'opacity-35 grayscale' : ''}`}>
-                                      <AchievementBadge title={ach.achievement} tier={ach.highest_tier} count={ach.total_awards} size="lg" showTitle={false} showCount={false} />
-                                    </div>
-                                    <span className="font-semibold text-neutral-100 hover:text-white truncate text-[14px]">{meta.title}</span>
-                                  </div>
-                                </div>
-                              );
-                            case 'highest_tier':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  {isUnearnedItem ? (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  ) : (
-                                    <span className={`text-[10.5px] font-mono font-bold px-2 py-0.5 border uppercase tracking-wider ${
-                                      ach.highest_tier === 'legendary' ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/50 shadow-sm'
-                                      : ach.highest_tier === 'platinum' ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/50 shadow-sm'
-                                      : ach.highest_tier === 'gold' ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
-                                      : ach.highest_tier === 'silver' ? 'bg-slate-400/15 text-slate-200 border-slate-400/35'
-                                      : ach.highest_tier === 'iron' ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/35'
-                                      : 'bg-amber-900/25 text-amber-200 border-amber-700/35'
-                                    }`}>{ach.highest_tier}</span>
-                                  )}
-                                </div>
-                              );
-                            case 'legendary':
-                            case 'platinum':
-                            case 'gold':
-                            case 'silver':
-                            case 'bronze':
-                            case 'iron':
-                              const tierVal = ach[`${col.key}_count`] ?? ach[col.key] ?? 0;
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  {isUnearnedItem ? (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  ) : (
-                                    <span className="text-xs font-mono text-neutral-300 tabular-nums">{tierVal}</span>
-                                  )}
-                                </div>
-                              );
-                            case 'total':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  {isUnearnedItem ? (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  ) : (
-                                    <span className="text-xs font-mono font-bold text-white tabular-nums">{ach.total_awards || 0}</span>
-                                  )}
-                                </div>
-                              );
-                            case 'cards':
-                            case 'decorated_cards':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  {isUnearnedItem ? (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  ) : (
-                                    <span className="text-xs font-mono text-neutral-300 tabular-nums">{ach.cards?.length || 0}</span>
-                                  )}
-                                </div>
-                              );
-                            case 'first_earned':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  <span className="text-xs font-mono text-neutral-400">{dateStr}</span>
-                                </div>
-                              );
-                            case 'cards_achieved':
-                            case 'top_earners':
-                              return (
-                                <div key={col.key} className={cellClass}>
-                                  {isUnearnedItem ? (
-                                    <span className="text-xs font-mono text-neutral-600">—</span>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5 overflow-hidden">
-                                      {topEarners.map((c: any) => {
-                                        const cName = c.card_name || c.name || `Card #${c.grp_id}`;
-                                        return (
-                                          <div
-                                            key={c.grp_id || cName}
-                                            className="w-6 h-6 border border-white/15 overflow-hidden shrink-0 bg-neutral-900 shadow-sm"
-                                            title={`${cName} (${c.highest_tier || 'bronze'}, ${c.count || c.award_count || 1}×)`}
-                                          >
-                                            <CardImage name={cName} version="art_crop" alt={cName} className="w-full h-full object-cover" />
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            default:
-                              return null;
-                          }
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+                );
+              }}
+            />
           )}
 
           {/* Floating Pagination Footer */}
