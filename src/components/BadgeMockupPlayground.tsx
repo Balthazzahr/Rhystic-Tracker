@@ -146,7 +146,7 @@ export const BadgeMockupPlayground: React.FC<BadgeMockupPlaygroundProps> = ({ on
         <div className="flex items-center bg-black/40 border border-white/10 p-1 gap-1">
           <button
             onClick={() => setActiveTab('card')}
-            className={`px-4 py-1.5 text-xs font-display font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            className={`px-4 py-1.5 text-xs font-sans font-bold uppercase tracking-wider transition-all cursor-pointer ${
               activeTab === 'card'
                 ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-sm'
                 : 'text-neutral-400 hover:text-white border border-transparent'
@@ -156,7 +156,7 @@ export const BadgeMockupPlayground: React.FC<BadgeMockupPlaygroundProps> = ({ on
           </button>
           <button
             onClick={() => setActiveTab('deck')}
-            className={`px-4 py-1.5 text-xs font-display font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            className={`px-4 py-1.5 text-xs font-sans font-bold uppercase tracking-wider transition-all cursor-pointer ${
               activeTab === 'deck'
                 ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 shadow-sm'
                 : 'text-neutral-400 hover:text-white border border-transparent'
@@ -235,7 +235,7 @@ export const BadgeMockupPlayground: React.FC<BadgeMockupPlaygroundProps> = ({ on
       {/* Style Description Banner */}
       <div className="px-6 py-2.5 bg-black/40 border-b border-white/5 flex items-center justify-between shrink-0">
         <div className="text-xs font-sans text-neutral-300 flex items-center gap-2">
-          <span className="font-bold font-display uppercase tracking-wider text-amber-400">
+          <span className="font-bold font-sans uppercase tracking-wider text-amber-400">
             {activeTab === 'card' ? cardStyleLabels[cardStyle].name : deckStyleLabels[deckStyle].name}:
           </span>
           <span className="text-neutral-400">
@@ -372,7 +372,7 @@ export const BadgeMockupPlayground: React.FC<BadgeMockupPlaygroundProps> = ({ on
 
                           {/* Deck Description */}
                           <div className="text-center px-2">
-                            <h4 className={`font-display font-bold ${scale50 ? 'text-base' : 'text-sm'} uppercase tracking-wide text-white truncate`}>
+                            <h4 className={`font-sans font-bold ${scale50 ? 'text-base' : 'text-sm'} uppercase tracking-wide text-white truncate`}>
                               {ach.title}
                             </h4>
                             <p className={`${scale50 ? 'text-xs' : 'text-[11px]'} font-sans text-neutral-300 line-clamp-2 mt-1 leading-relaxed`}>
