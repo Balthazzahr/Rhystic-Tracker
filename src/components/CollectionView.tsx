@@ -11,9 +11,7 @@ import {
   Table2,
   SlidersHorizontal,
   Columns3,
-  GripVertical,
   RotateCcw,
-  Check,
   X,
   ZoomIn,
   ZoomOut,
@@ -23,6 +21,8 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { CardImage } from './CardImage';
 import { PaginationFooter, GlassSearchInput } from './common';
+import { useColumnManager } from '../hooks/useColumnManager';
+import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 import { getCardStylePref } from '../utils/cardStylePrefs';
 import { ManaPip } from './ManaPip';
 import { ManaFontPip } from './ManaFontPip';
@@ -200,91 +200,18 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   }, []);
 
   // --- Table View Column Customizer State ---
-  const [columns, setColumns] = useState<CollectionColumnDef[]>(() => {
-    try {
-      const saved = localStorage.getItem('rhystic_collection_columns_v2') || localStorage.getItem('rhystic_collection_columns');
-      if (saved) {
-        const parsed: CollectionColumnDef[] = JSON.parse(saved);
-        const existingKeys = new Set(parsed.map((c) => c.key));
-        const missing = DEFAULT_COLLECTION_COLUMNS.filter((c) => !existingKeys.has(c.key));
-        const combined = [...parsed, ...missing];
-        if (!existingKeys.has('art')) {
-          const artDef = DEFAULT_COLLECTION_COLUMNS.find((c) => c.key === 'art');
-          if (artDef) {
-            return [artDef, ...parsed];
-          }
-        }
-        return combined;
-      }
-    } catch (e) {
-      console.error('Failed to load collection columns:', e);
-    }
-    return DEFAULT_COLLECTION_COLUMNS;
+  const {
+    columns,
+    visibleColumns,
+    showColumnModal,
+    setShowColumnModal,
+    toggleColumnVisibility,
+    moveColumn,
+    resetColumns,
+  } = useColumnManager<CollectionColumnDef>({
+    storageKey: 'rhystic_collection_columns_v2',
+    defaultColumns: DEFAULT_COLLECTION_COLUMNS,
   });
-
-  const [showColumnModal, setShowColumnModal] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const saveColumns = (newCols: CollectionColumnDef[]) => {
-    setColumns(newCols);
-    try {
-      localStorage.setItem('rhystic_collection_columns_v2', JSON.stringify(newCols));
-    } catch (e) {
-      console.error('Failed to persist collection columns:', e);
-    }
-  };
-
-  const toggleColumnVisibility = (key: string) => {
-    const updated = columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c));
-    saveColumns(updated);
-  };
-
-  const moveColumn = (fromIdx: number, toIdx: number) => {
-    if (toIdx < 0 || toIdx >= columns.length || fromIdx === toIdx) return;
-    const updated = [...columns];
-    const [moved] = updated.splice(fromIdx, 1);
-    updated.splice(toIdx, 0, moved);
-    saveColumns(updated);
-  };
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverIndex !== index) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    const sourceIdx =
-      draggedIndex !== null
-        ? draggedIndex
-        : parseInt(e.dataTransfer.getData('text/plain'), 10);
-    if (!isNaN(sourceIdx) && sourceIdx !== targetIndex) {
-      moveColumn(sourceIdx, targetIndex);
-    }
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const resetColumns = () => {
-    saveColumns(DEFAULT_COLLECTION_COLUMNS);
-  };
-
-  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
 
   useEffect(() => {
     setStyleRev((r) => r + 1);
@@ -1676,160 +1603,17 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       )}
 
       {/* 4. CUSTOMIZE COLUMNS MODAL */}
-      {showColumnModal && (
-        <div
-          onClick={() => setShowColumnModal(false)}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
-          >
-            {/* Modal Header */}
-            <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Columns3 className="w-5 h-5" style={{ color: palette?.accent || '#A855F7' }} />
-                  <h2 className="text-lg font-display font-bold tracking-[0.14em] uppercase text-white">
-                    CUSTOMIZE CARD TABLE COLUMNS
-                  </h2>
-                </div>
-                <p className="text-xs text-neutral-400 mt-1 font-sans">
-                  Toggle column visibility and drag or click arrows to reorder library table columns.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="p-1.5 text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Scrollable Column List */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-2">
-              {columns.map((col, idx) => {
-                const isDragging = draggedIndex === idx;
-                const isTarget = dragOverIndex === idx && draggedIndex !== null && draggedIndex !== idx;
-
-                return (
-                  <div
-                    key={col.key}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    onDrop={(e) => handleDrop(e, idx)}
-                    onDragEnd={handleDragEnd}
-                    className={`flex items-center justify-between p-3 border transition-all cursor-move select-none ${
-                      isDragging
-                        ? 'opacity-30 border-dashed border-white/40 scale-[0.98]'
-                        : isTarget
-                        ? 'border-2 scale-[1.02] shadow-xl ring-1'
-                        : col.visible
-                        ? 'bg-white/[0.04] border-white/15 hover:border-white/30'
-                        : 'bg-white/[0.01] border-white/5 opacity-50'
-                    }`}
-                    style={{
-                      borderColor: isTarget ? (palette?.accent || '#A855F7') : undefined,
-                      backgroundColor: isTarget ? `${palette?.accent || '#A855F7'}18` : undefined,
-                      boxShadow: isTarget ? `0 0 15px ${palette?.accent || '#A855F7'}44` : undefined,
-                    }}
-                  >
-                    {/* Left: Grip Handle + Checkbox + Column Info */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <GripVertical
-                        className={`w-4 h-4 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
-                          isTarget ? 'text-white' : 'text-neutral-500'
-                        }`}
-                      />
-                      <button
-                        onClick={() => toggleColumnVisibility(col.key)}
-                        className={`w-4 h-4 flex items-center justify-center border text-xs cursor-pointer transition-colors ${
-                          col.visible
-                            ? 'border-white/40 text-white shadow-sm'
-                            : 'border-white/20 text-transparent'
-                        }`}
-                        style={{
-                          backgroundColor: col.visible ? (palette?.accent || '#A855F7') : 'transparent',
-                          borderColor: col.visible ? (palette?.accent || '#A855F7') : undefined,
-                        }}
-                      >
-                        {col.visible && (
-                          <Check
-                            className="w-3 h-3 stroke-[3]"
-                            style={{ color: getContrastTextColor(palette?.accent || '#A855F7') }}
-                          />
-                        )}
-                      </button>
-                      <div>
-                        <div className="text-xs font-sans font-bold text-white tracking-wide flex items-center gap-2">
-                          <span>{col.label}</span>
-                          {isTarget && (
-                            <span
-                              className="text-[9px] font-mono uppercase px-1.5 py-0.2 border font-bold"
-                              style={{
-                                color: palette?.accent || '#A855F7',
-                                borderColor: `${palette?.accent || '#A855F7'}66`,
-                                backgroundColor: `${palette?.accent || '#A855F7'}20`,
-                              }}
-                            >
-                              ⇄ SWAP TO POS #{idx + 1}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10.5px] font-mono text-neutral-400 leading-tight">
-                          {col.description}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Reorder Up/Down buttons */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        disabled={idx === 0}
-                        onClick={() => moveColumn(idx, idx - 1)}
-                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Move column left / up"
-                      >
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        disabled={idx === columns.length - 1}
-                        onClick={() => moveColumn(idx, idx + 1)}
-                        className="p-1 border border-white/10 hover:border-white/30 disabled:opacity-20 text-neutral-300 hover:text-white transition-colors cursor-pointer"
-                        title="Move column right / down"
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
-              <button
-                onClick={resetColumns}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Defaults</span>
-              </button>
-              <button
-                onClick={() => setShowColumnModal(false)}
-                className="px-5 py-1.5 text-xs font-mono uppercase tracking-wider font-bold shadow-md transition-all cursor-pointer hover:brightness-110 active:scale-95"
-                style={{
-                  backgroundColor: palette?.accent || '#A855F7',
-                  color: getContrastTextColor(palette?.accent || '#A855F7'),
-                }}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ColumnCustomizerModal
+        isOpen={showColumnModal}
+        onClose={() => setShowColumnModal(false)}
+        title="CUSTOMIZE CARD TABLE COLUMNS"
+        subtitle="Toggle column visibility and drag or click arrows to reorder library table columns."
+        columns={columns}
+        accentColor={palette?.accent || '#A855F7'}
+        onToggleVisibility={toggleColumnVisibility}
+        onMoveColumn={moveColumn}
+        onResetColumns={resetColumns}
+      />
     </div>
   );
 }
