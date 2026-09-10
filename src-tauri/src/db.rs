@@ -529,6 +529,38 @@ impl DatabaseManager {
                 .await;
         }
 
+        // Migration: Retroactively untangle Midweek Magic Momir matches erroneously tagged with other deck names
+        let momir_matches = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT m.id
+            FROM matches m
+            JOIN match_cards mc ON mc.match_id = m.id AND mc.is_opponent = 0
+            JOIN cards_cache c ON c.grp_id = mc.grp_id
+            WHERE m.format = 'Midweek Magic'
+              AND m.hero_deck_name != 'Midweek Magic (Momir)'
+              AND c.name LIKE 'Snow-Covered %'
+            GROUP BY m.id
+            HAVING COUNT(DISTINCT c.name) >= 4
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+        for mid in momir_matches {
+            let _ = sqlx::query("UPDATE matches SET hero_deck_name = 'Midweek Magic (Momir)' WHERE id = ?")
+                .bind(&mid)
+                .execute(&pool)
+                .await;
+            let _ = sqlx::query(
+                "UPDATE match_decks SET deck_name = 'Midweek Magic (Momir)', deck_id = NULL, preset_deck = 1, exclusion_reason = 'assigned-deck event (no deck submitted)' WHERE match_id = ?"
+            )
+            .bind(&mid)
+            .execute(&pool)
+            .await;
+            println!("[DB MIGRATION] Untangled Momir match {} to 'Midweek Magic (Momir)'", mid);
+        }
+
         // Migration: add icon_svg_uri column to sets_metadata for databases created
         // before the set-icon feature. CREATE TABLE IF NOT EXISTS won't add columns
         // to an existing table, so the Collection set filter would fail otherwise.
@@ -1310,7 +1342,12 @@ impl DatabaseManager {
     /// Resolves or fingerprints an assigned/event deck (e.g. Jump In!) so each distinct card pool
     /// receives a distinct, descriptive deck name rather than merging into a single shared bucket.
     pub async fn resolve_event_deck_name(&self, format_name: &str, hero_grp_ids: &[i64]) -> String {
-        let is_jump_in = format_name.to_lowercase().contains("jump in") || format_name.to_lowercase().contains("jumpin");
+        let fmt_lower = format_name.to_lowercase();
+        if fmt_lower.contains("momir") {
+            return "Midweek Magic (Momir)".to_string();
+        }
+
+        let is_jump_in = fmt_lower.contains("jump in") || fmt_lower.contains("jumpin");
         let prefix = if is_jump_in { "Jump In!" } else { "Event Deck" };
 
         if hero_grp_ids.is_empty() {
@@ -1325,6 +1362,16 @@ impl DatabaseManager {
         .fetch_all(&self.pool)
         .await
         .unwrap_or_default();
+
+        let snow_lands_seen = card_rows.iter().filter(|r| {
+            let name: String = r.get("name");
+            name.starts_with("Snow-Covered ")
+        }).count();
+
+        // If in Midweek Magic and hero has all 5 snow-covered lands or pure snow lands/tokens, it's Momir
+        if fmt_lower.contains("midweek") && snow_lands_seen >= 4 {
+            return "Midweek Magic (Momir)".to_string();
+        }
 
         let basic_lands: std::collections::HashSet<&str> = [
             "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
@@ -2827,6 +2874,12 @@ mod tests {
 
         let resolved = db.resolve_event_deck_name("Jump In!", &[1, 2, 3]).await;
         assert_eq!(resolved, "Jump In! (Markov Purifier / Bloodtithe Harvester)");
+
+        let resolved_momir = db.resolve_event_deck_name("Midweek Magic (Momir)", &[1, 2, 3]).await;
+        assert_eq!(resolved_momir, "Midweek Magic (Momir)");
+
+        let resolved_momir_sub = db.resolve_event_deck_name("Momir MWM", &[]).await;
+        assert_eq!(resolved_momir_sub, "Midweek Magic (Momir)");
     }
 
     #[tokio::test]

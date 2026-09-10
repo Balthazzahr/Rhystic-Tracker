@@ -2384,6 +2384,36 @@ use super::*;
     }
 
     #[test]
+    fn test_momir_event_bypasses_stale_brawl_deck_cache() {
+        let mut assembler = MatchAssembler::new();
+
+        // Previous match was played with user's Brawl deck "Took'ens"
+        assembler.set_deck(
+            "Took'ens".to_string(),
+            Some("brawl-uuid-1".to_string()),
+            Some(103371),
+            vec![95161, 78322, 73774],
+        );
+        assert!(assembler.match_legitimate);
+
+        // Next match enters pairing in MWM_Momir_20260908
+        let is_assigned = is_assigned_deck_event("MWM_Momir_20260908");
+        assert!(is_assigned);
+
+        assembler.start_match(
+            "momir-match-1".to_string(),
+            "Midweek Magic".to_string(),
+            is_assigned,
+        );
+
+        let active = assembler.active_match.as_ref().expect("Active match should exist");
+        // Must NOT inherit "Took'ens"
+        assert_ne!(active.player_deck_name, "Took'ens");
+        assert_eq!(active.player_deck_name, PRESET_EVENT_DECK_NAME);
+        assert!(!assembler.match_legitimate);
+    }
+
+    #[test]
     fn test_assigned_deck_event_no_fingerprint_reattribute_and_no_collection() {
         let mut assembler = MatchAssembler::new();
 

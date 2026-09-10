@@ -62,7 +62,8 @@ pub fn preset_deck_reason(name: &str) -> Option<&'static str> {
         || lower.contains("arenadirecttoken") {
         return Some("token/cosmetic entry");
     }
-    if lower.starts_with("jump in") || lower.contains("jump in!") || lower.starts_with("event deck") || lower == "preset / event deck" {
+    if lower.starts_with("jump in") || lower.contains("jump in!") || lower.starts_with("event deck") || lower == "preset / event deck"
+        || lower.starts_with("midweek magic (") || lower == "momir" || lower == "midweek magic: momir" {
         return Some("jump in / event deck preset");
     }
 
@@ -145,6 +146,8 @@ mod tests {
         assert!(preset_deck_reason("DualColorPrecons").is_some());
         assert!(preset_deck_reason("Home").is_some());
         assert!(preset_deck_reason("Default").is_some());
+        assert!(preset_deck_reason("Midweek Magic (Momir)").is_some());
+        assert!(preset_deck_reason("Momir").is_some());
     }
 
     #[test]
@@ -160,6 +163,7 @@ mod tests {
         assert!(preset_deck_reason("MonoWhite - Auras (Standard)").is_none());
         assert!(preset_deck_reason("MonoRed Pauper (Historic)").is_none());
         assert!(preset_deck_reason("Artifact Affinity Burn").is_none());
+        assert!(preset_deck_reason("Momir in Brawl?").is_none());
         // Fancy/emoji and punctuation-heavy user deck names must be allowed.
         assert!(preset_deck_reason("Fe Fi Fo FUM!").is_none());
         assert!(preset_deck_reason("...in a CAVE!").is_none());

@@ -28,6 +28,7 @@ import { CardInspectorModal } from './components/CardInspectorModal';
 import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import { AvatarOnboardingModal } from './components/AvatarOnboardingModal';
 import { BlurredCardBackground } from './components/BlurredCardBackground';
+import { MemoryStatsPanel } from './components/MemoryStatsPanel';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
 import { APP_VERSION } from './version';
@@ -1012,6 +1013,9 @@ export default function App() {
         palette={palette}
         activeTab={activeTab}
       />
+
+      {/* Dev/test-only memory readout */}
+      <MemoryStatsPanel isTestEnv={envInfo?.is_test} />
 
       {/* COLUMN 1: Left Sidebar (in-flow bar) */}
       <aside 

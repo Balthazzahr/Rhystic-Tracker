@@ -31,6 +31,67 @@ pub fn get_active_theme(theme_id: String) -> ManaTheme {
     get_mana_theme(&theme_id)
 }
 
+#[derive(serde::Serialize)]
+pub struct MemoryStats {
+    main_kb: u64,
+    webkit_kb: u64,
+    network_kb: u64,
+    total_kb: u64,
+}
+
+fn read_rss_kb(pid: i32) -> Option<u64> {
+    let status = std::fs::read_to_string(format!("/proc/{}/status", pid)).ok()?;
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("VmRSS:") {
+            let kb: u64 = rest.trim().split_whitespace().next()?.parse().ok()?;
+            return Some(kb);
+        }
+    }
+    None
+}
+
+fn child_rss_with_name(name_substring: &str) -> u64 {
+    let self_pid = std::process::id() as i32;
+    let Ok(entries) = std::fs::read_dir("/proc") else { return 0 };
+    for entry in entries.flatten() {
+        let pid_str = entry.file_name().to_string_lossy().to_string();
+        let Ok(pid) = pid_str.parse::<i32>() else { continue };
+        if pid == self_pid { continue; }
+        // Confirm it is a direct child of this process
+        let Ok(status) = std::fs::read_to_string(format!("/proc/{}/status", pid)) else { continue };
+        let is_child = status.lines().any(|l| l.starts_with("PPid:") && l.trim_end().ends_with(&self_pid.to_string()));
+        if !is_child { continue; }
+        let Ok(cmdline) = std::fs::read(format!("/proc/{}/cmdline", pid)) else { continue };
+        let cmd = String::from_utf8_lossy(&cmdline);
+        if cmd.contains(name_substring) {
+            return read_rss_kb(pid).unwrap_or(0);
+        }
+    }
+    0
+}
+
+/// Read the RSS of the main process and its WebKit child processes (Linux).
+/// Dev/test diagnostic only — the frontend gates this behind isTestEnv.
+#[tauri::command]
+#[cfg(target_os = "linux")]
+pub fn get_memory_stats() -> MemoryStats {
+    let main_kb = read_rss_kb(std::process::id() as i32).unwrap_or(0);
+    let webkit_kb = child_rss_with_name("WebKitWebProcess");
+    let network_kb = child_rss_with_name("WebKitNetworkProcess");
+    MemoryStats {
+        main_kb,
+        webkit_kb,
+        network_kb,
+        total_kb: main_kb + webkit_kb + network_kb,
+    }
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "linux"))]
+pub fn get_memory_stats() -> MemoryStats {
+    MemoryStats { main_kb: 0, webkit_kb: 0, network_kb: 0, total_kb: 0 }
+}
+
 // Resolve the effective MTGA log path: stored override > RHYSTIC_MTGA_LOG >
 // auto-discovery. Returns an empty string when none can be found.
 pub fn resolve_effective_log_path() -> String {

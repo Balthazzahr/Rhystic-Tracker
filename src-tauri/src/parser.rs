@@ -665,7 +665,11 @@ pub fn normalize_format(raw_event_id: &str) -> String {
 /// lowercased so the check is accurate regardless of casing.
 pub fn is_assigned_deck_event(raw_event_id: &str) -> bool {
     let lower = raw_event_id.to_lowercase();
-    lower.contains("welcomedeckduels") || lower.contains("jump_in")
+    lower.contains("welcomedeckduels")
+        || lower.contains("jump_in")
+        || lower.contains("jumpin")
+        || lower.contains("momir")
+        || lower.contains("omniscience")
 }
 
 #[cfg(test)]
@@ -732,10 +736,13 @@ mod tests {
         // Real event IDs from Player.log (queue -> MatchCreated eventId).
         assert!(is_assigned_deck_event("WelcomeDeckDuels_HOB_20260811"));
         assert!(is_assigned_deck_event("Jump_In_2024"));
+        assert!(is_assigned_deck_event("MWM_Momir_20260908"));
+        assert!(is_assigned_deck_event("MWM_Omniscience_Dragons"));
         // Casing must not matter on either side.
         assert!(is_assigned_deck_event("welcomedeckduels_hob_20260811"));
         assert!(is_assigned_deck_event("JUMP_IN_2024"));
         assert!(is_assigned_deck_event("jump_in"));
+        assert!(is_assigned_deck_event("mwm_momir_20260908"));
 
         // Deck-submitting queues must NOT be flagged: they always emit a fresh
         // EventSetDeck before MatchCreated, so the cache is never stale there.

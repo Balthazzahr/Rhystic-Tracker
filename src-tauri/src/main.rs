@@ -659,6 +659,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_environment,
+            get_memory_stats,
             get_active_theme,
             get_matches_count,
             get_recent_matches,
