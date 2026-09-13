@@ -97,8 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         for (target_id, counter_type, amount) in step.counter_events {
                             assembler.process_counter_event(target_id, counter_type, amount);
                         }
-                        for (affector_id, count) in step.draw_events {
-                            assembler.process_draw_event(affector_id, count);
+                        for (affector_id, zone_dest, count) in step.draw_events {
+                            assembler.process_draw_event(affector_id, zone_dest, count);
                         }
                     }
                 }

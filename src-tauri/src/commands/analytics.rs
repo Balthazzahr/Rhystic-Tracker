@@ -146,7 +146,7 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     _ => bronze_count += 1,
                 }
 
-                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, "bronze".to_string(), match_timestamp.clone(), 0, 0, 0, 0, 0, 0, std::collections::HashMap::new()));
+                let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, tier.clone(), match_timestamp.clone(), 0, 0, 0, 0, 0, 0, std::collections::HashMap::new()));
                 entry.0 += 1;
                 if tier_rank(&tier) > tier_rank(&entry.1) {
                     entry.1 = tier.clone();
@@ -182,7 +182,7 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     silver_count: 0,
                     bronze_count: 0,
                     iron_count: 0,
-                    highest_tier: "bronze".to_string(),
+                    highest_tier: tier.clone(),
                     first_earned_at: match_timestamp.clone(),
                     last_earned_at: match_timestamp.clone(),
                 });

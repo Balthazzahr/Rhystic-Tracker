@@ -44,7 +44,7 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     id: 'scoop_inducer',
     title: 'Scoop Inducer',
     category: 'Closer',
-    description: 'Awarded when casting a 5+ mana card immediately compels the opponent to concede.',
+    description: 'Awarded when an opponent scoops after you play a notable card.',
     tierDescriptions: {
       iron: 'Awarded when opponent scoops Round 8 or earlier with 20+ life after casting a 5+ mana card.',
       bronze: 'Awarded when opponent scoops Round 7 or earlier with 20+ life after casting a 5+ mana card.',
@@ -73,7 +73,7 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     id: 'executioner',
     title: 'Executioner',
     category: 'Closer',
-    description: "Awarded to the creature or direct spell that delivers the final lethal strike reducing the opponent\'s life total to zero or below.",
+    description: 'Awarded for dealing the killing blow to an opponent.',
     tierDescriptions: {
       iron: 'Awarded for dealing the killing blow to an opponent who had ≤ 6 health before the hit.',
       bronze: 'Awarded for dealing the killing blow to an opponent who had ≤ 7 health before the hit.',
@@ -368,7 +368,7 @@ export const ACHIEVEMENTS_REGISTRY: Record<string, AchievementMeta> = {
     id: 'royal_assassin',
     title: 'Royal Assassin',
     category: 'Combat',
-    description: 'Awarded to an individual creature or targeted removal card eliminating multiple opponent creatures across a match.',
+    description: 'Awarded to a creature card for destroying or exiling opponent creatures across a match.',
     tierDescriptions: {
       iron: 'Awarded for destroying or eliminating 2+ opponent creatures across a match.',
       bronze: 'Awarded for destroying or eliminating 3+ opponent creatures across a match.',

@@ -237,11 +237,43 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Trigger Multiplier Count Pill */}
-                          <div className="shrink-0 flex flex-col items-end gap-0.5">
-                            <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/[0.04] text-white">
-                              {awardCount} {awardCount === 1 ? 'trigger' : 'triggers'}
-                            </span>
+                          {/* Tier Breakdown Pills */}
+                          <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
+                            {c.legendary_count > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/50 uppercase shadow-sm">
+                                Legendary ×{c.legendary_count}
+                              </span>
+                            )}
+                            {c.platinum_count > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/50 uppercase shadow-sm">
+                                Platinum ×{c.platinum_count}
+                              </span>
+                            )}
+                            {c.gold_count > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-amber-500/20 text-amber-300 border-amber-500/40 uppercase shadow-sm">
+                                Gold ×{c.gold_count}
+                              </span>
+                            )}
+                            {c.silver_count > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-slate-400/20 text-slate-200 border-slate-400/40 uppercase shadow-sm">
+                                Silver ×{c.silver_count}
+                              </span>
+                            )}
+                            {c.bronze_count > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-amber-900/30 text-amber-200 border-amber-700/40 uppercase shadow-sm">
+                                Bronze ×{c.bronze_count}
+                              </span>
+                            )}
+                            {c.iron_count > 0 && (
+                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-zinc-700/30 text-zinc-300 border-zinc-500/40 uppercase shadow-sm">
+                                Iron ×{c.iron_count}
+                              </span>
+                            )}
+                            {!(c.legendary_count > 0 || c.platinum_count > 0 || c.gold_count > 0 || c.silver_count > 0 || c.bronze_count > 0 || c.iron_count > 0) && (
+                              <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/[0.04] text-white">
+                                {awardCount} ×
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -260,7 +292,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                     Achievement Criteria
                   </span>
                   <p className="text-xs text-neutral-300 font-sans leading-relaxed">
-                    {meta?.tierDescriptions?.[achievement.highest_tier as 'bronze' | 'silver' | 'gold'] || meta?.description}
+                    {meta?.description}
                   </p>
                 </div>
 

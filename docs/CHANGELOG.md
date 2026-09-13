@@ -2,6 +2,16 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.1] - 2026-09-13
+
+### 🏆 Achievement Accuracy & Criteria Refinements
+- **Royal Assassin Strict Creature Targeting**: Restricted the Royal Assassin achievement strictly to creature spells/abilities destroying or exiling opponent *creatures*. Removed non-creature permanent destruction (such as artifacts and enchantments) from counting towards creatures eliminated, and stripped invalid historical titles (e.g. *Loran of the Third Path* destroying *The Meathook Massacre* and *Golgari Signet*).
+- **Rhystic Tracker Hero-Only Card Draw**: Fixed draw event attribution so that symmetrical draws (e.g. *Commit // Memory* causing both players to draw 7 cards) only credit cards drawn by the hero into their own hand, preventing inflated Rhystic Tracker achievement tiers.
+- **Swarmer Tier Synchronization & Badge Fix**: Resolved an issue in the Card Inspector and Achievement Viewer where cards awarded Iron tier for Swarmer inadvertently displayed a Bronze badge due to tier initialization fallbacks. Corrected the full 6-tier parsing hierarchy (`Iron`, `Bronze`, `Silver`, `Gold`, `Platinum`, `Legendary`).
+- **Standardized Achievement Criteria Descriptions**: Updated the Achievement Detail Modal to display the high-level description for the achievement (e.g., *"Awarded for dealing the killing blow to an opponent."*) under Achievement Criteria, while reserving specific numeric thresholds for the Tier Milestones breakdown.
+- **Decorated Card Tier Breakdown Pills**: Replaced generic trigger count pills in the Achievement Detail Modal with color-coded tier count badges (`Legendary ×X`, `Platinum ×X`, `Gold ×X`, `Silver ×X`, `Bronze ×X`, `Iron ×X`).
+- **Momir MWM Deck Name Disambiguation**: Resolved an issue where Midweek Magic Momir matches inherited stale Brawl deck names by detecting Momir event signatures and correctly labeling the deck *Midweek Magic (Momir)*.
+
 ## [1.5.0] - 2026-09-09
 
 ### 🚀 App Performance, Layout Optimization & Milestone Polish Pass

@@ -248,6 +248,9 @@ async fn dispatch_parsed_event(
                 for (ability_id, parent_id) in step.ability_associations {
                     assembler.register_ability_parent(ability_id, parent_id);
                 }
+                for inst_id in &step.creature_instance_ids {
+                    assembler.register_creature(*inst_id);
+                }
                 for (affector_id, affected_ids, category, zone_src, zone_dest) in step.zone_transfer_events {
                     assembler.process_zone_transfer_event(affector_id, &affected_ids, &category, zone_src, zone_dest);
                 }
@@ -274,8 +277,8 @@ async fn dispatch_parsed_event(
                 for (target_id, counter_type, amount) in step.counter_events {
                     assembler.process_counter_event(target_id, counter_type, amount);
                 }
-                for (affector_id, count) in step.draw_events {
-                    assembler.process_draw_event(affector_id, count);
+                for (affector_id, zone_dest, count) in step.draw_events {
+                    assembler.process_draw_event(affector_id, zone_dest, count);
                 }
                 for (affector_id, target_id) in step.counter_spell_events {
                     assembler.process_counterspell_event(affector_id, target_id, None);
@@ -375,9 +378,15 @@ async fn dispatch_parsed_event(
                         if is_land {
                             // Lands can never receive non-mana titles (e.g. Scoop Inducer, Tax Collector, Cat Burglar, etc.)
                             imp.titles.retain(|t| t.starts_with("Mana Dynamo"));
-                        } else if cmc_val < 5 {
-                            // Non-land cards with CMC < 5 cannot receive Scoop Inducer
-                            imp.titles.retain(|t| !t.starts_with("Scoop Inducer"));
+                        } else {
+                            if cmc_val < 5 {
+                                // Non-land cards with CMC < 5 cannot receive Scoop Inducer
+                                imp.titles.retain(|t| !t.starts_with("Scoop Inducer"));
+                            }
+                            if !type_str.contains("creature") {
+                                // Royal Assassin is strictly restricted to creature cards (not sorceries, instants, artifacts, etc.)
+                                imp.titles.retain(|t| !t.starts_with("Royal Assassin"));
+                            }
                         }
                     }
                 }

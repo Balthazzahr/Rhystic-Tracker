@@ -4,6 +4,11 @@ import { CustomDropdown } from './CustomDropdown';
 import { ManaFontPip } from './ManaFontPip';
 import { parseMtgaManaCost } from '../utils/manaUtils';
 import { AchievementBadge } from './AchievementBadge';
+import {
+  cleanAchievementTitle,
+  extractTierFromTitle,
+  AchievementTier,
+} from '../utils/achievementBadges';
 import { setCardStylePref, getCardStylePref, clearCardStylePref } from '../utils/cardStylePrefs';
 import { CardImage } from './CardImage';
 import { cleanCardName } from '../utils/cardImageCache';
@@ -120,13 +125,19 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
 
   const aggregatedAchievements = useMemo(() => {
     if (!overlayStats?.lifetime_titles) return [];
-    const map = new Map<string, { title: string; highestTier: 'gold' | 'silver' | 'bronze'; totalCount: number }>();
-    const tierRank: Record<string, number> = { gold: 3, silver: 2, bronze: 1 };
+    const map = new Map<string, { title: string; highestTier: AchievementTier; totalCount: number }>();
+    const tierRank: Record<AchievementTier, number> = {
+      legendary: 6,
+      platinum: 5,
+      gold: 4,
+      silver: 3,
+      bronze: 2,
+      iron: 1,
+    };
 
     for (const [rawTitle, count] of Object.entries(overlayStats.lifetime_titles)) {
-      const cleanTitle = rawTitle.replace(/\s*\((Gold|Silver|Bronze)\)/i, '').trim();
-      const tierMatch = rawTitle.match(/\((Gold|Silver|Bronze)\)/i);
-      const tier = (tierMatch ? tierMatch[1].toLowerCase() : 'bronze') as 'gold' | 'silver' | 'bronze';
+      const cleanTitle = cleanAchievementTitle(rawTitle);
+      const tier: AchievementTier = extractTierFromTitle(rawTitle) || 'bronze';
       const c = typeof count === 'number' ? count : 1;
 
       const existing = map.get(cleanTitle);

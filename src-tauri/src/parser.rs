@@ -21,11 +21,12 @@ pub struct GameStateStep {
     pub counter_events: Vec<(u32, u32, i32)>, // (target_instance_id, counter_type, amount)
     pub life_by_seat: Vec<(u32, i32)>,
     pub life_modifications: Vec<(u32, u32, i32)>, // (affector_id, target_seat, delta)
-    pub draw_events: Vec<(u32, u32)>,
+    pub draw_events: Vec<(u32, u32, u32)>, // (affector_id, zone_dest, count)
     pub mulligan_events: Vec<(u32, bool, Option<u32>)>, // (seat_id, is_mulligan, num_cards)
     pub counter_spell_events: Vec<(u32, u32)>, // (affector_id, target_instance_id)
     pub zone_transfer_events: Vec<(u32, Vec<u32>, String, u32, u32)>, // (affector_id, affected_ids, category, zone_src, zone_dest)
     pub mana_paid_events: Vec<(u32, u32)>, // (affector_id, count)
+    pub creature_instance_ids: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -324,6 +325,15 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                                     step.ability_associations.push((inst_id as u32, pid));
                                                 }
                                             }
+                                            let is_creature = obj.get("cardTypes")
+                                                .and_then(|c| c.as_array())
+                                                .map(|arr| arr.iter().any(|v| v.as_str().unwrap_or("").contains("Creature")))
+                                                .unwrap_or(false)
+                                                || obj_type.contains("Creature")
+                                                || token_name.as_ref().map(|n| n.contains("Creature")).unwrap_or(false);
+                                            if is_creature {
+                                                step.creature_instance_ids.push(inst_id as u32);
+                                            }
                                             step.objects.push((inst_id as u32, grp_id, owner_seat, zone_id, is_card, is_token, token_name));
                                         }
                                     }
@@ -522,7 +532,7 @@ pub fn parse_line(line: &str) -> ParsedEvent {
 
                                             if category.eq_ignore_ascii_case("Draw") && affector_id > 0 {
                                                 let count = if affected_ids.is_empty() { 1 } else { affected_ids.len() as u32 };
-                                                step.draw_events.push((affector_id, count));
+                                                step.draw_events.push((affector_id, zone_dest, count));
                                             } else if category.eq_ignore_ascii_case("Countered") {
                                                 for target_id in &affected_ids {
                                                     step.counter_spell_events.push((affector_id, *target_id));
@@ -852,7 +862,8 @@ mod tests {
                 assert_eq!(steps[0].objects.len(), 1);
                 assert_eq!(steps[0].draw_events.len(), 1);
                 assert_eq!(steps[0].draw_events[0].0, 870, "affectorId should match");
-                assert_eq!(steps[0].draw_events[0].1, 2, "affectedIds count should match");
+                assert_eq!(steps[0].draw_events[0].1, 31, "zone_dest should match (hero hand)");
+                assert_eq!(steps[0].draw_events[0].2, 2, "affectedIds count should match");
             }
             other => panic!("expected GameStateUpdates, got {:?}", other),
         }

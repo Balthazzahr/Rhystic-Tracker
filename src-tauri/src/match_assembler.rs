@@ -188,6 +188,7 @@ pub struct MatchAssembler {
     pub instance_controller_map: HashMap<u32, u32>, // instanceId -> controllerSeatId
     pub instance_flicker_pending: HashSet<u32>, // instanceIds that went 28 -> 29
     pub ability_parent_map: HashMap<u32, u32>, // abilityInstanceId -> parentInstanceId
+    pub creature_instance_ids: HashSet<u32>,
     pub token_instance_names: HashMap<u32, String>, // instanceId -> token name
     pub token_instance_ids: HashSet<u32>,
     pub token_grp_ids: HashSet<u32>,
@@ -250,6 +251,7 @@ impl MatchAssembler {
             instance_controller_map: HashMap::new(),
             instance_flicker_pending: HashSet::new(),
             ability_parent_map: HashMap::new(),
+            creature_instance_ids: HashSet::new(),
             token_instance_names: HashMap::new(),
             token_instance_ids: HashSet::new(),
             token_grp_ids: HashSet::new(),
@@ -334,6 +336,7 @@ impl MatchAssembler {
         self.instance_zone_map.clear();
         self.instance_owner_map.clear();
         self.ability_parent_map.clear();
+        self.creature_instance_ids.clear();
         self.token_instance_names.clear();
         self.recorded_actions.clear();
         self.turn_events.clear();
@@ -682,6 +685,10 @@ impl MatchAssembler {
             self.turn_event_seqs.push(self.feed_seq);
             self.feed_seq += 1;
         }
+    }
+
+    pub fn register_creature(&mut self, instance_id: u32) {
+        self.creature_instance_ids.insert(instance_id);
     }
 
     pub fn process_game_object(&mut self, instance_id: u32, grp_id: Option<u32>, owner_seat: Option<u32>, zone_id: u32, is_card: bool, is_token: bool, token_name: Option<String>) -> Option<(u32, u32, String)> {
@@ -1170,10 +1177,17 @@ impl MatchAssembler {
 
     /// Record extra card draws caused by a spell/ability/card instance.
     /// Aggregates lifetime draw engine metrics and awards Rhystic Tracker honors.
-    pub fn process_draw_event(&mut self, affector_instance_id: u32, count: u32) {
+    pub fn process_draw_event(&mut self, affector_instance_id: u32, zone_dest: u32, count: u32) {
         if affector_instance_id == 0 || count == 0 {
             return;
         }
+
+        // Zone 31 is hero hand, Zone 35 is opponent hand in MTGA.
+        // If zone_dest is specified (> 0) and not hero hand (31), do not count as hero draw.
+        if zone_dest > 0 && zone_dest != 31 {
+            return;
+        }
+
         let mut grp_id = self.instance_map.get(&affector_instance_id).copied().unwrap_or(0);
         let mut seat_id = self.instance_owner_map.get(&affector_instance_id).copied().unwrap_or(0);
 
@@ -1207,7 +1221,7 @@ impl MatchAssembler {
             return;
         }
 
-        println!("[DRAW] affector {} -> grp {} seat {} count {} (hero_seat {})", affector_instance_id, grp_id, seat_id, count, self.player_seat_id);
+        println!("[DRAW] affector {} -> grp {} seat {} count {} zone_dest {} (hero_seat {})", affector_instance_id, grp_id, seat_id, count, zone_dest, self.player_seat_id);
 
         let entry = self.impactful_cards.entry(grp_id).or_default();
         if entry.seat_id == 0 {
@@ -1328,6 +1342,9 @@ impl MatchAssembler {
 
         // If affector is not resolved, attribute to target creature
         if grp_id == 0 {
+            if self.token_instance_ids.contains(&target_instance_id) {
+                return;
+            }
             grp_id = self.instance_map.get(&target_instance_id).copied().unwrap_or(0);
             seat_id = self.instance_owner_map.get(&target_instance_id).copied().unwrap_or(self.player_seat_id);
         }
@@ -1787,10 +1804,6 @@ impl MatchAssembler {
             return;
         }
 
-        for target_id in affected_ids {
-            self.token_spawner_map.insert(*target_id, affector_grp);
-        }
-
         let is_wipe_category = category.eq_ignore_ascii_case("Destroy")
             || category.eq_ignore_ascii_case("Exile")
             || category.eq_ignore_ascii_case("Sacrifice")
@@ -1798,6 +1811,7 @@ impl MatchAssembler {
 
         if is_wipe_category {
             let mut opp_wiped = 0usize;
+            let mut opp_creatures_wiped = 0usize;
             let mut total_wiped = 0usize;
 
             for tgt_id in affected_ids {
@@ -1807,6 +1821,9 @@ impl MatchAssembler {
                     total_wiped += 1;
                     if tgt_owner > 0 && tgt_owner != self.player_seat_id {
                         opp_wiped += 1;
+                        if self.creature_instance_ids.contains(tgt_id) {
+                            opp_creatures_wiped += 1;
+                        }
                     }
                 }
             }
@@ -1854,8 +1871,9 @@ impl MatchAssembler {
             }
 
             // Royal Assassin: 2 (Iron), 3 (Bronze), 4 (Silver), 5 (Gold), 8 (Platinum), 10 (Legendary)
-            if opp_wiped >= 1 && opp_wiped <= 3 {
-                entry.creatures_eliminated += opp_wiped as u32;
+            // Strictly restricted to eliminating opponent CREATURES (1-3 at a time)
+            if opp_creatures_wiped >= 1 && opp_creatures_wiped <= 3 {
+                entry.creatures_eliminated += opp_creatures_wiped as u32;
                 if entry.creatures_eliminated >= 2 {
                     let tier = if entry.creatures_eliminated >= 10 {
                         "Legendary"
@@ -2659,16 +2677,44 @@ use super::*;
         // Instance 50 = Rhystic Study (Grp 12345)
         assembler.process_game_object(50, Some(12345), Some(1), 28, true, false, None);
 
-        // Trigger draw 3 cards
-        assembler.process_draw_event(50, 3);
-        // Trigger draw 3 more cards (total 6 -> Rhystic Tracker Silver)
-        assembler.process_draw_event(50, 3);
+        // Trigger draw 3 cards to hero hand (zone 31)
+        assembler.process_draw_event(50, 31, 3);
+        // Trigger draw 3 more cards to hero hand (total 6 -> Rhystic Tracker Silver)
+        assembler.process_draw_event(50, 31, 3);
 
         let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
         let rhystic_entry = impactful.iter().find(|i| i.grp_id == 12345).expect("Rhystic Study should be impactful");
 
         assert_eq!(rhystic_entry.cards_drawn, 6, "Rhystic Study should have 6 cards drawn");
         assert!(rhystic_entry.titles.iter().any(|t| t == "Rhystic Tracker (Silver)"), "Should award Rhystic Tracker (Silver) badge");
+    }
+
+    #[test]
+    fn test_draw_event_ignores_opponent_hand() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_user_id("hero".to_string());
+        assembler.start_match("match-commit-memory".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        // Instance 60 = Commit // Memory (Grp 54321)
+        assembler.process_game_object(60, Some(54321), Some(1), 28, true, false, None);
+
+        // Hero draws 7 (zone 31)
+        assembler.process_draw_event(60, 31, 7);
+        // Opponent draws 7 (zone 35) - should be IGNORED
+        assembler.process_draw_event(60, 35, 7);
+
+        let (_, _, _, impactful) = assembler.complete_match(1, "Loss_Life").expect("match should complete");
+        let memory_entry = impactful.iter().find(|i| i.grp_id == 54321).expect("Commit // Memory should be impactful");
+
+        // Should only be 7 cards drawn, NOT 14
+        assert_eq!(memory_entry.cards_drawn, 7, "Only hero draws should be credited");
+        assert!(memory_entry.titles.iter().any(|t| t == "Rhystic Tracker (Silver)"), "Should award Rhystic Tracker (Silver) for 7 cards, not Platinum for 14");
     }
 
     #[test]
@@ -2690,7 +2736,7 @@ use super::*;
         assembler.register_ability_parent(327, 324);
 
         // ZoneTransfer Draw event triggered with affectorId 327 (the ability instance)
-        assembler.process_draw_event(327, 1);
+        assembler.process_draw_event(327, 31, 1);
 
         let (_, _, _, impactful) = assembler.complete_match(2, "Loss_Life").expect("match should complete");
         let feather_entry = impactful.iter().find(|i| i.grp_id == 91549).expect("Feather of Flight should be impactful");
@@ -3756,5 +3802,50 @@ use super::*;
 
         let storm = impactful.iter().find(|i| i.grp_id == 4005).expect("Rider of the Storm");
         assert!(storm.titles.contains(&"Rider of the Storm (Gold)".to_string()), "Rider of the Storm must have Gold title");
+    }
+
+    #[test]
+    fn test_royal_assassin_only_creatures() {
+        let mut assembler = MatchAssembler::new();
+        assembler.start_match("match_ra_test".to_string(), "Standard".to_string(), false);
+
+        // Turn 1
+        assembler.update_game_state(Some(1), 1, &[(1, 20), (2, 20)], 1);
+
+        // Loran of the Third Path (affector: inst 10, grp 82496)
+        assembler.register_creature(10);
+        assembler.process_game_object(10, Some(82496), Some(1), 28, true, false, None);
+
+        // Opponent non-creature targets (Artifacts/Enchantments: inst 20, 21)
+        // Notice: NOT registered in creature_instance_ids!
+        assembler.process_game_object(20, Some(78457), Some(2), 28, true, false, None);
+        assembler.process_game_object(21, Some(100077), Some(2), 28, true, false, None);
+
+        // Loran destroys 2 non-creature permanents
+        assembler.process_zone_transfer_event(10, &[20], "Destroy", 28, 33);
+        assembler.process_zone_transfer_event(10, &[21], "Destroy", 28, 33);
+
+        // Verify creatures_eliminated is 0 and no Royal Assassin title
+        let loran_entry = assembler.impactful_cards.get(&82496).expect("Loran impactful entry");
+        assert_eq!(loran_entry.creatures_eliminated, 0, "Non-creatures must not increment creatures_eliminated");
+        assert!(!loran_entry.titles.iter().any(|t| t.starts_with("Royal Assassin")), "Loran must not receive Royal Assassin for non-creatures");
+
+        // Now test Murderous Rider (affector: inst 30, grp 90001) destroying actual creatures
+        assembler.register_creature(30);
+        assembler.process_game_object(30, Some(90001), Some(1), 28, true, false, None);
+
+        // Opponent creatures: inst 40, 41
+        assembler.register_creature(40);
+        assembler.process_game_object(40, Some(50001), Some(2), 28, true, false, None);
+        assembler.register_creature(41);
+        assembler.process_game_object(41, Some(50002), Some(2), 28, true, false, None);
+
+        // Murderous Rider destroys 2 opponent creatures
+        assembler.process_zone_transfer_event(30, &[40], "Destroy", 28, 33);
+        assembler.process_zone_transfer_event(30, &[41], "Destroy", 28, 33);
+
+        let rider_entry = assembler.impactful_cards.get(&90001).expect("Rider impactful entry");
+        assert_eq!(rider_entry.creatures_eliminated, 2, "Opponent creatures must increment creatures_eliminated");
+        assert!(rider_entry.titles.contains(&"Royal Assassin (Iron)".to_string()), "Rider must receive Royal Assassin (Iron) for eliminating 2 creatures");
     }
 }

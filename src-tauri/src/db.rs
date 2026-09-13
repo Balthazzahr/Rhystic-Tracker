@@ -735,6 +735,10 @@ impl DatabaseManager {
                             if name.contains("excalibur") {
                                 titles.retain(|t| !t.starts_with("Ozolithic!"));
                             }
+                            // Royal Assassin is strictly restricted to creature cards (and cards that destroy creatures)
+                            if !type_str.contains("creature") || name.contains("loran of the third path") {
+                                titles.retain(|t| !t.starts_with("Royal Assassin"));
+                            }
                         }
                     }
 
