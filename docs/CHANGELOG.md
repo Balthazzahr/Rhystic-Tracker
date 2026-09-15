@@ -2,6 +2,13 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.2] - 2026-09-15
+
+### 🏆 Combat Analytics, Zone Transfer & Achievement Fixes
+- **Multi-Annotation Board Wipe Aggregation**: Fixed an issue where mass removal spells (e.g. *Farewell*, *Beyond the Quiet*, *Wrath of God*) that emit granular single-target `ZoneTransfer` annotations failed to trigger the **Sweeper** ($\ge 6$ opponent permanents) and **Cataclysm** ($\ge 10$ total permanents) achievements. Zone transfer wipe events sharing the same spell affector are now aggregated cumulatively.
+- **Strict Board Wipe Creature Revocation**: Safeguarded the **Royal Assassin** achievement against board wipes. If a spell destroys or exiles more than 3 opponent creatures across its resolution, it is identified as a board wipe and barred from receiving targeted spot-removal credit.
+- **Graveyard Reanimation Distinction**: Disambiguated graveyard-to-battlefield reanimation events from exile/flicker events. Reanimated creatures (such as via *Zombify* or *Reanimate*) no longer falsely trigger the **Blinkmaster** achievement, and now receive dedicated **`REANIMATE`** badges in the Live Match HUD and Match Action Timeline.
+
 ## [1.5.1] - 2026-09-13
 
 ### 🏆 Achievement Accuracy & Criteria Refinements

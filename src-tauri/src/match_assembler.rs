@@ -187,6 +187,7 @@ pub struct MatchAssembler {
     pub instance_owner_map: HashMap<u32, u32>, // instanceId -> ownerSeatId
     pub instance_controller_map: HashMap<u32, u32>, // instanceId -> controllerSeatId
     pub instance_flicker_pending: HashSet<u32>, // instanceIds that went 28 -> 29
+    pub instance_reanimator_map: HashMap<u32, u32>, // reanimated instanceId -> reanimating spell/card instanceId
     pub ability_parent_map: HashMap<u32, u32>, // abilityInstanceId -> parentInstanceId
     pub creature_instance_ids: HashSet<u32>,
     pub token_instance_names: HashMap<u32, String>, // instanceId -> token name
@@ -211,6 +212,7 @@ pub struct MatchAssembler {
     pub turn_1_active_seat: Option<u32>,
     pub match_start_time: Option<chrono::DateTime<Utc>>,
     pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
+    pub instance_wipe_counts: HashMap<u32, (usize, usize, usize)>, // affector_instance_id -> (total_wiped, opp_wiped, opp_creatures_wiped)
     pub last_hero_damage_hit: Option<(u32, i32, i32)>, // (grp_id, amount, opp_life_before)
     pub current_turn_hero_hits: Vec<(u32, i32, i32)>, // (grp_id, magnitude, opp_life_before) dealt to opponent in current turn
     pub opp_life_before_combat: i32,
@@ -250,6 +252,7 @@ impl MatchAssembler {
             instance_owner_map: HashMap::new(),
             instance_controller_map: HashMap::new(),
             instance_flicker_pending: HashSet::new(),
+            instance_reanimator_map: HashMap::new(),
             ability_parent_map: HashMap::new(),
             creature_instance_ids: HashSet::new(),
             token_instance_names: HashMap::new(),
@@ -274,6 +277,7 @@ impl MatchAssembler {
             turn_1_active_seat: None,
             match_start_time: None,
             impactful_cards: HashMap::new(),
+            instance_wipe_counts: HashMap::new(),
             last_hero_damage_hit: None,
             processed_msg_ids: HashSet::new(),
             last_completed: None,
@@ -335,6 +339,9 @@ impl MatchAssembler {
         self.instance_map.clear();
         self.instance_zone_map.clear();
         self.instance_owner_map.clear();
+        self.instance_controller_map.clear();
+        self.instance_flicker_pending.clear();
+        self.instance_reanimator_map.clear();
         self.ability_parent_map.clear();
         self.creature_instance_ids.clear();
         self.token_instance_names.clear();
@@ -346,6 +353,7 @@ impl MatchAssembler {
         self.seen_damage_annotation_ids.clear();
         self.active_life_sources.clear();
         self.impactful_cards.clear();
+        self.instance_wipe_counts.clear();
         self.pending_counter_events.clear();
         self.processed_msg_ids.clear();
         self.token_instance_ids.clear();
@@ -520,6 +528,12 @@ impl MatchAssembler {
         }
         if self.instance_flicker_pending.contains(&orig_id) {
             self.instance_flicker_pending.insert(new_id);
+        }
+        if let Some(reanimator) = self.instance_reanimator_map.remove(&orig_id) {
+            self.instance_reanimator_map.insert(new_id, reanimator);
+        }
+        if let Some(counts) = self.instance_wipe_counts.remove(&orig_id) {
+            self.instance_wipe_counts.insert(new_id, counts);
         }
     }
 
@@ -764,9 +778,12 @@ impl MatchAssembler {
 
         let mut event_type = None;
         if zone_id == 28 {
-            self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "dies" || act == "exile" || act == "blink")));
-            // Blinkmaster: Returned to battlefield from Exile (29) or Limbo (30) or flagged pending flicker
-            let is_flicker = self.instance_flicker_pending.contains(&instance_id) || ((previous_zone == Some(29) || previous_zone == Some(30)) && previous_zone != Some(28));
+            self.recorded_actions.retain(|(_, inst, act)| !(*inst == instance_id && (act == "dies" || act == "exile" || act == "blink" || act == "reanimate")));
+            let reanimator_affector = self.instance_reanimator_map.remove(&instance_id);
+            let is_from_graveyard = previous_zone == Some(33) || previous_zone == Some(37) || reanimator_affector.is_some();
+
+            // Blinkmaster: Returned to battlefield strictly from Exile (29) or Limbo (30) or flagged pending flicker
+            let is_flicker = !is_from_graveyard && (self.instance_flicker_pending.contains(&instance_id) || ((previous_zone == Some(29) || previous_zone == Some(30)) && previous_zone != Some(28)));
             self.instance_flicker_pending.remove(&instance_id);
             if is_flicker {
                 if seat_id == self.player_seat_id && !is_token && !self.token_grp_ids.contains(&resolved_grp_id) {
@@ -793,8 +810,10 @@ impl MatchAssembler {
                 event_type = Some("blink".to_string());
             }
 
-            // Immortal & Reanimator: Returned to battlefield from Graveyard (33)
-            if previous_zone == Some(33) {
+            // Immortal & Reanimator: Returned to battlefield from Graveyard (33 or 37 or tracked reanimation)
+            if is_from_graveyard {
+                event_type = Some("reanimate".to_string());
+
                 if seat_id == self.player_seat_id && !is_token && !self.token_grp_ids.contains(&resolved_grp_id) {
                     let entry = self.impactful_cards.entry(resolved_grp_id).or_default();
                     if entry.seat_id == 0 { entry.seat_id = seat_id; }
@@ -819,8 +838,15 @@ impl MatchAssembler {
 
                 // Reanimator: Attributed to the spell/engine card that brought this permanent back
                 if seat_id == self.player_seat_id {
-                    let reanimating_source = self.ability_parent_map.get(&instance_id).copied()
-                        .and_then(|p| self.instance_map.get(&p).copied());
+                    let reanimating_source = reanimator_affector
+                        .and_then(|aff_id| {
+                            self.instance_map.get(&aff_id).copied()
+                                .or_else(|| self.ability_parent_map.get(&aff_id).and_then(|p| self.instance_map.get(p)).copied())
+                        })
+                        .or_else(|| {
+                            self.ability_parent_map.get(&instance_id).copied()
+                                .and_then(|p| self.instance_map.get(&p).copied())
+                        });
                     if let Some(src_grp) = reanimating_source {
                         // Avoid self-reanimation counting as Reanimator engine (self-reanimation is Immortal)
                         if src_grp > 0 && src_grp != resolved_grp_id && !self.token_grp_ids.contains(&src_grp) {
@@ -1788,8 +1814,8 @@ impl MatchAssembler {
             return;
         }
 
-        // Handle Flicker tracking (return to battlefield from exile/limbo)
-        if category.eq_ignore_ascii_case("Return") && zone_dest == 28 {
+        // Handle Flicker tracking (return to battlefield strictly from exile/limbo)
+        if category.eq_ignore_ascii_case("Return") && zone_dest == 28 && (zone_src == 29 || zone_src == 30) {
             for target_id in affected_ids {
                 self.instance_flicker_pending.insert(*target_id);
             }
@@ -1797,6 +1823,13 @@ impl MatchAssembler {
         if category.eq_ignore_ascii_case("Exile") && zone_src == 28 && (zone_dest == 29 || zone_dest == 30) {
             for target_id in affected_ids {
                 self.instance_flicker_pending.insert(*target_id);
+            }
+        }
+
+        // Handle Reanimation tracking (graveyard -> battlefield)
+        if zone_dest == 28 && (zone_src == 33 || zone_src == 37) && affector_id > 0 {
+            for target_id in affected_ids {
+                self.instance_reanimator_map.insert(*target_id, affector_id);
             }
         }
 
@@ -1810,41 +1843,51 @@ impl MatchAssembler {
             || (zone_src == 28 && (zone_dest == 33 || zone_dest == 29 || zone_dest == 37));
 
         if is_wipe_category {
-            let mut opp_wiped = 0usize;
-            let mut opp_creatures_wiped = 0usize;
-            let mut total_wiped = 0usize;
+            let mut step_opp_wiped = 0usize;
+            let mut step_opp_creatures_wiped = 0usize;
+            let mut step_total_wiped = 0usize;
 
             for tgt_id in affected_ids {
                 let tgt_owner = self.instance_owner_map.get(tgt_id).copied().unwrap_or(0);
                 let tgt_zone = self.instance_zone_map.get(tgt_id).copied().unwrap_or(zone_src);
                 if tgt_zone == 28 || zone_src == 28 {
-                    total_wiped += 1;
+                    step_total_wiped += 1;
                     if tgt_owner > 0 && tgt_owner != self.player_seat_id {
-                        opp_wiped += 1;
+                        step_opp_wiped += 1;
                         if self.creature_instance_ids.contains(tgt_id) {
-                            opp_creatures_wiped += 1;
+                            step_opp_creatures_wiped += 1;
                         }
                     }
                 }
             }
 
+            let (total_wiped, opp_wiped, opp_creatures_wiped) = self.instance_wipe_counts.entry(affector_id).or_default();
+            let prev_opp_creatures = *opp_creatures_wiped;
+            *total_wiped += step_total_wiped;
+            *opp_wiped += step_opp_wiped;
+            *opp_creatures_wiped += step_opp_creatures_wiped;
+
+            let cur_total_wiped = *total_wiped;
+            let cur_opp_wiped = *opp_wiped;
+            let cur_opp_creatures_wiped = *opp_creatures_wiped;
+
             let entry = self.impactful_cards.entry(affector_grp).or_default();
             if entry.seat_id == 0 { entry.seat_id = affector_seat; }
 
-            if opp_wiped > entry.max_opp_wiped { entry.max_opp_wiped = opp_wiped; }
-            if total_wiped > entry.max_total_wiped { entry.max_total_wiped = total_wiped; }
+            if cur_opp_wiped > entry.max_opp_wiped { entry.max_opp_wiped = cur_opp_wiped; }
+            if cur_total_wiped > entry.max_total_wiped { entry.max_total_wiped = cur_total_wiped; }
 
             // Sweeper: 6 (Iron), 7 (Bronze), 8 (Silver), 10 (Gold), 15 (Platinum), 20 (Legendary)
-            if opp_wiped >= 6 {
-                let tier = if opp_wiped >= 20 {
+            if cur_opp_wiped >= 6 {
+                let tier = if cur_opp_wiped >= 20 {
                     "Legendary"
-                } else if opp_wiped >= 15 {
+                } else if cur_opp_wiped >= 15 {
                     "Platinum"
-                } else if opp_wiped >= 10 {
+                } else if cur_opp_wiped >= 10 {
                     "Gold"
-                } else if opp_wiped >= 8 {
+                } else if cur_opp_wiped >= 8 {
                     "Silver"
-                } else if opp_wiped >= 7 {
+                } else if cur_opp_wiped >= 7 {
                     "Bronze"
                 } else {
                     "Iron"
@@ -1853,16 +1896,16 @@ impl MatchAssembler {
             }
 
             // Cataclysm: 10 (Iron), 12 (Bronze), 14 (Silver), 18 (Gold), 25 (Platinum), 30 (Legendary)
-            if total_wiped >= 10 {
-                let tier = if total_wiped >= 30 {
+            if cur_total_wiped >= 10 {
+                let tier = if cur_total_wiped >= 30 {
                     "Legendary"
-                } else if total_wiped >= 25 {
+                } else if cur_total_wiped >= 25 {
                     "Platinum"
-                } else if total_wiped >= 18 {
+                } else if cur_total_wiped >= 18 {
                     "Gold"
-                } else if total_wiped >= 14 {
+                } else if cur_total_wiped >= 14 {
                     "Silver"
-                } else if total_wiped >= 12 {
+                } else if cur_total_wiped >= 12 {
                     "Bronze"
                 } else {
                     "Iron"
@@ -1871,25 +1914,34 @@ impl MatchAssembler {
             }
 
             // Royal Assassin: 2 (Iron), 3 (Bronze), 4 (Silver), 5 (Gold), 8 (Platinum), 10 (Legendary)
-            // Strictly restricted to eliminating opponent CREATURES (1-3 at a time)
-            if opp_creatures_wiped >= 1 && opp_creatures_wiped <= 3 {
-                entry.creatures_eliminated += opp_creatures_wiped as u32;
-                if entry.creatures_eliminated >= 2 {
-                    let tier = if entry.creatures_eliminated >= 10 {
-                        "Legendary"
-                    } else if entry.creatures_eliminated >= 8 {
-                        "Platinum"
-                    } else if entry.creatures_eliminated >= 5 {
-                        "Gold"
-                    } else if entry.creatures_eliminated >= 4 {
-                        "Silver"
-                    } else if entry.creatures_eliminated >= 3 {
-                        "Bronze"
-                    } else {
-                        "Iron"
-                    };
-                    add_tiered_title(&mut entry.titles, "Royal Assassin", tier);
+            // Strictly restricted to spot/targeted removal eliminating opponent CREATURES (1-3 at a time across the spell's resolution)
+            if cur_opp_creatures_wiped <= 3 {
+                if step_opp_creatures_wiped > 0 {
+                    entry.creatures_eliminated += step_opp_creatures_wiped as u32;
                 }
+            } else if prev_opp_creatures <= 3 && prev_opp_creatures > 0 {
+                // If this spell exceeded 3 opponent creatures, revoke the previously added count from this spell resolution
+                entry.creatures_eliminated = entry.creatures_eliminated.saturating_sub(prev_opp_creatures as u32);
+            }
+
+            if entry.creatures_eliminated >= 2 {
+                let tier = if entry.creatures_eliminated >= 10 {
+                    "Legendary"
+                } else if entry.creatures_eliminated >= 8 {
+                    "Platinum"
+                } else if entry.creatures_eliminated >= 5 {
+                    "Gold"
+                } else if entry.creatures_eliminated >= 4 {
+                    "Silver"
+                } else if entry.creatures_eliminated >= 3 {
+                    "Bronze"
+                } else {
+                    "Iron"
+                };
+                add_tiered_title(&mut entry.titles, "Royal Assassin", tier);
+            } else {
+                // If count was revoked below threshold, remove Royal Assassin title
+                entry.titles.retain(|t| !t.starts_with("Royal Assassin"));
             }
         }
     }
@@ -3535,6 +3587,52 @@ use super::*;
     }
 
     #[test]
+    fn test_reanimation_does_not_flicker_and_awards_reanimator() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-reanimate".to_string(), "Standard".to_string(), false);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+
+        // Zombify (grp 93900), Armaggon, Future Shark (grp 95100)
+        let armaggon_grp = 95100;
+        let zombify_grp = 93900;
+
+        for turn in 3..=6 {
+            assembler.update_game_state(Some(turn as u64), turn, &[(1, 20), (2, 20)], 1);
+            let zombify_inst = 700 + turn;
+            let creature_inst = 800 + turn;
+
+            // 1. Zombify is cast on stack (zone 27)
+            assembler.process_game_object(zombify_inst, Some(zombify_grp), Some(1), 27, true, false, None);
+
+            // 2. MTGA sends ZoneTransfer for reanimation with category "Return", zone_src 33, zone_dest 28
+            assembler.process_zone_transfer_event(zombify_inst, &[creature_inst], "Return", 33, 28);
+
+            // 3. Creature arrives in zone 28 from graveyard (33)
+            let res = assembler.process_game_object(creature_inst, Some(armaggon_grp), Some(1), 28, true, false, None);
+            assert_eq!(res, Some((armaggon_grp, 1, "reanimate".to_string())), "Reanimation must emit 'reanimate' event");
+        }
+
+        let (_, _, turn_events, impactful) = assembler.complete_match(1, "Concede").expect("complete");
+
+        let armaggon = impactful.iter().find(|i| i.grp_id == armaggon_grp).expect("Armaggon");
+        assert!(!armaggon.titles.iter().any(|t| t.starts_with("Blinkmaster")), "Armaggon must NOT earn Blinkmaster");
+        assert!(armaggon.titles.contains(&"Immortal (Silver)".to_string()), "Armaggon must earn Immortal (Silver)");
+
+        let zombify = impactful.iter().find(|i| i.grp_id == zombify_grp).expect("Zombify");
+        assert!(zombify.titles.contains(&"Reanimator (Bronze)".to_string()), "Zombify must earn Reanimator (Bronze)");
+
+        let reanimate_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "reanimate").collect();
+        assert_eq!(reanimate_events.len(), 4, "Timeline must record 4 reanimate events");
+
+        let blink_events: Vec<_> = turn_events.iter().filter(|e| e.event_type == "blink").collect();
+        assert_eq!(blink_events.len(), 0, "No blink events should exist for reanimations");
+    }
+
+    #[test]
     fn test_achievement_swarmer_and_mana_dynamo() {
         let mut assembler = MatchAssembler::new();
         assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
@@ -3847,5 +3945,50 @@ use super::*;
         let rider_entry = assembler.impactful_cards.get(&90001).expect("Rider impactful entry");
         assert_eq!(rider_entry.creatures_eliminated, 2, "Opponent creatures must increment creatures_eliminated");
         assert!(rider_entry.titles.contains(&"Royal Assassin (Iron)".to_string()), "Rider must receive Royal Assassin (Iron) for eliminating 2 creatures");
+    }
+
+    #[test]
+    fn test_board_wipe_multi_annotation_aggregation() {
+        let mut assembler = MatchAssembler::new();
+        assembler.set_player_info("hero_id".to_string(), "Hero".to_string());
+        assembler.start_match("m-wipe-test".to_string(), "Brawl".to_string(), true);
+        assembler.update_reserved_players(&serde_json::json!([
+            { "userId": "hero_id", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "opp_id", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+        assembler.update_game_state(Some(1), 7, &[(1, 25), (2, 25)], 1);
+
+        // Hero casts Beyond the Quiet (spell instance 601, grpId 96581)
+        assembler.process_game_object(601, Some(96581), Some(1), 27, true, false, None);
+
+        // Register 6 opponent creatures (607..612) and 4 opponent non-creatures/tokens (613..616)
+        // Total 10 permanents on battlefield
+        for id in 607..=612 {
+            assembler.register_creature(id);
+            assembler.process_game_object(id, Some(70000 + id), Some(2), 28, true, false, None);
+        }
+        for id in 613..=616 {
+            assembler.process_game_object(id, Some(80000 + id), Some(2), 28, true, false, None);
+        }
+
+        // Simulate MTGA emitting 10 separate ZoneTransfer annotations with affectedIds length 1
+        // all with affector_id = 601 (Beyond the Quiet)
+        for id in 607..=616 {
+            assembler.process_zone_transfer_event(601, &[id], "Exile", 28, 29);
+        }
+
+        let entry = assembler.impactful_cards.get(&96581).expect("Beyond the Quiet impactful entry");
+        assert_eq!(entry.max_opp_wiped, 10, "Should have aggregated 10 opponent permanents wiped");
+        assert_eq!(entry.max_total_wiped, 10, "Should have aggregated 10 total permanents wiped");
+
+        // Sweeper: 10 opp wiped -> Gold
+        assert!(entry.titles.contains(&"Sweeper (Gold)".to_string()), "Beyond the Quiet must earn Sweeper (Gold)");
+
+        // Cataclysm: 10 total wiped -> Iron
+        assert!(entry.titles.contains(&"Cataclysm (Iron)".to_string()), "Beyond the Quiet must earn Cataclysm (Iron)");
+
+        // Crucially: A board wipe must NOT award Royal Assassin even though single-target annotations were emitted!
+        assert_eq!(entry.creatures_eliminated, 0, "Board wipe with >3 creatures must not award creatures_eliminated");
+        assert!(!entry.titles.iter().any(|t| t.starts_with("Royal Assassin")), "Board wipe must not receive Royal Assassin");
     }
 }

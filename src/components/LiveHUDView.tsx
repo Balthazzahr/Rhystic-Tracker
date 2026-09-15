@@ -545,7 +545,10 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     } else if (e.type === 'exile') {
       badgeText = 'EXILE';
       badgeStyle = 'bg-purple-950/50 text-purple-300 border-purple-500/30';
-    } else if (e.type === 'blink' || e.type === 'return') {
+    } else if (e.type === 'reanimate') {
+      badgeText = 'REANIMATE';
+      badgeStyle = 'bg-purple-950/50 text-purple-300 border-purple-500/30';
+    } else if (e.type === 'blink') {
       badgeText = 'BLINK';
       badgeStyle = 'bg-cyan-950/50 text-cyan-300 border-cyan-500/30';
     } else if (e.type === 'discard') {

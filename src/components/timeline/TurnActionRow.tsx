@@ -282,7 +282,14 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
         </span>
       );
     }
-    if (evType === 'blink' || evType === 'return') {
+    if (evType === 'reanimate') {
+      return (
+        <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-purple-950/40 text-purple-300 border-purple-500/40 shrink-0">
+          REANIMATE
+        </span>
+      );
+    }
+    if (evType === 'blink') {
       return (
         <span className="px-1.5 py-0.5 border text-[9.5px] font-mono font-bold uppercase bg-cyan-950/30 text-cyan-300 border-cyan-500/30 shrink-0">
           BLINK
