@@ -455,8 +455,8 @@ impl DatabaseManager {
             "UPDATE matches SET format = 'Pioneer Ranked' WHERE format IN ('Pioneer (Ranked)', 'Pioneer_Ladder')",
             "UPDATE matches SET format = 'Standard Brawl' WHERE format IN ('Brawl - Standard', 'Standard_Brawl', 'Brawl_Standard')",
             "UPDATE matches SET format = 'Brawl - Competitive' WHERE format IN ('Competitive Brawl', 'Competitive_Brawl', 'Brawl (Ranked)', 'Brawl Ranked', 'Brawl_Ladder')",
-            "UPDATE matches SET format = 'Brawl' WHERE format = 'Standard Brawl' AND TRIM(TRIM(hero_deck_name, ''''), '\"') IN (SELECT TRIM(TRIM(deck_name, ''''), '\"') FROM deck_lists WHERE commander_grp_id IS NOT NULL AND json_array_length(cards_json) > 60)",
-            "UPDATE matches SET format = 'Standard Brawl' WHERE format = 'Brawl' AND TRIM(TRIM(hero_deck_name, ''''), '\"') IN (SELECT TRIM(TRIM(deck_name, ''''), '\"') FROM deck_lists WHERE commander_grp_id IS NOT NULL AND json_array_length(cards_json) <= 60)",
+            "UPDATE matches SET format = 'Brawl' WHERE format = 'Standard Brawl' AND REPLACE(REPLACE(hero_deck_name, '''', ''), '\"', '') IN (SELECT REPLACE(REPLACE(deck_name, '''', ''), '\"', '') FROM deck_lists WHERE commander_grp_id IS NOT NULL AND json_array_length(cards_json) > 60)",
+            "UPDATE matches SET format = 'Standard Brawl' WHERE format = 'Brawl' AND REPLACE(REPLACE(hero_deck_name, '''', ''), '\"', '') IN (SELECT REPLACE(REPLACE(deck_name, '''', ''), '\"', '') FROM deck_lists WHERE commander_grp_id IS NOT NULL AND json_array_length(cards_json) <= 60)",
         ];
         for stmt in format_migrations {
             let _ = sqlx::query(stmt).execute(&pool).await;

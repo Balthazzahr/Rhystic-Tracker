@@ -2,6 +2,14 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.5] - 2026-09-17
+
+### 📊 Format Distribution Widget Enhancements & Layout Scaling
+- **Fluid Proportional Grid Scaling**: Replaced static table width constraints with a fluid proportional flex layout (`max-w-[58%]`, `min-w-[160px]`). On wider screen resolutions and larger column spans, the donut chart and format list dynamically expand together without dead space.
+- **Refined Chart Breakpoint**: Updated the widget compact threshold from 3 columns down to 2 (`width <= 2 || height <= 1`), keeping the interactive pie chart rendered and accessible on 3-column and 4-column widget configurations.
+- **Format Usage Share Metric**: Replaced the previous win rate percentage text in the format breakdown table with the format's overall **usage percentage** (share of lifetime matches).
+- **Muted Win-Loss Continuum Underlay**: Introduced a subtle, desaturated horizontal underlay bar behind each format entry visualizing win-loss split proportions using the dashboard's customizable win/loss color theme.
+
 ## [1.5.4] - 2026-09-17
 
 ### 🐛 Standard Brawl Format Recognition & Reclassification Hotfix

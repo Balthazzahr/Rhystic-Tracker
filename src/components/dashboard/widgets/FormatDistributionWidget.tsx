@@ -72,6 +72,22 @@ function getDonutArc(
   return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${ir} ${ir} 0 ${largeArc} 0 ${ix2} ${iy2} Z`;
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex) return `rgba(255, 255, 255, ${alpha})`;
+  let c = hex.trim().replace(/^#/, "");
+  if (c.length === 3) {
+    c = c.split("").map((x) => x + x).join("");
+  }
+  const num = parseInt(c, 16);
+  if (isNaN(num) || c.length !== 6) {
+    return `rgba(255, 255, 255, ${alpha})`;
+  }
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
   widget,
   winLossMatches,
@@ -89,8 +105,9 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
   const width = widget.width ?? 4;
   const height = widget.height ?? 2;
 
-  // Determine view mode based on widget dimensions
-  const isCompact = width <= 3 || height <= 1;
+  // Determine view mode based on widget dimensions:
+  // Pie chart is preserved for 3 or more columns, disappearing only at 2 or fewer columns (or height 1)
+  const isCompact = width <= 2 || height <= 1;
 
   const { formatList, overallStats, totalMatches } = useMemo(() => {
     const fMap = new Map<string, { wins: number; losses: number }>();
@@ -244,40 +261,70 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
     >
       <div className="flex-1 flex flex-col justify-center select-none min-h-0 pt-0.5">
         {isCompact ? (
-          // Compact / Narrow Mode: High-density list only (Pie Chart hidden)
+          // Compact / Narrow Mode: High-density list only (Pie Chart hidden on <= 2 cols)
           <div className="flex-1 flex flex-col justify-center space-y-1.5 overflow-y-auto custom-scrollbar pr-0.5">
             {formatList.map((f) => {
               const isSelected = selectedFormat === f.format;
+              const isHovered = !selectedFormat && hoveredFormat === f.format;
+              const winAlpha = isSelected ? 0.4 : isHovered ? 0.3 : 0.2;
+              const lossAlpha = isSelected ? 0.4 : isHovered ? 0.3 : 0.2;
+              const winBg = hexToRgba(winColor, winAlpha);
+              const lossBg = hexToRgba(lossColor, lossAlpha);
+
               return (
                 <div
                   key={f.format}
                   onClick={() => handleFormatClick(f.format)}
-                  className={`flex items-center justify-between p-1.5 border transition-all cursor-pointer ${
+                  onMouseEnter={() => !selectedFormat && setHoveredFormat(f.format)}
+                  onMouseLeave={() => !selectedFormat && setHoveredFormat(null)}
+                  className={`relative overflow-hidden flex items-center justify-between p-1.5 border transition-all cursor-pointer rounded-[2px] ${
                     isSelected
-                      ? "bg-white/10 border-white/40 shadow-sm"
-                      : "bg-white/[0.02] border-white/5 hover:border-white/20 hover:bg-white/[0.04]"
+                      ? "border-white/40 shadow-sm"
+                      : isHovered
+                      ? "border-white/25 bg-white/[0.03]"
+                      : "border-white/10 hover:border-white/20"
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 min-w-0 mr-2">
+                  {/* Win-Loss Continuum Underlay Bar */}
+                  <div className="absolute inset-0 z-0 flex w-full h-full pointer-events-none">
+                    {f.winRate > 0 && (
+                      <div
+                        className="h-full transition-all duration-300"
+                        style={{
+                          width: `${f.winRate}%`,
+                          backgroundColor: winBg,
+                        }}
+                      />
+                    )}
+                    {f.winRate < 100 && (
+                      <div
+                        className="h-full transition-all duration-300"
+                        style={{
+                          width: `${100 - f.winRate}%`,
+                          backgroundColor: lossBg,
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Foreground Content */}
+                  <div className="relative z-10 flex items-center gap-1.5 min-w-0 mr-2">
                     <div
-                      className="w-2 h-2 rounded-full shrink-0"
+                      className="w-2 h-2 rounded-full shrink-0 shadow-sm"
                       style={{ backgroundColor: f.color }}
                     />
-                    <span className="font-sans font-semibold text-white truncate text-xs">
+                    <span className="font-sans font-semibold text-white truncate text-xs drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                       {f.format}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 font-mono tabular-nums text-xs shrink-0">
-                    <span className="text-neutral-400 text-[11px]">
+                  <div className="relative z-10 flex items-center gap-1.5 font-mono tabular-nums text-xs shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                    <span className="text-neutral-300 text-[11px] font-medium">
                       {f.total}G
                     </span>
-                    <span className="text-neutral-600">·</span>
-                    <span
-                      className="font-bold text-xs"
-                      style={{ color: f.winRate >= 50 ? winColor : lossColor }}
-                    >
-                      {f.winRate.toFixed(0)}%
+                    <span className="text-neutral-500">·</span>
+                    <span className="font-bold text-xs text-neutral-200">
+                      {f.pct < 1 && f.pct > 0 ? "<1%" : `${f.pct.toFixed(0)}%`}
                     </span>
                   </div>
                 </div>
@@ -285,18 +332,18 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
             })}
           </div>
         ) : (
-          // Standard / Large Mode: Dynamically expanding Donut on Left, Compact Table on Right
-          <div className="flex items-center justify-between gap-3 sm:gap-4 flex-1 min-h-0 w-full">
+          // Standard / Large Mode: Dynamically expanding Donut on Left, Proportional Table on Right
+          <div className="flex items-center justify-between gap-3 sm:gap-4 lg:gap-6 flex-1 min-h-0 w-full">
             {/* Left: Expanding Interactive SVG Pie Chart */}
-            <div className="flex-1 min-w-0 h-full flex flex-col items-center justify-center p-1">
+            <div className="flex-1 min-w-[120px] max-w-[50%] h-full flex flex-col items-center justify-center p-1">
               {/* Header Label Above Pie Chart (Visible on Hover/Select only) */}
-              <div className="h-5 flex items-center justify-center mb-1">
+              <div className="h-5 flex items-center justify-center mb-0.5 shrink-0">
                 {selectedData ? (
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 truncate max-w-[200px]">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 truncate max-w-[220px]">
                     {selectedData.format}
                   </span>
                 ) : activeHover ? (
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 truncate max-w-[200px]">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 truncate max-w-[220px]">
                     {activeHover.format}
                   </span>
                 ) : null}
@@ -304,7 +351,7 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
 
               {/* Responsive Auto-Sizing SVG Donut Container */}
               <div
-                className="relative w-full flex-1 max-h-[88%] aspect-square flex items-center justify-center cursor-pointer"
+                className="relative w-full flex-1 min-h-0 max-h-[92%] aspect-square flex items-center justify-center cursor-pointer"
                 onClick={(e) => {
                   if (e.target === e.currentTarget && selectedFormat) {
                     setSelectedFormat(null);
@@ -385,11 +432,11 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
               </div>
             </div>
 
-            {/* Right: Compact, Clean Table (Format Name, Games, Win Rate) */}
-            <div className="w-48 sm:w-52 md:w-60 shrink-0 flex flex-col justify-center space-y-1 overflow-y-auto max-h-full custom-scrollbar pr-0.5">
+            {/* Right: Proportional Table (Format Name, Games, Usage %, Win-Loss Continuum Underlay) */}
+            <div className="flex-1 min-w-[160px] max-w-[58%] flex flex-col justify-center space-y-1.5 overflow-y-auto max-h-full custom-scrollbar pr-0.5">
               {/* Selected Format Reset Banner */}
               {selectedData && (
-                <div className="flex items-center justify-between pb-1 mb-0.5 border-b border-white/10">
+                <div className="flex items-center justify-between pb-1 mb-0.5 border-b border-white/10 shrink-0">
                   <span className="text-[10px] font-mono text-neutral-400 uppercase">
                     Win/Loss Mode
                   </span>
@@ -406,6 +453,10 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
               {formatList.map((seg) => {
                 const isSelected = selectedFormat === seg.format;
                 const isHovered = !selectedFormat && hoveredFormat === seg.format;
+                const winAlpha = isSelected ? 0.4 : isHovered ? 0.3 : 0.2;
+                const lossAlpha = isSelected ? 0.4 : isHovered ? 0.3 : 0.2;
+                const winBg = hexToRgba(winColor, winAlpha);
+                const lossBg = hexToRgba(lossColor, lossAlpha);
 
                 return (
                   <div
@@ -413,36 +464,54 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
                     onClick={() => handleFormatClick(seg.format)}
                     onMouseEnter={() => !selectedFormat && setHoveredFormat(seg.format)}
                     onMouseLeave={() => !selectedFormat && setHoveredFormat(null)}
-                    className={`flex items-center justify-between p-1.5 border transition-all cursor-pointer ${
+                    className={`relative overflow-hidden flex items-center justify-between p-1.5 border transition-all cursor-pointer rounded-[2px] ${
                       isSelected
-                        ? "bg-white/10 border-white/40 shadow-sm"
+                        ? "border-white/40 shadow-sm"
                         : isHovered
-                        ? "bg-white/[0.06] border-white/20"
-                        : "bg-white/[0.02] border-white/5 hover:border-white/20"
+                        ? "border-white/25 bg-white/[0.03]"
+                        : "border-white/10 hover:border-white/20"
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 min-w-0 mr-2">
+                    {/* Win-Loss Continuum Underlay Bar */}
+                    <div className="absolute inset-0 z-0 flex w-full h-full pointer-events-none">
+                      {seg.winRate > 0 && (
+                        <div
+                          className="h-full transition-all duration-300"
+                          style={{
+                            width: `${seg.winRate}%`,
+                            backgroundColor: winBg,
+                          }}
+                        />
+                      )}
+                      {seg.winRate < 100 && (
+                        <div
+                          className="h-full transition-all duration-300"
+                          style={{
+                            width: `${100 - seg.winRate}%`,
+                            backgroundColor: lossBg,
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Foreground Content */}
+                    <div className="relative z-10 flex items-center gap-1.5 min-w-0 mr-2">
                       <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
                         style={{ backgroundColor: seg.color }}
                       />
-                      <span className="text-xs font-sans font-semibold text-white truncate">
+                      <span className="text-xs font-sans font-semibold text-white truncate drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                         {seg.format}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 font-mono tabular-nums text-xs shrink-0">
-                      <span className="text-neutral-400 text-[11px]">
+                    <div className="relative z-10 flex items-center gap-1.5 font-mono tabular-nums text-xs shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      <span className="text-neutral-300 text-[11px] font-medium">
                         {seg.total}G
                       </span>
-                      <span className="text-neutral-600">·</span>
-                      <span
-                        className="font-bold text-xs"
-                        style={{
-                          color: seg.winRate >= 50 ? winColor : lossColor,
-                        }}
-                      >
-                        {seg.winRate.toFixed(0)}%
+                      <span className="text-neutral-500">·</span>
+                      <span className="font-bold text-xs text-neutral-200">
+                        {seg.pct < 1 && seg.pct > 0 ? "<1%" : `${seg.pct.toFixed(0)}%`}
                       </span>
                     </div>
                   </div>
