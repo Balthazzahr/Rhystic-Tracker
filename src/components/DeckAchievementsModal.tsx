@@ -1,11 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Award } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { AchievementBadge } from './AchievementBadge';
-import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { CardImage } from './CardImage';
-import { getAchievementMeta, getDeckAchievementMeta, AchievementTier } from '../utils/achievementBadges';
+import { getAchievementMeta } from '../utils/achievementBadges';
 
 interface DeckAchievementsModalProps {
   isOpen: boolean;
@@ -30,28 +28,6 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
   palette,
   onShowCard,
 }) => {
-  const [activeTab, setActiveTab] = useState<'card' | 'deck'>('card');
-  const [deckAchievements, setDeckAchievements] = useState<Array<{
-    achievement_id: string;
-    tier: AchievementTier;
-    match_id: string;
-    earned_at: string;
-  }>>([]);
-  const [loadingDeckAch, setLoadingDeckAch] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen || !deckName) return;
-    setLoadingDeckAch(true);
-    invoke<Array<any>>('get_deck_achievements', { deckName })
-      .then((res) => {
-        setDeckAchievements(res || []);
-      })
-      .catch((err) => {
-        console.error('Failed to load deck achievements for', deckName, err);
-        setDeckAchievements([]);
-      })
-      .finally(() => setLoadingDeckAch(false));
-  }, [isOpen, deckName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -156,113 +132,22 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
 
         {/* Modal Container */}
         <div className="w-full max-h-[82vh] bg-neutral-950 border border-white/20 rounded-none flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl">
-          {/* Sub-header Navigation Tabs */}
+          {/* Sub-header Navigation */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-white/[0.02]">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveTab('card')}
-                className={`px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
-                  activeTab === 'card'
-                    ? 'bg-white/10 text-white border-white/30'
-                    : 'bg-transparent text-neutral-400 border-transparent hover:text-white'
-                }`}
-              >
+              <span className="px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider border bg-white/10 text-white border-white/30">
                 Card Achievements ({totalHonors})
-              </button>
-              <button
-                onClick={() => setActiveTab('deck')}
-                className={`px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer border flex items-center gap-1.5 ${
-                  activeTab === 'deck'
-                    ? 'bg-white/10 text-white border-white/30'
-                    : 'bg-transparent text-neutral-400 border-transparent hover:text-white'
-                }`}
-              >
-                <span>Deck Achievements</span>
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 border border-amber-500/30 bg-amber-500/10 text-amber-300">
-                  {deckAchievements.length}
-                </span>
-              </button>
+              </span>
             </div>
 
             <span className="text-[11px] font-mono text-neutral-400">
-              {activeTab === 'card'
-                ? `${cleanGroups.length} ${cleanGroups.length === 1 ? 'Category' : 'Categories'}`
-                : `${deckAchievements.length} ${deckAchievements.length === 1 ? 'Milestone' : 'Milestones'}`}
+              {cleanGroups.length} {cleanGroups.length === 1 ? 'Category' : 'Categories'}
             </span>
           </div>
 
           {/* Content Body */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
-            {activeTab === 'deck' ? (
-              loadingDeckAch ? (
-                <div className="py-20 text-center text-xs font-mono uppercase tracking-wider text-neutral-500">
-                  Loading deck achievements...
-                </div>
-              ) : deckAchievements.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-                  <div className="w-14 h-14 bg-white/[0.02] border border-white/10 flex items-center justify-center text-neutral-500 mx-auto">
-                    <span className="ms ms-ability-adventure text-3xl" style={{ color: accentColor }} />
-                  </div>
-                  <h4 className="text-base font-display font-bold uppercase tracking-wide text-white">
-                    No Deck Achievements Yet
-                  </h4>
-                  <p className="text-xs font-sans text-neutral-400 max-w-md leading-relaxed">
-                    Pilot <strong className="text-white">{deckName}</strong> in MTGA matches to unlock milestones for win streaks, comeback victories, blitz finishes, and flawless endurance!
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {deckAchievements.map((ach) => {
-                    const meta = getDeckAchievementMeta(ach.achievement_id);
-                    const dateStr = ach.earned_at
-                      ? new Date(ach.earned_at).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'Recently';
-
-                    return (
-                      <div
-                        key={`${ach.achievement_id}_${ach.tier}`}
-                        className="border border-white/10 bg-black/40 p-4 flex flex-col items-center text-center space-y-2.5 relative group hover:border-white/25 transition-colors"
-                      >
-                        <DeckAchievementBadge
-                          title={ach.achievement_id}
-                          tier={ach.tier}
-                          deckName={deckName}
-                          size="2xl"
-                          showTitle={false}
-                          showCount={false}
-                          showTooltip={true}
-                        />
-                        <div className="w-full">
-                          <h4 className="font-sans font-bold text-sm uppercase tracking-wide text-white truncate">
-                            {meta.title}
-                          </h4>
-                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 border uppercase tracking-wider ${
-                            ach.tier === 'gold'
-                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
-                              : ach.tier === 'silver'
-                              ? 'bg-slate-400/15 text-slate-200 border-slate-400/35'
-                              : 'bg-amber-900/25 text-amber-200 border-amber-700/35'
-                          }`}>
-                            {ach.tier}
-                          </span>
-                        </div>
-                        <p className="text-[11.5px] font-sans text-neutral-300 leading-relaxed">
-                          {meta.tierDescriptions[ach.tier] || meta.description}
-                        </p>
-                        <div className="w-full pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-neutral-500">
-                          <span>Earned</span>
-                          <span className="text-neutral-400">{dateStr}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            ) : cleanGroups.length === 0 ? (
+            {cleanGroups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center space-y-2.5">
                 <div className="w-12 h-12 bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500">
                   <Award className="w-6 h-6 opacity-40" />

@@ -141,6 +141,55 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = React.memo(({
       return rows;
     }
 
+    if (chartTime === "20G" || chartTime === "50G" || chartTime === "100G") {
+      const targetCount = chartTime === "20G" ? 20 : chartTime === "50G" ? 50 : 100;
+      const filtered = winLossMatches.filter((m) => {
+        if (chartFormat !== "ALL" && m.format_name.toUpperCase() !== chartFormat) {
+          return false;
+        }
+        return true;
+      });
+
+      // Sort chronological (oldest to newest)
+      const chrono = [...filtered].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+      const slice = chrono.slice(-targetCount);
+
+      if (slice.length === 0) return [];
+
+      // Calculate rolling window moving average across games (e.g. 5 games rolling window)
+      const windowSize = Math.min(5, Math.max(3, Math.floor(targetCount / 10)));
+      return slice.map((m, idx) => {
+        const isWin = m.result === "win";
+        const wStart = Math.max(0, idx - windowSize + 1);
+        let wWins = 0;
+        let wTotal = 0;
+        for (let j = wStart; j <= idx; j++) {
+          wTotal++;
+          if (slice[j].result === "win") wWins++;
+        }
+        const rollingWR = Math.round((wWins / wTotal) * 1000) / 10;
+        const d = new Date(m.timestamp);
+        const timeStr = isNaN(d.getTime())
+          ? ""
+          : `${d.getMonth() + 1}/${d.getDate()}`;
+
+        return {
+          date: m.match_id || `match-${idx}`,
+          label: `#${idx + 1}`,
+          subLabel: timeStr,
+          opponent: m.opponent_name || "Opponent",
+          deck: m.player_deck_name || "Deck",
+          wins: isWin ? 1 : 0,
+          losses: isWin ? 0 : 1,
+          total: 1,
+          winRate: isWin ? 100 : 0,
+          trend: rollingWR,
+        };
+      });
+    }
+
     if (chartTime === "YEAR") {
       const monthly = new Map<
         string,
@@ -373,7 +422,7 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = React.memo(({
         </div>
       )}
 
-      {/* Time Filters */}
+      {/* Time Filters & Game-count Filters */}
       <div className="flex items-center gap-2">
         {[
           { id: "TODAY", label: "Today" },
@@ -382,6 +431,9 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = React.memo(({
           { id: "30D", label: "30D" },
           { id: "YEAR", label: "Year" },
           { id: "ALL", label: "All" },
+          { id: "20G", label: "20G" },
+          { id: "50G", label: "50G" },
+          { id: "100G", label: "100G" },
         ].map((t) => (
           <button
             key={t.id}
@@ -466,21 +518,55 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = React.memo(({
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   const d = payload[0].payload;
+                  const isGameCount =
+                    chartTime === "20G" ||
+                    chartTime === "50G" ||
+                    chartTime === "100G";
+
                   return (
                     <div className="px-3 py-2 bg-neutral-900/95 border border-white/20 text-xs font-sans text-white shadow-2xl backdrop-blur-md">
-                      <div className="font-semibold text-neutral-200">
-                        {d.label}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-neutral-200">
+                          {isGameCount ? `Game ${d.label}` : d.label}
+                        </span>
+                        {d.subLabel && (
+                          <span className="text-[10px] text-neutral-400 font-mono">
+                            {d.subLabel}
+                          </span>
+                        )}
                       </div>
-                      <div className="mt-1">
-                        Trending WR:{" "}
-                        <span className="font-semibold text-white">
+
+                      {isGameCount && d.opponent && (
+                        <div className="text-[11px] text-neutral-300 mt-1 truncate max-w-[200px]">
+                          vs <span className="font-semibold text-white">{d.opponent}</span>
+                        </div>
+                      )}
+
+                      <div className="mt-1 flex items-center justify-between gap-3">
+                        <span className="text-neutral-400">
+                          {isGameCount ? "Rolling WR:" : "Trending WR:"}
+                        </span>
+                        <span className="font-semibold text-white tabular-nums">
                           {d.trend}%
                         </span>
                       </div>
-                      {d.total > 0 && (
-                        <div className="text-[11px] text-neutral-400 mt-0.5">
-                          Day Rate: {d.winRate}% ({d.wins}W - {d.losses}L)
+
+                      {isGameCount ? (
+                        <div className="text-[11px] mt-1 pt-1 border-t border-white/10 flex items-center justify-between">
+                          <span className="text-neutral-400">Result:</span>
+                          <span
+                            className="font-bold uppercase tracking-wider"
+                            style={{ color: d.wins > 0 ? winBarColor : lossBarColor }}
+                          >
+                            {d.wins > 0 ? "Win" : "Loss"}
+                          </span>
                         </div>
+                      ) : (
+                        d.total > 0 && (
+                          <div className="text-[11px] text-neutral-400 mt-0.5">
+                            Period: {d.winRate}% ({d.wins}W - {d.losses}L)
+                          </div>
+                        )
                       )}
                     </div>
                   );

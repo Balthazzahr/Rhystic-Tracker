@@ -839,7 +839,7 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
-        // Migration: Reconcile duration_seconds for historical matches using turn events span
+        // Migration: Reconcile duration_seconds for historical matches using turn events span or reasonable estimate
         let _ = sqlx::query(
             r#"
             UPDATE matches
@@ -848,13 +848,21 @@ impl DatabaseManager {
                 FROM match_turn_events e
                 WHERE e.match_id = matches.id
             )
-            WHERE duration_seconds = 0
+            WHERE (duration_seconds = 0 OR duration_seconds > 3600)
               AND id IN (
                   SELECT match_id
                   FROM match_turn_events
                   GROUP BY match_id
-                  HAVING COUNT(id) > 1
+                  HAVING COUNT(id) > 1 AND (JULIANDAY(MAX(timestamp)) - JULIANDAY(MIN(timestamp))) * 86400 BETWEEN 30 AND 3600
               );
+            "#
+        ).execute(&pool).await;
+
+        let _ = sqlx::query(
+            r#"
+            UPDATE matches
+            SET duration_seconds = MIN(3600, MAX(60, turns * 45))
+            WHERE duration_seconds = 0 OR duration_seconds > 3600;
             "#
         ).execute(&pool).await;
 
@@ -2775,10 +2783,10 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_layout_fresh_fallback() {
         let db = in_memory_db().await;
-        // On empty DB, get_dashboard_layout should return and persist the default 10-widget layout
+        // On empty DB, get_dashboard_layout should return and persist the default 12-widget layout
         let layout = db.get_dashboard_layout("default").await.unwrap();
         assert_eq!(layout.schema_version, 1);
-        assert_eq!(layout.widgets.len(), 10);
+        assert_eq!(layout.widgets.len(), 12);
         assert_eq!(layout.widgets[0].kind, "win_rate_summary");
 
         // Verify it was persisted to SQLite
@@ -2825,7 +2833,7 @@ mod tests {
             .unwrap();
 
         let fallback = db.get_dashboard_layout("corrupted").await.unwrap();
-        assert_eq!(fallback.widgets.len(), 10, "Corrupted layout must fall back to default 10-widget layout");
+        assert_eq!(fallback.widgets.len(), 12, "Corrupted layout must fall back to default 12-widget layout");
         assert_eq!(fallback.widgets[0].kind, "win_rate_summary");
     }
 

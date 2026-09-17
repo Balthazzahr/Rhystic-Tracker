@@ -85,6 +85,7 @@ export interface WidgetProps {
   onShowCard: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
   onInspectAchievement?: (ach: any) => void;
   onInspectLeaderboard?: (cat: any) => void;
+  onFilterOpponent?: (opponentName: string) => void;
   onUpdateSettings?: (settings: Record<string, any>) => void;
   customColors?: any;
   isLoading?: boolean;

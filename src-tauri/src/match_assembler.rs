@@ -2170,7 +2170,16 @@ impl MatchAssembler {
 
             let now = Utc::now();
             let wall_elapsed = self.match_start_time.map(|st| (now - st).num_seconds().max(0) as u32).unwrap_or(0);
-            m.duration_seconds = event_span.max(wall_elapsed);
+            let duration = if event_span > 0 && event_span <= 3600 {
+                event_span
+            } else if wall_elapsed > 0 && wall_elapsed <= 3600 {
+                wall_elapsed
+            } else if self.current_turn > 0 {
+                (self.current_turn * 45).clamp(60, 3600)
+            } else {
+                120
+            };
+            m.duration_seconds = duration;
 
             let reason_clean = if reason.is_empty() { None } else { Some(reason.to_string()) };
             m.result_reason = reason_clean.clone();

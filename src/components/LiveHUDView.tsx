@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Clock, Swords, Activity, Sparkles, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Clock, Swords, Activity, Sparkles, Search, X, ChevronDown, ChevronRight, History, ExternalLink, Award } from 'lucide-react';
 import { ManaPip } from './ManaPip';
 import CardImage from './CardImage';
+import { AchievementBadge } from './AchievementBadge';
 import logoImg from '../assets/RhysticTrackerLogo.svg';
 import symbolIcon from '../assets/RhysticTrackerICON.svg';
 import { RoundTurnGroup } from './timeline/RoundTurnGroup';
@@ -14,6 +15,7 @@ interface LiveHUDViewProps {
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
   formatChipColor?: (format?: string) => { text: string; bg: string; border: string };
   onCloseMatch?: () => void;
+  onSelectMatch?: (matchId: string) => void;
 }
 
 interface HealthTransition {
@@ -53,15 +55,15 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
   onShowCard,
   formatChipColor,
   onCloseMatch,
+  onSelectMatch,
 }) => {
   const accentColor = palette?.accent || '#A855F7';
 
   // Search input state
   const [search, setSearch] = useState<string>('');
 
-  // Result overlay dismiss & countdown state
+  // Result banner dismiss state
   const [dismissedResultMatchId, setDismissedResultMatchId] = useState<string | null>(null);
-  const [resultCountdown, setResultCountdown] = useState<number>(10);
 
   const isMatchActive =
     !!liveMatchState && (liveMatchState.status === 'IN_MATCH' || liveMatchState.status === 'COMPLETED');
@@ -188,26 +190,6 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     };
   }, []);
 
-  // 10-second auto-dismiss timer for Victory/Defeat overlay
-  useEffect(() => {
-    if (!liveMatchState?.just_completed || !liveMatchState?.match_id) return;
-    if (dismissedResultMatchId === liveMatchState.match_id) return;
-
-    setResultCountdown(10);
-    const interval = setInterval(() => {
-      setResultCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(interval);
-          setDismissedResultMatchId(liveMatchState.match_id);
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [liveMatchState?.just_completed, liveMatchState?.match_id, dismissedResultMatchId]);
-
   // Filter events based on search query
   const query = search.trim().toLowerCase();
 
@@ -304,6 +286,55 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
     if (raw.length === 0) return [];
     return raw.slice().reverse().slice(0, 3);
   }, [liveMatchState?.recent_events]);
+
+  // Partition impactful cards into MVPs and Achievement Earners
+  const mvpCards = useMemo(() => {
+    return (liveMatchState?.impactful_cards || []).filter(
+      (c: any) => c.total_damage && c.total_damage > 0
+    );
+  }, [liveMatchState?.impactful_cards]);
+
+  const achievementCards = useMemo(() => {
+    const map = new Map<string, { grp_id?: number; name: string; titles: string[] }>();
+
+    // 1. From impactful_cards (cards with titles)
+    for (const c of liveMatchState?.impactful_cards || []) {
+      if (
+        c.titles &&
+        Array.isArray(c.titles) &&
+        c.titles.length > 0 &&
+        !c.name?.toLowerCase().includes('token')
+      ) {
+        const key = `${c.grp_id || c.name}`;
+        if (!map.has(key)) {
+          map.set(key, { grp_id: c.grp_id, name: c.name, titles: [...c.titles] });
+        } else {
+          const entry = map.get(key)!;
+          for (const t of c.titles) {
+            if (!entry.titles.includes(t)) entry.titles.push(t);
+          }
+        }
+      }
+    }
+
+    // 2. From earned_achievements (card-level)
+    for (const ach of liveMatchState?.earned_achievements || []) {
+      if (!ach.is_deck && ach.card_name && ach.card_name !== 'Unknown') {
+        const key = `${ach.grp_id || ach.card_name}`;
+        const titleStr = ach.raw_title || ach.title;
+        if (!map.has(key)) {
+          map.set(key, { grp_id: ach.grp_id, name: ach.card_name, titles: titleStr ? [titleStr] : [] });
+        } else {
+          const entry = map.get(key)!;
+          if (titleStr && !entry.titles.includes(titleStr)) {
+            entry.titles.push(titleStr);
+          }
+        }
+      }
+    }
+
+    return Array.from(map.values());
+  }, [liveMatchState?.impactful_cards, liveMatchState?.earned_achievements]);
 
   // Render mana pips for live deck colors
   const renderLiveDeckColors = (colors?: string[]) => {
@@ -988,103 +1019,6 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
       {/* 3. MAIN WORKSPACE (No outer box — top elements sit directly on background, timeline is the only container) */}
       {isMatchActive && liveMatchState ? (
         <div className="flex-1 flex flex-col space-y-3 min-h-0 overflow-hidden relative">
-          {/* MATCH RESULT OVERLAY: VICTORY / DEFEAT BANNER (Centered true pop-up overlay covering ~60% screen) */}
-          {liveMatchState.just_completed && dismissedResultMatchId !== liveMatchState.match_id && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-              <div
-                className={`w-[60vw] max-w-4xl max-h-[60vh] overflow-y-auto p-6 space-y-5 border relative flex flex-col items-center justify-center custom-scrollbar shadow-2xl ${
-                  liveMatchState.result === 'win'
-                    ? 'bg-[#0a120c] border-[#4ADE80]/50'
-                    : 'bg-[#220d11] border-[#F87171]/50'
-                }`}
-              >
-                {/* Close Button in Top Right */}
-                <button
-                  onClick={() => setDismissedResultMatchId(liveMatchState.match_id)}
-                  className="absolute top-3 right-3 p-1.5 text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-transparent hover:border-white/20 cursor-pointer"
-                  title="Dismiss Result Overlay"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
-                {/* Header Banner */}
-                <div className="flex flex-col items-center space-y-1.5 text-center">
-                  <div
-                    className={`text-5xl font-bold font-display tracking-[0.2em] uppercase drop-shadow-md ${
-                      liveMatchState.result === 'win' ? 'text-[#4ADE80]' : 'text-[#F87171]'
-                    }`}
-                  >
-                    {liveMatchState.result === 'win' ? 'VICTORY' : 'DEFEAT'}
-                  </div>
-                  <div className="text-xs font-mono text-neutral-300 uppercase tracking-widest bg-black/40 px-3 py-0.5 border border-white/10 flex items-center gap-2">
-                    <span>{liveMatchState.reason_label || 'Match Concluded'}</span>
-                    <span className="text-neutral-500">·</span>
-                    <span className="text-neutral-400 lowercase">{resultCountdown}s</span>
-                  </div>
-                </div>
-
-                {/* Match Statistics Pill Bar */}
-                <div className="flex items-center gap-3 flex-wrap justify-center font-mono text-xs tabular-nums">
-                  <div className="flex items-center gap-2 px-3 py-1 border border-white/15 bg-black/60 shadow-inner">
-                    <Clock className="w-3.5 h-3.5 text-sky-400" />
-                    <span className="text-neutral-400">Duration:</span>
-                    <span className="font-bold text-white">
-                      {formatMatchDuration(liveMatchState.duration_seconds)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1 border border-white/15 bg-black/60 shadow-inner">
-                    <Swords className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="text-neutral-400">Turns:</span>
-                    <span className="font-bold text-white">
-                      {liveMatchState.turns ?? liveMatchState.turn ?? 1} Turns
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1 border border-white/15 bg-black/60 shadow-inner">
-                    <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-emerald-400 font-bold">{liveMatchState.player_life ?? 0} HP</span>
-                    <span className="text-neutral-500">vs</span>
-                    <span className="text-rose-400 font-bold">{liveMatchState.opponent_life ?? 0} HP</span>
-                  </div>
-                </div>
-
-                {/* Notable Plays / Big Impact Cards */}
-                {liveMatchState.impactful_cards && liveMatchState.impactful_cards.length > 0 && (
-                  <div className="w-full max-w-2xl flex flex-col items-center space-y-2 pt-1">
-                    <div className="text-xs font-sans font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Notable Match Cards & MVPs
-                    </div>
-                    <div className="flex flex-wrap items-center justify-center gap-2.5 w-full">
-                      {liveMatchState.impactful_cards.map((card: any, idx: number) => (
-                        <div
-                          key={idx}
-                          onClick={() => onShowCard?.({ name: card.name }, false)}
-                          className="border border-white/20 bg-black/85 flex items-center p-2.5 gap-2.5 shadow-xl min-w-[210px] max-w-[260px] cursor-pointer hover:border-white/50 transition-colors group"
-                        >
-                          <div className="w-10 h-10 shrink-0 border border-white/25 overflow-hidden bg-neutral-900 shadow">
-                            <CardImage
-                              name={card.name}
-                              version="art_crop"
-                              alt={card.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block group-hover:text-amber-300 transition-colors">
-                              {card.name}
-                            </span>
-                            <span className="text-[10.5px] font-sans text-neutral-400 block truncate mt-0.5">
-                              {card.reason || 'High Impact Action'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* TOP SECTION: COMMAND METRICS (Floating Unboxed directly on the background) */}
           <div className="grid grid-cols-2 gap-6 shrink-0 pt-1 pb-1">
             {firstPlayerIsHero ? (
@@ -1099,6 +1033,201 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
               </>
             )}
           </div>
+
+          {/* PERPETUAL END-OF-MATCH RESULT BANNER: Embedded directly above the timeline */}
+          {(liveMatchState.status === 'COMPLETED' || liveMatchState.just_completed) &&
+            dismissedResultMatchId !== liveMatchState.match_id && (
+              <div
+                className={`shrink-0 p-4 border relative flex flex-col space-y-3.5 shadow-xl transition-all ${
+                  liveMatchState.result === 'win'
+                    ? 'bg-[#0a120c]/90 border-[#4ADE80]/40'
+                    : 'bg-[#220d11]/90 border-[#F87171]/40'
+                }`}
+              >
+                {/* Header Row: Result Title, Reason, Quick Stats, and Action Buttons */}
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  {/* Left: Result, Reason, and Inline Earned Achievement Badges */}
+                  <div className="flex items-center gap-3.5 min-w-0 flex-wrap">
+                    <div
+                      className={`text-2xl sm:text-3xl font-bold font-display tracking-[0.15em] uppercase drop-shadow-md leading-none ${
+                        liveMatchState.result === 'win' ? 'text-[#4ADE80]' : 'text-[#F87171]'
+                      }`}
+                    >
+                      {liveMatchState.result === 'win' ? 'VICTORY' : 'DEFEAT'}
+                    </div>
+                    <div className="text-[11px] font-mono text-neutral-300 uppercase tracking-widest bg-black/50 px-2.5 py-1 border border-white/10 shrink-0">
+                      {liveMatchState.reason_label || 'Match Concluded'}
+                    </div>
+                  </div>
+
+                  {/* Center: Match Stats Pills */}
+                  <div className="flex items-center gap-2 flex-wrap font-mono text-[11px] tabular-nums">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-white/15 bg-black/60 shadow-inner">
+                      <Clock className="w-3.5 h-3.5 text-sky-400" />
+                      <span className="text-neutral-400">Time:</span>
+                      <span className="font-bold text-white">
+                        {formatMatchDuration(liveMatchState.duration_seconds)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-white/15 bg-black/60 shadow-inner">
+                      <Swords className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-neutral-400">Turns:</span>
+                      <span className="font-bold text-white">
+                        {liveMatchState.turns ?? liveMatchState.turn ?? 1}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-white/15 bg-black/60 shadow-inner">
+                      <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 font-bold">{liveMatchState.player_life ?? 0} HP</span>
+                      <span className="text-neutral-500">vs</span>
+                      <span className="text-rose-400 font-bold">{liveMatchState.opponent_life ?? 0} HP</span>
+                    </div>
+                  </div>
+
+                  {/* Right: Action Buttons (Inspect Match History & Dismiss) */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {onSelectMatch && liveMatchState.match_id && (
+                      <button
+                        onClick={() => onSelectMatch(liveMatchState.match_id)}
+                        className="px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 text-white border border-white/25 hover:border-white/40 transition-colors flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+                        title="Open Match History Inspector for this match"
+                      >
+                        <History className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Match Details</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDismissedResultMatchId(liveMatchState.match_id)}
+                      className="p-1.5 text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-white/10 hover:border-white/25 cursor-pointer"
+                      title="Dismiss Match Result Banner"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Middle: Notable Plays / Match MVPs & Achievements */}
+                {(mvpCards.length > 0 || achievementCards.length > 0 || (liveMatchState.impactful_cards && liveMatchState.impactful_cards.length > 0)) && (
+                  <div className="w-full flex flex-col space-y-2 pt-2 border-t border-white/10">
+                    <div className="text-[10.5px] font-sans font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Notable Match Cards & Achievements
+                    </div>
+                    <div className="flex flex-wrap items-start gap-4 w-full">
+                      {/* Sub-section 1: Match MVPs */}
+                      {mvpCards.length > 0 && (
+                        <div className="flex flex-col space-y-1.5 flex-1 min-w-[200px]">
+                          <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-neutral-400 block">
+                            Match MVPs ({mvpCards.length})
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {mvpCards.map((card: any, idx: number) => (
+                              <div
+                                key={`mvp-${idx}`}
+                                onClick={() => onShowCard?.({ name: card.name, grp_id: card.grp_id }, false)}
+                                className="border border-white/20 bg-black/85 flex items-center p-2 gap-2 shadow-md min-w-[170px] max-w-[220px] cursor-pointer hover:border-white/50 transition-colors group"
+                                title="Click to view card details"
+                              >
+                                <div className="w-8 h-8 shrink-0 border border-white/25 overflow-hidden bg-neutral-900 shadow">
+                                  <CardImage
+                                    name={card.name}
+                                    version="art_crop"
+                                    alt={card.name}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block group-hover:text-amber-300 transition-colors">
+                                    {card.name}
+                                  </span>
+                                  <span className="text-[10px] font-mono font-bold text-amber-400 block truncate mt-0.5">
+                                    {card.total_damage} Total DMG
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sub-section 2: Achievement Earners */}
+                      {achievementCards.length > 0 && (
+                        <div className="flex flex-col space-y-1.5 flex-1 min-w-[200px]">
+                          <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-neutral-400 block">
+                            Achievements ({achievementCards.length})
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {achievementCards.map((card: any, idx: number) => (
+                              <div
+                                key={`ach-${idx}`}
+                                onClick={() => onShowCard?.({ name: card.name, grp_id: card.grp_id }, false)}
+                                className="border border-white/20 bg-black/85 flex items-center p-2 gap-2 shadow-md min-w-[190px] max-w-[260px] cursor-pointer hover:border-white/50 transition-colors group"
+                                title="Click to view card details"
+                              >
+                                <div className="w-8 h-8 shrink-0 border border-white/25 overflow-hidden bg-neutral-900 shadow">
+                                  <CardImage
+                                    name={card.name}
+                                    version="art_crop"
+                                    alt={card.name}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block group-hover:text-amber-300 transition-colors">
+                                    {card.name}
+                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                    {card.titles.map((t: string, ti: number) => (
+                                      <AchievementBadge
+                                        key={ti}
+                                        title={t}
+                                        size="sm"
+                                        showTooltip={true}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Fallback if no specific mvps or achievements detected but raw impactful_cards exist */}
+                      {mvpCards.length === 0 && achievementCards.length === 0 && liveMatchState.impactful_cards && liveMatchState.impactful_cards.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 w-full">
+                          {liveMatchState.impactful_cards.map((card: any, idx: number) => (
+                            <div
+                              key={idx}
+                              onClick={() => onShowCard?.({ name: card.name, grp_id: card.grp_id }, false)}
+                              className="border border-white/20 bg-black/85 flex items-center p-2 gap-2 shadow-md min-w-[190px] max-w-[240px] cursor-pointer hover:border-white/50 transition-colors group"
+                            >
+                              <div className="w-8 h-8 shrink-0 border border-white/25 overflow-hidden bg-neutral-900 shadow">
+                                <CardImage
+                                  name={card.name}
+                                  version="art_crop"
+                                  alt={card.name}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block group-hover:text-amber-300 transition-colors">
+                                  {card.name}
+                                </span>
+                                <span className="text-[10px] font-sans text-neutral-400 block truncate mt-0.5">
+                                  {card.reason || 'High Impact Action'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+
 
           {/* Top Timeline Column Labels (Left = Opponent, Right = You) */}
           <div className="flex items-center justify-between px-3.5 pt-0.5 shrink-0">

@@ -27,6 +27,7 @@ import { LiveHUDView } from './components/LiveHUDView';
 import { CardInspectorModal } from './components/CardInspectorModal';
 import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import { AvatarOnboardingModal } from './components/AvatarOnboardingModal';
+import { WhatsNewModal } from './components/WhatsNewModal';
 import { BlurredCardBackground } from './components/BlurredCardBackground';
 import { MemoryStatsPanel } from './components/MemoryStatsPanel';
 import logoImg from './assets/RhysticTrackerLogo.svg';
@@ -234,6 +235,28 @@ export default function App() {
       setShowAvatarOnboarding(true);
     }
   }, []);
+
+  // One-time What's New Splash Modal for v1.5.3 (New Dashboard Widgets)
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  useEffect(() => {
+    const seen = localStorage.getItem('rhystic_whats_new_1_5_3_seen');
+    if (!seen) {
+      setShowWhatsNew(true);
+    }
+  }, []);
+
+  const handleDismissWhatsNew = () => {
+    localStorage.setItem('rhystic_whats_new_1_5_3_seen', 'true');
+    setShowWhatsNew(false);
+  };
+
+  const handleOpenCustomizeFromWhatsNew = () => {
+    handleDismissWhatsNew();
+    setActiveTab('dashboard');
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('rhystic-open-dashboard-customize'));
+    }, 100);
+  };
 
   // Listen for navigation events from the system tray menu
   useEffect(() => {
@@ -639,7 +662,16 @@ export default function App() {
     turns?: number;
     timestamp?: string;
     impactful_cards?: { grp_id: number; name: string; total_damage: number; max_hit: number; damage_combat: number; damage_spell: number }[];
-    earned_achievements?: { grp_id: number; card_name: string; title: string; raw_title: string; tier: string }[];
+    earned_achievements?: {
+      is_deck?: boolean;
+      grp_id?: number;
+      card_name?: string;
+      title: string;
+      raw_title: string;
+      tier: string;
+      achievement_id?: string;
+      deck_name?: string;
+    }[];
     just_completed?: boolean;
     result?: string;
     result_reason?: string;
@@ -699,7 +731,7 @@ export default function App() {
             turn: liveState.turns,
             round: Math.ceil((liveState.turns || 1) / 2),
             timestamp: liveState.timestamp,
-            impactful_cards: (liveState.impactful_cards || []).filter((c: any) => c.max_hit > 8 || c.total_damage > 12),
+            impactful_cards: liveState.impactful_cards || [],
             earned_achievements: liveState.earned_achievements || [],
             just_completed: true,
             result: liveState.result,
@@ -1185,6 +1217,10 @@ export default function App() {
               onSelectMatch={handleSelectMatch}
               onSelectDeck={handleSelectDeck}
               onShowCard={openCardOverlay}
+              onFilterOpponent={(oppName) => {
+                setMatchHistorySearch(oppName);
+                setActiveTab('matches');
+              }}
               isTestEnv={envInfo?.is_test}
               dashboardMode={dashboardMode}
               setDashboardMode={handleSetDashboardMode}
@@ -1237,6 +1273,7 @@ export default function App() {
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
             formatChipColor={formatChipColor}
             onCloseMatch={() => setLiveMatchState(null)}
+            onSelectMatch={handleSelectMatch}
           />
         )}
 
@@ -1455,6 +1492,15 @@ export default function App() {
       {/* ONE-TIME AVATAR ONBOARDING MODAL */}
       {showAvatarOnboarding && !showSplash && !showSetupWizard && (
         <AvatarOnboardingModal onClose={() => setShowAvatarOnboarding(false)} />
+      )}
+
+      {/* ONE-TIME WHAT'S NEW SPLASH MODAL (v1.5.3 DASHBOARD WIDGETS) */}
+      {showWhatsNew && !showSplash && !showSetupWizard && !showAvatarOnboarding && (
+        <WhatsNewModal
+          isOpen={showWhatsNew}
+          onClose={handleDismissWhatsNew}
+          onOpenCustomize={handleOpenCustomizeFromWhatsNew}
+        />
       )}
 
       {/* SPLASH SCREEN */}

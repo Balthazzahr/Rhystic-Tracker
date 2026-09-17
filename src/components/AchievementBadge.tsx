@@ -249,13 +249,13 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
     <>
       <div
         ref={badgeRef}
-        className={`relative ${isStandaloneLarge ? 'w-full h-full flex items-center justify-center' : 'inline-block'} ${className}`}
+        className={`relative ${isStandaloneLarge ? 'inline-flex items-center justify-center' : 'inline-block'} ${className}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={onClick}
       >
         {isStandaloneLarge ? (
-          <div className="w-full h-full flex items-center justify-center transition-all">
+          <div className="inline-flex items-center justify-center transition-transform hover:scale-110 cursor-pointer">
             <div className={`shrink-0 flex items-center justify-center ${sizeMap.icon}`}>
               <AchievementShieldArtBadge tier={activeTier} achievementId={meta.id} artCard={meta.artCard} fallbackTitle={displayTitle} />
             </div>

@@ -327,13 +327,14 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
                     let rows = sqlx::query(
                         r#"
                         SELECT i.grp_id, COALESCE(c.name, 'Unknown') as card_name,
-                               i.total_damage, i.max_hit, i.damage_combat, i.damage_spell
+                               i.total_damage, i.max_hit, i.damage_combat, i.damage_spell,
+                               i.titles
                         FROM match_impactful_cards i
                         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
                         WHERE i.match_id = ? AND i.seat_id = ?
-                          AND (i.max_hit > 8 OR i.total_damage > 12)
+                          AND (i.total_damage > 0 OR (i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'))
                         ORDER BY i.total_damage DESC, i.max_hit DESC
-                        LIMIT 4
+                        LIMIT 12
                         "#
                     )
                     .bind(&record.match_id)
@@ -349,6 +350,11 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
                         let max_hit: i64 = r.get("max_hit");
                         let dmg_combat: i64 = r.get("damage_combat");
                         let dmg_spell: i64 = r.get("damage_spell");
+                        let titles_json: Option<String> = r.try_get("titles").ok();
+                        let titles: Vec<String> = titles_json
+                            .as_deref()
+                            .and_then(|s| serde_json::from_str(s).ok())
+                            .unwrap_or_default();
 
                         impactful_cards_arr.push(serde_json::json!({
                             "grp_id": gid,
@@ -357,6 +363,7 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
                             "max_hit": max_hit,
                             "damage_combat": dmg_combat,
                             "damage_spell": dmg_spell,
+                            "titles": titles,
                         }));
                     }
 
@@ -385,6 +392,7 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
                                 if !raw_title.is_empty() {
                                     let (clean_title, tier) = parse_title_and_tier(&raw_title);
                                     earned_achievements_arr.push(serde_json::json!({
+                                        "is_deck": false,
                                         "grp_id": gid,
                                         "card_name": name,
                                         "title": clean_title,
@@ -395,6 +403,9 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
                             }
                         }
                     }
+
+
+
                     let event_rows = sqlx::query(
                         r#"
                         SELECT e.turn_number, e.seat_id, e.event_type, e.grp_id,

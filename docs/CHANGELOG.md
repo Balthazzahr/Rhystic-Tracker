@@ -2,6 +2,16 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.3] - 2026-09-17
+
+### 📊 Modular Dashboard Widgets & Telemetry Engine
+- **Customizable Bento-Box Dashboard Grid**: Introduced a fully responsive, drag-and-drop customizable dashboard grid allowing players to arrange, resize, and configure their telemetry cards.
+- **Interactive Format Distribution Widget**: Added an interactive donut chart with format game distribution, individual win rates, and direct format filtering.
+- **Overhauled Fun Facts Engine**: Expanded to 16 dynamic gameplay stats including authentic MTGA watermark icons, Toughest Matchup commander previews, concession-free Fast Wins tracking, and Longest Game battle duration and spell count analytics.
+- **New Analytical Telemetry Widgets**: Added Guild & Clan Mastery, Mulligan Resilience Meter, Lucky Charms & Cursed Spells card correlation engine, and Archetype Pace Matrix.
+- **First-Launch Splash Screen**: Added a What's New modal introducing the new widgets on first boot with direct navigation to dashboard customization.
+- **Streamlined Widget Library**: Retired legacy and duplicate widgets for a focused, high-performance telemetry dashboard.
+
 ## [1.5.2] - 2026-09-15
 
 ### 🏆 Combat Analytics, Zone Transfer & Achievement Fixes

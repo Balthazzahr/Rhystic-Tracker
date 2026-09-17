@@ -74,24 +74,28 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
     return chrono.slice(-maxDots);
   }, [winLossMatches]);
 
-  // All-time best win streak calculation
-  const bestWinStreak = useMemo(() => {
-    if (!winLossMatches || winLossMatches.length === 0) return 0;
+  // All-time best win streak and worst loss streak calculation
+  const { bestWinStreak, worstLossStreak } = useMemo(() => {
+    if (!winLossMatches || winLossMatches.length === 0) {
+      return { bestWinStreak: 0, worstLossStreak: 0 };
+    }
     const chrono = [...winLossMatches].sort(
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
-    let curLen = 0;
-    let maxWin = 0;
+    let cur = { type: "", len: 0 };
+    let bestWin = 0;
+    let bestLoss = 0;
     for (const m of chrono) {
-      if (m.result === "win") {
-        curLen++;
-        if (curLen > maxWin) maxWin = curLen;
+      if (cur.type === m.result) {
+        cur.len++;
       } else {
-        curLen = 0;
+        cur = { type: m.result, len: 1 };
       }
+      if (m.result === "win" && cur.len > bestWin) bestWin = cur.len;
+      if (m.result === "loss" && cur.len > bestLoss) bestLoss = cur.len;
     }
-    return maxWin;
+    return { bestWinStreak: bestWin, worstLossStreak: bestLoss };
   }, [winLossMatches]);
 
   // Time since last win (for losing streak)
@@ -186,28 +190,31 @@ export const CurrentStreakWidget: React.FC<WidgetProps> = React.memo(({
           <span className="text-neutral-300 truncate">
             {streakCount === 0 ? (
               "Play a match to build your streak"
-            ) : !isWin ? (
-              timeSinceLastWin ? (
-                <>
-                  <span className="font-semibold text-white">
-                    {timeSinceLastWin}
-                  </span>{" "}
-                  since last win
-                </>
-              ) : (
-                "Active losing run"
-              )
-            ) : bestWinStreak > 0 ? (
+            ) : !isWin && timeSinceLastWin ? (
               <>
-                Lifetime best:{" "}
                 <span className="font-semibold text-white">
-                  {bestWinStreak} wins
-                </span>
+                  {timeSinceLastWin}
+                </span>{" "}
+                since last win
               </>
-            ) : (
+            ) : isWin ? (
               "Active winning run"
+            ) : (
+              "Active losing run"
             )}
           </span>
+
+          {(bestWinStreak > 0 || worstLossStreak > 0) && (
+            <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-mono pl-2 text-neutral-400">
+              <span title="All-time best win streak">
+                Best: <span className="font-bold" style={{ color: winColor }}>W{bestWinStreak}</span>
+              </span>
+              <span className="opacity-30">·</span>
+              <span title="All-time worst losing streak">
+                Worst: <span className="font-bold" style={{ color: lossColor }}>L{worstLossStreak}</span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </WidgetShell>

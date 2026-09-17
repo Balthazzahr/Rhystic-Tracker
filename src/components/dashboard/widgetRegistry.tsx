@@ -5,11 +5,20 @@ import { TodayWidget } from "./widgets/TodayWidget";
 import { CurrentStreakWidget } from "./widgets/CurrentStreakWidget";
 import { WinRateTrendWidget } from "./widgets/WinRateTrendWidget";
 import { RecentMatchesWidget } from "./widgets/RecentMatchesWidget";
-import { FormatBreakdownWidget } from "./widgets/FormatBreakdownWidget";
+import { FormatDistributionWidget } from "./widgets/FormatDistributionWidget";
 import { DeckSpotlightWidget } from "./widgets/DeckSpotlightWidget";
 import { RecentAchievementsWidget } from "./widgets/RecentAchievementsWidget";
 import { FeaturedLeaderboardWidget } from "./widgets/FeaturedLeaderboardWidget";
 import { FunFactsWidget } from "./widgets/FunFactsWidget";
+import { FrequentOpponentsWidget } from "./widgets/FrequentOpponentsWidget";
+import { PlayVsDrawWidget } from "./widgets/PlayVsDrawWidget";
+import { VictoryBreakdownWidget } from "./widgets/VictoryBreakdownWidget";
+import { LifeClosenessWidget } from "./widgets/LifeClosenessWidget";
+import { ActivityHeatmapWidget } from "./widgets/ActivityHeatmapWidget";
+import { LuckyCursedCardsWidget } from "./widgets/LuckyCursedCardsWidget";
+import { GuildMasteryWidget } from "./widgets/GuildMasteryWidget";
+import { MulliganMeterWidget } from "./widgets/MulliganMeterWidget";
+import { ArchetypeClashWidget } from "./widgets/ArchetypeClashWidget";
 import {
   Trophy,
   Calendar,
@@ -21,6 +30,15 @@ import {
   Award,
   Crown,
   Lightbulb,
+  Users,
+  ArrowLeftRight,
+  HeartPulse,
+  Flag,
+  BarChart3,
+  Shield,
+  PieChart,
+  Gauge,
+  Target,
 } from "lucide-react";
 
 export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
@@ -89,17 +107,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
     },
     component: RecentMatchesWidget,
   },
-  format_breakdown: {
-    kind: "format_breakdown",
-    title: "Format Breakdown",
-    subtitle: "By game mode",
-    icon: <Layers className="w-3.5 h-3.5" />,
-    defaultWidth: 3,
-    defaultHeight: 3,
-    defaultSettings: {
-      limit: 8,
-    },
-    component: FormatBreakdownWidget,
+  format_distribution: {
+    kind: "format_distribution",
+    title: "Format Distribution",
+    icon: <PieChart className="w-3.5 h-3.5" />,
+    defaultWidth: 4,
+    defaultHeight: 2,
+    defaultSettings: {},
+    component: FormatDistributionWidget,
   },
   fun_facts: {
     kind: "fun_facts",
@@ -135,7 +150,109 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
     },
     component: FeaturedLeaderboardWidget,
   },
+  frequent_opponents: {
+    kind: "frequent_opponents",
+    title: "Frequent Opponents",
+    subtitle: "Most faced rivals",
+    icon: <Users className="w-3.5 h-3.5" />,
+    defaultWidth: 5,
+    defaultHeight: 3,
+    defaultSettings: {
+      limit: 6,
+    },
+    component: FrequentOpponentsWidget,
+  },
+  play_vs_draw: {
+    kind: "play_vs_draw",
+    title: "Play vs. Draw",
+    subtitle: "First-turn advantage",
+    icon: <ArrowLeftRight className="w-3.5 h-3.5" />,
+    defaultWidth: 4,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: PlayVsDrawWidget,
+  },
+  victory_breakdown: {
+    kind: "victory_breakdown",
+    title: "Victory Breakdown",
+    subtitle: "Win condition analysis",
+    icon: <Flag className="w-3.5 h-3.5" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: VictoryBreakdownWidget,
+  },
+  life_closeness: {
+    kind: "life_closeness",
+    title: "End-Game Life Totals",
+    subtitle: "Victory health margins",
+    icon: <HeartPulse className="w-3.5 h-3.5" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: LifeClosenessWidget,
+  },
+  activity_heatmap: {
+    kind: "activity_heatmap",
+    title: "Activity by Day",
+    subtitle: "Volume & win rate trends",
+    icon: <BarChart3 className="w-3.5 h-3.5" />,
+    defaultWidth: 12,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: ActivityHeatmapWidget,
+  },
+  lucky_cursed_cards: {
+    kind: "lucky_cursed_cards",
+    title: "Lucky Charms & Cursed Spells",
+    subtitle: "Card win rate impact",
+    icon: <Sparkles className="w-3.5 h-3.5" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: LuckyCursedCardsWidget,
+  },
+  guild_mastery: {
+    kind: "guild_mastery",
+    title: "Guild & Clan Mastery",
+    subtitle: "Best & worst color pairs",
+    icon: <Shield className="w-3.5 h-3.5" />,
+    defaultWidth: 12,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: GuildMasteryWidget,
+  },
+  mulligan_meter: {
+    kind: "mulligan_meter",
+    title: "Mulligan Resilience Meter",
+    subtitle: "Opening hand win drop-off",
+    icon: <Gauge className="w-3.5 h-3.5" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: MulliganMeterWidget,
+  },
+  archetype_clash: {
+    kind: "archetype_clash",
+    title: "Archetype Pace Matrix",
+    subtitle: "Aggro / Midrange / Control",
+    icon: <Target className="w-3.5 h-3.5" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: ArchetypeClashWidget,
+  },
 };
+
+const WIDGET_ALIASES: Record<string, string> = {
+  format_breakdown: "format_distribution",
+  radial_format_dial: "format_distribution",
+};
+
+export function getWidgetDefinition(kind: string): WidgetDefinition | undefined {
+  const resolvedKind = WIDGET_ALIASES[kind] || kind;
+  return WIDGET_REGISTRY[resolvedKind];
+}
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   schema_version: 1,
@@ -200,15 +317,13 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
       },
     },
     {
-      id: "widget-format-breakdown",
-      kind: "format_breakdown",
+      id: "widget-format-distribution",
+      kind: "format_distribution",
       x: 5,
       y: 4,
       width: 3,
       height: 3,
-      settings: {
-        limit: 8,
-      },
+      settings: {},
     },
     {
       id: "widget-fun-facts",
@@ -240,6 +355,89 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
       settings: {
         category: "combat_single_hit",
       },
+    },
+    {
+      id: "widget-frequent-opponents",
+      kind: "frequent_opponents",
+      x: 0,
+      y: 10,
+      width: 6,
+      height: 3,
+      settings: {
+        limit: 6,
+      },
+    },
+    {
+      id: "widget-play-vs-draw",
+      kind: "play_vs_draw",
+      x: 6,
+      y: 10,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-victory-breakdown",
+      kind: "victory_breakdown",
+      x: 0,
+      y: 13,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-life-closeness",
+      kind: "life_closeness",
+      x: 6,
+      y: 13,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-lucky-cursed-cards",
+      kind: "lucky_cursed_cards",
+      x: 0,
+      y: 16,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-mulligan-meter",
+      kind: "mulligan_meter",
+      x: 6,
+      y: 16,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-archetype-clash",
+      kind: "archetype_clash",
+      x: 0,
+      y: 19,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-activity-heatmap",
+      kind: "activity_heatmap",
+      x: 6,
+      y: 19,
+      width: 6,
+      height: 3,
+      settings: {},
+    },
+    {
+      id: "widget-guild-mastery",
+      kind: "guild_mastery",
+      x: 0,
+      y: 22,
+      width: 12,
+      height: 3,
+      settings: {},
     },
   ],
 };

@@ -101,7 +101,8 @@ async fn record_match_deck_audit(
     let _ = db_manager.upsert_match_deck(match_id, deck_name.as_deref(), deck_id.as_deref(), preset, reason).await;
 }
 
-/// Evaluates and awards deck-level achievements upon match completion
+/// Evaluates and awards deck-level achievements upon match completion (Shelved for future milestone)
+#[allow(dead_code)]
 async fn evaluate_deck_achievements(
     db_manager: &DatabaseManager,
     record: &match_assembler::MatchRecord,
@@ -404,8 +405,9 @@ async fn dispatch_parsed_event(
                 );
                 let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &validated_impactful).await;
                 record_match_deck_audit(db_manager, assembler, &record.match_id, Some(&record.player_deck_name)).await;
-                let min_life = record.min_player_life.unwrap_or(assembler.min_player_life);
-                evaluate_deck_achievements(db_manager, &record, min_life).await;
+                // Deck achievements are shelved for a future release milestone.
+                // let min_life = record.min_player_life.unwrap_or(assembler.min_player_life);
+                // evaluate_deck_achievements(db_manager, &record, min_life).await;
             }
         }
         ParsedEvent::Unknown => {}
@@ -730,6 +732,8 @@ fn main() {
             get_dashboard_layout,
             save_dashboard_layout,
             reset_dashboard_layout,
+            get_card_win_correlations,
+            get_opponent_commander_records,
             save_custom_background,
             get_preferred_prints,
             set_preferred_print,

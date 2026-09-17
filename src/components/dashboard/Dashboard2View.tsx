@@ -19,7 +19,7 @@ import {
   WidgetInstance,
   ManaTheme,
 } from "./types";
-import { WIDGET_REGISTRY, DEFAULT_DASHBOARD_LAYOUT } from "./widgetRegistry";
+import { WIDGET_REGISTRY, DEFAULT_DASHBOARD_LAYOUT, getWidgetDefinition } from "./widgetRegistry";
 import { AchievementDetailModal } from "../AchievementDetailModal";
 import {
   DashboardColorPickerModal,
@@ -39,6 +39,7 @@ interface Dashboard2ViewProps {
     card: { name: string; grp_id?: number },
     isCommander: boolean,
   ) => void;
+  onFilterOpponent?: (opponentName: string) => void;
   isTestEnv?: boolean;
   dashboardMode: "2.0" | "legacy";
   setDashboardMode: (mode: "2.0" | "legacy") => void;
@@ -115,6 +116,7 @@ interface DashboardWidgetContainerProps {
     isCommander: boolean,
   ) => void;
   onInspectAchievement: (ach: any) => void;
+  onFilterOpponent?: (opponentName: string) => void;
   onUpdateWidgetSettings: (widgetId: string, newSettings: Record<string, any>) => void;
   customColors: DashboardCustomColors;
   isLoading: boolean;
@@ -133,11 +135,12 @@ const DashboardWidgetContainer: React.FC<DashboardWidgetContainerProps> = React.
   onSelectDeck,
   onShowCard,
   onInspectAchievement,
+  onFilterOpponent,
   onUpdateWidgetSettings,
   customColors,
   isLoading,
 }) => {
-  const def = WIDGET_REGISTRY[widget.kind];
+  const def = getWidgetDefinition(widget.kind);
   if (!def) return null;
   const Component = def.component;
 
@@ -162,6 +165,7 @@ const DashboardWidgetContainer: React.FC<DashboardWidgetContainerProps> = React.
       onSelectDeck={onSelectDeck}
       onShowCard={onShowCard}
       onInspectAchievement={onInspectAchievement}
+      onFilterOpponent={onFilterOpponent}
       onUpdateSettings={handleSettingsUpdate}
       customColors={customColors}
       isLoading={isLoading}
@@ -178,6 +182,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
   onSelectMatch,
   onSelectDeck,
   onShowCard,
+  onFilterOpponent,
   isTestEnv = false,
   dashboardMode,
   setDashboardMode,
@@ -218,6 +223,15 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
   const [isModulePickerOpen, setIsModulePickerOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [inspectedAchievement, setInspectedAchievement] = useState<any>(null);
+
+  useEffect(() => {
+    const handleOpenCustomize = () => {
+      setIsEditMode(true);
+      setIsModulePickerOpen(true);
+    };
+    window.addEventListener("rhystic-open-dashboard-customize", handleOpenCustomize);
+    return () => window.removeEventListener("rhystic-open-dashboard-customize", handleOpenCustomize);
+  }, []);
 
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null);
@@ -756,6 +770,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                     onSelectDeck={onSelectDeck}
                     onShowCard={onShowCard}
                     onInspectAchievement={setInspectedAchievement}
+                    onFilterOpponent={onFilterOpponent}
                     onUpdateWidgetSettings={handleUpdateWidgetSettings}
                     customColors={customColors}
                     isLoading={isLoadingLayout}

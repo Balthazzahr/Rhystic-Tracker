@@ -878,7 +878,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
 
     for (const m of winLossMatches) {
-      if (m.duration_seconds > 0) {
+      if (m.duration_seconds >= 30 && m.duration_seconds <= 3600) {
         totalSec += m.duration_seconds;
         validDurations++;
       }
@@ -888,25 +888,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       // Fastest organic victory: must be win, turns > 0, and not ended by concession
       if (m.result === "win" && m.turns > 0 && !isConceded(m)) {
+        const dur = (m.duration_seconds >= 30 && m.duration_seconds <= 3600)
+          ? m.duration_seconds
+          : (m.turns * 45);
         if (
           !fastestOrganicWin ||
           m.turns < fastestOrganicWin.turns ||
-          (m.turns === fastestOrganicWin.turns &&
-            m.duration_seconds < fastestOrganicWin.duration)
+          (m.turns === fastestOrganicWin.turns && dur < fastestOrganicWin.duration)
         ) {
-          fastestOrganicWin = { turns: m.turns, duration: m.duration_seconds };
+          fastestOrganicWin = { turns: m.turns, duration: dur };
         }
       }
 
       // Longest game (no filter on concede)
-      if (m.turns > 0 || m.duration_seconds > 0) {
+      if (m.turns > 0) {
+        const dur = (m.duration_seconds >= 30 && m.duration_seconds <= 3600)
+          ? m.duration_seconds
+          : (m.turns * 45);
         if (
           !longestGame ||
           m.turns > longestGame.turns ||
-          (m.turns === longestGame.turns &&
-            m.duration_seconds > longestGame.duration)
+          (m.turns === longestGame.turns && dur > longestGame.duration)
         ) {
-          longestGame = { turns: m.turns, duration: m.duration_seconds };
+          longestGame = { turns: m.turns, duration: dur };
         }
       }
     }

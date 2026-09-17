@@ -11,10 +11,21 @@ pub const VALID_WIDGET_KINDS: &[&str] = &[
     "win_rate_trend",
     "recent_matches",
     "format_breakdown",
+    "format_distribution",
     "deck_spotlight",
     "recent_achievements",
     "featured_leaderboard",
     "fun_facts",
+    "frequent_opponents",
+    "play_vs_draw",
+    "victory_breakdown",
+    "life_closeness",
+    "activity_heatmap",
+    "lucky_cursed_cards",
+    "guild_mastery",
+    "radial_format_dial",
+    "mulligan_meter",
+    "archetype_clash",
 ];
 
 fn default_widget_width() -> u32 {
@@ -115,15 +126,13 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
                 }),
             },
             WidgetInstance {
-                id: "widget-format-breakdown".to_string(),
-                kind: "format_breakdown".to_string(),
+                id: "widget-format-distribution".to_string(),
+                kind: "format_distribution".to_string(),
                 x: 5,
                 y: 4,
-                width: 3,
-                height: 3,
-                settings: json!({
-                    "limit": 6
-                }),
+                width: 4,
+                height: 2,
+                settings: json!({}),
             },
             WidgetInstance {
                 id: "widget-fun-facts".to_string(),
@@ -148,6 +157,26 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
                 kind: "featured_leaderboard".to_string(),
                 x: 6,
                 y: 7,
+                width: 6,
+                height: 3,
+                settings: json!({}),
+            },
+            WidgetInstance {
+                id: "widget-frequent-opponents".to_string(),
+                kind: "frequent_opponents".to_string(),
+                x: 0,
+                y: 10,
+                width: 6,
+                height: 3,
+                settings: json!({
+                    "limit": 6
+                }),
+            },
+            WidgetInstance {
+                id: "widget-play-vs-draw".to_string(),
+                kind: "play_vs_draw".to_string(),
+                x: 6,
+                y: 10,
                 width: 6,
                 height: 3,
                 settings: json!({}),
@@ -194,7 +223,7 @@ mod tests {
     fn test_default_dashboard_layout_valid() {
         let layout = default_dashboard_layout();
         assert_eq!(layout.schema_version, CURRENT_SCHEMA_VERSION);
-        assert_eq!(layout.widgets.len(), 10);
+        assert_eq!(layout.widgets.len(), 12);
         assert!(validate_layout(&layout).is_ok());
     }
 
