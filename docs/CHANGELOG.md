@@ -2,6 +2,13 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.4] - 2026-09-17
+
+### 🐛 Standard Brawl Format Recognition & Reclassification Hotfix
+- **Accurate Standard Brawl Queue Resolution**: Resolved an issue where Standard Brawl games queued via MTGA's `Play_Brawl` / `Brawl_Play` identifier were incorrectly logged as generic 100-card `Brawl`. Updated parser format normalization to accurately distinguish Standard Brawl (60-card) queues from Historic Brawl (`Play_Brawl_Historic`).
+- **Retroactive Database Reclassification**: Added automated startup database reconciliation that identifies matches recorded under `Brawl` using verified $\le 60$-card commander decks and migrates them to **`Standard Brawl`**.
+- **Standardized UI Format Badges & Analytics**: Aligned format chip color hierarchies and dashboard distribution charts to consistently render Standard Brawl badges across Match History, Full Match Inspector, Deck Detail, and telemetry widgets.
+
 ## [1.5.3] - 2026-09-17
 
 ### 📊 Modular Dashboard Widgets & Telemetry Engine

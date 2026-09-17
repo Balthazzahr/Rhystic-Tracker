@@ -29,7 +29,11 @@ type Tip = { text: string; x: number; y: number };
 const formatChipColor = (formatStr?: string) => {
   if (!formatStr) return { bg: '#94A3B818', fg: '#CBD5E1', border: '#94A3B838' };
   const f = formatStr.toLowerCase();
-  if (f.includes('brawl') || f.includes('commander')) {
+  if (f.includes('standard brawl') || f.includes('brawl - standard')) {
+    return { bg: '#8a719d18', fg: '#b39ec4', border: '#8a719d38' };
+  } else if (f.includes('brawl - competitive') || f.includes('competitive brawl')) {
+    return { bg: '#8a719d18', fg: '#b39ec4', border: '#8a719d38' };
+  } else if (f.includes('brawl') || f.includes('commander')) {
     return { bg: '#4A7FA318', fg: '#7FAAC9', border: '#4A7FA338' };
   } else if (f.includes('standard')) {
     return { bg: '#B8503A18', fg: '#D57C69', border: '#B8503A38' };

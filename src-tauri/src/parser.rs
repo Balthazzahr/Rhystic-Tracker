@@ -610,10 +610,18 @@ pub fn normalize_format(raw_event_id: &str) -> String {
     } else if s.contains("gladiator") {
         "Gladiator".to_string()
     } else if s.contains("brawl") || s.contains("commander") {
-        if s.contains("standard") {
-            "Brawl - Standard".to_string()
-        } else if s.contains("ranked") || s.contains("competitive") || s.contains("ladder") {
+        if s.contains("ranked") || s.contains("competitive") || s.contains("ladder") {
             "Brawl - Competitive".to_string()
+        } else if s.contains("historic") || s.contains("100") {
+            "Brawl".to_string()
+        } else if s.contains("standard")
+            || s == "play_brawl"
+            || s == "brawl_play"
+            || s == "standard brawl"
+            || s == "brawl - standard"
+            || (s.starts_with("play_brawl") && !s.contains("historic"))
+        {
+            "Standard Brawl".to_string()
         } else {
             "Brawl".to_string()
         }
@@ -721,8 +729,16 @@ mod tests {
         assert_eq!(normalize_format("Pioneer_Ladder"), "Pioneer Ranked");
 
         // Brawl variants
-        assert_eq!(normalize_format("Brawl_Play"), "Brawl");
-        assert_eq!(normalize_format("Standard_Brawl_Play"), "Brawl - Standard");
+        assert_eq!(normalize_format("Play_Brawl"), "Standard Brawl");
+        assert_eq!(normalize_format("Brawl_Play"), "Standard Brawl");
+        assert_eq!(normalize_format("Standard_Brawl_Play"), "Standard Brawl");
+        assert_eq!(normalize_format("Play_Standard_Brawl"), "Standard Brawl");
+        assert_eq!(normalize_format("Standard_Brawl"), "Standard Brawl");
+        assert_eq!(normalize_format("Brawl_Standard"), "Standard Brawl");
+        assert_eq!(normalize_format("Play_Brawl_Historic"), "Brawl");
+        assert_eq!(normalize_format("Brawl_Historic"), "Brawl");
+        assert_eq!(normalize_format("Historic_Brawl"), "Brawl");
+        assert_eq!(normalize_format("Play_HistoricBrawl"), "Brawl");
         assert_eq!(normalize_format("Competitive_Brawl"), "Brawl - Competitive");
         assert_eq!(normalize_format("Brawl_Ranked"), "Brawl - Competitive");
         assert_eq!(normalize_format("Brawl_Ladder"), "Brawl - Competitive");

@@ -5,6 +5,9 @@ import { WidgetShell } from "../WidgetShell";
 
 const FORMAT_COLORS: Record<string, string> = {
   Brawl: "#F59E0B",
+  "Standard Brawl": "#EC4899",
+  "Brawl - Standard": "#EC4899",
+  "Brawl - Competitive": "#F59E0B",
   Standard: "#38BDF8",
   "Standard Ranked": "#38BDF8",
   Historic: "#A855F7",
@@ -17,7 +20,13 @@ const FORMAT_COLORS: Record<string, string> = {
   "Midweek Magic": "#818CF8",
   Commander: "#8B5CF6",
   Alchemy: "#F97316",
+  "Alchemy Ranked": "#F97316",
   "Bot Match": "#64748B",
+  "Direct Challenge": "#B8503A",
+  Gladiator: "#6E8A42",
+  Sealed: "#6366F1",
+  Pioneer: "#10B981",
+  "Pioneer Ranked": "#10B981",
   Other: "#64748B",
 };
 

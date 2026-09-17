@@ -823,6 +823,7 @@ export default function App() {
       'Brawl',
       'Brawl - Competitive',
       'Brawl - Standard',
+      'Standard Brawl',
       'Direct Challenge',
       'Draft',
       'Explorer',

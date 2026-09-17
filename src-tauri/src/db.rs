@@ -446,20 +446,21 @@ impl DatabaseManager {
         .await;
 
         // Migration: Reconcile historical ranked / ladder format names to clean format titles
-        let _ = sqlx::query(
-            r#"
-            UPDATE matches SET format = 'Standard Ranked' WHERE format IN ('Ladder', 'Traditional Ladder', 'Standard (Ranked)', 'Standard_Ladder', 'Ladder_Play');
-            UPDATE matches SET format = 'Historic Ranked' WHERE format IN ('Historic (Ranked)', 'Historic_Ladder');
-            UPDATE matches SET format = 'Alchemy Ranked' WHERE format IN ('Alchemy (Ranked)', 'Alchemy_Ladder');
-            UPDATE matches SET format = 'Timeless Ranked' WHERE format IN ('Timeless (Ranked)', 'Timeless_Ladder');
-            UPDATE matches SET format = 'Explorer Ranked' WHERE format IN ('Explorer (Ranked)', 'Explorer_Ladder');
-            UPDATE matches SET format = 'Pioneer Ranked' WHERE format IN ('Pioneer (Ranked)', 'Pioneer_Ladder');
-            UPDATE matches SET format = 'Brawl - Standard' WHERE format IN ('Standard Brawl', 'Standard_Brawl', 'Brawl_Standard');
-            UPDATE matches SET format = 'Brawl - Competitive' WHERE format IN ('Competitive Brawl', 'Competitive_Brawl', 'Brawl (Ranked)', 'Brawl Ranked', 'Brawl_Ladder');
-            "#
-        )
-        .execute(&pool)
-        .await;
+        let format_migrations = [
+            "UPDATE matches SET format = 'Standard Ranked' WHERE format IN ('Ladder', 'Traditional Ladder', 'Standard (Ranked)', 'Standard_Ladder', 'Ladder_Play')",
+            "UPDATE matches SET format = 'Historic Ranked' WHERE format IN ('Historic (Ranked)', 'Historic_Ladder')",
+            "UPDATE matches SET format = 'Alchemy Ranked' WHERE format IN ('Alchemy (Ranked)', 'Alchemy_Ladder')",
+            "UPDATE matches SET format = 'Timeless Ranked' WHERE format IN ('Timeless (Ranked)', 'Timeless_Ladder')",
+            "UPDATE matches SET format = 'Explorer Ranked' WHERE format IN ('Explorer (Ranked)', 'Explorer_Ladder')",
+            "UPDATE matches SET format = 'Pioneer Ranked' WHERE format IN ('Pioneer (Ranked)', 'Pioneer_Ladder')",
+            "UPDATE matches SET format = 'Standard Brawl' WHERE format IN ('Brawl - Standard', 'Standard_Brawl', 'Brawl_Standard')",
+            "UPDATE matches SET format = 'Brawl - Competitive' WHERE format IN ('Competitive Brawl', 'Competitive_Brawl', 'Brawl (Ranked)', 'Brawl Ranked', 'Brawl_Ladder')",
+            "UPDATE matches SET format = 'Brawl' WHERE format = 'Standard Brawl' AND TRIM(TRIM(hero_deck_name, ''''), '\"') IN (SELECT TRIM(TRIM(deck_name, ''''), '\"') FROM deck_lists WHERE commander_grp_id IS NOT NULL AND json_array_length(cards_json) > 60)",
+            "UPDATE matches SET format = 'Standard Brawl' WHERE format = 'Brawl' AND TRIM(TRIM(hero_deck_name, ''''), '\"') IN (SELECT TRIM(TRIM(deck_name, ''''), '\"') FROM deck_lists WHERE commander_grp_id IS NOT NULL AND json_array_length(cards_json) <= 60)",
+        ];
+        for stmt in format_migrations {
+            let _ = sqlx::query(stmt).execute(&pool).await;
+        }
 
         // Migration: Resolve any localization keys in hero_deck_name or match_decks
         let loc_decks = sqlx::query_as::<_, (String,)>(
