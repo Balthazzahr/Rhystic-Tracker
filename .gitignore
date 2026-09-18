@@ -7,10 +7,10 @@ dist/
 .DS_Store
 src-tauri/gen/
 launch.sh
-run.sh
 launch-test.sh
-launch-fresh-test.sh
-src-tauri/migrate_database.py
+
+# Archive for obsolete / legacy assets and scratch files
+archive/
 
 # Agent & internal instruction documents
 AGENTS.md
@@ -18,7 +18,3 @@ ARCHITECTURE.md
 PROJECT_SPEC.md
 ROADMAP.md
 DESIGN_SYSTEM.md
-rhystictracker-redesign-brief*.md
-rhystictracker-redesign-execution-brief*.md
-redesign example/
-redesign example
