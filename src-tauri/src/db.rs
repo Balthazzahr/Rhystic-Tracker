@@ -5,6 +5,7 @@ use crate::dashboard::{default_dashboard_layout, validate_layout, DashboardLayou
 use crate::card_db;
 use crate::parser;
 
+#[derive(Clone)]
 pub struct DatabaseManager {
     pool: Pool<Sqlite>,
     pub db_filename: String,
@@ -257,8 +258,20 @@ impl DatabaseManager {
             }
         }
     }
-    
+}
+
+#[cfg(not(test))]
+static DB_SINGLETON: tokio::sync::OnceCell<DatabaseManager> = tokio::sync::OnceCell::const_new();
+
+impl DatabaseManager {
     pub async fn init() -> Result<Self, Box<dyn std::error::Error>> {
+        #[cfg(not(test))]
+        {
+            if let Some(instance) = DB_SINGLETON.get() {
+                return Ok(instance.clone());
+            }
+        }
+
         // TEST SAFETY GUARD: Under `cargo test` this code path is the ONLY way a
         // test can obtain a database handle, so it is forced to a hardcoded
         // test-only directory under the system temp dir — never the user's real
@@ -963,10 +976,12 @@ impl DatabaseManager {
         let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_hero ON match_impactful_cards(seat_id, grp_id)").execute(&pool).await;
         let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_turn_events_seat_type ON match_turn_events(seat_id, event_type, grp_id)").execute(&pool).await;
 
-        // Backfill draw records from logs additively for any historical matches missing draw stats
-        Self::backfill_draw_records_from_logs(&pool).await;
-
-        Ok(Self { pool, db_filename })
+        let mgr = Self { pool, db_filename };
+        #[cfg(not(test))]
+        {
+            let _ = DB_SINGLETON.set(mgr.clone());
+        }
+        Ok(mgr)
     }
 
     async fn backfill_draw_records_from_logs(pool: &Pool<Sqlite>) {

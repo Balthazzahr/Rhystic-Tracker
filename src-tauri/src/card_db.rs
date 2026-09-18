@@ -340,7 +340,23 @@ pub async fn sync_card_cache(pool: &Pool<Sqlite>) -> Result<(usize, u128), Box<d
     Ok((count, elapsed_ms))
 }
 
+use std::sync::RwLock;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+static CARD_CACHE: OnceLock<RwLock<HashMap<i64, CardMetadata>>> = OnceLock::new();
+
+fn get_card_cache() -> &'static RwLock<HashMap<i64, CardMetadata>> {
+    CARD_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
 pub async fn get_card_metadata(pool: &Pool<Sqlite>, grp_id: i64) -> Result<Option<CardMetadata>, Box<dyn std::error::Error>> {
+    if let Ok(guard) = get_card_cache().read() {
+        if let Some(cached) = guard.get(&grp_id) {
+            return Ok(Some(cached.clone()));
+        }
+    }
+
     let row = sqlx::query(
         r#"
         SELECT grp_id, name, card_type, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number
@@ -361,7 +377,7 @@ pub async fn get_card_metadata(pool: &Pool<Sqlite>, grp_id: i64) -> Result<Optio
             raw_cmc
         };
 
-        Ok(Some(CardMetadata {
+        let meta = CardMetadata {
             grp_id: r.get("grp_id"),
             name: r.get("name"),
             card_type: r.get("card_type"),
@@ -372,10 +388,88 @@ pub async fn get_card_metadata(pool: &Pool<Sqlite>, grp_id: i64) -> Result<Optio
             set_code: r.get("set_code"),
             rarity: r.get("rarity"),
             collector_number: r.get("collector_number"),
-        }))
+        };
+
+        if let Ok(mut guard) = get_card_cache().write() {
+            guard.insert(grp_id, meta.clone());
+        }
+
+        Ok(Some(meta))
     } else {
         Ok(None)
     }
+}
+
+pub async fn get_batch_card_metadata(pool: &Pool<Sqlite>, grp_ids: &[i64]) -> Result<HashMap<i64, CardMetadata>, Box<dyn std::error::Error>> {
+    let mut results: HashMap<i64, CardMetadata> = HashMap::new();
+    let mut missing: Vec<i64> = Vec::new();
+
+    if let Ok(guard) = get_card_cache().read() {
+        for &gid in grp_ids {
+            if let Some(meta) = guard.get(&gid) {
+                results.insert(gid, meta.clone());
+            } else {
+                missing.push(gid);
+            }
+        }
+    } else {
+        missing.extend_from_slice(grp_ids);
+    }
+
+    if missing.is_empty() {
+        return Ok(results);
+    }
+
+    missing.sort_unstable();
+    missing.dedup();
+
+    for chunk in missing.chunks(100) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let query_str = format!(
+            "SELECT grp_id, name, card_type, mana_cost, cmc, colors, color_identity, set_code, rarity, collector_number FROM cards_cache WHERE grp_id IN ({})",
+            placeholders
+        );
+        let mut query = sqlx::query(&query_str);
+        for &gid in chunk {
+            query = query.bind(gid);
+        }
+        let rows = query.fetch_all(pool).await?;
+
+        let mut to_cache = Vec::new();
+        for r in rows {
+            let gid: i64 = r.get("grp_id");
+            let mana_cost: Option<String> = r.get("mana_cost");
+            let raw_cmc: i64 = r.get("cmc");
+            let cmc = if raw_cmc == 0 && mana_cost.is_some() {
+                parse_mtga_cmc(mana_cost.as_deref().unwrap())
+            } else {
+                raw_cmc
+            };
+
+            let meta = CardMetadata {
+                grp_id: gid,
+                name: r.get("name"),
+                card_type: r.get("card_type"),
+                mana_cost,
+                cmc,
+                colors: r.get("colors"),
+                color_identity: r.get("color_identity"),
+                set_code: r.get("set_code"),
+                rarity: r.get("rarity"),
+                collector_number: r.get("collector_number"),
+            };
+            results.insert(gid, meta.clone());
+            to_cache.push((gid, meta));
+        }
+
+        if let Ok(mut guard) = get_card_cache().write() {
+            for (gid, meta) in to_cache {
+                guard.insert(gid, meta);
+            }
+        }
+    }
+
+    Ok(results)
 }
 
 /// Looks up a card by exact name (prefers a non-land exact match if multiple
@@ -483,7 +577,7 @@ mod tests {
     fn test_derive_raw_dir_steam_compatdata() {
         // If the directory does not exist on disk, derive_raw_dir checks exists(), but the logic handles prefixes
         let log_path = Path::new("/teradrive/SteamLibrary/steamapps/compatdata/2141910/pfx/drive_c/users/steamuser/AppData/LocalLow/Wizards Of The Coast/MTGA/Player.log");
-        let derived = derive_raw_dir_from_log_path(log_path);
+        let _derived = derive_raw_dir_from_log_path(log_path);
         // Will be None if /teradrive doesn't actually exist on test runner machine, but syntax and string parsing are verified
         let path_str = log_path.to_str().unwrap();
         assert!(path_str.contains("/steamapps/compatdata"));

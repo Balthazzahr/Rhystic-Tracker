@@ -306,17 +306,11 @@ impl FileTailer {
             // Check for file rotation/recreation or truncation
             if let Ok(new_meta) = std::fs::metadata(&self.path) {
                 #[cfg(unix)]
-                let new_ino = new_meta.ino();
-                let new_len = new_meta.len();
-
+                let rotated = new_meta.ino() != current_ino;
+                #[cfg(not(unix))]
                 let rotated = {
-                    #[cfg(unix)]
-                    { new_ino != current_ino }
-                    #[cfg(not(unix))]
-                    {
-                        let current_pos = reader.stream_position().unwrap_or(0);
-                        new_len < current_pos
-                    }
+                    let current_pos = reader.stream_position().unwrap_or(0);
+                    new_meta.len() < current_pos
                 };
 
                 if rotated {
@@ -325,7 +319,7 @@ impl FileTailer {
                     if let Ok(new_file) = File::open(&self.path) {
                         #[cfg(unix)]
                         {
-                            current_ino = new_ino;
+                            current_ino = new_meta.ino();
                         }
                         reader = BufReader::new(new_file);
                         let _ = self.sender.send(TailerEvent::Rotated).await;

@@ -2,6 +2,17 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.6.1] - 2026-09-18 — 🚀 Unicode Multi-Byte Redaction & High-Speed Polling Hotfix
+
+### 🐛 Critical UTF-8 Character Boundary Crash Fix
+- **Safe Unicode Redaction**: Fixed a critical panic in `redact_str` where non-ASCII opponent or player usernames containing multi-byte UTF-8 sequences (e.g. Japanese Kanji, Chinese characters, Cyrillic, accented glyphs, emoji) caused raw byte-slicing crashes in background processing threads. Slicing now operates strictly across Unicode character iterators.
+- **Resilient Log Supervisor**: Eliminated recursive thread restart loops triggered by non-ASCII player log entries.
+
+### ⚡ Engine Performance & Mutex Lock De-Contention
+- **Singleton Database Pooling**: Cached SQLite connection pools and table migrations via a global async singleton, eliminating continuous SQLite pool initialization storms on 1.5-second live match polling.
+- **In-Memory Card Cache & Batch Metadata**: Introduced an in-memory card cache and batch query resolver in `card_db`, eliminating sequential blocking SQL queries inside the live match HUD poller.
+- **Non-Blocking HUD Polling**: Refactored `get_live_match_state` to snapshot live state and release the `MatchAssembler` mutex lock immediately, dropping application idle CPU usage to ~0% and preventing tailer channel buffer starvation.
+
 ## [1.6.0] - 2026-09-18 — 🪟 The Cross-Platform Windows & Advanced Combat Filtering Release
 
 ### 🪟 Official Windows Cross-Platform Release

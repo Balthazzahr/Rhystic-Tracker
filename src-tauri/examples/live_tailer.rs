@@ -6,10 +6,13 @@ use rhystic_tracker::match_assembler::MatchAssembler;
 use rhystic_tracker::db::DatabaseManager;
 
 fn redact_str(s: &str) -> String {
-    if s.len() <= 6 {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= 6 {
         "[REDACTED]".to_string()
     } else {
-        format!("{}...{}", &s[..3], &s[s.len()-3..])
+        let prefix: String = chars[..3].iter().collect();
+        let suffix: String = chars[chars.len() - 3..].iter().collect();
+        format!("{}...{}", prefix, suffix)
     }
 }
 

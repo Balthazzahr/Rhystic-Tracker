@@ -23,10 +23,13 @@ use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState, MouseButton}
 use tauri::image::Image;
 
 fn redact_str(s: &str) -> String {
-    if s.len() <= 6 {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= 6 {
         "[REDACTED]".to_string()
     } else {
-        format!("{}...{}", &s[..3], &s[s.len()-3..])
+        let prefix: String = chars[..3].iter().collect();
+        let suffix: String = chars[chars.len() - 3..].iter().collect();
+        format!("{}...{}", prefix, suffix)
     }
 }
 
@@ -457,14 +460,18 @@ async fn process_tailer_events(
                         let payload_str = json_buffer.clone();
                         json_buffer.clear();
 
-                        let mut assembler = assembler_ref.lock().await;
                         let parsed = parse_line(&payload_str);
-                        dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
+                        if !matches!(parsed, ParsedEvent::Unknown) {
+                            let mut assembler = assembler_ref.lock().await;
+                            dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
+                        }
                     }
                 } else {
-                    let mut assembler = assembler_ref.lock().await;
                     let parsed = parse_line(&line);
-                    dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
+                    if !matches!(parsed, ParsedEvent::Unknown) {
+                        let mut assembler = assembler_ref.lock().await;
+                        dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
+                    }
                 }
             }
         }

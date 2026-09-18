@@ -21,23 +21,18 @@ fn main() {
 
     for line in reader.lines() {
         if let Ok(line_str) = line {
-            if line_str.contains(target_match_id) {
-                in_target_match = true;
-            }
-
-            if !in_target_match {
-                continue;
-            }
-
             match parse_line(&line_str) {
                 ParsedEvent::Auth { screen_name, client_id } => {
+                    println!("[AUTH] screen_name={}, client_id={}", screen_name, client_id);
                     assembler.set_player_user_id(client_id);
                 }
                 ParsedEvent::MatchCreated { match_id, format_name, assigned_deck_event, reserved_players } => {
+                    println!("[MATCH_CREATED] match_id={}, format={}", match_id, format_name);
                     assembler.start_match(match_id, format_name, assigned_deck_event);
                     assembler.update_reserved_players(&reserved_players);
                 }
                 ParsedEvent::DeckSubmitted { deck_name, commander_id, main_deck, .. } => {
+                    println!("[DECK_SUBMITTED] deck_name={}, main_deck_len={}", deck_name, main_deck.len());
                     assembler.set_deck(deck_name, None, commander_id, main_deck);
                 }
                 ParsedEvent::GameStateUpdates { steps } => {
@@ -73,31 +68,29 @@ fn main() {
                 ParsedEvent::MulliganEvent { seat_id, is_mulligan, num_cards } => {
                     assembler.handle_mulligan_decision(seat_id, is_mulligan, num_cards);
                 }
-                ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
+                ParsedEvent::MatchCompleted { winning_team_id, reason, match_id } => {
+                    println!("[MATCH_COMPLETED] match_id={}, winning_team={}, reason={}", match_id, winning_team_id, reason);
                     let res = assembler.complete_match(winning_team_id, &reason);
                     if let Some((record, _cards, turn_events, _impactful)) = res {
-                        println!("\n=== OFFLINE TEST MATCH COMPLETED ===");
+                        println!("\n=== MATCH COMPLETED AND RECORDED ===");
                         println!("Match ID: {}", record.match_id);
                         println!("Player Deck: {:?}", record.player_deck_name);
                         println!("Opponent Name: {:?}", record.opponent_name);
                         println!("Result: {}", record.result);
                         println!("Total Turn Events Captured: {}", turn_events.len());
-                        println!("\n--- Turn Events Sample ---");
-                        for (i, evt) in turn_events.iter().enumerate() {
-                            println!(
-                                "  #{:02} [Turn {}] Seat {}: {} (GRP ID #{})",
-                                i + 1,
-                                evt.turn_number,
-                                evt.seat_id,
-                                evt.event_type.to_uppercase(),
-                                evt.grp_id
-                            );
-                        }
+                    } else {
+                        println!("[ERROR] complete_match returned NONE! active_match was None!");
                     }
-                    break;
                 }
                 _ => {}
             }
         }
     }
+
+    println!("\n=== END OF LOG STATE ===");
+    println!("active_match is_some: {}", assembler.active_match.is_some());
+    if let Some(active) = &assembler.active_match {
+        println!("Active match: id={}, opp={:?}", active.match_id, active.opponent_name);
+    }
 }
+
