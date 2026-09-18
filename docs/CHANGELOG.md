@@ -2,7 +2,12 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [1.5.6] - 2026-09-18
+## [1.6.0] - 2026-09-18 — 🪟 The Cross-Platform Windows & Advanced Combat Filtering Release
+
+### 🪟 Official Windows Cross-Platform Release
+- **Native Windows Discovery Engine**: Introduced automated discovery for Windows MTGA installations, resolving `%USERPROFILE%\AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log` and the `Raw_CardDatabase_*.mtga` binary cache across native Windows, Epic Games Launcher, and custom Steam drives (`C:`, `D:`, `E:`, `F:`, `G:`).
+- **Automated Windows Release Pipeline**: Added continuous automated CI compilation for Windows (`x86_64`) generating standalone `.zip` packages and setup installers alongside Linux and macOS universal bundles.
+- **Cross-Platform Parity**: Full feature parity across Linux, macOS, and Windows with zero platform-specific restrictions or proprietary dependencies.
 
 ### 🔍 Advanced Match Filtering & Commander Search
 - **Multi-Commander & Multi-Card Advanced Filter**: Added an interactive filter builder beneath the *Turn Position (Play / Draw)* section in Advanced Filters. Players can toggle between **Filter by Commander** (OR matching across commander slots) and **Filter by Card in deck** (AND matching across decklists and played cards).
@@ -13,10 +18,8 @@ All notable changes to Rhystic Tracker are documented here.
 - **My Commander & Opp Commander Table Columns**: Added two customizable columns to the main Match History table (`hero_commander` and `opponent_commander`) displaying the commander name with a square art crop thumbnail.
 - **Interactive Card Inspector Drill-Down**: Clicking any commander name in the Match History table opens the full 450px Card Inspector with complete combat metrics, casting timelines, and win rates.
 
-### 🪟 Windows Support & Cross-Platform CI Pipeline
-- **Native Windows Discovery Engine**: Added auto-discovery for `Player.log` (`%USERPROFILE%\AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log`) and MTGA Raw card database paths across standalone Windows and Steam installations.
-- **Automated Windows CI Packaging**: Added a dedicated `build-windows` job to GitHub Actions compiling and packaging Windows standalone `.zip` archives and setup installers on release.
-- **Community Disclaimer**: Added experimental/community-verified notices for Windows releases in documentation and release notes.
+### 📸 Visual Documentation & Assets Overhaul
+- **Complete Application Screenshot Refresh**: Replaced all legacy documentation captures with fresh, high-resolution 1.6.0 application screenshots covering the Bento Dashboard, Advanced Filters, Deck Library, Card Library, Achievements, and Leaderboards.
 
 ## [1.5.5] - 2026-09-17
 
