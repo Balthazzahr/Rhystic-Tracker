@@ -2,6 +2,22 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.5.6] - 2026-09-18
+
+### 🔍 Advanced Match Filtering & Commander Search
+- **Multi-Commander & Multi-Card Advanced Filter**: Added an interactive filter builder beneath the *Turn Position (Play / Draw)* section in Advanced Filters. Players can toggle between **Filter by Commander** (OR matching across commander slots) and **Filter by Card in deck** (AND matching across decklists and played cards).
+- **Fuzzy Autocomplete with Authentic Mana Pips**: Integrated debounced type-ahead search across the MTGA card database with card types, authentic MTGA mana glyphs, and square art crop icons.
+- **Filter Stacking & Removable Tags**: Search queries can be stacked into removable filter chips with square art crops, allowing instant multi-card and multi-commander criteria composition.
+
+### 🃏 Dedicated Commander Columns in Match History
+- **My Commander & Opp Commander Table Columns**: Added two customizable columns to the main Match History table (`hero_commander` and `opponent_commander`) displaying the commander name with a square art crop thumbnail.
+- **Interactive Card Inspector Drill-Down**: Clicking any commander name in the Match History table opens the full 450px Card Inspector with complete combat metrics, casting timelines, and win rates.
+
+### 🪟 Windows Support & Cross-Platform CI Pipeline
+- **Native Windows Discovery Engine**: Added auto-discovery for `Player.log` (`%USERPROFILE%\AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log`) and MTGA Raw card database paths across standalone Windows and Steam installations.
+- **Automated Windows CI Packaging**: Added a dedicated `build-windows` job to GitHub Actions compiling and packaging Windows standalone `.zip` archives and setup installers on release.
+- **Community Disclaimer**: Added experimental/community-verified notices for Windows releases in documentation and release notes.
+
 ## [1.5.5] - 2026-09-17
 
 ### 📊 Format Distribution Widget Enhancements & Layout Scaling

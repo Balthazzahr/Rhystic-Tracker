@@ -432,3 +432,350 @@ pub async fn get_opponent_matches(opponent_name: String) -> Result<Vec<serde_jso
 
     Ok(result)
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct CardAutocompleteItem {
+    pub name: String,
+    pub card_type: Option<String>,
+    pub mana_cost: Option<String>,
+    pub rarity: Option<i64>,
+    pub is_commander: bool,
+}
+
+#[tauri::command]
+pub async fn search_card_autocomplete(
+    query: String,
+    commander_only: Option<bool>,
+    limit: Option<usize>,
+) -> Result<Vec<CardAutocompleteItem>, String> {
+    let clean_query = query.trim();
+    if clean_query.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let pool = db.pool();
+    search_card_autocomplete_internal(pool, clean_query, commander_only.unwrap_or(false), limit.unwrap_or(20)).await
+}
+
+pub async fn search_card_autocomplete_internal(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+    clean_query: &str,
+    commander_only: bool,
+    limit: usize,
+) -> Result<Vec<CardAutocompleteItem>, String> {
+    let max_limit = limit.min(50) as i64;
+    let like_pattern = format!("%{}%", clean_query);
+    let prefix_pattern = format!("{}%", clean_query);
+
+    let rows = if commander_only {
+        sqlx::query(
+            r#"
+            SELECT c.name, c.card_type, c.mana_cost, c.rarity,
+                   1 as is_commander
+            FROM cards_cache c
+            WHERE c.name LIKE ?
+              AND (
+                c.card_type LIKE '%Legendary%Creature%'
+                OR c.card_type LIKE '%Legendary%Planeswalker%'
+                OR c.card_type LIKE '%Legendary%Artifact%Creature%'
+                OR c.grp_id IN (
+                    SELECT hero_commander_id FROM matches WHERE hero_commander_id IS NOT NULL
+                    UNION
+                    SELECT opponent_commander_id FROM matches WHERE opponent_commander_id IS NOT NULL
+                    UNION
+                    SELECT commander_grp_id FROM deck_lists WHERE commander_grp_id IS NOT NULL
+                )
+              )
+            GROUP BY c.name
+            ORDER BY
+              CASE WHEN c.name LIKE ? THEN 0 ELSE 1 END,
+              LENGTH(c.name) ASC,
+              c.name ASC
+            LIMIT ?
+            "#
+        )
+        .bind(&like_pattern)
+        .bind(&prefix_pattern)
+        .bind(max_limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT c.name, c.card_type, c.mana_cost, c.rarity,
+                   (
+                       c.card_type LIKE '%Legendary%Creature%'
+                       OR c.card_type LIKE '%Legendary%Planeswalker%'
+                       OR c.grp_id IN (
+                           SELECT hero_commander_id FROM matches WHERE hero_commander_id IS NOT NULL
+                           UNION
+                           SELECT opponent_commander_id FROM matches WHERE opponent_commander_id IS NOT NULL
+                           UNION
+                           SELECT commander_grp_id FROM deck_lists WHERE commander_grp_id IS NOT NULL
+                       )
+                   ) as is_commander
+            FROM cards_cache c
+            WHERE c.name LIKE ?
+            GROUP BY c.name
+            ORDER BY
+              CASE WHEN c.name LIKE ? THEN 0 ELSE 1 END,
+              LENGTH(c.name) ASC,
+              c.name ASC
+            LIMIT ?
+            "#
+        )
+        .bind(&like_pattern)
+        .bind(&prefix_pattern)
+        .bind(max_limit)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?
+    };
+
+    let mut results = Vec::new();
+    for r in rows {
+        let name: String = r.get("name");
+        let card_type: Option<String> = r.get("card_type");
+        let mana_cost: Option<String> = r.get("mana_cost");
+        let rarity: Option<i64> = r.get("rarity");
+        let is_commander: bool = r.get::<i64, _>("is_commander") != 0;
+
+        results.push(CardAutocompleteItem {
+            name,
+            card_type,
+            mana_cost,
+            rarity,
+            is_commander,
+        });
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn get_matches_with_cards(
+    card_names: Vec<String>,
+    match_all: Option<bool>,
+) -> Result<Vec<String>, String> {
+    if card_names.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    let pool = db.pool();
+    get_matches_with_cards_internal(pool, &card_names, match_all.unwrap_or(true)).await
+}
+
+pub async fn get_matches_with_cards_internal(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+    card_names: &[String],
+    match_all: bool,
+) -> Result<Vec<String>, String> {
+    if card_names.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    use std::collections::HashSet;
+    let mut matching_match_ids: Option<HashSet<String>> = None;
+
+    for card_name in card_names {
+        let clean_name = card_name.trim();
+        if clean_name.is_empty() {
+            continue;
+        }
+
+        let rows = sqlx::query(
+            r#"
+            SELECT DISTINCT m.id
+            FROM matches m
+            WHERE m.id IN (
+                SELECT mc.match_id
+                FROM match_cards mc
+                JOIN cards_cache c ON mc.grp_id = c.grp_id
+                WHERE mc.is_opponent = 0 AND c.name = ?
+                UNION
+                SELECT m2.id
+                FROM matches m2
+                JOIN deck_lists dl ON m2.hero_deck_name = dl.deck_name AND dl.cards_json IS NOT NULL
+                JOIN json_each(dl.cards_json) je
+                LEFT JOIN cards_cache c2 ON (CAST(je.value->>'grp_id' AS INTEGER) = c2.grp_id)
+                WHERE c2.name = ? OR je.value->>'name' = ?
+            )
+            "#
+        )
+        .bind(clean_name)
+        .bind(clean_name)
+        .bind(clean_name)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let card_match_ids: HashSet<String> = rows.into_iter().map(|r| r.get("id")).collect();
+
+        if match_all {
+            match matching_match_ids.as_mut() {
+                Some(existing) => {
+                    *existing = existing.intersection(&card_match_ids).cloned().collect();
+                }
+                None => {
+                    matching_match_ids = Some(card_match_ids);
+                }
+            }
+        } else {
+            match matching_match_ids.as_mut() {
+                Some(existing) => {
+                    existing.extend(card_match_ids);
+                }
+                None => {
+                    matching_match_ids = Some(card_match_ids);
+                }
+            }
+        }
+    }
+
+    let mut result_list: Vec<String> = matching_match_ids.unwrap_or_default().into_iter().collect();
+    result_list.sort();
+    Ok(result_list)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn setup_test_db() -> sqlx::Pool<sqlx::Sqlite> {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS cards_cache (
+                grp_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                mana_cost TEXT,
+                cmc REAL,
+                colors TEXT,
+                color_identity TEXT,
+                set_code TEXT,
+                rarity INTEGER,
+                collector_number TEXT,
+                card_type TEXT,
+                last_updated TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS matches (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                date_str TEXT,
+                format TEXT,
+                result TEXT,
+                result_reason TEXT,
+                duration_seconds INTEGER,
+                turns INTEGER,
+                going_first INTEGER,
+                hero_seat_id INTEGER,
+                hero_deck_name TEXT,
+                hero_commander_id INTEGER,
+                hero_life_end INTEGER,
+                hero_mulligans INTEGER,
+                opponent_name TEXT,
+                opponent_commander_id INTEGER,
+                opponent_life_end INTEGER,
+                opponent_mulligans INTEGER,
+                raw_payload TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS match_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL,
+                grp_id INTEGER NOT NULL,
+                is_opponent INTEGER NOT NULL,
+                count INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deck_lists (
+                deck_name TEXT PRIMARY KEY,
+                cards_json TEXT,
+                sideboard_json TEXT,
+                commander_grp_id INTEGER,
+                source TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                deck_id TEXT
+            );
+            "#
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Seed cards_cache
+        sqlx::query(
+            "INSERT INTO cards_cache (grp_id, name, mana_cost, card_type, rarity) VALUES
+             (101, 'Atraxa, Grand Unifier', 'o3oWoUoBoG', 'Legendary Creature — Phyrexian Angel', 4),
+             (102, 'Counterspell', 'oUoU', 'Instant', 2),
+             (103, 'Lightning Bolt', 'oR', 'Instant', 2),
+             (104, 'Swamp', '', 'Basic Land — Swamp', 1),
+             (105, 'Urza, Lord High Artificer', 'o2oUoU', 'Legendary Creature — Human Artificer', 4)"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_search_card_autocomplete_all_and_commander() {
+        let pool = setup_test_db().await;
+
+        // Search all cards matching "counter"
+        let res_all = search_card_autocomplete_internal(&pool, "counter", false, 10).await.unwrap();
+        assert_eq!(res_all.len(), 1);
+        assert_eq!(res_all[0].name, "Counterspell");
+        assert!(!res_all[0].is_commander);
+
+        // Search commander matching "atraxa"
+        let res_comm = search_card_autocomplete_internal(&pool, "atraxa", true, 10).await.unwrap();
+        assert_eq!(res_comm.len(), 1);
+        assert_eq!(res_comm[0].name, "Atraxa, Grand Unifier");
+        assert!(res_comm[0].is_commander);
+
+        // Searching commander for non-legendary shouldn't return it
+        let res_non_comm = search_card_autocomplete_internal(&pool, "bolt", true, 10).await.unwrap();
+        assert_eq!(res_non_comm.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_matches_with_cards_from_match_cards_and_decklist() {
+        let pool = setup_test_db().await;
+
+        // Seed match 1: has Counterspell in match_cards
+        sqlx::query("INSERT INTO matches (id, timestamp, hero_deck_name, result) VALUES ('m1', '2026-09-17T12:00:00Z', 'Deck A', 'win')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES ('m1', 102, 0, 2)").execute(&pool).await.unwrap();
+
+        // Seed match 2: has Lightning Bolt in deck_lists
+        sqlx::query("INSERT INTO matches (id, timestamp, hero_deck_name, result) VALUES ('m2', '2026-09-17T13:00:00Z', 'Burn Deck', 'win')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO deck_lists (deck_name, cards_json) VALUES ('Burn Deck', '[{\"grp_id\": 103, \"name\": \"Lightning Bolt\", \"count\": 4}]')").execute(&pool).await.unwrap();
+
+        // Seed match 3: has both Counterspell and Lightning Bolt (in match_cards)
+        sqlx::query("INSERT INTO matches (id, timestamp, hero_deck_name, result) VALUES ('m3', '2026-09-17T14:00:00Z', 'Izzet Deck', 'win')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO match_cards (match_id, grp_id, is_opponent, count) VALUES ('m3', 102, 0, 2), ('m3', 103, 0, 4)").execute(&pool).await.unwrap();
+
+        // Test filtering single card: Counterspell -> matches m1 and m3
+        let res_cs = get_matches_with_cards_internal(&pool, &["Counterspell".to_string()], true).await.unwrap();
+        assert_eq!(res_cs, vec!["m1", "m3"]);
+
+        // Test filtering single card: Lightning Bolt -> matches m2 and m3
+        let res_bolt = get_matches_with_cards_internal(&pool, &["Lightning Bolt".to_string()], true).await.unwrap();
+        assert_eq!(res_bolt, vec!["m2", "m3"]);
+
+        // Test filtering multiple cards (AND): Counterspell AND Lightning Bolt -> matches only m3
+        let res_both_and = get_matches_with_cards_internal(&pool, &["Counterspell".to_string(), "Lightning Bolt".to_string()], true).await.unwrap();
+        assert_eq!(res_both_and, vec!["m3"]);
+
+        // Test filtering multiple cards (OR): Counterspell OR Lightning Bolt -> matches m1, m2, m3
+        let res_both_or = get_matches_with_cards_internal(&pool, &["Counterspell".to_string(), "Lightning Bolt".to_string()], false).await.unwrap();
+        assert_eq!(res_both_or, vec!["m1", "m2", "m3"]);
+    }
+}

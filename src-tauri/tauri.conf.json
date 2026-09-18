@@ -1,11 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-utils/tauri.conf.json",
   "productName": "Rhystic Tracker",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "identifier": "com.rhystic.tracker",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "./node_modules/.bin/vite build",
+    "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },

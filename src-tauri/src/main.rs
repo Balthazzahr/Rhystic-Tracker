@@ -733,6 +733,8 @@ fn main() {
             save_dashboard_layout,
             reset_dashboard_layout,
             get_card_win_correlations,
+            search_card_autocomplete,
+            get_matches_with_cards,
             get_opponent_commander_records,
             save_custom_background,
             get_preferred_prints,

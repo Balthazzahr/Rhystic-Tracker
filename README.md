@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  <strong>The open-source, local-first companion and combat analytics engine for Magic: The Gathering Arena on Linux & macOS.</strong>
+  <strong>The open-source, local-first companion and combat analytics engine for Magic: The Gathering Arena on Linux, macOS & Windows.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.5.5-38BDF8?style=flat-square&logo=git" alt="Version 1.5.5" /></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Arch%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=archlinux" alt="Linux and macOS Platform" />
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.5.6-38BDF8?style=flat-square&logo=git" alt="Version 1.5.6" /></a>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=linux" alt="Cross-Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
   <img src="https://img.shields.io/badge/license-MIT-emerald?style=flat-square" alt="License MIT" />
@@ -24,7 +24,7 @@
 
 ## ⚡ What is Rhystic Tracker?
 
-**Rhystic Tracker** is a native, ultra-responsive desktop companion for MTG Arena on Linux and macOS. It continuously parses MTGA's `Player.log` in real time, persisting every match, mulligan, card draw, spell resolution, token creation, permanent destruction, and combat damage swing into a local SQLite database on your machine.
+**Rhystic Tracker** is a native, ultra-responsive desktop companion for MTG Arena on Linux, macOS, and Windows. It continuously parses MTGA's `Player.log` in real time, persisting every match, mulligan, card draw, spell resolution, token creation, permanent destruction, and combat damage swing into a local SQLite database on your machine.
 
 Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers maximum visual performance and instant zero-latency queries without cloud requirements, tracking accounts, or telemetry.
 
@@ -35,12 +35,13 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 ## ✨ Features at a Glance
 
 - 🎨 **Authentic MTG Visual Aesthetic**: Complete sharp geometry (`rounded-none`), official **Beleren Bold** & **Plantin MTG** typography, and authentic MTG mana and ability font iconography.
+- 🔍 **Advanced Match Filtering & Dedicated Commander Columns**: Filter matches by multiple commanders (OR) and multiple cards in deck (AND) with fuzzy type-ahead autocomplete, plus dedicated table columns for hero and opponent commanders with square art crops.
 - ⚙️ **Categorized Tabbed Settings**: Organized into 5 dedicated tabs (*General & Behavior*, *Appearance & Themes*, *MTGA Connection*, *Storage & Database*, *About & Legal*) with safety confirmations and card density controls.
 - 🔍 **Expanded Floating Inspector Workspaces**: Massive `95vw × 97vh` modal workspaces for Decks, Matches, and Cards with borderless floating analytics, authentic mana pie charts, and turn-by-turn combat replay.
 - 🔄 **Automatic True Decklist Capture & UUID Sync**: Automatic ingestion of 100% full genuine decklists (including Commanders) upon starting a match or navigating decks, paired with MTGA persistent UUID tracking that automatically propagates deck modifications and renames while preserving historical match analytics.
 - 🏆 **Global Card Achievements & Trophy Case**: 21 custom SVG achievement emblems spanning 7 categories with Bronze, Silver, and Gold tiers, objective value thresholds ($X+$), MVP showcase, center-out symmetrical square clustering, and interactive drill-down roster modal with MTG lore quotes.
 - 🏛️ **All-Time Leaderboards & Hall of Fame**: 3×3 domain grid across Combat Damage, Non-Combat Damage, and Honors & Mastery with 9 categories (including Card Draw Engines and Battlefield Stalwarts), podium styling with crowns, full-height 25-card drill-down modal, live search, and diff-to-podium tracking.
-- 🍏 **Native macOS & Linux Platform Support**: Universal release packaging with native log and raw card database discovery across Linux (Proton, Lutris, Bottles, Heroic) and macOS.
+- 🍏 **Cross-Platform Linux, macOS & Windows Support**: Universal release packaging with native log and raw card database discovery across Linux (Proton, Lutris, Bottles, Heroic), macOS, and Windows.
 - 🃏 **Mulligan Tracking & Timeline Replay**: Full London mulligan detection, opening hand buffer state machine, and dedicated Opening Phase section in the Match Play Timeline with amber `mulligan` and orange `bottom` badges.
 - 🧙‍♂️ **First-Time Setup Wizard & Dynamic Discovery**: Guided 3-step setup with real-time log detection across all prefixes, plus instant startup card indexing (26,000+ cards in ~150ms).
 - 🏅 **Comprehensive MTGA Formats Coverage**: Native categorization and distinct colored badges for all 13 formats (Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match with precon resolution, Direct Challenge, Midweek Magic, and Gladiator).
@@ -55,29 +56,33 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 
 ## 📸 Screenshots Showcase
 
-|                  Dashboard                   |                  Match History                   |
-| :------------------------------------------: | :----------------------------------------------: |
-| ![Dashboard](docs/screenshots/v13%20Dashboard.png) | ![Match History](docs/screenshots/v13%20MatchHistory.png) |
+|                  Dashboard (Bento Grid)                   |                  Match History                   |
+| :-------------------------------------------------------: | :----------------------------------------------: |
+|        ![Dashboard](docs/screenshots/Dashboard.png)        |   ![Match History](docs/screenshots/MatchHistory.png)    |
 
-|             Deck Library (Grid View)              |             Deck Library (Table View)             |
-| :-----------------------------------------------: | :-----------------------------------------------: |
-| ![Deck Library](docs/screenshots/v13%20DeckLibrary.png) | ![Deck Library Table](docs/screenshots/v13%20DeckLibraryTable.png) |
+|             Match Inspector (Timeline Replay)             |                  Live Match HUD                  |
+| :-------------------------------------------------------: | :----------------------------------------------: |
+| ![Match Details](docs/screenshots/MatchHistory_Details.png) |   ![Live Match HUD](docs/screenshots/LiveMatchHud.png)   |
 
-|            Expanded Deck Inspector                |             Full Match Inspector                 |
-| :-----------------------------------------------: | :----------------------------------------------: |
-| ![Deck Inspector](docs/screenshots/v13%20DeckInspector.png) | ![Match Inspector](docs/screenshots/v13%20MatchInspector.png) |
+|                 Deck Library (Card View)                  |            Deck Library (Table View)             |
+| :-------------------------------------------------------: | :----------------------------------------------: |
+|   ![Deck Library](docs/screenshots/DeckLibrary_CardView.png)    | ![Deck Library Table](docs/screenshots/DeckLibrary_TableView.png) |
 
-|             Card Library (4×3 Grid)               |             3-Panel Card Inspector               |
-| :-----------------------------------------------: | :----------------------------------------------: |
-| ![Card Library](docs/screenshots/v13%20CardLibrary.png) | ![Card Inspector](docs/screenshots/v13%20CardInspector.png) |
+|                 Card Library (Card View)                  |            Card Library (Table View)             |
+| :-------------------------------------------------------: | :----------------------------------------------: |
+|   ![Card Library](docs/screenshots/CardLibrary_CardView.png)    | ![Card Library Table](docs/screenshots/CardLibrary_TableView.png) |
 
-|           Global Achievements & Trophy Case       |             Achievement Details Roster           |
-| :-----------------------------------------------: | :----------------------------------------------: |
-| ![Achievements](docs/screenshots/v13%20Achievments.png) | ![Achievement Details](docs/screenshots/v13%20AchievementsInspector.png) |
+|                  3-Panel Card Inspector                   |            Global Achievements & Trophies        |
+| :-------------------------------------------------------: | :----------------------------------------------: |
+| ![Card Inspector](docs/screenshots/CardLibrary_CardInspector.png) |     ![Achievements](docs/screenshots/Achievements.png)     |
 
-|            All-Time Leaderboards (3×3)            |             Modernized Tabbed Settings           |
-| :-----------------------------------------------: | :----------------------------------------------: |
-| ![Leaderboards](docs/screenshots/v13%20Leaderboards.png) | ![Settings](docs/screenshots/v13%20Settings.png) |
+|                 Achievement Details Roster                |            All-Time Leaderboards & Podium        |
+| :-------------------------------------------------------: | :----------------------------------------------: |
+| ![Achievement Details](docs/screenshots/Achievements_Details.png) |     ![Leaderboards](docs/screenshots/Leaderboards.png)     |
+
+|                 Leaderboard 25-Card Drilldown             |
+| :-------------------------------------------------------: |
+| ![Leaderboard Details](docs/screenshots/Leaderboards_Details.png) |
 
 ---
 
@@ -124,6 +129,11 @@ yay -S rhystic-tracker-git
   1. Download `rhystic-tracker-macos-universal.dmg` from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
   2. Open the `.dmg` and drag **Rhystic Tracker** to your **Applications** folder.
   3. *First launch Gatekeeper bypass*: Right-click (or Control-click) **Rhystic Tracker** in Applications, select **Open**, and confirm **Open**.
+
+- **Windows (`x86_64`)** — *(Community Verified / CI Built)*:
+  1. Download `rhystic-tracker-windows-setup.exe` (or `rhystic-tracker-windows-x86_64.zip`) from [GitHub Releases](https://github.com/Balthazzahr/Rhystic-Tracker/releases/latest).
+  2. Run the setup installer (or extract the `.zip` archive) and launch `rhystic-tracker.exe`.
+  > **⚠️ Windows Community Release Note**: Windows binaries are built automatically via GitHub Actions CI from our cross-platform codebase. Since primary development and testing takes place on Linux, Windows releases have not undergone direct local QA. If you discover any bugs or path issues on Windows, please report them on [GitHub Issues](https://github.com/Balthazzahr/Rhystic-Tracker/issues)!
 
 ---
 

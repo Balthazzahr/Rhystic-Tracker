@@ -97,9 +97,61 @@ jobs:
           name: macos-app
           path: dist-release/rhystic-tracker-macos-universal-app.tar.gz
 
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build Windows Bundle & Standalone Executable
+        run: |
+          npx @tauri-apps/cli build --features production-env
+
+      - name: Package Windows Artifacts
+        shell: bash
+        run: |
+          mkdir -p dist-release/scripts
+          cp src-tauri/target/release/rhystic-tracker.exe dist-release/rhystic-tracker.exe
+          cp src-tauri/scripts/extract_mtga_avatars.py dist-release/scripts/extract_mtga_avatars.py
+          cd dist-release
+          7z a ../rhystic-tracker-windows-x86_64.zip rhystic-tracker.exe scripts
+          cd ..
+          if compgen -G "src-tauri/target/release/bundle/nsis/*.exe" > /dev/null; then
+            cp src-tauri/target/release/bundle/nsis/*.exe ./rhystic-tracker-windows-setup.exe
+          fi
+          if compgen -G "src-tauri/target/release/bundle/msi/*.msi" > /dev/null; then
+            cp src-tauri/target/release/bundle/msi/*.msi ./rhystic-tracker-windows-setup.msi
+          fi
+
+      - name: Upload Windows Zip Artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: windows-zip
+          path: rhystic-tracker-windows-x86_64.zip
+
+      - name: Upload Windows Setup Artifact
+        uses: actions/upload-artifact@v5
+        if: hashFiles('rhystic-tracker-windows-setup.exe') != ''
+        with:
+          name: windows-setup
+          path: rhystic-tracker-windows-setup.exe
+
   publish-release:
     name: Publish GitHub Release
-    needs: [build-linux, build-macos]
+    needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -122,9 +174,20 @@ jobs:
         with:
           name: macos-app
 
+      - name: Download Windows Zip Artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: windows-zip
+
+      - name: Download Windows Setup Artifact
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: windows-setup
+
       - name: Generate Checksums
         run: |
-          sha256sum rhystic-tracker-linux-x86_64.tar.gz rhystic-tracker-macos-universal.dmg rhystic-tracker-macos-universal-app.tar.gz > SHA256SUMS.txt
+          sha256sum rhystic-tracker-linux-x86_64.tar.gz rhystic-tracker-macos-universal.dmg rhystic-tracker-macos-universal-app.tar.gz rhystic-tracker-windows-x86_64.zip $([ -f rhystic-tracker-windows-setup.exe ] && echo rhystic-tracker-windows-setup.exe) > SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -134,6 +197,8 @@ jobs:
             rhystic-tracker-linux-x86_64.tar.gz
             rhystic-tracker-macos-universal.dmg
             rhystic-tracker-macos-universal-app.tar.gz
+            rhystic-tracker-windows-x86_64.zip
+            rhystic-tracker-windows-setup.exe
             SHA256SUMS.txt
           generate_release_notes: true
           make_latest: "true"

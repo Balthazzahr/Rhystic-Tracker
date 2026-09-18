@@ -9,6 +9,7 @@ import {
   Home,
   Swords,
   Trash2,
+  Search,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -18,6 +19,7 @@ import { CardImage } from './CardImage';
 import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
+import { parseMtgaManaCost } from '../utils/manaUtils';
 
 // Date Formatters matching Dashboard
 const formatTimeAgo = (ts: string): string => {
@@ -145,6 +147,8 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'end_reason', label: 'End Reason', description: 'Victory/defeat condition', visible: false, width: 'flex-[1.1] min-w-[105px]', align: 'center' },
   { key: 'opp_colors', label: 'Opp Colors', description: 'Detected opponent deck colors', visible: false, width: 'flex-1 min-w-[90px]', align: 'center' },
   { key: 'commanders', label: 'Commanders', description: 'Brawl Commander portraits', visible: false, width: 'flex-[1.2] min-w-[120px]', align: 'center' },
+  { key: 'hero_commander', label: 'My Commander', description: 'Name of your commander', visible: false, width: 'flex-[1.5] min-w-[140px]', align: 'left' },
+  { key: 'opponent_commander', label: 'Opp Commander', description: "Name of opponent's commander", visible: false, width: 'flex-[1.5] min-w-[140px]', align: 'left' },
   { key: 'delete', label: 'Delete', description: 'Permanently remove match from database', visible: true, width: 'flex-[0.7] min-w-[65px]', align: 'center' },
 ];
 
@@ -182,6 +186,99 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   const [positionFilter, setPositionFilter] = useState<'ALL' | 'play' | 'draw'>('ALL');
   const [deckFilter, setDeckFilter] = useState<string>('ALL');
   const [showAdvModal, setShowAdvModal] = useState(false);
+
+  // Commander & Card in Deck Filters
+  const [commanderFilters, setCommanderFilters] = useState<string[]>([]);
+  const [cardFilters, setCardFilters] = useState<string[]>([]);
+  const [filterMode, setFilterMode] = useState<'card' | 'commander'>('card');
+  const [filterInput, setFilterInput] = useState('');
+  const [autocompleteResults, setAutocompleteResults] = useState<
+    Array<{ name: string; card_type?: string; mana_cost?: string; rarity?: number; is_commander: boolean }>
+  >([]);
+  const [autocompleteSelectedIndex, setAutocompleteSelectedIndex] = useState<number>(-1);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [matchingCardMatchIds, setMatchingCardMatchIds] = useState<Set<string> | null>(null);
+
+  // Query matching match IDs whenever cardFilters change
+  useEffect(() => {
+    if (cardFilters.length === 0) {
+      setMatchingCardMatchIds(null);
+      return;
+    }
+    let active = true;
+    invoke<string[]>('get_matches_with_cards', { cardNames: cardFilters, matchAll: true })
+      .then((ids) => {
+        if (active) {
+          setMatchingCardMatchIds(new Set(ids));
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to query matches with cards:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [cardFilters]);
+
+  // Autocomplete debounced lookup
+  useEffect(() => {
+    const query = filterInput.trim();
+    if (query.length < 2) {
+      setAutocompleteResults([]);
+      setAutocompleteSelectedIndex(-1);
+      return;
+    }
+    let active = true;
+    const timeoutId = setTimeout(() => {
+      invoke<Array<{ name: string; card_type?: string; mana_cost?: string; rarity?: number; is_commander: boolean }>>(
+        'search_card_autocomplete',
+        { query, commanderOnly: filterMode === 'commander', limit: 20 }
+      )
+        .then((results) => {
+          if (active) {
+            setAutocompleteResults(results);
+            setAutocompleteSelectedIndex(-1);
+          }
+        })
+        .catch((err) => {
+          if (active) {
+            console.error('Autocomplete error:', err);
+          }
+        });
+    }, 120);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [filterInput, filterMode]);
+
+  const handleAddFilter = (nameToAdd?: string) => {
+    const name = (nameToAdd || filterInput).trim();
+    if (!name) return;
+
+    if (filterMode === 'commander') {
+      if (!commanderFilters.includes(name)) {
+        setCommanderFilters((prev) => [...prev, name]);
+      }
+    } else {
+      if (!cardFilters.includes(name)) {
+        setCardFilters((prev) => [...prev, name]);
+      }
+    }
+    setFilterInput('');
+    setAutocompleteResults([]);
+    setIsDropdownOpen(false);
+    setAutocompleteSelectedIndex(-1);
+  };
+
+  const handleRemoveCommanderFilter = (name: string) => {
+    setCommanderFilters((prev) => prev.filter((c) => c !== name));
+  };
+
+  const handleRemoveCardFilter = (name: string) => {
+    setCardFilters((prev) => prev.filter((c) => c !== name));
+  };
 
   // Match Deletion state
   const [allowMatchDeletion, setAllowMatchDeletion] = useState(() => {
@@ -418,6 +515,24 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         }
       }
 
+      // 5.5 Commander Filter (Matches if any of the specified commanders was hero/opponent commander)
+      if (commanderFilters.length > 0) {
+        const heroComm = (m.player_commander_name || '').toLowerCase();
+        const oppComm = (m.opponent_commander_name || '').toLowerCase();
+        const matchesCommander = commanderFilters.some((comm) => {
+          const target = comm.toLowerCase();
+          return heroComm === target || oppComm === target || heroComm.includes(target) || oppComm.includes(target);
+        });
+        if (!matchesCommander) return false;
+      }
+
+      // 5.6 Card in Deck Filter (Matches if deck contained all specified cards)
+      if (cardFilters.length > 0) {
+        if (!matchingCardMatchIds || !matchingCardMatchIds.has(m.match_id)) {
+          return false;
+        }
+      }
+
       // 6. Search term (deck name, opponent name, commander)
       if (cleanSearch) {
         const dName = (m.player_deck_name || '').toLowerCase();
@@ -438,16 +553,39 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
 
       return true;
     });
-  }, [matches, searchTerm, formatFilter, timeFilter, resultFilter, positionFilter, deckFilter, colorFilter]);
+  }, [
+    matches,
+    searchTerm,
+    formatFilter,
+    timeFilter,
+    resultFilter,
+    positionFilter,
+    deckFilter,
+    colorFilter,
+    commanderFilters,
+    cardFilters,
+    matchingCardMatchIds,
+    deletedMatchIds,
+    excludeSparkyMatches,
+  ]);
 
-  const hasActiveAdvancedFilters = formatFilter !== 'ALL' || timeFilter !== 'ALL' || resultFilter !== 'ALL' || positionFilter !== 'ALL' || deckFilter !== 'ALL';
+  const hasActiveAdvancedFilters =
+    formatFilter !== 'ALL' ||
+    timeFilter !== 'ALL' ||
+    resultFilter !== 'ALL' ||
+    positionFilter !== 'ALL' ||
+    deckFilter !== 'ALL' ||
+    commanderFilters.length > 0 ||
+    cardFilters.length > 0;
 
   const activeAdvancedFilterCount =
     (formatFilter !== 'ALL' ? 1 : 0) +
     (timeFilter !== 'ALL' ? 1 : 0) +
     (resultFilter !== 'ALL' ? 1 : 0) +
     (positionFilter !== 'ALL' ? 1 : 0) +
-    (deckFilter !== 'ALL' ? 1 : 0);
+    (deckFilter !== 'ALL' ? 1 : 0) +
+    commanderFilters.length +
+    cardFilters.length;
 
   const clearAdvancedFilters = () => {
     setFormatFilter('ALL');
@@ -455,6 +593,11 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     setResultFilter('ALL');
     setPositionFilter('ALL');
     setDeckFilter('ALL');
+    setCommanderFilters([]);
+    setCardFilters([]);
+    setFilterInput('');
+    setAutocompleteResults([]);
+    setIsDropdownOpen(false);
   };
 
   const activeChips = useMemo(() => {
@@ -502,8 +645,33 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       });
     }
 
+    commanderFilters.forEach((comm) => {
+      chips.push({
+        key: `commander-${comm}`,
+        label: `Commander: ${comm}`,
+        onRemove: () => handleRemoveCommanderFilter(comm),
+      });
+    });
+
+    cardFilters.forEach((card) => {
+      chips.push({
+        key: `card-${card}`,
+        label: `Card: ${card}`,
+        onRemove: () => handleRemoveCardFilter(card),
+      });
+    });
+
     return chips;
-  }, [formatFilter, deckFilter, timeFilter, resultFilter, positionFilter, normalizedFormatOptions]);
+  }, [
+    formatFilter,
+    deckFilter,
+    timeFilter,
+    resultFilter,
+    positionFilter,
+    normalizedFormatOptions,
+    commanderFilters,
+    cardFilters,
+  ]);
 
   // --- Pagination (30 matches per page) ---
   const [page, setPage] = useState(1);
@@ -855,6 +1023,68 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         );
       }
 
+      case 'hero_commander':
+        return (
+          <div className="flex items-center gap-2 min-w-0 pr-2">
+            {m.player_commander_name ? (
+              <>
+                <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
+                  <CardImage
+                    name={m.player_commander_name}
+                    version="art_crop"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                  />
+                </div>
+                <span
+                  onClick={(e) => {
+                    if (onShowCard && m.player_commander_name) {
+                      e.stopPropagation();
+                      onShowCard({ name: m.player_commander_name }, true);
+                    }
+                  }}
+                  title="Click to inspect commander card"
+                  className="font-semibold text-neutral-100 hover:text-white truncate hover:underline cursor-pointer text-[13px]"
+                >
+                  {m.player_commander_name}
+                </span>
+              </>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
+            )}
+          </div>
+        );
+
+      case 'opponent_commander':
+        return (
+          <div className="flex items-center gap-2 min-w-0 pr-2">
+            {m.opponent_commander_name ? (
+              <>
+                <div className="w-6 h-6 shrink-0 overflow-hidden border border-white/10 shadow-sm bg-neutral-900">
+                  <CardImage
+                    name={m.opponent_commander_name}
+                    version="art_crop"
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                  />
+                </div>
+                <span
+                  onClick={(e) => {
+                    if (onShowCard && m.opponent_commander_name) {
+                      e.stopPropagation();
+                      onShowCard({ name: m.opponent_commander_name }, true);
+                    }
+                  }}
+                  title="Click to inspect commander card"
+                  className="font-semibold text-neutral-100 hover:text-white truncate hover:underline cursor-pointer text-[13px]"
+                >
+                  {m.opponent_commander_name}
+                </span>
+              </>
+            ) : (
+              <span className="opacity-30 text-xs font-mono">—</span>
+            )}
+          </div>
+        );
+
       case 'delete':
         return (
           <div className="flex items-center justify-center w-full">
@@ -1015,7 +1245,12 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                 }}
               >
                 {visibleColumns.map((col) => {
-                  const isMatchup = col.key === 'matchup' || col.key === 'deck' || col.key === 'opponent';
+                  const isMatchup =
+                    col.key === 'matchup' ||
+                    col.key === 'deck' ||
+                    col.key === 'opponent' ||
+                    col.key === 'hero_commander' ||
+                    col.key === 'opponent_commander';
                   return (
                     <div
                       key={col.key}
@@ -1159,7 +1394,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                 </div>
               </div>
 
-              {/* Right Column: Hero Deck & Result */}
+              {/* Right Column: Hero Deck, Result & Position */}
               <div className="w-1/2 shrink-0 overflow-y-auto custom-scrollbar p-6 space-y-6 bg-neutral-950/60">
                 {/* Deck Selection */}
                 <div>
@@ -1249,6 +1484,239 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Card in Deck & Commander Filter */}
+                <div className="pt-4 border-t border-white/10 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] font-sans font-semibold tracking-[0.14em] uppercase text-neutral-400 opacity-75">
+                        CARD & COMMANDER FILTER
+                      </p>
+                      {/* Segmented Mode Switch */}
+                      <div className="flex items-center border border-white/10 bg-black/40">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterMode('card');
+                            setFilterInput('');
+                            setAutocompleteResults([]);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer border-r border-white/10 ${
+                            filterMode === 'card'
+                              ? 'bg-white/10 text-white font-bold'
+                              : 'text-neutral-400 hover:text-white'
+                          }`}
+                        >
+                          Filter by Card in deck
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterMode('commander');
+                            setFilterInput('');
+                            setAutocompleteResults([]);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                            filterMode === 'commander'
+                              ? 'bg-white/10 text-white font-bold'
+                              : 'text-neutral-400 hover:text-white'
+                          }`}
+                        >
+                          Filter by Commander
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Search Input + Add Filter Button with Autocomplete */}
+                    <div className="relative">
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1 h-8 flex items-center">
+                          <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={filterInput}
+                            onChange={(e) => {
+                              setFilterInput(e.target.value);
+                              setIsDropdownOpen(true);
+                            }}
+                            onFocus={() => {
+                              if (autocompleteResults.length > 0) setIsDropdownOpen(true);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setAutocompleteSelectedIndex((prev) =>
+                                  prev < autocompleteResults.length - 1 ? prev + 1 : prev
+                                );
+                              } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setAutocompleteSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+                              } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (
+                                  autocompleteSelectedIndex >= 0 &&
+                                  autocompleteSelectedIndex < autocompleteResults.length
+                                ) {
+                                  handleAddFilter(autocompleteResults[autocompleteSelectedIndex].name);
+                                } else if (filterInput.trim()) {
+                                  handleAddFilter();
+                                }
+                              } else if (e.key === 'Escape') {
+                                setIsDropdownOpen(false);
+                              }
+                            }}
+                            placeholder={
+                              filterMode === 'commander'
+                                ? 'Type commander name to search...'
+                                : 'Type card name in deck to search...'
+                            }
+                            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-none bg-white/[0.04] hover:bg-white/[0.07] focus:bg-white/[0.09] text-white placeholder:text-neutral-500 focus:outline-none transition-colors font-sans"
+                          />
+                          {filterInput && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilterInput('');
+                                setAutocompleteResults([]);
+                                setIsDropdownOpen(false);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Add Filter Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              autocompleteSelectedIndex >= 0 &&
+                              autocompleteSelectedIndex < autocompleteResults.length
+                            ) {
+                              handleAddFilter(autocompleteResults[autocompleteSelectedIndex].name);
+                            } else {
+                              handleAddFilter();
+                            }
+                          }}
+                          disabled={!filterInput.trim() && autocompleteSelectedIndex < 0}
+                          className={`h-8 px-3 text-xs font-mono uppercase tracking-wider font-bold border transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                            filterInput.trim() || autocompleteSelectedIndex >= 0
+                              ? 'border-white/30 bg-white/10 hover:bg-white/20 text-white'
+                              : 'border-white/5 bg-white/[0.02] text-neutral-600 cursor-not-allowed'
+                          }`}
+                        >
+                          <span>+ Add Filter</span>
+                        </button>
+                      </div>
+
+                      {/* Autocomplete Dropdown */}
+                      {isDropdownOpen && autocompleteResults.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-52 overflow-y-auto custom-scrollbar bg-neutral-950 border border-white/20 shadow-2xl divide-y divide-white/5">
+                          {autocompleteResults.map((item, idx) => {
+                            const isSelected = idx === autocompleteSelectedIndex;
+                            return (
+                              <div
+                                key={item.name}
+                                onClick={() => handleAddFilter(item.name)}
+                                onMouseEnter={() => setAutocompleteSelectedIndex(idx)}
+                                className={`px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-white/10 text-white' : 'hover:bg-white/[0.06] text-neutral-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 pr-2">
+                                  <div className="w-5 h-5 shrink-0 overflow-hidden border border-white/10 bg-neutral-900">
+                                    <CardImage
+                                      name={item.name}
+                                      version="art_crop"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                  <span className="text-xs font-sans truncate font-medium">{item.name}</span>
+                                  {item.card_type && (
+                                    <span className="text-[10px] font-mono text-neutral-500 truncate hidden sm:inline">
+                                      {item.card_type}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  {item.mana_cost &&
+                                    parseMtgaManaCost(item.mana_cost)
+                                      .slice(0, 5)
+                                      .map((s, i) => (
+                                        <ManaPip key={i} symbol={s} size={13} />
+                                      ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Active Added Filter Chips below Search */}
+                    {(commanderFilters.length > 0 || cardFilters.length > 0) && (
+                      <div className="space-y-1.5 pt-2">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-neutral-500">
+                          Active Filters:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {commanderFilters.map((comm) => (
+                            <span
+                              key={`modal-comm-${comm}`}
+                              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono border bg-amber-500/10 border-amber-500/30 text-amber-200"
+                            >
+                              <div className="w-4 h-4 shrink-0 overflow-hidden border border-amber-500/40 bg-neutral-900">
+                                <CardImage
+                                  name={comm}
+                                  version="art_crop"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">Commander:</span>
+                              <span className="font-sans font-medium">{comm}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCommanderFilter(comm)}
+                                className="hover:text-white ml-0.5 cursor-pointer opacity-70 hover:opacity-100"
+                                title="Remove filter"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {cardFilters.map((card) => (
+                            <span
+                              key={`modal-card-${card}`}
+                              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono border bg-blue-500/10 border-blue-500/30 text-blue-200"
+                            >
+                              <div className="w-4 h-4 shrink-0 overflow-hidden border border-blue-500/40 bg-neutral-900">
+                                <CardImage
+                                  name={card}
+                                  version="art_crop"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <span className="text-[10px] uppercase font-bold tracking-wider text-blue-400">Card:</span>
+                              <span className="font-sans font-medium">{card}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCardFilter(card)}
+                                className="hover:text-white ml-0.5 cursor-pointer opacity-70 hover:opacity-100"
+                                title="Remove filter"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

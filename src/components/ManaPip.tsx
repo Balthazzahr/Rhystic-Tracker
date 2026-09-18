@@ -28,13 +28,13 @@ export const MANA_GRAPHIC_COLORS: Record<string, string> = {
 };
 
 export const ManaPip: React.FC<ManaPipProps> = ({ 
-  symbol, 
+  symbol = '', 
   size = 20, 
   className = '', 
   colorOverride,
   grayscale = false
 }) => {
-  const sym = symbol.replace(/[{}]/g, '').trim().toUpperCase();
+  const sym = (symbol || '').replace(/[{}]/g, '').trim().toUpperCase();
 
   const [manaPipStyle, setManaPipStyle] = useState<string>(() => {
     return localStorage.getItem('manaPipStyle') || 'graphic';

@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.5.5**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux or macOS environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
+Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.5.6**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux, macOS, or Windows environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
 
 ---
 
@@ -108,6 +108,15 @@ If you run MTGA via Steam on Linux or Steam Deck:
 If you run MTGA through standalone Wine, Lutris, or Bottles:
 - Common Lutris paths (`~/Games/mtga`, `~/Games/magic-the-gathering-arena`) and Bottles prefixes are scanned automatically.
 - The raw card database path is dynamically inferred by walking up from the discovered `Player.log` directory to locate `Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads/Raw/`.
+
+### macOS Setup & Discovery
+If you run MTGA on macOS (Epic Games Store or standalone):
+- Rhystic Tracker automatically detects `~/Library/Logs/Wizards Of The Coast/MTGA/Player.log` and the application support Raw database cache.
+
+### Windows Setup & Discovery
+If you run MTGA on Windows (Standalone, Epic Games Store, Steam):
+- Rhystic Tracker automatically detects `%USERPROFILE%\AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log` and standard installation directories (`C:\Program Files\Wizards of the Coast\MTGA\MTGA_Data\Downloads\Raw\`, Steam libraries, etc.).
+> **⚠️ Note on Windows Builds**: Windows binaries are compiled via automated GitHub Actions CI and are community-verified. If you encounter any bugs, please report them to our GitHub repository.
 
 ### Manual Path & Environment Overrides
 If your setup uses an unconventional path, you can set the `RHYSTIC_MTGA_LOG` environment variable:
@@ -230,7 +239,7 @@ To safeguard your daily match history and collection, Rhystic Tracker uses stric
 The **Achievements** view transforms your match history into an interactive trophy case, celebrating epic combat feats, lethal strikes, massive token swarms, and card draw milestones.
 
 <p align="center">
-  <img src="screenshots/v13%20Achievments.png" alt="Achievements Trophy Case" width="900" />
+  <img src="screenshots/Achievements.png" alt="Achievements Trophy Case" width="900" />
 </p>
 
 #### 21 Custom Vector Badges Across 7 Categories
@@ -251,7 +260,7 @@ Every achievement represents a distinct gameplay feat across 7 MTG disciplines:
 - **Drill-Down Inspection Modal**: Click any trophy to inspect every card that has earned it, view objective requirements, read flavor lore quotes, and click to inspect individual card stats. Press <kbd>Esc</kbd> or click the backdrop to close.
 
 <p align="center">
-  <img src="screenshots/v13%20AchievementsInspector.png" alt="Achievements Drill-Down Modal" width="900" />
+  <img src="screenshots/Achievements_Details.png" alt="Achievements Drill-Down Modal" width="900" />
 </p>
 
 ---
@@ -261,7 +270,7 @@ Every achievement represents a distinct gameplay feat across 7 MTG disciplines:
 The **Leaderboards** view showcases your MTG career's all-time greatest cards across a 3×3 matrix of Hall of Fame categories:
 
 <p align="center">
-  <img src="screenshots/v13%20Leaderboards.png" alt="All-Time Leaderboards" width="900" />
+  <img src="screenshots/Leaderboards.png" alt="All-Time Leaderboards" width="900" />
 </p>
 
 1. 🥊 **Highest Single-Hit Strike** (*Haymakers* — Most damage dealt in a single blow).
@@ -280,13 +289,17 @@ The **Leaderboards** view showcases your MTG career's all-time greatest cards ac
 - **Global Search & Diff to Podium**: Search any card in your collection (e.g. *Craterhoof Behemoth*). If ranked outside the top 3, the card is displayed below the pinned Top 3 benchmark along with its true global rank (e.g. `#75`) and a dynamic **diff pill** indicating how far off it is from the #3 podium spot (e.g. `-18 to #3`).
 - **Expanded Top 25 Dialog**: Maximize any category into a full-height pop-out showing up to 25 ranked cards with live in-category search.
 
+<p align="center">
+  <img src="screenshots/Leaderboards_Details.png" alt="Leaderboard Top 25 Category Details" width="900" />
+</p>
+
 ---
 
-### Dashboard & Time-Series Win Rate Analytics
-The **Dashboard** serves as your mission control, synthesizing daily performance, active win streaks, multi-window win rate analytics, and match history.
+### Dashboard & Bento Grid Telemetry
+The **Dashboard** serves as your mission control, synthesizing daily performance, active win streaks, multi-window win rate analytics, interactive format breakdowns, and fun gameplay facts into a customizable Bento-box grid.
 
 <p align="center">
-  <img src="screenshots/v13%20Dashboard.png" alt="Dashboard" width="900" />
+  <img src="screenshots/Dashboard.png" alt="Dashboard Bento Grid" width="900" />
 </p>
 
 #### Key Metrics & Streak Tracking
@@ -340,7 +353,7 @@ Rhystic Tracker provides native GRE parser categorization and database normaliza
 While in an active match, click **Live Match HUD** in the left navigation sidebar (the sword icon pulses bright orange when a game is live).
 
 <p align="center">
-  <img src="screenshots/live_hud.png" alt="Live Match HUD" width="900" />
+  <img src="screenshots/LiveMatchHud.png" alt="Live Match HUD" width="900" />
 </p>
 
 - **Commander & Color Identity**: Displays both players' commanders (for Brawl variants) and active color identities.
@@ -359,15 +372,20 @@ While in an active match, click **Live Match HUD** in the left navigation sideba
 Clicking any match in the Dashboard, Match History, Deck detail, or Head-to-Head modal opens the **Full Match Inspector**.
 
 <p align="center">
-  <img src="screenshots/v13%20MatchHistory.png" alt="Match History Table" width="900" />
+  <img src="screenshots/MatchHistory.png" alt="Match History Table" width="900" />
 </p>
 
-#### Inspector Ergonomics
-- **Dynamic Viewport Scaling**: Modals scale to **95% window width** ($95\text{vw}$) and **97% window height** ($97\text{vh}$) with symmetric buffers.
-- **Universal Escape Key & Backdrop Dismissal**: Press <kbd>Esc</kbd> or click the darkened backdrop to immediately dismiss any open modal.
+#### Multi-Commander & Multi-Card Advanced Filtering
+- **Mode Toggle Switch**: Switch between **Filter by Commander** (matches any selected commander with OR logic) and **Filter by Card in deck** (matches decks containing all chosen cards with AND logic).
+- **Fuzzy Autocomplete**: Debounced type-ahead search across the MTGA card database with card types, mana glyphs, and square art crops.
+- **Filter Tags**: Active search items stack into removable filter chips with square art crops.
+
+#### Dedicated Commander Columns
+- Customizable table columns for **My Commander** (`hero_commander`) and **Opp Commander** (`opponent_commander`) displaying square card art crops.
+- Clicking any commander name directly opens the 3-Panel Card Inspector.
 
 <p align="center">
-  <img src="screenshots/v13%20MatchInspector.png" alt="Full Match Inspector Workspace" width="900" />
+  <img src="screenshots/MatchHistory_Details.png" alt="Full Match Inspector Workspace" width="900" />
 </p>
 
 #### Inspector Views
@@ -377,14 +395,14 @@ Clicking any match in the Dashboard, Match History, Deck detail, or Head-to-Head
 ---
 
 ### Deck Library, 3-Column Inspector & True Decklists
-The **Deck Library** tracks performance per deck, format legitimacy, automatic and manual True Decklist management, and real-time MTGA client synchronization.
+The **Deck Library** tracks performance per deck, format legitimacy, automatic and manual True Decklist management, and real-time MTGA client synchronization in both visual Card Grid and Table views.
 
 <p align="center">
-  <img src="screenshots/v13%20DeckLibrary.png" alt="Deck Library Grid View" width="900" />
+  <img src="screenshots/DeckLibrary_CardView.png" alt="Deck Library Card View" width="900" />
 </p>
 
 <p align="center">
-  <img src="screenshots/v13%20DeckLibraryTable.png" alt="Deck Library Table View" width="900" />
+  <img src="screenshots/DeckLibrary_TableView.png" alt="Deck Library Table View" width="900" />
 </p>
 
 - **Automatic True Decklist Capture**:
@@ -403,17 +421,17 @@ The **Deck Library** tracks performance per deck, format legitimacy, automatic a
   - **Mana Value Curve Histogram**: Full-height histogram with centered translucent floating title badge (`MANA VALUE`).
   - **Card Types Breakdown Bars**: Visual proportional representation of deck makeup.
 
-<p align="center">
-  <img src="screenshots/v13%20DeckInspector.png" alt="Deck Inspector" width="900" />
-</p>
-
 ---
 
 ### Card Library, Full-Card View & Real-Time Ownership Sync
-The **Card Library** provides an interactive visual explorer paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics.
+The **Card Library** provides an interactive visual explorer available in both **Card Grid** and **Table View**, paired with a 3-panel **Card Inspector** that tracks lifetime combat statistics.
 
 <p align="center">
-  <img src="screenshots/v13%20CardLibrary.png" alt="Card Library 4x3 Grid" width="900" />
+  <img src="screenshots/CardLibrary_CardView.png" alt="Card Library Card View" width="900" />
+</p>
+
+<p align="center">
+  <img src="screenshots/CardLibrary_TableView.png" alt="Card Library Table View" width="900" />
 </p>
 
 #### How Collection Ownership Works
@@ -423,7 +441,7 @@ Because MTGA no longer dumps complete raw collections into `Player.log`, Rhystic
 3. **Interactive 4-Diamond Ownership Selector**: Adjust owned copies directly in the card detail modal with instant persistence and real-time cross-view synchronization.
 
 <p align="center">
-  <img src="screenshots/v13%20CardInspector.png" alt="3-Panel Card Inspector" width="900" />
+  <img src="screenshots/CardLibrary_CardInspector.png" alt="3-Panel Card Inspector" width="900" />
 </p>
 
 #### Full Card Frame View
@@ -436,10 +454,6 @@ When inspecting any card, selecting an alternate set printing from the **Card St
 
 ### Settings & Configuration Control Panel
 The **Settings and Configuration** view is organized into 5 dedicated categorized tabs:
-
-<p align="center">
-  <img src="screenshots/v13%20Settings.png" alt="Tabbed Settings Control Panel" width="900" />
-</p>
 
 1. **General & Behavior**:
    - *Minimize to System Tray on Close*: Keep match tailing running silently in the background.

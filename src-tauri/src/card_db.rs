@@ -109,6 +109,24 @@ pub fn find_latest_raw_card_db() -> Option<PathBuf> {
     // 4. Candidate directories scan across Steam, Lutris, Bottles, Heroic, Wine, and mounted drives
     let mut candidate_dirs = Vec::new();
     
+    #[cfg(target_os = "windows")]
+    {
+        let win_candidates = [
+            PathBuf::from(r"C:\Program Files\Wizards of the Coast\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"C:\Program Files (x86)\Wizards of the Coast\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"C:\Program Files\Steam\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"C:\Program Files (x86)\Steam\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"C:\Steam\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"D:\SteamLibrary\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"E:\SteamLibrary\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"F:\SteamLibrary\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+            PathBuf::from(r"G:\SteamLibrary\steamapps\common\MTGA\MTGA_Data\Downloads\Raw"),
+        ];
+        for c in win_candidates {
+            candidate_dirs.push(c);
+        }
+    }
+
     #[cfg(target_os = "macos")]
     if let Some(home) = dirs::home_dir() {
         candidate_dirs.push(

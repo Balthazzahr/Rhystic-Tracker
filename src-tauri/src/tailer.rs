@@ -40,10 +40,48 @@ pub fn discover_log_path() -> Option<PathBuf> {
             }
         }
     }
+
+    // Windows layout: Unity writes to AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            let p = home.join(r"AppData\LocalLow\Wizards Of The Coast\MTGA\Player.log");
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        if let Some(local_app_data) = dirs::data_local_dir() {
+            if let Some(app_data) = local_app_data.parent() {
+                let p = app_data.join(r"LocalLow\Wizards Of The Coast\MTGA\Player.log");
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+    }
     
     // Candidate Steam library roots (both native layout and mounted libraries).
     let mut candidates: Vec<PathBuf> = Vec::new();
     let mut roots: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        let win_steam_roots = [
+            PathBuf::from(r"C:\Program Files (x86)\Steam"),
+            PathBuf::from(r"C:\Program Files\Steam"),
+            PathBuf::from(r"C:\Steam"),
+            PathBuf::from(r"D:\SteamLibrary"),
+            PathBuf::from(r"E:\SteamLibrary"),
+            PathBuf::from(r"F:\SteamLibrary"),
+            PathBuf::from(r"G:\SteamLibrary"),
+        ];
+        for root in win_steam_roots {
+            let p = root.join(r"steamapps\common\MTGA\MTGA_Data\Downloads\Player.log");
+            if p.exists() {
+                candidates.push(p);
+            }
+        }
+    }
 
     if let Some(home) = dirs::home_dir() {
         // Steam standard & Flatpak
