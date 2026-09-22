@@ -2,6 +2,22 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.6.2] - 2026-09-23 — 💎 Card Ownership Consolidation, Scryfall Set Reminder & Settings UI Polish
+
+### 💎 Collection Card Ownership Integrity & UI Stability
+- **Multi-Printing Ownership Consolidation**: Updated `DatabaseManager::set_collection_card_count` to consolidate card ownership by name in `collection_cards`. Setting a card to $N$ copies ($1 \le N \le 4$) clears orphan records from other printings of the same card name and assigns $N$ to the active printing, guaranteeing that sum totals never fluctuate or exceed the chosen diamond count.
+- **Zero-Flicker Card Inspector**: Fixed the `useEffect` overlay dependency in `App.tsx` so diamond clicks update local state instantly without wiping modal stats, resetting printings, or re-requesting Scryfall flavor texts.
+- **Cross-View Live Synchronization**: Included card `name` in `rhystic-collection-updated` events to ensure representative card tiles in the Card Library update immediately in memory alongside database persistence.
+
+### 🔔 Dynamic Scryfall New Set Detection & 1-Click Sync Reminder
+- **New Set Reminder Modal**: Added `NewSetReminderModal` adhering to the standard modal frame (`bg-neutral-950 border border-white/20 shadow-2xl rounded-none`) alerting users whenever new MTG set releases are detected on Scryfall.
+- **Direct 1-Click Synchronization**: Users can update both Scryfall set metadata and the MTGA card database directly from the popup with live animated progress and confirmation feedback.
+- **Smart Acknowledgment**: Includes a "Remind Me Later" dismissal that records acknowledged set codes in local storage to prevent intrusive repeat popups.
+
+### ⚙️ Settings Storage & Database Button Consistency
+- **Standardized Action Button Styling**: Aligned the "MTGA Card Universe" and "Scryfall Set Catalog" controls in the Storage & Database tab to use full action buttons matching "Pre-download Collection Art" and "Extract Avatars from MTGA Client".
+- **Telemetry & Indexing Feedback**: Added inline status messaging displaying indexed card counts, indexing duration in milliseconds, and set update counts.
+
 ## [1.6.1] - 2026-09-18 — 🚀 Unicode Multi-Byte Redaction & High-Speed Polling Hotfix
 
 ### 🐛 Critical UTF-8 Character Boundary Crash Fix

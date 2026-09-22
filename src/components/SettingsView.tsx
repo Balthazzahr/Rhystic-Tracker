@@ -1038,9 +1038,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               onClearAvatarCache={handleClearAvatarCache}
               cardDbStatus={cardDbStatus}
               cardDbSyncing={cardDbSyncing}
+              cardDbSyncResult={cardDbSyncResult}
               onSyncCardDb={handleSyncCardDb}
               setMetaStatus={setMetaStatus}
               setMetaBusy={setMetaBusy}
+              setMetaResult={setMetaResult}
+              setMetaError={setMetaError}
               onRefreshSets={handleRefreshSets}
             />
           )}

@@ -28,6 +28,7 @@ import { CardInspectorModal } from './components/CardInspectorModal';
 import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import { AvatarOnboardingModal } from './components/AvatarOnboardingModal';
 import { WhatsNewModal } from './components/WhatsNewModal';
+import { NewSetReminderModal, DetectedSet } from './components/NewSetReminderModal';
 import { BlurredCardBackground } from './components/BlurredCardBackground';
 import { MemoryStatsPanel } from './components/MemoryStatsPanel';
 import logoImg from './assets/RhysticTrackerLogo.svg';
@@ -339,6 +340,74 @@ export default function App() {
   const [overlayFlavors, setOverlayFlavors] = useState<Record<string, string>>({});
   const [collectionRefreshTrigger, setCollectionRefreshTrigger] = useState(0);
 
+  // Dynamic Scryfall New Set Release Detection & Reminder Popup
+  const [detectedNewSets, setDetectedNewSets] = useState<DetectedSet[]>([]);
+  const [allScryfallSets, setAllScryfallSets] = useState<any[]>([]);
+  const [showNewSetReminder, setShowNewSetReminder] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkNewSets = async () => {
+      try {
+        const localMeta = await invoke<any>('get_set_metadata');
+        const localKnownCodes = new Set<string>(
+          (localMeta?.sets || []).map((s: any) => String(s.set_code || '').toUpperCase())
+        );
+
+        const resp = await fetch('https://api.scryfall.com/sets');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const rawSets = data.data || [];
+        if (cancelled) return;
+        setAllScryfallSets(rawSets);
+
+        const relevantTypes = new Set([
+          'core',
+          'expansion',
+          'masters',
+          'alchemy',
+          'commander',
+          'draft_innovation',
+          'funny',
+          'starter',
+        ]);
+
+        const dismissedCodes: string[] = JSON.parse(
+          localStorage.getItem('rhystic_dismissed_sets') || '[]'
+        );
+        const dismissedSet = new Set(dismissedCodes.map((c) => c.toUpperCase()));
+
+        const newlyDiscovered: DetectedSet[] = [];
+        for (const s of rawSets) {
+          const code = String(s.code || '').toUpperCase();
+          if (!code) continue;
+          if (relevantTypes.has(s.set_type) && !localKnownCodes.has(code) && !dismissedSet.has(code)) {
+            newlyDiscovered.push({
+              code: s.code,
+              name: s.name,
+              released_at: s.released_at || null,
+              icon_svg_uri: s.icon_svg_uri || null,
+              set_type: s.set_type,
+            });
+          }
+        }
+
+        if (newlyDiscovered.length > 0 && !cancelled) {
+          setDetectedNewSets(newlyDiscovered);
+          setShowNewSetReminder(true);
+        }
+      } catch (e) {
+        // Network or Scryfall offline, quietly ignore
+      }
+    };
+
+    const timer = setTimeout(checkNewSets, 2500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [collectionRefreshTrigger]);
+
   // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
   // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
   // local cards cache so the detail panel always has complete info.
@@ -638,7 +707,7 @@ export default function App() {
     })();
 
     return () => { cancelled = true; };
-  }, [deckCardOverlay]);
+  }, [deckCardOverlay?.card?.name, deckCardOverlay?.card?.grp_id]);
 
   const [liveMatchState, setLiveMatchState] = useState<{
     status: string;
@@ -1501,6 +1570,20 @@ export default function App() {
           isOpen={showWhatsNew}
           onClose={handleDismissWhatsNew}
           onOpenCustomize={handleOpenCustomizeFromWhatsNew}
+        />
+      )}
+
+      {/* NEW SETS DETECTED REMINDER MODAL */}
+      {showNewSetReminder && !showSplash && !showSetupWizard && (
+        <NewSetReminderModal
+          isOpen={showNewSetReminder}
+          onClose={() => setShowNewSetReminder(false)}
+          newSets={detectedNewSets}
+          allScryfallSets={allScryfallSets}
+          palette={palette}
+          onSyncComplete={() => {
+            setCollectionRefreshTrigger((prev) => prev + 1);
+          }}
         />
       )}
 

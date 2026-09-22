@@ -461,7 +461,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
                       onClick={async () => {
                         const newCount = slot === 1 && curOwned === 1 ? 0 : slot;
                         const targetGrp =
-                          deckCardOverlay.card.grp_id || overlayPrintings[0]?.grp_id;
+                          selPrinting?.grp_id || deckCardOverlay?.card?.grp_id || overlayPrintings[0]?.grp_id;
                         if (!targetGrp) return;
                         setOverlayStats((prev: any) =>
                           prev ? { ...prev, owned_count: newCount } : { owned_count: newCount }
@@ -478,7 +478,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
                           onStyleChanged?.();
                           window.dispatchEvent(
                             new CustomEvent('rhystic-collection-updated', {
-                              detail: { grpId: targetGrp, count: newCount },
+                              detail: { grpId: targetGrp, name: deckCardOverlay?.card?.name, count: newCount },
                             })
                           );
                         } catch (err) {

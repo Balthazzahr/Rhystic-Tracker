@@ -374,10 +374,10 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
   // Also listen for collection update events
   useEffect(() => {
     const handleCollectionUpdate = (e: any) => {
-      const { grpId, count } = e.detail || {};
-      if (grpId !== undefined && count !== undefined) {
+      const { grpId, name, count } = e.detail || {};
+      if (count !== undefined && (grpId !== undefined || name !== undefined)) {
         setCards((prev) =>
-          prev.map((c) => (c.grp_id === grpId ? { ...c, owned_count: count } : c))
+          prev.map((c) => (c.grp_id === grpId || (name && c.name === name) ? { ...c, owned_count: count } : c))
         );
       }
       fetchCollection();

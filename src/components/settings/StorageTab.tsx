@@ -47,11 +47,14 @@ export interface StorageTabProps {
   // Card Universe sync
   cardDbStatus: any;
   cardDbSyncing: boolean;
+  cardDbSyncResult?: { success: boolean; count: number; elapsedMs: number; error?: string } | null;
   onSyncCardDb: () => void;
 
   // Scryfall Set Catalog
   setMetaStatus: { known_count: number; last_updated: string | null } | null;
   setMetaBusy: boolean;
+  setMetaResult?: string | null;
+  setMetaError?: string | null;
   onRefreshSets: () => void;
 }
 
@@ -89,9 +92,12 @@ export const StorageTab: React.FC<StorageTabProps> = ({
   onClearAvatarCache,
   cardDbStatus,
   cardDbSyncing,
+  cardDbSyncResult,
   onSyncCardDb,
   setMetaStatus,
   setMetaBusy,
+  setMetaResult,
+  setMetaError,
   onRefreshSets,
 }) => {
   return (
@@ -307,18 +313,7 @@ export const StorageTab: React.FC<StorageTabProps> = ({
             {/* Card DB Index */}
             {(matchCardDbSync || !isSearching) && (
               <div className="border border-white/10 bg-white/[0.02] p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">MTGA Card Universe</p>
-                  <button
-                    onClick={onSyncCardDb}
-                    disabled={cardDbSyncing}
-                    style={{ color: MTG_COLORS.blue.text }}
-                    className="text-[10px] font-mono font-bold hover:underline uppercase flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${cardDbSyncing ? 'animate-spin' : ''}`} />
-                    {cardDbSyncing ? 'Syncing…' : 'Re-sync'}
-                  </button>
-                </div>
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">MTGA Card Universe</p>
                 <p className="text-base font-mono font-bold text-white tabular-nums">
                   {cardDbStatus?.card_count ? (
                     <span style={{ color: MTG_COLORS.green.text }}>{cardDbStatus.card_count.toLocaleString()} Cards</span>
@@ -335,18 +330,7 @@ export const StorageTab: React.FC<StorageTabProps> = ({
             {/* Scryfall Set Metadata */}
             {(matchSetCatalog || !isSearching) && (
               <div className="border border-white/10 bg-white/[0.02] p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Scryfall Set Catalog</p>
-                  <button
-                    onClick={onRefreshSets}
-                    disabled={setMetaBusy}
-                    style={{ color: MTG_COLORS.blue.text }}
-                    className="text-[10px] font-mono font-bold hover:underline uppercase flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${setMetaBusy ? 'animate-spin' : ''}`} />
-                    {setMetaBusy ? 'Updating…' : 'Update Sets'}
-                  </button>
-                </div>
+                <p className="text-[10px] font-mono uppercase text-neutral-400 font-bold">Scryfall Set Catalog</p>
                 <p className="text-base font-mono font-bold text-white tabular-nums">
                   {setMetaStatus?.known_count ?? 0} Sets Known
                 </p>
@@ -356,6 +340,49 @@ export const StorageTab: React.FC<StorageTabProps> = ({
               </div>
             )}
           </div>
+
+          {/* Action Buttons matching Pre-download Collection Art & Extract Avatars */}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            {(matchCardDbSync || !isSearching) && (
+              <button
+                onClick={onSyncCardDb}
+                disabled={cardDbSyncing}
+                style={{ backgroundColor: MTG_COLORS.blue.bg, borderColor: MTG_COLORS.blue.border }}
+                className="px-4 py-2 border hover:brightness-125 active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${cardDbSyncing ? 'animate-spin' : ''}`} style={{ color: MTG_COLORS.blue.text }} />
+                {cardDbSyncing ? 'Syncing Card Universe…' : 'Re-sync Card Universe'}
+              </button>
+            )}
+
+            {(matchSetCatalog || !isSearching) && (
+              <button
+                onClick={onRefreshSets}
+                disabled={setMetaBusy}
+                style={{ backgroundColor: MTG_COLORS.blue.bg, borderColor: MTG_COLORS.blue.border }}
+                className="px-4 py-2 border hover:brightness-125 active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${setMetaBusy ? 'animate-spin' : ''}`} style={{ color: MTG_COLORS.blue.text }} />
+                {setMetaBusy ? 'Updating Scryfall Sets…' : 'Update Scryfall Sets'}
+              </button>
+            )}
+          </div>
+
+          {cardDbSyncResult && (
+            <p className="text-xs font-mono" style={{ color: cardDbSyncResult.success ? MTG_COLORS.green.text : '#F87171' }}>
+              {cardDbSyncResult.success
+                ? `Card universe indexed: ${cardDbSyncResult.count.toLocaleString()} cards in ${cardDbSyncResult.elapsedMs}ms`
+                : `Card sync failed: ${cardDbSyncResult.error || 'Unknown error'}`}
+            </p>
+          )}
+
+          {setMetaResult && (
+            <p className="text-xs font-mono" style={{ color: MTG_COLORS.green.text }}>{setMetaResult}</p>
+          )}
+
+          {setMetaError && (
+            <p className="text-xs font-mono text-red-400">{setMetaError}</p>
+          )}
         </div>
       )}
     </div>

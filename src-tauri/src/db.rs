@@ -2132,6 +2132,8 @@ impl DatabaseManager {
 
     /// Manual correction: set owned_count to an explicit value clamped to [0,4].
     /// Separate from the monotonic ingest path (user-initiated only).
+    /// Consolidates copies across all printings of the same card name so the total
+    /// owned count is strictly equal to the chosen count.
     pub async fn set_collection_card_count(
         &self,
         grp_id: i64,
@@ -2139,12 +2141,49 @@ impl DatabaseManager {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let now = chrono::Utc::now().to_rfc3339();
         let clamped = count.clamp(0, 4);
+
+        // Find if this grp_id belongs to a named card in cards_cache
+        let card_name: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM cards_cache WHERE grp_id = ?"
+        )
+        .bind(grp_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
         if clamped == 0 {
-            sqlx::query("DELETE FROM collection_cards WHERE grp_id = ?")
+            if let Some(ref name) = card_name {
+                sqlx::query(
+                    r#"
+                    DELETE FROM collection_cards 
+                    WHERE grp_id = ? OR grp_id IN (SELECT grp_id FROM cards_cache WHERE name = ?)
+                    "#
+                )
                 .bind(grp_id)
+                .bind(name)
                 .execute(&self.pool)
                 .await?;
+            } else {
+                sqlx::query("DELETE FROM collection_cards WHERE grp_id = ?")
+                    .bind(grp_id)
+                    .execute(&self.pool)
+                    .await?;
+            }
         } else {
+            // If other printings exist with the same name, remove them from collection_cards
+            // so the total owned count for this card name is strictly clamped to the chosen value.
+            if let Some(ref name) = card_name {
+                sqlx::query(
+                    r#"
+                    DELETE FROM collection_cards 
+                    WHERE grp_id != ? AND grp_id IN (SELECT grp_id FROM cards_cache WHERE name = ?)
+                    "#
+                )
+                .bind(grp_id)
+                .bind(name)
+                .execute(&self.pool)
+                .await?;
+            }
+
             sqlx::query(
                 r#"
                 INSERT INTO collection_cards (grp_id, owned_count, provenance, first_seen_at, last_updated_at, draw_seen)
@@ -2540,6 +2579,35 @@ mod tests {
         db.set_collection_card_count(1006, 0).await.unwrap();
         assert_eq!(owned_count(&db, 1006).await, 0);
         assert!(!db.is_card_owned(1006).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_manual_correction_consolidates_multi_printings() {
+        let db = in_memory_db().await;
+        // Insert two printings of the same card name into cards_cache
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, set_code, rarity, last_updated) VALUES (2001, 'Counterspell', 'MH2', 3, '2026-01-01')")
+            .execute(&db.pool).await.unwrap();
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, set_code, rarity, last_updated) VALUES (2002, 'Counterspell', 'STA', 4, '2026-01-01')")
+            .execute(&db.pool).await.unwrap();
+
+        // Simulate existing ownership on printing 2002 (2 copies)
+        db.upsert_collection_from_decklist(2002, 2).await.unwrap();
+        assert_eq!(owned_count(&db, 2002).await, 2);
+
+        // Manually set 1 copy on printing 2001 -> should clear 2002 and set 2001 to 1
+        db.set_collection_card_count(2001, 1).await.unwrap();
+        assert_eq!(owned_count(&db, 2001).await, 1);
+        assert_eq!(owned_count(&db, 2002).await, 0);
+
+        // Sum across both printings must be exactly 1
+        let total_owned: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(owned_count), 0) FROM collection_cards WHERE grp_id IN (2001, 2002)")
+            .fetch_one(&db.pool).await.unwrap();
+        assert_eq!(total_owned, 1);
+
+        // Setting to 0 removes all printings
+        db.set_collection_card_count(2001, 0).await.unwrap();
+        assert_eq!(owned_count(&db, 2001).await, 0);
+        assert_eq!(owned_count(&db, 2002).await, 0);
     }
 
     #[tokio::test]
