@@ -1160,7 +1160,7 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
                               <div
                                 key={`ach-${idx}`}
                                 onClick={() => onShowCard?.({ name: card.name, grp_id: card.grp_id }, false)}
-                                className="border border-white/20 bg-black/85 flex items-center p-2 gap-2 shadow-md min-w-[190px] max-w-[260px] cursor-pointer hover:border-white/50 transition-colors group"
+                                className="border border-white/20 bg-black/85 flex items-center p-2 gap-2.5 shadow-md cursor-pointer hover:border-white/50 transition-colors group"
                                 title="Click to view card details"
                               >
                                 <div className="w-8 h-8 shrink-0 border border-white/25 overflow-hidden bg-neutral-900 shadow">
@@ -1171,20 +1171,20 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                                   />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block group-hover:text-amber-300 transition-colors">
-                                    {card.name}
-                                  </span>
-                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                    {card.titles.map((t: string, ti: number) => (
-                                      <AchievementBadge
-                                        key={ti}
-                                        title={t}
-                                        size="sm"
-                                        showTooltip={true}
-                                      />
-                                    ))}
-                                  </div>
+                                <span className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block group-hover:text-amber-300 transition-colors">
+                                  {card.name}
+                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {card.titles.map((t: string, ti: number) => (
+                                    <AchievementBadge
+                                      key={ti}
+                                      title={t}
+                                      size="lg"
+                                      showTitle={false}
+                                      showCount={false}
+                                      showTooltip={true}
+                                    />
+                                  ))}
                                 </div>
                               </div>
                             ))}

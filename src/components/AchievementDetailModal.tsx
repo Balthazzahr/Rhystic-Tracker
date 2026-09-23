@@ -9,6 +9,7 @@ export interface AchievementDetailModalProps {
   achievement: any;
   onClose: () => void;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
+  onSelectMatch?: (matchId: string) => void;
   palette?: any;
 }
 
@@ -55,6 +56,7 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
   achievement,
   onClose,
   onShowCard,
+  onSelectMatch,
   palette,
 }) => {
   useEffect(() => {
@@ -94,9 +96,9 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
       className="fixed inset-0 z-[99999] flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none overflow-y-auto custom-scrollbar animate-fade-in"
       onClick={onClose}
     >
-      <div className="flex flex-col items-center justify-center max-w-5xl w-full my-auto relative pt-12">
-        {/* Stamped Heraldic Shield Badge: Positioned far to the left, moved up by 10% */}
-        <div className="absolute -left-12 -top-8 w-[180px] h-[155px] z-30 drop-shadow-[0_16px_32px_rgba(0,0,0,0.95)] pointer-events-none">
+      <div className="flex flex-col items-center justify-center max-w-5xl w-full my-auto relative pt-24">
+        {/* Stamped Heraldic Shield Badge: Hero size with bottom tip slightly touching the modal box border */}
+        <div className="absolute -left-10 -top-20 w-[200px] h-[240px] z-30 drop-shadow-[0_16px_32px_rgba(0,0,0,0.95)] pointer-events-none flex items-center justify-center">
           <AchievementBadge
             title={achievement.achievement}
             tier={achievement.highest_tier}
@@ -104,15 +106,16 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
             size="hero"
             showTitle={false}
             showCount={false}
+            showTooltip={false}
           />
         </div>
 
-        {/* Completely Floating Header (No background frame, clear gap from badge) */}
+        {/* Completely Floating Header: Placed right beside the hero shield */}
         <div
-          className="w-full flex items-center justify-between pl-48 pr-2 pb-3.5 relative z-20"
+          className="w-full flex items-center justify-between pl-44 pr-2 pb-3.5 relative z-20"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-4 flex-wrap min-w-0">
+          <div className="flex items-center gap-3.5 flex-wrap min-w-0">
             <h2 className="text-[30px] font-display font-bold tracking-[0.14em] uppercase text-white drop-shadow-lg truncate">
               {meta?.title}
             </h2>
@@ -184,10 +187,13 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {achievement.cards.map((c: any) => {
                       const cardName = c.card_name || c.name || `Card #${c.grp_id}`;
-                      const awardCount = c.count || c.award_count || 1;
+                      const highestTier = c.highest_tier || achievement.highest_tier || 'bronze';
+                      const achievedDate = c.earned_at || c.first_earned_at;
+                      const matchId = c.match_id || c.first_match_id;
+
                       return (
                         <div
                           key={c.grp_id || cardName}
@@ -195,85 +201,64 @@ export const AchievementDetailModal: React.FC<AchievementDetailModalProps> = ({
                             onClose();
                             onShowCard?.({ name: cardName, grp_id: c.grp_id }, false);
                           }}
-                          className="p-2.5 border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] flex items-center justify-between gap-2.5 transition-colors cursor-pointer group"
+                          className="p-2.5 border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/25 flex items-center gap-2.5 transition-colors cursor-pointer group"
+                          title={`Click to view ${cardName} details`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            {/* Card Art Thumbnail */}
-                            <div className="w-11 h-11 shrink-0 border border-white/15 overflow-hidden bg-neutral-900 group-hover:border-white/50 transition-colors shadow-sm">
-                              <CardImage
-                                name={cardName}
-                                version="art_crop"
-                                alt={cardName}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                              />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <span
-                                className="text-xs font-bold font-display uppercase tracking-wide text-white truncate block text-left w-full group-hover:underline leading-snug"
-                                title={cardName}
-                              >
-                                {cardName}
-                              </span>
-                              <div className="flex items-center gap-1.5 mt-1">
-                                <span
-                                  className={`text-[9px] font-mono font-bold px-1.5 py-0.2 border uppercase ${
-                                    c.highest_tier === 'legendary'
-                                      ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/40'
-                                      : c.highest_tier === 'platinum'
-                                      ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/40'
-                                      : c.highest_tier === 'gold'
-                                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                      : c.highest_tier === 'silver'
-                                      ? 'bg-slate-400/15 text-slate-200 border-slate-400/30'
-                                      : c.highest_tier === 'iron'
-                                      ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/30'
-                                      : 'bg-amber-900/25 text-amber-200 border-amber-700/30'
-                                  }`}
-                                >
-                                  {c.highest_tier || achievement.highest_tier || 'bronze'}
-                                </span>
-                              </div>
-                            </div>
+                          {/* Card Art Thumbnail */}
+                          <div className="w-10 h-10 shrink-0 border border-white/15 overflow-hidden bg-neutral-900 group-hover:border-white/50 transition-colors shadow-sm">
+                            <CardImage
+                              name={cardName}
+                              version="art_crop"
+                              alt={cardName}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
                           </div>
 
-                          {/* Tier Breakdown Pills */}
-                          <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
-                            {c.legendary_count > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/50 uppercase shadow-sm">
-                                Legendary ×{c.legendary_count}
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className="text-xs font-sans font-bold uppercase tracking-wide text-white truncate block text-left w-full group-hover:text-amber-300 transition-colors leading-snug"
+                              title={cardName}
+                            >
+                              {cardName}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span
+                                className={`text-[9px] font-mono font-bold px-1.5 py-0.2 border uppercase ${
+                                  highestTier === 'legendary'
+                                    ? 'bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 text-rose-200 border-rose-400/40'
+                                    : highestTier === 'platinum'
+                                    ? 'bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/40'
+                                    : highestTier === 'gold'
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : highestTier === 'silver'
+                                    ? 'bg-slate-400/15 text-slate-200 border-slate-400/30'
+                                    : highestTier === 'iron'
+                                    ? 'bg-zinc-700/30 text-zinc-300 border-zinc-500/30'
+                                    : 'bg-amber-900/25 text-amber-200 border-amber-700/30'
+                                }`}
+                              >
+                                {highestTier}
                               </span>
-                            )}
-                            {c.platinum_count > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-[#4fbbb4]/20 text-[#4fbbb4] border-[#4fbbb4]/50 uppercase shadow-sm">
-                                Platinum ×{c.platinum_count}
-                              </span>
-                            )}
-                            {c.gold_count > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-amber-500/20 text-amber-300 border-amber-500/40 uppercase shadow-sm">
-                                Gold ×{c.gold_count}
-                              </span>
-                            )}
-                            {c.silver_count > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-slate-400/20 text-slate-200 border-slate-400/40 uppercase shadow-sm">
-                                Silver ×{c.silver_count}
-                              </span>
-                            )}
-                            {c.bronze_count > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-amber-900/30 text-amber-200 border-amber-700/40 uppercase shadow-sm">
-                                Bronze ×{c.bronze_count}
-                              </span>
-                            )}
-                            {c.iron_count > 0 && (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 border bg-zinc-700/30 text-zinc-300 border-zinc-500/40 uppercase shadow-sm">
-                                Iron ×{c.iron_count}
-                              </span>
-                            )}
-                            {!(c.legendary_count > 0 || c.platinum_count > 0 || c.gold_count > 0 || c.silver_count > 0 || c.bronze_count > 0 || c.iron_count > 0) && (
-                              <span className="text-xs font-mono font-bold px-2 py-0.5 border border-white/15 bg-white/[0.04] text-white">
-                                {awardCount} ×
-                              </span>
-                            )}
+                              {achievedDate && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (matchId && onSelectMatch) {
+                                      onClose();
+                                      onSelectMatch(matchId);
+                                    }
+                                  }}
+                                  className={`text-[9px] font-mono text-neutral-400 truncate flex items-center gap-0.5 ${
+                                    matchId && onSelectMatch ? 'hover:text-amber-300 hover:underline cursor-pointer' : ''
+                                  }`}
+                                  title={matchId ? 'Click to inspect match history' : undefined}
+                                >
+                                  <span>{new Date(achievedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                  {matchId && onSelectMatch && <span className="text-[8px] opacity-70">↗</span>}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

@@ -2,14 +2,15 @@ import React, { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Award } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
-import { getAchievementMeta } from '../utils/achievementBadges';
+import { getAchievementMeta, cleanAchievementTitle, extractTierFromTitle, AchievementTier } from '../utils/achievementBadges';
 
 interface CardTrophyCaseModalProps {
   isOpen: boolean;
   onClose: () => void;
   cardName: string;
-  titles: Record<string, number>;
+  titles: Record<string, any>;
   palette?: any;
+  onSelectMatch?: (matchId: string) => void;
 }
 
 export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
@@ -18,6 +19,7 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
   cardName,
   titles = {},
   palette,
+  onSelectMatch,
 }) => {
   useEffect(() => {
     if (!isOpen) return;
@@ -32,31 +34,46 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
 
   const accentColor = palette?.accent || '#EAB308';
 
-  // Group achievements by base title, selecting highest tier and summing awards
+  // Group achievements by base title, selecting highest tier, date, and matchId
   const aggregatedTrophies = useMemo(() => {
-    const map = new Map<string, { title: string; highestTier: 'gold' | 'silver' | 'bronze'; totalCount: number }>();
-    const tierRank: Record<string, number> = { gold: 3, silver: 2, bronze: 1 };
+    const map = new Map<string, { title: string; highestTier: AchievementTier; totalCount: number; achievedAt?: string; matchId?: string }>();
+    const tierRank: Record<AchievementTier, number> = {
+      legendary: 6,
+      platinum: 5,
+      gold: 4,
+      silver: 3,
+      bronze: 2,
+      iron: 1,
+    };
 
-    for (const [rawTitle, count] of Object.entries(titles || {})) {
-      const cleanTitle = rawTitle.replace(/\s*\((Gold|Silver|Bronze)\)/i, '').trim();
-      const tierMatch = rawTitle.match(/\((Gold|Silver|Bronze)\)/i);
-      const tier = (tierMatch ? tierMatch[1].toLowerCase() : 'bronze') as 'gold' | 'silver' | 'bronze';
-      const c = typeof count === 'number' ? count : 1;
+    for (const [rawTitle, val] of Object.entries(titles || {})) {
+      const cleanTitle = cleanAchievementTitle(rawTitle);
+      const explicitTier = extractTierFromTitle(rawTitle);
+      const objTier = typeof val === 'object' && val?.tier ? (val.tier.toLowerCase() as AchievementTier) : undefined;
+      const tier: AchievementTier = explicitTier || objTier || 'bronze';
+      const c = typeof val === 'number' ? val : (typeof val === 'object' && val?.count ? val.count : 1);
+      const achievedAt = typeof val === 'object' ? val?.achieved_at : undefined;
+      const matchId = typeof val === 'object' ? val?.match_id : undefined;
 
       const existing = map.get(cleanTitle);
       if (!existing) {
-        map.set(cleanTitle, { title: cleanTitle, highestTier: tier, totalCount: c });
+        map.set(cleanTitle, { title: cleanTitle, highestTier: tier, totalCount: c, achievedAt, matchId });
       } else {
         existing.totalCount += c;
         if ((tierRank[tier] || 1) > (tierRank[existing.highestTier] || 1)) {
           existing.highestTier = tier;
+          if (achievedAt) existing.achievedAt = achievedAt;
+          if (matchId) existing.matchId = matchId;
+        } else if (!existing.achievedAt && achievedAt) {
+          existing.achievedAt = achievedAt;
+          if (matchId) existing.matchId = matchId;
         }
       }
     }
     return Array.from(map.values());
   }, [titles]);
 
-  const totalHonors = Object.values(titles || {}).reduce((sum, cnt) => sum + (typeof cnt === 'number' ? cnt : 1), 0);
+  const totalHonors = aggregatedTrophies.length;
 
   if (!isOpen) return null;
 
@@ -118,7 +135,7 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
             </span>
           </div>
 
-          {/* Content Body: 75% Larger Trophies spreading out from center */}
+          {/* Content Body */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
             {aggregatedTrophies.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center space-y-2.5">
@@ -141,24 +158,24 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
                     <div
                       key={trophy.title}
                       onClick={() => handleOpenAchievement(trophy.title)}
-                      className="flex flex-col items-center justify-between p-5 border border-white/10 bg-black/40 hover:bg-white/10 hover:border-white/30 hover:scale-[1.04] transition-all text-center min-w-[230px] max-w-[260px] min-h-[260px] space-y-3 shadow-xl group cursor-pointer"
+                      className="flex flex-col items-center justify-between p-5 border border-white/10 bg-black/40 hover:bg-white/10 hover:border-white/30 hover:scale-[1.03] transition-all text-center min-w-[220px] max-w-[250px] min-h-[250px] gap-3 shadow-xl group cursor-pointer"
                       title="Click to inspect this achievement and all decorated cards in the library"
                     >
-                      {/* 75% Larger Hero Badge Emblem */}
-                      <div className="w-[170px] h-[145px] flex items-center justify-center group-hover:scale-110 transition-transform origin-center">
+                      {/* Sized Badge Emblem without text overlap */}
+                      <div className="w-[130px] h-[130px] flex items-center justify-center group-hover:scale-105 transition-transform origin-center shrink-0">
                         <AchievementBadge
                           title={trophy.title}
                           tier={trophy.highestTier}
                           count={trophy.totalCount}
-                          size="hero"
+                          size="3xl"
                           showTitle={false}
                           showCount={false}
                           showTooltip={false}
                         />
                       </div>
 
-                      <div className="space-y-0.5 min-w-0 w-full px-1">
-                        <p className="text-sm font-display font-bold uppercase truncate tracking-wide text-white group-hover:text-amber-300 group-hover:underline">
+                      <div className="space-y-1 min-w-0 w-full px-1">
+                        <p className="text-sm font-sans font-bold uppercase truncate tracking-wide text-white group-hover:text-amber-300 group-hover:underline">
                           {meta.title}
                         </p>
                         <p className="text-[10.5px] font-mono text-neutral-400 truncate uppercase">
@@ -166,9 +183,27 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
                         </p>
                       </div>
 
-                      <span className="text-[11px] font-mono font-bold px-3 py-0.5 border border-white/15 bg-neutral-900 text-neutral-200 tabular-nums">
-                        {trophy.totalCount > 1 ? `Awarded ×${trophy.totalCount}` : 'Awarded 1×'}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (trophy.matchId && onSelectMatch) {
+                            onClose();
+                            onSelectMatch(trophy.matchId);
+                          }
+                        }}
+                        className={`text-[11px] font-mono font-bold px-3 py-0.5 border border-white/15 bg-neutral-900 text-neutral-200 tabular-nums flex items-center gap-1.5 transition-colors ${
+                          trophy.matchId && onSelectMatch ? 'hover:border-amber-400/50 hover:text-amber-300 cursor-pointer' : ''
+                        }`}
+                        title={trophy.matchId ? 'Click to inspect match history' : undefined}
+                      >
+                        <span>
+                          {trophy.achievedAt
+                            ? `Achieved ${new Date(trophy.achievedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+                            : 'Achieved'}
+                        </span>
+                        {trophy.matchId && onSelectMatch && <span className="text-[10px] text-amber-400">↗</span>}
+                      </button>
                     </div>
                   );
                 })}

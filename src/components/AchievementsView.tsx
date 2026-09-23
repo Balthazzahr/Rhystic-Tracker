@@ -16,6 +16,7 @@ interface AchievementsViewProps {
   initialAchievement?: string | null;
   onClearInitialAchievement?: () => void;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander?: boolean) => void;
+  onSelectMatch?: (matchId: string) => void;
 }
 
 export interface AchievementColumnDef {
@@ -49,6 +50,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
   initialAchievement,
   onClearInitialAchievement,
   onShowCard,
+  onSelectMatch,
 }) => {
   const [activeCategory] = useState<'card'>('card');
   const [loading, setLoading] = useState(true);
@@ -766,6 +768,7 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
           achievement={selectedAchievement}
           onClose={() => setSelectedAchievement(null)}
           onShowCard={onShowCard}
+          onSelectMatch={onSelectMatch}
           palette={palette}
         />
       )}

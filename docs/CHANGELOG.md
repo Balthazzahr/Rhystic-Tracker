@@ -2,6 +2,20 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.6.3] - 2026-09-23 — 🏆 Progressive Card Achievements, Trophy Case & Live HUD Polish
+
+### 🏆 Progressive Card Achievements & De-duplication
+- **Progressive Distinction Logic**: Refactored card achievement calculations (`get_global_achievements` and `get_card_printings`) so each individual card can earn each achievement tier progressively once, eliminating redundant multi-tier duplicate awards (e.g. "Silver × 2").
+- **Match History Timelines & Direct Navigation**: Achievement awards now record the precise timestamp and `match_id` of the match in which they were earned. Clicking any achievement date or distinction in the Trophy Cabinet or Achievement Detail modal directly opens the Full Match Inspector for that match.
+
+### 🛡️ Achievement Detail & Trophy Cabinet Visual Overhaul
+- **Hero Shield Positioning**: Redesigned the `AchievementDetailModal` header geometry, scaling the emblem to `size="hero"` with adjusted top/left offsets and container padding so the shield sits cleanly adjacent to titles without overlapping decorated cards.
+- **Card Decorator Grid**: Reorganized decorated cards into a responsive 3-column grid (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`) with dedicated tier badges underneath card titles and direct match jump links.
+- **Trophy Case Layout Refinement**: Centered and scaled badge emblems to `size="3xl"` (130px container) in `CardTrophyCaseModal`, eliminating vertical clipping and overlapping text.
+
+### ⚔️ Live Match HUD Post-Match Polish
+- **Clean Inline Badges**: Redesigned the post-match earned achievements row in `LiveHUDView` to display icon-only badges (`size="lg"`) horizontally to the right of the card name, matching card preview art dimensions with full hover tooltips.
+
 ## [1.6.2] - 2026-09-23 — 💎 Card Ownership Consolidation, Scryfall Set Reminder & Settings UI Polish
 
 ### 💎 Collection Card Ownership Integrity & UI Stability

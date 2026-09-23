@@ -125,7 +125,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
 
   const aggregatedAchievements = useMemo(() => {
     if (!overlayStats?.lifetime_titles) return [];
-    const map = new Map<string, { title: string; highestTier: AchievementTier; totalCount: number }>();
+    const map = new Map<string, { title: string; highestTier: AchievementTier; totalCount: number; achievedAt?: string }>();
     const tierRank: Record<AchievementTier, number> = {
       legendary: 6,
       platinum: 5,
@@ -135,18 +135,24 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
       iron: 1,
     };
 
-    for (const [rawTitle, count] of Object.entries(overlayStats.lifetime_titles)) {
+    for (const [rawTitle, val] of Object.entries(overlayStats.lifetime_titles)) {
       const cleanTitle = cleanAchievementTitle(rawTitle);
-      const tier: AchievementTier = extractTierFromTitle(rawTitle) || 'bronze';
-      const c = typeof count === 'number' ? count : 1;
+      const explicitTier = extractTierFromTitle(rawTitle);
+      const objTier = typeof val === 'object' && (val as any)?.tier ? ((val as any).tier.toLowerCase() as AchievementTier) : undefined;
+      const tier: AchievementTier = explicitTier || objTier || 'bronze';
+      const c = typeof val === 'number' ? val : (typeof val === 'object' && (val as any)?.count ? (val as any).count : 1);
+      const achievedAt = typeof val === 'object' ? (val as any)?.achieved_at : undefined;
 
       const existing = map.get(cleanTitle);
       if (!existing) {
-        map.set(cleanTitle, { title: cleanTitle, highestTier: tier, totalCount: c });
+        map.set(cleanTitle, { title: cleanTitle, highestTier: tier, totalCount: c, achievedAt });
       } else {
         existing.totalCount += c;
         if ((tierRank[tier] || 1) > (tierRank[existing.highestTier] || 1)) {
           existing.highestTier = tier;
+          if (achievedAt) existing.achievedAt = achievedAt;
+        } else if (!existing.achievedAt && achievedAt) {
+          existing.achievedAt = achievedAt;
         }
       }
     }

@@ -18,13 +18,14 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
 
     let rows = sqlx::query(
         r#"
-        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles, m.timestamp as match_timestamp
+        SELECT i.grp_id, c.name as card_name, c.mana_cost, c.card_type, c.rarity, c.set_code, i.titles, m.timestamp as match_timestamp, m.id as match_id
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.seat_id = m.hero_seat_id
           AND m.timestamp >= '2026-08-23T06:30:00'
           AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        ORDER BY m.timestamp ASC
         "#
     )
     .fetch_all(pool)
@@ -87,6 +88,9 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
         highest_tier: String,
         first_earned_at: Option<String>,
         last_earned_at: Option<String>,
+        match_id: Option<String>,
+        first_match_id: Option<String>,
+        earned_tiers: std::collections::HashSet<String>,
     }
 
     // HashMap: achievement_title -> (total, highest, first_earned, legendary, platinum, gold, silver, bronze, iron, cards_map)
@@ -109,42 +113,14 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
         let set_code: Option<String> = row.try_get("set_code").ok();
         let titles_json: String = row.try_get("titles").unwrap_or_default();
         let match_timestamp: Option<String> = row.try_get("match_timestamp").ok();
+        let match_id: Option<String> = row.try_get("match_id").ok();
 
         if let Ok(titles) = serde_json::from_str::<Vec<String>>(&titles_json) {
             for raw in titles {
                 if raw.is_empty() { continue; }
                 let (clean_title, tier) = parse_title_and_tier(&raw);
-                total_honors_count += 1;
-                match tier.as_str() {
-                    "legendary" => legendary_count += 1,
-                    "platinum" => platinum_count += 1,
-                    "gold" => gold_count += 1,
-                    "silver" => silver_count += 1,
-                    "iron" => iron_count += 1,
-                    _ => bronze_count += 1,
-                }
 
                 let entry = ach_map.entry(clean_title.clone()).or_insert_with(|| (0, tier.clone(), match_timestamp.clone(), 0, 0, 0, 0, 0, 0, std::collections::HashMap::new()));
-                entry.0 += 1;
-                if tier_rank(&tier) > tier_rank(&entry.1) {
-                    entry.1 = tier.clone();
-                }
-                match tier.as_str() {
-                    "legendary" => entry.3 += 1,
-                    "platinum" => entry.4 += 1,
-                    "gold" => entry.5 += 1,
-                    "silver" => entry.6 += 1,
-                    "bronze" => entry.7 += 1,
-                    "iron" => entry.8 += 1,
-                    _ => entry.7 += 1,
-                }
-                if let Some(ref ts) = match_timestamp {
-                    match &entry.2 {
-                        None => entry.2 = Some(ts.clone()),
-                        Some(prev) if prev > ts => entry.2 = Some(ts.clone()),
-                        _ => {}
-                    }
-                }
 
                 let card_entry = entry.9.entry(grp_id).or_insert_with(|| CardStats {
                     grp_id,
@@ -163,25 +139,74 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
                     highest_tier: tier.clone(),
                     first_earned_at: match_timestamp.clone(),
                     last_earned_at: match_timestamp.clone(),
+                    match_id: match_id.clone(),
+                    first_match_id: match_id.clone(),
+                    earned_tiers: std::collections::HashSet::new(),
                 });
-                card_entry.count += 1;
-                match tier.as_str() {
-                    "legendary" => card_entry.legendary_count += 1,
-                    "platinum" => card_entry.platinum_count += 1,
-                    "gold" => card_entry.gold_count += 1,
-                    "silver" => card_entry.silver_count += 1,
-                    "bronze" => card_entry.bronze_count += 1,
-                    "iron" => card_entry.iron_count += 1,
-                    _ => card_entry.bronze_count += 1,
+
+                // Progressive Achievement Rule: Each card can only earn each tier once.
+                if card_entry.earned_tiers.insert(tier.clone()) {
+                    total_honors_count += 1;
+                    card_entry.count += 1;
+                    entry.0 += 1;
+
+                    match tier.as_str() {
+                        "legendary" => {
+                            legendary_count += 1;
+                            entry.3 += 1;
+                            card_entry.legendary_count += 1;
+                        }
+                        "platinum" => {
+                            platinum_count += 1;
+                            entry.4 += 1;
+                            card_entry.platinum_count += 1;
+                        }
+                        "gold" => {
+                            gold_count += 1;
+                            entry.5 += 1;
+                            card_entry.gold_count += 1;
+                        }
+                        "silver" => {
+                            silver_count += 1;
+                            entry.6 += 1;
+                            card_entry.silver_count += 1;
+                        }
+                        "iron" => {
+                            iron_count += 1;
+                            entry.8 += 1;
+                            card_entry.iron_count += 1;
+                        }
+                        _ => {
+                            bronze_count += 1;
+                            entry.7 += 1;
+                            card_entry.bronze_count += 1;
+                        }
+                    }
                 }
-                if let Some(ts) = &match_timestamp {
+
+                if tier_rank(&tier) >= tier_rank(&card_entry.highest_tier) {
+                    card_entry.match_id = match_id.clone();
+                }
+
+                if tier_rank(&tier) > tier_rank(&entry.1) {
+                    entry.1 = tier.clone();
+                }
+
+                if let Some(ref ts) = match_timestamp {
+                    match &entry.2 {
+                        None => entry.2 = Some(ts.clone()),
+                        Some(prev) if prev > ts => entry.2 = Some(ts.clone()),
+                        _ => {}
+                    }
                     if card_entry.last_earned_at.as_ref().map_or(true, |prev| ts > prev) {
                         card_entry.last_earned_at = Some(ts.clone());
                     }
                     if card_entry.first_earned_at.as_ref().map_or(true, |prev| ts < prev) {
                         card_entry.first_earned_at = Some(ts.clone());
+                        card_entry.first_match_id = match_id.clone();
                     }
                 }
+
                 if tier_rank(&tier) > tier_rank(&card_entry.highest_tier) {
                     card_entry.highest_tier = tier.clone();
                 }
@@ -207,7 +232,9 @@ pub async fn get_global_achievements() -> Result<serde_json::Value, String> {
                 "iron_count": c.iron_count,
                 "highest_tier": c.highest_tier,
                 "first_earned_at": c.first_earned_at,
-                "earned_at": c.last_earned_at
+                "earned_at": c.last_earned_at,
+                "match_id": c.match_id,
+                "first_match_id": c.first_match_id
             })
         }).collect();
 

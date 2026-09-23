@@ -267,23 +267,66 @@ pub async fn get_card_printings(name: String) -> Result<serde_json::Value, Strin
     // Lifetime achievement titles from match_impactful_cards
     let titles_sql = format!(
         r#"
-        SELECT i.titles
+        SELECT i.titles, m.timestamp as match_timestamp, m.id as match_id
         FROM match_impactful_cards i
         JOIN matches m ON i.match_id = m.id
         WHERE i.grp_id IN ({}) AND i.seat_id = m.hero_seat_id AND m.timestamp >= '2026-08-23T06:30:00' AND i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'
+        ORDER BY m.timestamp ASC
         "#,
         placeholders
     );
-    let mut titles_q = sqlx::query_as::<_, (String,)>(&titles_sql);
+    let mut titles_q = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(&titles_sql);
     for id in &grp_ids {
         titles_q = titles_q.bind(*id);
     }
     let title_rows = titles_q.fetch_all(pool).await.unwrap_or_default();
-    let mut lifetime_titles: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
-    for (t_json,) in title_rows {
+
+    fn parse_title_and_tier(raw: &str) -> (String, String) {
+        let trimmed = raw.trim();
+        let lower = trimmed.to_lowercase();
+        if lower.contains("(legendary)") {
+            (trimmed.replace("(Legendary)", "").replace("(legendary)", "").trim().to_string(), "legendary".to_string())
+        } else if lower.contains("(platinum)") || lower.contains("(titanium)") {
+            (trimmed.replace("(Platinum)", "").replace("(platinum)", "").replace("(Titanium)", "").replace("(titanium)", "").trim().to_string(), "platinum".to_string())
+        } else if lower.contains("(gold)") {
+            (trimmed.replace("(Gold)", "").replace("(gold)", "").trim().to_string(), "gold".to_string())
+        } else if lower.contains("(silver)") {
+            (trimmed.replace("(Silver)", "").replace("(silver)", "").trim().to_string(), "silver".to_string())
+        } else if lower.contains("(bronze)") {
+            (trimmed.replace("(Bronze)", "").replace("(bronze)", "").trim().to_string(), "bronze".to_string())
+        } else if lower.contains("(iron)") {
+            (trimmed.replace("(Iron)", "").replace("(iron)", "").trim().to_string(), "iron".to_string())
+        } else {
+            (trimmed.to_string(), "bronze".to_string())
+        }
+    }
+
+    let mut lifetime_titles: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+    for (t_json, match_timestamp, match_id) in title_rows {
         if let Ok(parsed) = serde_json::from_str::<Vec<String>>(&t_json) {
-            for title in parsed {
-                *lifetime_titles.entry(title).or_insert(0) += 1;
+            for raw in parsed {
+                if raw.is_empty() { continue; }
+                let (clean_title, tier) = parse_title_and_tier(&raw);
+                let key = if raw.contains('(') {
+                    raw.clone()
+                } else {
+                    let mut chars = tier.chars();
+                    let tier_cap = match chars.next() {
+                        None => String::new(),
+                        Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+                    };
+                    format!("{} ({})", clean_title, tier_cap)
+                };
+
+                if !lifetime_titles.contains_key(&key) && !lifetime_titles.contains_key(&raw) {
+                    lifetime_titles.insert(key, serde_json::json!({
+                        "count": 1,
+                        "title": clean_title,
+                        "tier": tier,
+                        "achieved_at": match_timestamp,
+                        "match_id": match_id
+                    }));
+                }
             }
         }
     }

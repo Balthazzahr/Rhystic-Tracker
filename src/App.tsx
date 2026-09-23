@@ -1391,6 +1391,10 @@ export default function App() {
             initialAchievement={initialAchievementName}
             onClearInitialAchievement={() => setInitialAchievementName(null)}
             onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            onSelectMatch={(matchId) => {
+              setSelectedMatchId(matchId);
+              setIsFullInfoOpen(true);
+            }}
           />
         )}
 
@@ -1497,6 +1501,12 @@ export default function App() {
         cardName={deckCardOverlay?.card?.name || 'Card'}
         titles={overlayStats?.lifetime_titles || {}}
         palette={palette}
+        onSelectMatch={(matchId) => {
+          setCardTrophyModalOpen(false);
+          setDeckCardOverlay(null);
+          setSelectedMatchId(matchId);
+          setIsFullInfoOpen(true);
+        }}
       />
 
       {/* Delete-deck confirmation modal */}
