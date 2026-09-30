@@ -122,6 +122,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("[LIVE TEST RUNNER] Upserted match record into rhystic_dev.db!");
                     }
                 }
+                ParsedEvent::InventoryUpdate(record) => {
+                    println!("[LIVE TEST RUNNER] Inventory Update: Gold={}, Gems={}, Vault={:.1}%", record.gold, record.gems, (record.vault_progress_tenths as f64) / 10.0);
+                }
+                ParsedEvent::BoosterOpened(booster) => {
+                    println!("[LIVE TEST RUNNER] Booster Opened: pack={:?}, cards={:?}, wildcards={:?}", booster.pack_id, booster.cards_added, booster.wildcards);
+                }
+                ParsedEvent::QuestUpdate { quests, can_swap } => {
+                    println!("[LIVE TEST RUNNER] Quests Update: {} quests, can_swap={}", quests.len(), can_swap);
+                }
+                ParsedEvent::PeriodicRewardsUpdate { daily_reset_timestamp, weekly_reset_timestamp, daily_wins, weekly_wins } => {
+                    println!("[LIVE TEST RUNNER] Periodic Rewards: daily={} (wins: {:?}), weekly={} (wins: {:?})", daily_reset_timestamp, daily_wins, weekly_reset_timestamp, weekly_wins);
+                }
+                ParsedEvent::Compound(events) => {
+                    println!("[LIVE TEST RUNNER] Compound event with {} sub-events", events.len());
+                }
+                ParsedEvent::RankUpdate(rank) => {
+                    println!("[LIVE TEST RUNNER] Rank Update: Season={}, Constructed={} Tier {}, Limited={} Tier {}", rank.season_ordinal, rank.constructed_tier, rank.constructed_level, rank.limited_tier, rank.limited_level);
+                }
+                ParsedEvent::SeasonUpdate(season) => {
+                    println!("[LIVE TEST RUNNER] Season Update: Season={}, End={:?}", season.season_ordinal, season.season_end_time);
+                }
                 ParsedEvent::Unknown => {}
             }
         }

@@ -19,6 +19,14 @@ import { LuckyCursedCardsWidget } from "./widgets/LuckyCursedCardsWidget";
 import { GuildMasteryWidget } from "./widgets/GuildMasteryWidget";
 import { MulliganMeterWidget } from "./widgets/MulliganMeterWidget";
 import { ArchetypeClashWidget } from "./widgets/ArchetypeClashWidget";
+import { CurrenciesVaultWidget } from "./widgets/CurrenciesVaultWidget";
+import { WildcardsGoldenPackWidget } from "./widgets/WildcardsGoldenPackWidget";
+import { EconomyOverviewWidget } from "./widgets/EconomyOverviewWidget";
+import { EconomyTrendsWidget } from "./widgets/EconomyTrendsWidget";
+import { ActiveQuestsWidget } from "./widgets/ActiveQuestsWidget";
+import { RewardTracksWidget } from "./widgets/RewardTracksWidget";
+import { QuestsRewardsOverviewWidget } from "./widgets/QuestsRewardsOverviewWidget";
+import { RankedLadderWidget } from "./widgets/RankedLadderWidget";
 import {
   Trophy,
   Calendar,
@@ -39,6 +47,9 @@ import {
   PieChart,
   Gauge,
   Target,
+  Coins,
+  Gem,
+  Package,
 } from "lucide-react";
 
 export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
@@ -241,6 +252,86 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
     defaultHeight: 3,
     defaultSettings: {},
     component: ArchetypeClashWidget,
+  },
+  currencies_vault: {
+    kind: "currencies_vault",
+    title: "Currencies & Vault",
+    subtitle: "Gold, Gems, Tokens & Vault",
+    icon: <Coins className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: CurrenciesVaultWidget,
+  },
+  wildcards_golden_pack: {
+    kind: "wildcards_golden_pack",
+    title: "Wildcards & Golden Pack",
+    subtitle: "Crafting resources & pack progress",
+    icon: <Layers className="w-3.5 h-3.5 text-sky-400" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: WildcardsGoldenPackWidget,
+  },
+  economy_overview: {
+    kind: "economy_overview",
+    title: "Economy Overview",
+    subtitle: "Complete player treasury",
+    icon: <Coins className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 12,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: EconomyOverviewWidget,
+  },
+  economy_trends: {
+    kind: "economy_trends",
+    title: "Economy Trends",
+    subtitle: "Currency & resource history",
+    icon: <TrendingUp className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 12,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: EconomyTrendsWidget,
+  },
+  active_quests: {
+    kind: "active_quests",
+    title: "Active Quests",
+    subtitle: "Daily objectives & rewards",
+    icon: <Target className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: ActiveQuestsWidget,
+  },
+  reward_tracks: {
+    kind: "reward_tracks",
+    title: "Win Reward Tracks",
+    subtitle: "Daily & weekly win progress",
+    icon: <Trophy className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: RewardTracksWidget,
+  },
+  quests_rewards_overview: {
+    kind: "quests_rewards_overview",
+    title: "Quests & Win Tracks",
+    subtitle: "Daily objectives, resets & win tracks",
+    icon: <Award className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 12,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: QuestsRewardsOverviewWidget,
+  },
+  ranked_ladder: {
+    kind: "ranked_ladder",
+    title: "Ranked Ladder",
+    subtitle: "Constructed & Limited rank progression",
+    icon: <Trophy className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 6,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: RankedLadderWidget,
   },
 };
 

@@ -9,6 +9,7 @@ mod settings;
 mod deck_legitimacy;
 mod dashboard;
 mod client_loc;
+mod quest_catalog;
 
 use tokio::sync::mpsc;
 use std::path::PathBuf;
@@ -408,9 +409,128 @@ async fn dispatch_parsed_event(
                 );
                 let _ = db_manager.upsert_match(&record, &card_records, &turn_events, &validated_impactful).await;
                 record_match_deck_audit(db_manager, assembler, &record.match_id, Some(&record.player_deck_name)).await;
+                let _ = db_manager.increment_active_quests_match_count().await;
                 // Deck achievements are shelved for a future release milestone.
                 // let min_life = record.min_player_life.unwrap_or(assembler.min_player_life);
                 // evaluate_deck_achievements(db_manager, &record, min_life).await;
+            }
+        }
+        ParsedEvent::InventoryUpdate(record) => {
+            match db_manager.record_economy_snapshot(&record).await {
+                Ok(inserted) => {
+                    if inserted {
+                        println!(
+                            "[EVENT: INVENTORY_UPDATE] Snapshot recorded: Gold={}, Gems={}, Vault={:.1}%, WCs(C:{}, U:{}, R:{}, M:{}), Tokens(Draft:{}, JumpIn:{}), GoldenPack={}/10",
+                            record.gold,
+                            record.gems,
+                            (record.vault_progress_tenths as f64) / 10.0,
+                            record.wc_common,
+                            record.wc_uncommon,
+                            record.wc_rare,
+                            record.wc_mythic,
+                            record.draft_tokens,
+                            record.jump_in_tokens,
+                            record.golden_pack_progress
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: INVENTORY_UPDATE] Failed to record snapshot: {}", e);
+                }
+            }
+        }
+        ParsedEvent::BoosterOpened(booster) => {
+            match db_manager.record_booster_opening(&booster).await {
+                Ok(id) => {
+                    println!(
+                        "[EVENT: BOOSTER_OPENED] Recorded booster opening #{} for pack {:?}: {} cards, {} wildcards, vault_delta: {:?}",
+                        id,
+                        booster.pack_id,
+                        booster.cards_added.len(),
+                        booster.wildcards.len(),
+                        booster.vault_progress_delta
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: BOOSTER_OPENED] Failed to record booster opening: {}", e);
+                }
+            }
+        }
+        ParsedEvent::QuestUpdate { quests, can_swap } => {
+            let count = quests.len();
+            match db_manager.record_quests_update(&quests, can_swap).await {
+                Ok(()) => {
+                    println!(
+                        "[EVENT: QUESTS_UPDATE] Recorded {} active quests (can_swap={})",
+                        count, can_swap
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: QUESTS_UPDATE] Failed to update quests: {}", e);
+                }
+            }
+        }
+        ParsedEvent::PeriodicRewardsUpdate {
+            daily_reset_timestamp,
+            weekly_reset_timestamp,
+            daily_wins,
+            weekly_wins,
+        } => {
+            match db_manager
+                .record_reward_tracks_update(
+                    &daily_reset_timestamp,
+                    &weekly_reset_timestamp,
+                    daily_wins,
+                    weekly_wins,
+                )
+                .await
+            {
+                Ok(()) => {
+                    println!(
+                        "[EVENT: REWARDS_UPDATE] Daily reset: {} (wins: {:?}), Weekly reset: {} (wins: {:?})",
+                        daily_reset_timestamp, daily_wins, weekly_reset_timestamp, weekly_wins
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: REWARDS_UPDATE] Failed to update reward tracks: {}", e);
+                }
+            }
+        }
+        ParsedEvent::RankUpdate(rank) => {
+            match db_manager.record_rank_update(&rank).await {
+                Ok(()) => {
+                    println!(
+                        "[EVENT: RANK_UPDATE] Season {}: Constructed {} Tier {} (step {}), Limited {} Tier {} (step {})",
+                        rank.season_ordinal,
+                        rank.constructed_tier,
+                        rank.constructed_level,
+                        rank.constructed_step,
+                        rank.limited_tier,
+                        rank.limited_level,
+                        rank.limited_step
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: RANK_UPDATE] Failed to record rank: {}", e);
+                }
+            }
+        }
+        ParsedEvent::SeasonUpdate(season) => {
+            match db_manager.record_season_update(&season).await {
+                Ok(()) => {
+                    println!(
+                        "[EVENT: SEASON_UPDATE] Season {}: Start: {:?}, End: {:?}",
+                        season.season_ordinal, season.season_start_time, season.season_end_time
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: SEASON_UPDATE] Failed to record season: {}", e);
+                }
+            }
+        }
+        ParsedEvent::Compound(events) => {
+            for ev in events {
+                Box::pin(dispatch_parsed_event(ev, assembler, db_manager)).await;
             }
         }
         ParsedEvent::Unknown => {}
@@ -746,7 +866,15 @@ fn main() {
             save_custom_background,
             get_preferred_prints,
             set_preferred_print,
-            clear_preferred_print
+            clear_preferred_print,
+            get_player_economy,
+            get_economy_history,
+            get_recent_booster_openings,
+            get_active_quests,
+            get_quest_statistics,
+            get_reward_tracks_status,
+            get_player_rank_status,
+            get_player_rank_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

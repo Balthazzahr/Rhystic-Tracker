@@ -26,6 +26,14 @@ pub const VALID_WIDGET_KINDS: &[&str] = &[
     "radial_format_dial",
     "mulligan_meter",
     "archetype_clash",
+    "currencies_vault",
+    "wildcards_golden_pack",
+    "economy_overview",
+    "economy_trends",
+    "active_quests",
+    "reward_tracks",
+    "quests_rewards_overview",
+    "ranked_ladder",
 ];
 
 fn default_widget_width() -> u32 {
@@ -36,10 +44,16 @@ fn default_widget_height() -> u32 {
     3
 }
 
+fn default_widget_page() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WidgetInstance {
     pub id: String,
     pub kind: String,
+    #[serde(default = "default_widget_page")]
+    pub page: u32,
     #[serde(default)]
     pub x: u32,
     #[serde(default)]
@@ -69,6 +83,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-win-rate-summary".to_string(),
                 kind: "win_rate_summary".to_string(),
+                page: 1,
                 x: 0,
                 y: 0,
                 width: 4,
@@ -78,6 +93,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-today".to_string(),
                 kind: "today".to_string(),
+                page: 1,
                 x: 4,
                 y: 0,
                 width: 4,
@@ -87,6 +103,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-current-streak".to_string(),
                 kind: "current_streak".to_string(),
+                page: 1,
                 x: 8,
                 y: 0,
                 width: 4,
@@ -96,6 +113,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-win-rate-trend".to_string(),
                 kind: "win_rate_trend".to_string(),
+                page: 1,
                 x: 0,
                 y: 1,
                 width: 7,
@@ -108,6 +126,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-deck-spotlight".to_string(),
                 kind: "deck_spotlight".to_string(),
+                page: 1,
                 x: 7,
                 y: 1,
                 width: 5,
@@ -117,6 +136,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-recent-matches".to_string(),
                 kind: "recent_matches".to_string(),
+                page: 1,
                 x: 0,
                 y: 4,
                 width: 5,
@@ -128,6 +148,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-format-distribution".to_string(),
                 kind: "format_distribution".to_string(),
+                page: 1,
                 x: 5,
                 y: 4,
                 width: 4,
@@ -137,6 +158,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-fun-facts".to_string(),
                 kind: "fun_facts".to_string(),
+                page: 1,
                 x: 8,
                 y: 4,
                 width: 4,
@@ -146,6 +168,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-recent-achievements".to_string(),
                 kind: "recent_achievements".to_string(),
+                page: 1,
                 x: 0,
                 y: 7,
                 width: 6,
@@ -155,6 +178,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-featured-leaderboard".to_string(),
                 kind: "featured_leaderboard".to_string(),
+                page: 1,
                 x: 6,
                 y: 7,
                 width: 6,
@@ -164,6 +188,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-frequent-opponents".to_string(),
                 kind: "frequent_opponents".to_string(),
+                page: 1,
                 x: 0,
                 y: 10,
                 width: 6,
@@ -175,6 +200,7 @@ pub fn default_dashboard_layout() -> DashboardLayoutPayload {
             WidgetInstance {
                 id: "widget-play-vs-draw".to_string(),
                 kind: "play_vs_draw".to_string(),
+                page: 1,
                 x: 6,
                 y: 10,
                 width: 6,
@@ -210,6 +236,9 @@ pub fn validate_layout(layout: &DashboardLayoutPayload) -> Result<(), String> {
         }
         if w.x >= 12 {
             return Err(format!("Widget x coordinate must be between 0 and 11, got {}", w.x));
+        }
+        if w.page == 0 || w.page > 50 {
+            return Err(format!("Widget page must be between 1 and 50, got {}", w.page));
         }
     }
     Ok(())
@@ -270,6 +299,16 @@ mod tests {
             schema_version: 1,
             widgets: vec![],
         };
+        assert!(validate_layout(&layout).is_err());
+    }
+
+    #[test]
+    fn test_validate_layout_invalid_page() {
+        let mut layout = default_dashboard_layout();
+        layout.widgets[0].page = 0;
+        assert!(validate_layout(&layout).is_err());
+
+        layout.widgets[0].page = 51;
         assert!(validate_layout(&layout).is_err());
     }
 }

@@ -3,6 +3,7 @@ import React from "react";
 export interface WidgetInstance {
   id: string;
   kind: string;
+  page?: number;
   x: number;
   y: number;
   width: number;

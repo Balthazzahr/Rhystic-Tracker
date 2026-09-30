@@ -11,6 +11,8 @@ import {
   Sparkles,
   ArrowLeftRight,
   Palette,
+  LayoutGrid,
+  Trash2,
 } from "lucide-react";
 import {
   MatchRecord,
@@ -62,11 +64,18 @@ const reflowRowOnRemoval = (
   widgets: WidgetInstance[],
   targetId: string,
 ): WidgetInstance[] => {
+  const targetWidget = widgets.find((w) => w.id === targetId);
+  if (!targetWidget) return widgets;
+
+  const targetPage = targetWidget.page || 1;
+  const pageWidgets = widgets.filter((w) => (w.page || 1) === targetPage);
+  const otherWidgets = widgets.filter((w) => (w.page || 1) !== targetPage);
+
   const rows: WidgetInstance[][] = [];
   let currentRow: WidgetInstance[] = [];
   let currentWidth = 0;
 
-  for (const w of widgets) {
+  for (const w of pageWidgets) {
     const wWidth = w.width || 4;
     if (currentWidth + wWidth > 12 && currentRow.length > 0) {
       rows.push(currentRow);
@@ -97,7 +106,7 @@ const reflowRowOnRemoval = (
     });
   });
 
-  return nextRows.flat();
+  return [...otherWidgets, ...nextRows.flat()];
 };
 
 interface DashboardWidgetContainerProps {
@@ -300,12 +309,30 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
     };
   }, []);
 
+  const [activePage, setActivePage] = useState<number>(1);
+
+  const totalPages = useMemo(() => {
+    let max = 1;
+    for (const w of layout.widgets) {
+      if ((w.page || 1) > max) max = w.page || 1;
+    }
+    return max;
+  }, [layout.widgets]);
+
+  // If current active page is beyond totalPages, adjust to totalPages
+  useEffect(() => {
+    if (activePage > totalPages) {
+      setActivePage(totalPages);
+    }
+  }, [activePage, totalPages]);
+
   const persistLayout = useCallback(async (newLayout: DashboardLayout) => {
     const sanitized: DashboardLayout = {
       schema_version: 1,
       widgets: newLayout.widgets.map((w, idx) => ({
         id: w.id || `widget-${w.kind}-${idx}`,
         kind: w.kind,
+        page: Math.max(1, Math.min(50, Math.round(w.page || 1))),
         x: Math.max(0, Math.round(w.x || 0)),
         y: Math.max(0, Math.round(w.y || 0)),
         width: Math.max(1, Math.min(12, Math.round(w.width || 4))),
@@ -352,16 +379,29 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
     });
   };
 
+  const handleMoveWidgetPage = (widgetId: string, targetPage: number) => {
+    setLayout((prev) => {
+      const nextWidgets = prev.widgets.map((w) =>
+        w.id === widgetId ? { ...w, page: targetPage } : w,
+      );
+      const nextLayout = { ...prev, widgets: nextWidgets };
+      persistLayout(nextLayout);
+      return nextLayout;
+    });
+  };
+
   const handleAddWidget = (kind: string) => {
     const def = WIDGET_REGISTRY[kind];
     if (!def) return;
     setLayout((prev) => {
       const newId = `widget-${kind}-${Date.now()}`;
+      const pageWidgets = prev.widgets.filter((w) => (w.page || 1) === activePage);
       const newWidget: WidgetInstance = {
         id: newId,
         kind,
+        page: activePage,
         x: 0,
-        y: prev.widgets.length,
+        y: pageWidgets.length,
         width: def.defaultWidth,
         height: def.defaultHeight,
         settings: { ...def.defaultSettings },
@@ -564,22 +604,62 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-y-auto custom-scrollbar overflow-x-hidden w-full px-8 py-4 select-none">
-      {/* Top Header & Mode Switcher */}
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden w-full px-8 pt-4 pb-0 select-none">
+      {/* Top Header & Sticky Toolbar (Never scrolls) */}
       <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0 gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <span
-            className="ms ms-ability-party text-2xl leading-none"
-            style={{ color: accentColor }}
-          />
-          <h1 className="text-[26px] font-display font-bold tracking-[0.12em] uppercase text-white leading-none">
-            DASHBOARD
-          </h1>
-          {isTestEnv && (
-            <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider rounded bg-purple-950/70 border border-purple-500/50 text-purple-300">
-              TEST ENV
-            </span>
-          )}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span
+              className="ms ms-ability-party text-2xl leading-none"
+              style={{ color: accentColor }}
+            />
+            <h1 className="text-[26px] font-display font-bold tracking-[0.12em] uppercase text-white leading-none">
+              DASHBOARD
+            </h1>
+            {isTestEnv && (
+              <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider rounded bg-purple-950/70 border border-purple-500/50 text-purple-300">
+                TEST ENV
+              </span>
+            )}
+
+            {/* Compact Squared Circle Page Selectors directly after DASHBOARD */}
+            <div className="flex items-center gap-1.5 ml-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                const isActive = activePage === pageNum;
+                const widgetCount = layout.widgets.filter((w) => (w.page || 1) === pageNum).length;
+
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setActivePage(pageNum)}
+                    className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-mono font-bold transition-all cursor-pointer select-none ${
+                      isActive
+                        ? "bg-sky-500/25 text-sky-200 border border-sky-400/60 shadow-[0_0_8px_rgba(56,189,248,0.2)]"
+                        : "bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/10"
+                    }`}
+                    title={`Page ${pageNum} (${widgetCount} ${widgetCount === 1 ? "widget" : "widgets"})`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+
+              {/* Add Page Button when in Customize mode */}
+              {isEditMode && (
+                <button
+                  onClick={() => {
+                    const newPage = totalPages + 1;
+                    setActivePage(newPage);
+                  }}
+                  className="h-7 px-2 rounded-md flex items-center gap-1 text-xs font-mono font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 transition-all cursor-pointer shadow-xs"
+                  title="Add a new dashboard page"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Page</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Action Controls */}
@@ -633,181 +713,219 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
         </div>
       </div>
 
-      {/* Main Bento-Box Widget Grid Workspace */}
-      <div className="pt-4 pb-8 flex-1 min-h-0">
-        <div
-          ref={gridContainerRef}
-          className="grid grid-cols-12 gap-4 auto-rows-[140px] [grid-auto-flow:row_dense] items-stretch relative"
-        >
-          {layout.widgets.map((w) => {
-            const def = WIDGET_REGISTRY[w.kind];
-            if (!def) return null;
-            const Component = def.component;
-            const colSpan = getColSpanClass(w);
-            const rowSpan = getRowSpanClass(w);
-            const isDraggingThis = draggedWidgetId === w.id;
-            const isDropTarget = dragOverWidgetId === w.id && draggedWidgetId !== w.id;
+      {/* Main Bento-Box Widget Grid Workspace — Scrollable */}
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar overflow-x-hidden pt-4 pb-8 pr-1">
+        {layout.widgets.filter((w) => (w.page || 1) === activePage).length === 0 ? (
+          <div className="h-64 flex flex-col items-center justify-center border border-dashed border-white/10 p-8 text-center space-y-3">
+            <LayoutGrid className="w-10 h-10 text-neutral-600" />
+            <div className="text-sm font-sans font-medium text-neutral-400">
+              Page {activePage} is currently empty
+            </div>
+            <div className="text-xs font-sans text-neutral-500">
+              Click &quot;Add Widget&quot; in the toolbar above or move widgets from other pages.
+            </div>
+            <button
+              onClick={() => setIsModulePickerOpen(true)}
+              className="px-3 py-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/40 text-xs font-mono font-medium hover:bg-sky-500/30 transition-colors cursor-pointer"
+            >
+              + Add Widget to Page {activePage}
+            </button>
+          </div>
+        ) : (
+          <div
+            ref={gridContainerRef}
+            className="grid grid-cols-12 gap-4 auto-rows-[140px] [grid-auto-flow:row_dense] items-stretch relative"
+          >
+            {layout.widgets
+              .filter((w) => (w.page || 1) === activePage)
+              .map((w) => {
+                const def = WIDGET_REGISTRY[w.kind];
+                if (!def) return null;
+                const colSpan = getColSpanClass(w);
+                const rowSpan = getRowSpanClass(w);
+                const isDraggingThis = draggedWidgetId === w.id;
+                const isDropTarget = dragOverWidgetId === w.id && draggedWidgetId !== w.id;
 
-            return (
-              <div
-                key={w.id}
-                draggable={isEditMode}
-                onDragStart={(e) => handleDragStart(e, w.id)}
-                onDragOver={(e) => handleDragOver(e, w.id)}
-                onDragLeave={(e) => handleDragLeave(e, w.id)}
-                onDrop={(e) => handleDrop(e, w.id)}
-                onDragEnd={handleDragEnd}
-                className={`${colSpan} ${rowSpan} h-full flex flex-col relative group transition-all duration-150 overflow-hidden ${
-                  isDraggingThis
-                    ? "opacity-40 border-2 border-dashed border-amber-400/80 scale-[0.99]"
-                    : "opacity-100"
-                } ${
-                  isDropTarget
-                    ? "ring-2 ring-amber-400 bg-amber-500/10 scale-[1.01] z-20"
-                    : ""
-                } ${
-                  isEditMode && !isDraggingThis && !isDropTarget
-                    ? "ring-1 ring-white/15 hover:ring-sky-400/60"
-                    : ""
-                }`}
-              >
-                {/* Swap Target Visual Badge */}
-                {isDropTarget && (
-                  <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-none">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-black font-sans font-bold text-xs uppercase tracking-wider animate-bounce">
-                      <ArrowLeftRight className="w-4 h-4" />
-                      <span>Swap with {def.title}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Edit Mode Overlay Header & Stepper Controls */}
-                {isEditMode && (
-                  <div className="absolute top-0 left-0 right-0 z-30 bg-neutral-900/95 border-b border-white/20 px-2 py-1 flex items-center justify-between backdrop-blur-md">
-                    {/* Drag Handle */}
-                    <div
-                      className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing text-neutral-300 hover:text-white"
-                      title="Drag by handle to reorder widget position"
-                    >
-                      <GripVertical className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-neutral-200 truncate max-w-[140px]">
-                        {def.title}
-                      </span>
-                    </div>
-
-                    {/* Width & Height Steppers & Remove Controls */}
-                    <div className="flex items-center gap-1.5">
-                      {/* Width Stepper */}
-                      <div className="flex items-center bg-black/50 border border-white/15 px-1 py-0.5 rounded-xs">
-                        <button
-                          onClick={() => handleAdjustWidth(w.id, -1)}
-                          disabled={w.width <= 1}
-                          className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
-                          title="Decrease column width"
-                        >
-                          <Minus className="w-2.5 h-2.5" />
-                        </button>
-                        <span className="text-[10px] font-mono px-1 text-neutral-300">
-                          {w.width || 4}c
-                        </span>
-                        <button
-                          onClick={() => handleAdjustWidth(w.id, 1)}
-                          disabled={w.width >= 12}
-                          className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
-                          title="Increase column width"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                        </button>
+                return (
+                  <div
+                    key={w.id}
+                    draggable={isEditMode}
+                    onDragStart={(e) => handleDragStart(e, w.id)}
+                    onDragOver={(e) => handleDragOver(e, w.id)}
+                    onDragLeave={(e) => handleDragLeave(e, w.id)}
+                    onDrop={(e) => handleDrop(e, w.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`${colSpan} ${rowSpan} h-full flex flex-col relative group transition-all duration-150 overflow-hidden ${
+                      isDraggingThis
+                        ? "opacity-40 border-2 border-dashed border-amber-400/80 scale-[0.99]"
+                        : "opacity-100"
+                    } ${
+                      isDropTarget
+                        ? "ring-2 ring-amber-400 bg-amber-500/10 scale-[1.01] z-20"
+                        : ""
+                    } ${
+                      isEditMode && !isDraggingThis && !isDropTarget
+                        ? "ring-1 ring-white/15 hover:ring-sky-400/60"
+                        : ""
+                    }`}
+                  >
+                    {/* Swap Target Visual Badge */}
+                    {isDropTarget && (
+                      <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-none">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-black font-sans font-bold text-xs uppercase tracking-wider animate-bounce">
+                          <ArrowLeftRight className="w-4 h-4" />
+                          <span>Swap with {def.title}</span>
+                        </div>
                       </div>
+                    )}
 
-                      {/* Height Stepper */}
-                      <div className="flex items-center bg-black/50 border border-white/15 px-1 py-0.5 rounded-xs">
-                        <button
-                          onClick={() => handleAdjustHeight(w.id, -1)}
-                          disabled={w.height <= 1}
-                          className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
-                          title="Decrease height rows"
+                    {/* Edit Mode Overlay Header & Stepper Controls */}
+                    {isEditMode && (
+                      <div className="absolute top-0 left-0 right-0 z-30 bg-neutral-900/95 border-b border-white/20 px-2 py-1 flex items-center justify-between backdrop-blur-md gap-2 flex-wrap">
+                        {/* Drag Handle */}
+                        <div
+                          className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing text-neutral-300 hover:text-white min-w-0"
+                          title="Drag by handle to reorder widget position"
                         >
-                          <Minus className="w-2.5 h-2.5" />
-                        </button>
-                        <span className="text-[10px] font-mono px-1 text-neutral-300">
-                          {w.height || 3}r
-                        </span>
-                        <button
-                          onClick={() => handleAdjustHeight(w.id, 1)}
-                          disabled={w.height >= 8}
-                          className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
-                          title="Increase height rows"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                        </button>
+                          <GripVertical className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-neutral-200 truncate max-w-[120px]">
+                            {def.title}
+                          </span>
+                        </div>
+
+                        {/* Page Selector & Dimensions Steppers & Remove Controls */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Move to Page Selector */}
+                          <div className="flex items-center bg-black/50 border border-white/15 px-1 py-0.5 rounded-xs gap-1">
+                            <span className="text-[9px] font-sans text-neutral-400 uppercase">Page:</span>
+                            <select
+                              value={w.page || 1}
+                              onChange={(e) => handleMoveWidgetPage(w.id, Number(e.target.value))}
+                              className="bg-transparent text-[10px] font-mono text-sky-300 font-bold focus:outline-none cursor-pointer"
+                              title="Move widget to another page"
+                            >
+                              {Array.from({ length: Math.max(totalPages, (w.page || 1) + 1) }, (_, i) => i + 1).map(
+                                (p) => (
+                                  <option key={p} value={p} className="bg-neutral-900 text-neutral-200">
+                                    {p}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </div>
+
+                          {/* Width Stepper */}
+                          <div className="flex items-center bg-black/50 border border-white/15 px-1 py-0.5 rounded-xs">
+                            <button
+                              onClick={() => handleAdjustWidth(w.id, -1)}
+                              disabled={w.width <= 1}
+                              className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="Decrease column width"
+                            >
+                              <Minus className="w-2.5 h-2.5" />
+                            </button>
+                            <span className="text-[10px] font-mono px-1 text-neutral-300">
+                              {w.width || 4}c
+                            </span>
+                            <button
+                              onClick={() => handleAdjustWidth(w.id, 1)}
+                              disabled={w.width >= 12}
+                              className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="Increase column width"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+
+                          {/* Height Stepper */}
+                          <div className="flex items-center bg-black/50 border border-white/15 px-1 py-0.5 rounded-xs">
+                            <button
+                              onClick={() => handleAdjustHeight(w.id, -1)}
+                              disabled={w.height <= 1}
+                              className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="Decrease height rows"
+                            >
+                              <Minus className="w-2.5 h-2.5" />
+                            </button>
+                            <span className="text-[10px] font-mono px-1 text-neutral-300">
+                              {w.height || 3}r
+                            </span>
+                            <button
+                              onClick={() => handleAdjustHeight(w.id, 1)}
+                              disabled={w.height >= 8}
+                              className="p-0.5 text-neutral-400 hover:text-white disabled:opacity-30 cursor-pointer"
+                              title="Increase height rows"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+
+                          {/* Remove Widget Button */}
+                          <button
+                            onClick={() => handleRemoveWidget(w.id)}
+                            title="Remove widget and auto-fill row space"
+                            className="p-1 text-neutral-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-500/40 rounded-xs transition-colors cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
+                    )}
 
-                      {/* Remove Widget Button */}
-                      <button
-                        onClick={() => handleRemoveWidget(w.id)}
-                        title="Remove widget and auto-fill row space"
-                        className="p-1 text-neutral-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-500/40 rounded-xs transition-colors cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                    {/* Rendered Widget Container */}
+                    <div className={`flex-1 min-h-0 flex flex-col h-full overflow-hidden ${isEditMode ? "pt-7" : ""}`}>
+                      <DashboardWidgetContainer
+                        widget={w}
+                        matches={matches}
+                        winLossMatches={winLossMatches}
+                        stats={stats}
+                        deckOverview={deckOverview}
+                        palette={palette}
+                        formatOptions={formatOptions}
+                        timeOptions={timeOptions}
+                        onSelectMatch={onSelectMatch}
+                        onSelectDeck={onSelectDeck}
+                        onShowCard={onShowCard}
+                        onInspectAchievement={setInspectedAchievement}
+                        onFilterOpponent={onFilterOpponent}
+                        onUpdateWidgetSettings={handleUpdateWidgetSettings}
+                        customColors={customColors}
+                        isLoading={isLoadingLayout}
+                      />
                     </div>
+
+                    {/* Interactive Border Resizing Handles (Active in Edit Mode) */}
+                    {isEditMode && (
+                      <>
+                        {/* Right Border Resize Handle */}
+                        <div
+                          onPointerDown={(e) => handleStartResize(e, w.id, "right")}
+                          className="absolute top-0 right-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-sky-500/50 z-20 transition-colors"
+                          title="Drag right edge to resize column width"
+                        />
+
+                        {/* Bottom Border Resize Handle */}
+                        <div
+                          onPointerDown={(e) => handleStartResize(e, w.id, "bottom")}
+                          className="absolute bottom-0 left-0 right-0 h-2.5 cursor-ns-resize hover:bg-sky-500/50 z-20 transition-colors"
+                          title="Drag bottom edge to resize row height"
+                        />
+
+                        {/* Bottom-Right Corner Resize Handle */}
+                        <div
+                          onPointerDown={(e) => handleStartResize(e, w.id, "corner")}
+                          className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-sky-400/90 z-30 flex items-center justify-center bg-white/15 border-t border-l border-white/30 transition-colors"
+                          title="Drag corner to resize width and height"
+                        >
+                          <Maximize2 className="w-2.5 h-2.5 text-neutral-200 rotate-90 pointer-events-none" />
+                        </div>
+                      </>
+                    )}
                   </div>
-                )}
-
-                {/* Rendered Widget Container */}
-                <div className={`flex-1 min-h-0 flex flex-col h-full overflow-hidden ${isEditMode ? "pt-7" : ""}`}>
-                  <DashboardWidgetContainer
-                    widget={w}
-                    matches={matches}
-                    winLossMatches={winLossMatches}
-                    stats={stats}
-                    deckOverview={deckOverview}
-                    palette={palette}
-                    formatOptions={formatOptions}
-                    timeOptions={timeOptions}
-                    onSelectMatch={onSelectMatch}
-                    onSelectDeck={onSelectDeck}
-                    onShowCard={onShowCard}
-                    onInspectAchievement={setInspectedAchievement}
-                    onFilterOpponent={onFilterOpponent}
-                    onUpdateWidgetSettings={handleUpdateWidgetSettings}
-                    customColors={customColors}
-                    isLoading={isLoadingLayout}
-                  />
-                </div>
-
-                {/* Interactive Border Resizing Handles (Active in Edit Mode) */}
-                {isEditMode && (
-                  <>
-                    {/* Right Border Resize Handle */}
-                    <div
-                      onPointerDown={(e) => handleStartResize(e, w.id, "right")}
-                      className="absolute top-0 right-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-sky-500/50 z-20 transition-colors"
-                      title="Drag right edge to resize column width"
-                    />
-
-                    {/* Bottom Border Resize Handle */}
-                    <div
-                      onPointerDown={(e) => handleStartResize(e, w.id, "bottom")}
-                      className="absolute bottom-0 left-0 right-0 h-2.5 cursor-ns-resize hover:bg-sky-500/50 z-20 transition-colors"
-                      title="Drag bottom edge to resize row height"
-                    />
-
-                    {/* Bottom-Right Corner Resize Handle */}
-                    <div
-                      onPointerDown={(e) => handleStartResize(e, w.id, "corner")}
-                      className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-sky-400/90 z-30 flex items-center justify-center bg-white/15 border-t border-l border-white/30 transition-colors"
-                      title="Drag corner to resize width and height"
-                    >
-                      <Maximize2 className="w-2.5 h-2.5 text-neutral-200 rotate-90 pointer-events-none" />
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       {/* CUSTOMIZE COLORS MODAL */}

@@ -2,6 +2,22 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.7.0] - 2026-09-30 — 📊 Multi-Page Dashboard, Sticky Controls, Economy Trends & Authentic Quests
+
+### 📑 Multi-Page Modular Dashboard & Sticky Navigation
+- **Multi-Page Layout Support**: Added full support for organizing widgets across distinct dashboard pages (Page 1, 2, 3...).
+- **Direct Header Page Selector**: Minimalist squared-circle page indicators (`1`, `2`, ...) docked directly after the `DASHBOARD` title for rapid one-click page switching.
+- **Customize Mode & Page Management**: Entering Customize mode reveals an authentic amber `+ Add Page` button directly adjacent to the page indicators, plus per-widget page relocation selectors allowing widgets to be smoothly moved across pages.
+- **Pinned Sticky Header Bar**: The entire dashboard top bar (title, page indicators, live color dots, customize button, and widget catalog triggers) remains firmly pinned to the top of the viewport while the modular widget grid scrolls independently.
+
+### 🪙 Economy Trends Aggregation & Time Filtering
+- **Granular Time Range Filtering**: Added quick toggle controls (`24H`, `7D`, `30D`, `ALL`) to the Economy Trends widget.
+- **Intelligent Day Grouping**: Automatically collapses frequent automated snapshots into daily end-of-day balances across multi-day views while maintaining full transaction granularity in the 24H inspection mode.
+
+### 📜 Authentic MTGA Quest Objectives & History Backfill
+- **In-Game Objective Titles**: Standardized quest records, analytics velocity tables, and frequency modals to display authentic in-game MTGA objective text (e.g. *"Cast 20 white or blue spells."*, *"Play 25 lands."*) instead of internal developer identifiers.
+- **Archived Telemetry Backfill**: Reconstructed and populated historical quest completion lifecycles from archived MTGA logs into SQLite.
+
 ## [1.6.3] - 2026-09-23 — 🏆 Progressive Card Achievements, Trophy Case & Live HUD Polish
 
 ### 🏆 Progressive Card Achievements & De-duplication

@@ -1,0 +1,353 @@
+{
+  "Quests/Color_Challenge_SecondPhase_07": {
+    "title": "Color Challenge",
+    "description_template": "Cast {quantity} spells.",
+    "category": "spells",
+    "colors": []
+  },
+  "Quests/Quest_Almighty_Army": {
+    "title": "Almighty Army",
+    "description_template": "Attack with {quantity} creatures.",
+    "category": "attacks",
+    "colors": []
+  },
+  "Quests/Quest_Azorius_Judge": {
+    "title": "Azorius Judge",
+    "description_template": "Cast {quantity} white or blue spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "U"
+    ]
+  },
+  "Quests/Quest_Azorius_Justice": {
+    "title": "Azorius Justice",
+    "description_template": "Win {quantity} games with a white-blue deck.",
+    "category": "wins",
+    "colors": [
+      "W",
+      "U"
+    ]
+  },
+  "Quests/Quest_Azorius_Justiciar": {
+    "title": "Azorius Justiciar",
+    "description_template": "Cast {quantity} white or blue spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "U"
+    ]
+  },
+  "Quests/Quest_Boros_Might": {
+    "title": "Boros Might",
+    "description_template": "Win {quantity} games with a white-red deck.",
+    "category": "wins",
+    "colors": [
+      "W",
+      "R"
+    ]
+  },
+  "Quests/Quest_Boros_Reckoner": {
+    "title": "Boros Reckoner",
+    "description_template": "Cast {quantity} white or red spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "R"
+    ]
+  },
+  "Quests/Quest_Boros_Vigor": {
+    "title": "Boros Vigor",
+    "description_template": "Cast {quantity} red or white spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "R"
+    ]
+  },
+  "Quests/Quest_Creature_Champion": {
+    "title": "Creature Champion",
+    "description_template": "Cast {quantity} creature spells.",
+    "category": "creatures",
+    "colors": []
+  },
+  "Quests/Quest_Creature_Comforts": {
+    "title": "Creature Comforts",
+    "description_template": "Cast {quantity} creature spells.",
+    "category": "creatures",
+    "colors": []
+  },
+  "Quests/Quest_Creature_Commander": {
+    "title": "Creature Commander",
+    "description_template": "Cast {quantity} creature spells.",
+    "category": "creatures",
+    "colors": []
+  },
+  "Quests/Quest_Dimir_Cunning": {
+    "title": "Dimir Cunning",
+    "description_template": "Win {quantity} games with a blue-black deck.",
+    "category": "wins",
+    "colors": [
+      "U",
+      "B"
+    ]
+  },
+  "Quests/Quest_Dimir_Cutpurse": {
+    "title": "Dimir Cutpurse",
+    "description_template": "Cast {quantity} blue or black spells.",
+    "category": "spells",
+    "colors": [
+      "U",
+      "B"
+    ]
+  },
+  "Quests/Quest_Dimir_Guile": {
+    "title": "Dimir Guile",
+    "description_template": "Cast {quantity} blue or black spells.",
+    "category": "spells",
+    "colors": [
+      "U",
+      "B"
+    ]
+  },
+  "Quests/Quest_Fatal_Push": {
+    "title": "Fatal Push",
+    "description_template": "Kill {quantity} of your opponent's creatures.",
+    "category": "kills",
+    "colors": []
+  },
+  "Quests/Quest_Golgari_Guildmage": {
+    "title": "Golgari Guildmage",
+    "description_template": "Cast {quantity} black or green spells.",
+    "category": "spells",
+    "colors": [
+      "B",
+      "G"
+    ]
+  },
+  "Quests/Quest_Golgari_Necromancy": {
+    "title": "Golgari Necromancy",
+    "description_template": "Cast {quantity} black or green spells.",
+    "category": "spells",
+    "colors": [
+      "B",
+      "G"
+    ]
+  },
+  "Quests/Quest_Golgari_Salvage": {
+    "title": "Golgari Salvage",
+    "description_template": "Win {quantity} games with a black-green deck.",
+    "category": "wins",
+    "colors": [
+      "B",
+      "G"
+    ]
+  },
+  "Quests/Quest_Gruul_Bloodthirst": {
+    "title": "Gruul Bloodthirst",
+    "description_template": "Cast {quantity} red or green spells.",
+    "category": "spells",
+    "colors": [
+      "R",
+      "G"
+    ]
+  },
+  "Quests/Quest_Gruul_OnSlaught": {
+    "title": "Gruul Onslaught",
+    "description_template": "Win {quantity} games with a red-green deck.",
+    "category": "wins",
+    "colors": [
+      "R",
+      "G"
+    ]
+  },
+  "Quests/Quest_Gruul_Scrapper": {
+    "title": "Gruul Scrapper",
+    "description_template": "Cast {quantity} red or green spells.",
+    "category": "spells",
+    "colors": [
+      "R",
+      "G"
+    ]
+  },
+  "Quests/Quest_Izzet_Chronarch": {
+    "title": "Izzet Chronarch",
+    "description_template": "Cast {quantity} blue or red spells.",
+    "category": "spells",
+    "colors": [
+      "U",
+      "R"
+    ]
+  },
+  "Quests/Quest_Izzet_Comprehension": {
+    "title": "Izzet Comprehension",
+    "description_template": "Cast {quantity} blue or red spells.",
+    "category": "spells",
+    "colors": [
+      "U",
+      "R"
+    ]
+  },
+  "Quests/Quest_Izzet_Genius": {
+    "title": "Izzet Genius",
+    "description_template": "Win {quantity} games with a blue-red deck.",
+    "category": "wins",
+    "colors": [
+      "U",
+      "R"
+    ]
+  },
+  "Quests/Quest_Nissas_Campaign": {
+    "title": "Nissa's Campaign",
+    "description_template": "Play {quantity} lands.",
+    "category": "lands",
+    "colors": []
+  },
+  "Quests/Quest_Nissas_Journey": {
+    "title": "Nissa's Journey",
+    "description_template": "Play {quantity} lands.",
+    "category": "lands",
+    "colors": []
+  },
+  "Quests/Quest_Nissas_Pilgrimage": {
+    "title": "Nissa's Pilgrimage",
+    "description_template": "Play {quantity} lands.",
+    "category": "lands",
+    "colors": []
+  },
+  "Quests/Quest_Orzhov_Advokist": {
+    "title": "Orzhov Advokist",
+    "description_template": "Cast {quantity} white or black spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "B"
+    ]
+  },
+  "Quests/Quest_Orzhov_Domination": {
+    "title": "Orzhov Domination",
+    "description_template": "Cast {quantity} white or black spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "B"
+    ]
+  },
+  "Quests/Quest_Orzhov_Obedience": {
+    "title": "Orzhov Obedience",
+    "description_template": "Win {quantity} games with a white-black deck.",
+    "category": "wins",
+    "colors": [
+      "W",
+      "B"
+    ]
+  },
+  "Quests/Quest_Raiding_Party": {
+    "title": "Raiding Party",
+    "description_template": "Attack with {quantity} creatures.",
+    "category": "attacks",
+    "colors": []
+  },
+  "Quests/Quest_Rakdos_Cackler": {
+    "title": "Rakdos Cackler",
+    "description_template": "Cast {quantity} black or red spells.",
+    "category": "spells",
+    "colors": [
+      "B",
+      "R"
+    ]
+  },
+  "Quests/Quest_Rakdos_Chaos": {
+    "title": "Rakdos Chaos",
+    "description_template": "Win {quantity} games with a black-red deck.",
+    "category": "wins",
+    "colors": [
+      "B",
+      "R"
+    ]
+  },
+  "Quests/Quest_Rakdos_Destruction": {
+    "title": "Rakdos Destruction",
+    "description_template": "Cast {quantity} black or red spells.",
+    "category": "spells",
+    "colors": [
+      "B",
+      "R"
+    ]
+  },
+  "Quests/Quest_Selesnya_Reverence": {
+    "title": "Selesnya Reverence",
+    "description_template": "Win {quantity} games with a white-green deck.",
+    "category": "wins",
+    "colors": [
+      "W",
+      "G"
+    ]
+  },
+  "Quests/Quest_Selesnya_Sentry": {
+    "title": "Selesnya Sentry",
+    "description_template": "Cast {quantity} white or green spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "G"
+    ]
+  },
+  "Quests/Quest_Selesnya_Silence": {
+    "title": "Selesnya Silence",
+    "description_template": "Cast {quantity} green or white spells.",
+    "category": "spells",
+    "colors": [
+      "W",
+      "G"
+    ]
+  },
+  "Quests/Quest_Selesyna_Reverence": {
+    "title": "Selesnya Reverence",
+    "description_template": "Win {quantity} games with a white-green deck.",
+    "category": "wins",
+    "colors": [
+      "W",
+      "G"
+    ]
+  },
+  "Quests/Quest_Simic_Evolution": {
+    "title": "Simic Evolution",
+    "description_template": "Cast {quantity} green or blue spells.",
+    "category": "spells",
+    "colors": [
+      "U",
+      "G"
+    ]
+  },
+  "Quests/Quest_Simic_Manipulator": {
+    "title": "Simic Manipulator",
+    "description_template": "Cast {quantity} blue or green spells.",
+    "category": "spells",
+    "colors": [
+      "U",
+      "G"
+    ]
+  },
+  "Quests/Quest_Simic_Progress": {
+    "title": "Simic Progress",
+    "description_template": "Win {quantity} games with a blue-green deck.",
+    "category": "wins",
+    "colors": [
+      "U",
+      "G"
+    ]
+  },
+  "Quests/Quest_Tragic_Slip": {
+    "title": "Tragic Slip",
+    "description_template": "Kill {quantity} of your opponent's creatures.",
+    "category": "kills",
+    "colors": []
+  },
+  "Quests/Quests/NPE_DamageDealt": {
+    "title": "Direct Damage",
+    "description_template": "Deal 20 damage.",
+    "category": "damage",
+    "colors": []
+  }
+}

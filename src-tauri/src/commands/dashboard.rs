@@ -132,3 +132,56 @@ pub async fn get_opponent_commander_records() -> Result<serde_json::Value, Strin
 
     Ok(serde_json::json!(result))
 }
+
+#[tauri::command]
+pub async fn get_player_economy() -> Result<Option<crate::db::EconomySnapshotRecord>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_latest_economy().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_economy_history(limit: Option<i64>) -> Result<Vec<crate::db::EconomySnapshotRecord>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_economy_history(limit.unwrap_or(50))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_recent_booster_openings(limit: Option<i64>) -> Result<Vec<crate::db::BoosterOpeningDbRecord>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_recent_booster_openings(limit.unwrap_or(50))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_active_quests() -> Result<crate::db::ActiveQuestsResponse, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_active_quests().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_quest_statistics() -> Result<crate::db::QuestStatistics, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_quest_statistics().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_reward_tracks_status() -> Result<crate::db::RewardTracksStatus, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_reward_tracks_status().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_player_rank_status() -> Result<Option<crate::db::PlayerRankStatusResponse>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_latest_rank_status().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_player_rank_history(limit: Option<i64>) -> Result<Vec<crate::db::PlayerRankSnapshotDbRecord>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_rank_history(limit.unwrap_or(50)).await.map_err(|e| e.to_string())
+}
+

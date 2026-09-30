@@ -29,6 +29,63 @@ pub struct GameStateStep {
     pub creature_instance_ids: Vec<u32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PlayerEconomyRecord {
+    pub gold: u32,
+    pub gems: u32,
+    pub vault_progress_tenths: u32,
+    pub wc_track_pos: u32,
+    pub wc_common: u32,
+    pub wc_uncommon: u32,
+    pub wc_rare: u32,
+    pub wc_mythic: u32,
+    pub draft_tokens: u32,
+    pub jump_in_tokens: u32,
+    pub golden_pack_progress: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct BoosterOpeningRecord {
+    pub pack_id: Option<String>,
+    pub cards_added: Vec<u32>,
+    pub wildcards: std::collections::HashMap<String, u32>,
+    pub vault_progress_delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct RawQuestData {
+    pub quest_id: String,
+    pub loc_key: String,
+    pub goal: u32,
+    pub starting_progress: u32,
+    pub ending_progress: u32,
+    pub can_swap: bool,
+    pub reward_gold: u32,
+    pub reward_xp: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlayerRankRecord {
+    pub season_ordinal: i64,
+    pub constructed_tier: String,    // "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Mythic"
+    pub constructed_level: i32,      // 4, 3, 2, 1
+    pub constructed_step: i32,       // 0 to 6
+    pub constructed_wins: i32,
+    pub constructed_losses: i32,
+    pub limited_tier: String,
+    pub limited_level: i32,
+    pub limited_step: i32,
+    pub limited_wins: i32,
+    pub limited_losses: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SeasonDetailsRecord {
+    pub season_ordinal: i64,
+    pub season_start_time: Option<String>,
+    pub season_end_time: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
@@ -40,6 +97,21 @@ pub enum ParsedEvent {
     },
     MulliganEvent { seat_id: u32, is_mulligan: bool, num_cards: Option<u32> },
     MatchCompleted { match_id: String, winning_team_id: u32, reason: String },
+    InventoryUpdate(PlayerEconomyRecord),
+    BoosterOpened(BoosterOpeningRecord),
+    QuestUpdate {
+        quests: Vec<RawQuestData>,
+        can_swap: bool,
+    },
+    PeriodicRewardsUpdate {
+        daily_reset_timestamp: String,
+        weekly_reset_timestamp: String,
+        daily_wins: Option<u32>,
+        weekly_wins: Option<u32>,
+    },
+    RankUpdate(PlayerRankRecord),
+    SeasonUpdate(SeasonDetailsRecord),
+    Compound(Vec<ParsedEvent>),
     Unknown,
 }
 
@@ -589,7 +661,431 @@ pub fn parse_line(line: &str) -> ParsedEvent {
         }
     }
 
+    // 6. Player Inventory & Periodic Rewards (StartHook / EventJoin / Store / Claim / PeriodicRewardsGetStatus)
+    if line.contains("InventoryInfo")
+        || line.contains("inventoryInfo")
+        || line.contains("ClientPeriodicRewards")
+        || line.contains("clientPeriodicRewards")
+        || line.contains("PeriodicRewardsGetStatus")
+        || line.contains("_dailyRewardResetTimestamp")
+    {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                let maybe_eco = extract_inventory_info(&v).map(ParsedEvent::InventoryUpdate);
+                let maybe_rewards = extract_periodic_rewards(&v);
+
+                match (maybe_eco, maybe_rewards) {
+                    (Some(eco), Some(rewards)) => {
+                        return ParsedEvent::Compound(vec![eco, rewards]);
+                    }
+                    (Some(eco), None) => {
+                        return eco;
+                    }
+                    (None, Some(rewards)) => {
+                        return rewards;
+                    }
+                    (None, None) => {}
+                }
+            }
+        }
+    }
+
+    // 7. Booster Pack Opening (OpenBooster / CardsAdded)
+    if line.contains("OpenBooster") || line.contains("openBooster") || line.contains("CardsAdded") || line.contains("cardsAdded") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(booster) = extract_booster_opening(&v) {
+                    return ParsedEvent::BoosterOpened(booster);
+                }
+            }
+        }
+    }
+
+    // 8. Daily Quests Update (QuestGetQuests)
+    if line.contains("\"quests\"") || line.contains("QuestGetQuests") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(quests_array) = v.get("quests").and_then(|q| q.as_array()) {
+                    let can_swap = v.get("canSwap")
+                        .or_else(|| v.get("can_swap"))
+                        .and_then(|x| x.as_bool())
+                        .unwrap_or(false);
+                    let mut raw_quests = Vec::new();
+                    for q in quests_array {
+                        if let Some(raw) = extract_raw_quest(q) {
+                            raw_quests.push(raw);
+                        }
+                    }
+                    return ParsedEvent::QuestUpdate {
+                        quests: raw_quests,
+                        can_swap,
+                    };
+                }
+            }
+        }
+    }
+
+    // 9. Ranked Ladder Update (RankGetCombinedRankInfo)
+    if line.contains("constructedSeasonOrdinal") || line.contains("limitedSeasonOrdinal") || line.contains("RankGetCombinedRankInfo") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(record) = extract_rank_info(&v) {
+                    return ParsedEvent::RankUpdate(record);
+                }
+            }
+        }
+    }
+
+    // 10. Season Details Update (RankGetSeasonAndRankDetails)
+    if (line.contains("seasonStartTime") && line.contains("seasonEndTime")) || line.contains("RankGetSeasonAndRankDetails") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(record) = extract_season_details(&v) {
+                    return ParsedEvent::SeasonUpdate(record);
+                }
+            }
+        }
+    }
+
     ParsedEvent::Unknown
+}
+
+pub fn extract_rank_info(v: &serde_json::Value) -> Option<PlayerRankRecord> {
+    let payload = if v.get("constructedSeasonOrdinal").is_some() || v.get("limitedSeasonOrdinal").is_some() {
+        v
+    } else if let Some(p) = v.get("Payload").or_else(|| v.get("payload")) {
+        p
+    } else {
+        v
+    };
+
+    let season_ordinal = payload.get("constructedSeasonOrdinal")
+        .or_else(|| payload.get("limitedSeasonOrdinal"))
+        .or_else(|| payload.get("seasonOrdinal"))
+        .and_then(|s| s.as_i64())?;
+
+    // MTGA omits constructedClass or limitedClass when Bronze
+    let constructed_tier = payload.get("constructedClass")
+        .or_else(|| payload.get("ConstructedClass"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("Bronze")
+        .to_string();
+    let constructed_level = payload.get("constructedLevel")
+        .or_else(|| payload.get("ConstructedLevel"))
+        .and_then(|l| l.as_i64())
+        .unwrap_or(4) as i32;
+    let constructed_step = payload.get("constructedStep")
+        .or_else(|| payload.get("ConstructedStep"))
+        .and_then(|s| s.as_i64())
+        .unwrap_or(0) as i32;
+    let constructed_wins = payload.get("constructedMatchesWon")
+        .or_else(|| payload.get("ConstructedMatchesWon"))
+        .and_then(|w| w.as_i64())
+        .unwrap_or(0) as i32;
+    let constructed_losses = payload.get("constructedMatchesLost")
+        .or_else(|| payload.get("ConstructedMatchesLost"))
+        .and_then(|l| l.as_i64())
+        .unwrap_or(0) as i32;
+
+    let limited_tier = payload.get("limitedClass")
+        .or_else(|| payload.get("LimitedClass"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("Bronze")
+        .to_string();
+    let limited_level = payload.get("limitedLevel")
+        .or_else(|| payload.get("LimitedLevel"))
+        .and_then(|l| l.as_i64())
+        .unwrap_or(4) as i32;
+    let limited_step = payload.get("limitedStep")
+        .or_else(|| payload.get("LimitedStep"))
+        .and_then(|s| s.as_i64())
+        .unwrap_or(0) as i32;
+    let limited_wins = payload.get("limitedMatchesWon")
+        .or_else(|| payload.get("LimitedMatchesWon"))
+        .and_then(|w| w.as_i64())
+        .unwrap_or(0) as i32;
+    let limited_losses = payload.get("limitedMatchesLost")
+        .or_else(|| payload.get("LimitedMatchesLost"))
+        .and_then(|l| l.as_i64())
+        .unwrap_or(0) as i32;
+
+    Some(PlayerRankRecord {
+        season_ordinal,
+        constructed_tier,
+        constructed_level,
+        constructed_step,
+        constructed_wins,
+        constructed_losses,
+        limited_tier,
+        limited_level,
+        limited_step,
+        limited_wins,
+        limited_losses,
+    })
+}
+
+pub fn extract_season_details(v: &serde_json::Value) -> Option<SeasonDetailsRecord> {
+    let payload = if v.get("currentSeason").is_some() || v.get("CurrentSeason").is_some() {
+        v
+    } else if let Some(p) = v.get("Payload").or_else(|| v.get("payload")) {
+        p
+    } else {
+        v
+    };
+
+    let current_season = payload.get("currentSeason").or_else(|| payload.get("CurrentSeason"))?;
+    let season_ordinal = current_season.get("seasonOrdinal")
+        .or_else(|| current_season.get("SeasonOrdinal"))
+        .and_then(|s| s.as_i64())?;
+    let season_start_time = current_season.get("seasonStartTime")
+        .or_else(|| current_season.get("SeasonStartTime"))
+        .and_then(|s| s.as_str())
+        .map(|s| s.to_string());
+    let season_end_time = current_season.get("seasonEndTime")
+        .or_else(|| current_season.get("SeasonEndTime"))
+        .and_then(|s| s.as_str())
+        .map(|s| s.to_string());
+
+    Some(SeasonDetailsRecord {
+        season_ordinal,
+        season_start_time,
+        season_end_time,
+    })
+}
+
+pub fn extract_raw_quest(q: &serde_json::Value) -> Option<RawQuestData> {
+    let quest_id = q.get("questId")
+        .or_else(|| q.get("quest_id"))
+        .and_then(|x| x.as_str())?
+        .to_string();
+    let loc_key = q.get("locKey")
+        .or_else(|| q.get("loc_key"))
+        .and_then(|x| x.as_str())?
+        .to_string();
+    let goal = q.get("goal").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let starting_progress = q.get("startingProgress")
+        .or_else(|| q.get("starting_progress"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(0) as u32;
+    let ending_progress = q.get("endingProgress")
+        .or_else(|| q.get("ending_progress"))
+        .or_else(|| q.get("currentProgress"))
+        .or_else(|| q.get("current_progress"))
+        .and_then(|x| x.as_u64())
+        .unwrap_or(starting_progress as u64) as u32;
+    let can_swap = q.get("canSwap")
+        .or_else(|| q.get("can_swap"))
+        .and_then(|x| x.as_bool())
+        .unwrap_or(false);
+
+    let chest = q.get("chestDescription").or_else(|| q.get("chest_description"));
+    let mut reward_gold = 500;
+    let mut reward_xp = 500;
+
+    if let Some(c) = chest {
+        if let Some(qty_str) = c.get("quantity").and_then(|x| x.as_str()) {
+            if let Ok(val) = qty_str.parse::<u32>() {
+                if val > 0 {
+                    reward_gold = val;
+                }
+            }
+        } else if let Some(qty_num) = c.get("quantity").and_then(|x| x.as_u64()) {
+            if qty_num > 0 {
+                reward_gold = qty_num as u32;
+            }
+        }
+        if let Some(loc_params) = c.get("locParams").or_else(|| c.get("loc_params")) {
+            if let Some(n1) = loc_params.get("number1").and_then(|x| x.as_u64()) {
+                if n1 > 0 {
+                    reward_gold = n1 as u32;
+                }
+            }
+            if let Some(n2) = loc_params.get("number2").and_then(|x| x.as_u64()) {
+                if n2 > 0 {
+                    reward_xp = n2 as u32;
+                }
+            }
+        }
+    }
+
+    Some(RawQuestData {
+        quest_id,
+        loc_key,
+        goal,
+        starting_progress,
+        ending_progress,
+        can_swap,
+        reward_gold,
+        reward_xp,
+    })
+}
+
+pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyRecord> {
+    let inv = v.get("InventoryInfo")
+        .or_else(|| v.get("inventoryInfo"))
+        .or_else(|| v.get("Payload").and_then(|p| p.get("InventoryInfo").or_else(|| p.get("inventoryInfo"))))
+        .or_else(|| v.get("payload").and_then(|p| p.get("InventoryInfo").or_else(|| p.get("inventoryInfo"))))?;
+
+    let gold = inv.get("Gold").or_else(|| inv.get("gold")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let gems = inv.get("Gems").or_else(|| inv.get("gems")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let vault_progress_tenths = inv.get("TotalVaultProgress").or_else(|| inv.get("totalVaultProgress")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let wc_track_pos = inv.get("WcTrackPosition").or_else(|| inv.get("wcTrackPosition")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let wc_common = inv.get("WildCardCommons").or_else(|| inv.get("wildCardCommons")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let wc_uncommon = inv.get("WildCardUnCommons").or_else(|| inv.get("wildCardUnCommons")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let wc_rare = inv.get("WildCardRares").or_else(|| inv.get("wildCardRares")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let wc_mythic = inv.get("WildCardMythics").or_else(|| inv.get("wildCardMythics")).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+
+    let custom_tokens = inv.get("CustomTokens").or_else(|| inv.get("customTokens"));
+    let draft_tokens = custom_tokens.and_then(|c| c.get("DraftToken").or_else(|| c.get("draftToken"))).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let jump_in_tokens = custom_tokens.and_then(|c| c.get("Token_JumpIn").or_else(|| c.get("token_JumpIn"))).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+    let golden_pack_progress = custom_tokens.and_then(|c| c.get("BonusPackProgress").or_else(|| c.get("bonusPackProgress"))).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+
+    Some(PlayerEconomyRecord {
+        gold,
+        gems,
+        vault_progress_tenths,
+        wc_track_pos,
+        wc_common,
+        wc_uncommon,
+        wc_rare,
+        wc_mythic,
+        draft_tokens,
+        jump_in_tokens,
+        golden_pack_progress,
+    })
+}
+
+pub fn extract_periodic_rewards(v: &serde_json::Value) -> Option<ParsedEvent> {
+    // 1. From StartHook: "ClientPeriodicRewards"
+    let cpr = v.get("ClientPeriodicRewards")
+        .or_else(|| v.get("clientPeriodicRewards"))
+        .or_else(|| v.get("Payload").and_then(|p| p.get("ClientPeriodicRewards").or_else(|| p.get("clientPeriodicRewards"))))
+        .or_else(|| v.get("payload").and_then(|p| p.get("ClientPeriodicRewards").or_else(|| p.get("clientPeriodicRewards"))));
+
+    if let Some(cpr_val) = cpr {
+        if let Some(daily_reset) = cpr_val.get("DailyRewardResetTimestampInternal")
+            .or_else(|| cpr_val.get("dailyRewardResetTimestampInternal"))
+            .or_else(|| cpr_val.get("_dailyRewardResetTimestamp"))
+            .and_then(|x| x.as_str())
+        {
+            let weekly_reset = cpr_val.get("WeeklyRewardResetTimestampInternal")
+                .or_else(|| cpr_val.get("weeklyRewardResetTimestampInternal"))
+                .or_else(|| cpr_val.get("_weeklyRewardResetTimestamp"))
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
+
+            let daily_seq = cpr_val.get("DailyRewardSequenceId")
+                .or_else(|| cpr_val.get("dailyRewardSequenceId"))
+                .and_then(|x| x.as_i64());
+
+            let weekly_seq = cpr_val.get("WeeklyRewardSequenceId")
+                .or_else(|| cpr_val.get("weeklyRewardSequenceId"))
+                .and_then(|x| x.as_i64());
+
+            let daily_wins = daily_seq.map(|s| if s <= 0 { 0 } else { (s as u32).min(15) });
+            let weekly_wins = weekly_seq.map(|s| if s <= 0 { 0 } else { (s as u32).min(15) });
+
+            return Some(ParsedEvent::PeriodicRewardsUpdate {
+                daily_reset_timestamp: daily_reset.to_string(),
+                weekly_reset_timestamp: weekly_reset.to_string(),
+                daily_wins,
+                weekly_wins,
+            });
+        }
+    }
+
+    // 2. From PeriodicRewardsGetStatus: "_dailyRewardResetTimestamp"
+    if let Some(daily_reset) = v.get("_dailyRewardResetTimestamp").or_else(|| v.get("dailyRewardResetTimestamp")).and_then(|x| x.as_str()) {
+        let weekly_reset = v.get("_weeklyRewardResetTimestamp")
+            .or_else(|| v.get("weeklyRewardResetTimestamp"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("");
+
+        let daily_seq = v.get("DailyRewardSequenceId")
+            .or_else(|| v.get("dailyRewardSequenceId"))
+            .or_else(|| v.get("_dailyRewardSequenceId"))
+            .and_then(|x| x.as_i64());
+
+        let weekly_seq = v.get("WeeklyRewardSequenceId")
+            .or_else(|| v.get("weeklyRewardSequenceId"))
+            .or_else(|| v.get("_weeklyRewardSequenceId"))
+            .and_then(|x| x.as_i64());
+
+        let daily_wins = daily_seq.map(|s| if s <= 0 { 0 } else { (s as u32).min(15) });
+        let weekly_wins = weekly_seq.map(|s| if s <= 0 { 0 } else { (s as u32).min(15) });
+
+        return Some(ParsedEvent::PeriodicRewardsUpdate {
+            daily_reset_timestamp: daily_reset.to_string(),
+            weekly_reset_timestamp: weekly_reset.to_string(),
+            daily_wins,
+            weekly_wins,
+        });
+    }
+
+    None
+}
+
+pub fn extract_booster_opening(v: &serde_json::Value) -> Option<BoosterOpeningRecord> {
+    let payload = v.get("payload")
+        .or_else(|| v.get("Payload"))
+        .unwrap_or(v);
+    let target = payload.get("OpenBooster")
+        .or_else(|| payload.get("openBooster"))
+        .unwrap_or(payload);
+
+    let cards_val = target.get("CardsAdded")
+        .or_else(|| target.get("cardsAdded"))
+        .or_else(|| target.get("Cards"))
+        .or_else(|| target.get("cards"))?;
+
+    let mut cards_added = Vec::new();
+    if let Some(arr) = cards_val.as_array() {
+        for c in arr {
+            if let Some(num) = c.as_u64() {
+                cards_added.push(num as u32);
+            } else if let Some(gid) = c.get("grpId").or_else(|| c.get("cardId")).or_else(|| c.get("id")).and_then(|x| x.as_u64()) {
+                cards_added.push(gid as u32);
+            }
+        }
+    }
+
+    if cards_added.is_empty() {
+        return None;
+    }
+
+    let pack_id = target.get("BoosterId")
+        .or_else(|| target.get("boosterId"))
+        .or_else(|| target.get("packId"))
+        .or_else(|| target.get("PackId"))
+        .and_then(|s| s.as_str())
+        .map(|s| s.to_string());
+
+    let mut wildcards = std::collections::HashMap::new();
+    if let Some(wc_obj) = target.get("Wildcards").or_else(|| target.get("wildcards")) {
+        if let Some(map) = wc_obj.as_object() {
+            for (k, val) in map {
+                if let Some(cnt) = val.as_u64() {
+                    wildcards.insert(k.clone(), cnt as u32);
+                }
+            }
+        }
+    }
+
+    let vault_progress_delta = target.get("VaultProgressDelta")
+        .or_else(|| target.get("vaultProgressDelta"))
+        .and_then(|x| x.as_f64());
+
+    Some(BoosterOpeningRecord {
+        pack_id,
+        cards_added,
+        wildcards,
+        vault_progress_delta,
+    })
 }
 
 pub fn normalize_format(raw_event_id: &str) -> String {
@@ -940,6 +1436,148 @@ mod tests {
                 assert!(!is_mulligan, "Should detect accept from payload");
             }
             other => panic!("expected MulliganEvent accept, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_extract_inventory_info() {
+        let line = r#"{ "InventoryInfo": { "SeqId": 1, "Gems": 3590, "Gold": 57200, "TotalVaultProgress": 1886, "WcTrackPosition": 5, "WildCardCommons": 118, "WildCardUnCommons": 108, "WildCardRares": 8, "WildCardMythics": 2, "CustomTokens": { "DraftToken": 8, "Token_JumpIn": 2, "BonusPackProgress": 5 } } }"#;
+        match parse_line(line) {
+            ParsedEvent::InventoryUpdate(eco) => {
+                assert_eq!(eco.gems, 3590);
+                assert_eq!(eco.gold, 57200);
+                assert_eq!(eco.vault_progress_tenths, 1886);
+                assert_eq!(eco.wc_track_pos, 5);
+                assert_eq!(eco.wc_common, 118);
+                assert_eq!(eco.wc_uncommon, 108);
+                assert_eq!(eco.wc_rare, 8);
+                assert_eq!(eco.wc_mythic, 2);
+                assert_eq!(eco.draft_tokens, 8);
+                assert_eq!(eco.jump_in_tokens, 2);
+                assert_eq!(eco.golden_pack_progress, 5);
+            }
+            other => panic!("expected InventoryUpdate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_extract_booster_opening() {
+        let line = r#"{"payload":{"OpenBooster":{"BoosterId":"FDN_Pack_1","CardsAdded":[{"grpId":86715},{"grpId":91549}],"Wildcards":{"WildCardRare":1},"VaultProgressDelta":0.3}}}"#;
+        match parse_line(line) {
+            ParsedEvent::BoosterOpened(booster) => {
+                assert_eq!(booster.pack_id.as_deref(), Some("FDN_Pack_1"));
+                assert_eq!(booster.cards_added, vec![86715, 91549]);
+                assert_eq!(booster.wildcards.get("WildCardRare").copied(), Some(1));
+                assert_eq!(booster.vault_progress_delta, Some(0.3));
+            }
+            other => panic!("expected BoosterOpened, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_quest_update() {
+        let line = r#"{"canSwap":true,"quests":[{"questId":"39892322-3ea8-4131-911d-fa6386c7b2d4","locKey":"Quests/Quest_Nissas_Journey","goal":25,"startingProgress":18,"endingProgress":20,"canSwap":true,"chestDescription":{"quantity":"500","locParams":{"number1":500,"number2":500}}}]}"#;
+        match parse_line(line) {
+            ParsedEvent::QuestUpdate { quests, can_swap } => {
+                assert!(can_swap);
+                assert_eq!(quests.len(), 1);
+                let q = &quests[0];
+                assert_eq!(q.quest_id, "39892322-3ea8-4131-911d-fa6386c7b2d4");
+                assert_eq!(q.loc_key, "Quests/Quest_Nissas_Journey");
+                assert_eq!(q.goal, 25);
+                assert_eq!(q.starting_progress, 18);
+                assert_eq!(q.ending_progress, 20);
+                assert!(q.can_swap);
+                assert_eq!(q.reward_gold, 500);
+                assert_eq!(q.reward_xp, 500);
+            }
+            other => panic!("expected QuestUpdate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_periodic_rewards_update() {
+        let line = r#"{"_dailyRewardResetTimestamp":"2026-09-30T09:00:00Z","_weeklyRewardResetTimestamp":"2026-10-04T09:00:00Z","_dailyRewardChestDescriptions":{}}"#;
+        match parse_line(line) {
+            ParsedEvent::PeriodicRewardsUpdate { daily_reset_timestamp, weekly_reset_timestamp, daily_wins, weekly_wins } => {
+                assert_eq!(daily_reset_timestamp, "2026-09-30T09:00:00Z");
+                assert_eq!(weekly_reset_timestamp, "2026-10-04T09:00:00Z");
+                assert_eq!(daily_wins, None);
+                assert_eq!(weekly_wins, None);
+            }
+            other => panic!("expected PeriodicRewardsUpdate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_starthook_compound_with_periodic_rewards() {
+        let line = r#"{"InventoryInfo":{"SeqId":1,"Gems":3590,"Gold":57200,"TotalVaultProgress":1886,"WcTrackPosition":5,"WildCardCommons":118,"WildCardUnCommons":108,"WildCardRares":11,"WildCardMythics":3},"ClientPeriodicRewards":{"DailyRewardSequenceId":-1,"DailyRewardResetTimestampInternal":"2026-09-30T09:00:00Z","WeeklyRewardSequenceId":-1,"WeeklyRewardResetTimestampInternal":"2026-10-04T09:00:00Z"}}"#;
+        match parse_line(line) {
+            ParsedEvent::Compound(events) => {
+                assert_eq!(events.len(), 2);
+                match &events[0] {
+                    ParsedEvent::InventoryUpdate(eco) => {
+                        assert_eq!(eco.gold, 57200);
+                        assert_eq!(eco.gems, 3590);
+                    }
+                    other => panic!("expected InventoryUpdate, got {:?}", other),
+                }
+                match &events[1] {
+                    ParsedEvent::PeriodicRewardsUpdate { daily_reset_timestamp, weekly_reset_timestamp, daily_wins, weekly_wins } => {
+                        assert_eq!(daily_reset_timestamp, "2026-09-30T09:00:00Z");
+                        assert_eq!(weekly_reset_timestamp, "2026-10-04T09:00:00Z");
+                        assert_eq!(*daily_wins, Some(0));
+                        assert_eq!(*weekly_wins, Some(0));
+                    }
+                    other => panic!("expected PeriodicRewardsUpdate, got {:?}", other),
+                }
+            }
+            other => panic!("expected Compound event, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_rank_combined_info() {
+        let line = r#"{"constructedSeasonOrdinal":93,"constructedLevel":3,"constructedStep":4,"constructedMatchesWon":2,"constructedMatchesLost":4,"limitedSeasonOrdinal":93,"limitedLevel":4}"#;
+        match parse_line(line) {
+            ParsedEvent::RankUpdate(rank) => {
+                assert_eq!(rank.season_ordinal, 93);
+                assert_eq!(rank.constructed_tier, "Bronze"); // default when omitted
+                assert_eq!(rank.constructed_level, 3);
+                assert_eq!(rank.constructed_step, 4);
+                assert_eq!(rank.constructed_wins, 2);
+                assert_eq!(rank.constructed_losses, 4);
+                assert_eq!(rank.limited_tier, "Bronze");
+                assert_eq!(rank.limited_level, 4);
+                assert_eq!(rank.limited_step, 0);
+            }
+            other => panic!("expected RankUpdate, got {:?}", other),
+        }
+
+        let line_with_class = r#"{"constructedSeasonOrdinal":93,"constructedClass":"Gold","constructedLevel":1,"constructedStep":5,"constructedMatchesWon":12,"constructedMatchesLost":3,"limitedSeasonOrdinal":93,"limitedClass":"Silver","limitedLevel":2,"limitedStep":1,"limitedMatchesWon":4,"limitedMatchesLost":1}"#;
+        match parse_line(line_with_class) {
+            ParsedEvent::RankUpdate(rank) => {
+                assert_eq!(rank.constructed_tier, "Gold");
+                assert_eq!(rank.constructed_level, 1);
+                assert_eq!(rank.constructed_step, 5);
+                assert_eq!(rank.limited_tier, "Silver");
+                assert_eq!(rank.limited_level, 2);
+                assert_eq!(rank.limited_step, 1);
+            }
+            other => panic!("expected RankUpdate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_season_details() {
+        let line = r#"{"currentSeason":{"seasonOrdinal":93,"seasonStartTime":"2026-08-31T19:05:00","seasonEndTime":"2026-09-30T19:00:00"}}"#;
+        match parse_line(line) {
+            ParsedEvent::SeasonUpdate(season) => {
+                assert_eq!(season.season_ordinal, 93);
+                assert_eq!(season.season_start_time, Some("2026-08-31T19:05:00".to_string()));
+                assert_eq!(season.season_end_time, Some("2026-09-30T19:00:00".to_string()));
+            }
+            other => panic!("expected SeasonUpdate, got {:?}", other),
         }
     }
 }

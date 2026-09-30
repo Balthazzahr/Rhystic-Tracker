@@ -1,5 +1,5 @@
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Datelike};
 use crate::match_assembler::{MatchRecord, MatchCardRecord, MatchTurnEventRecord, MatchImpactfulRecord, PRESET_EVENT_DECK_NAME};
 use crate::dashboard::{default_dashboard_layout, validate_layout, DashboardLayoutPayload};
 use crate::card_db;
@@ -181,7 +181,252 @@ CREATE TABLE IF NOT EXISTS deck_achievements (
     UNIQUE(deck_name, achievement_id, tier)
 );
 CREATE INDEX IF NOT EXISTS idx_deck_achievements_deck ON deck_achievements(deck_name);
+-- Player economy snapshots (Gold, Gems, Vault %, Wildcards, Tokens, Golden Pack)
+CREATE TABLE IF NOT EXISTS player_economy_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    gold INTEGER NOT NULL,
+    gems INTEGER NOT NULL,
+    vault_progress_tenths INTEGER NOT NULL,
+    wc_track_pos INTEGER NOT NULL,
+    wc_common INTEGER NOT NULL,
+    wc_uncommon INTEGER NOT NULL,
+    wc_rare INTEGER NOT NULL,
+    wc_mythic INTEGER NOT NULL,
+    draft_tokens INTEGER NOT NULL DEFAULT 0,
+    jump_in_tokens INTEGER NOT NULL DEFAULT 0,
+    golden_pack_progress INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_player_economy_snapshots_timestamp ON player_economy_snapshots(timestamp);
+
+-- Player booster pack openings
+CREATE TABLE IF NOT EXISTS player_booster_openings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    pack_id TEXT,
+    cards_json TEXT NOT NULL,
+    wildcards_json TEXT,
+    vault_delta REAL
+);
+CREATE INDEX IF NOT EXISTS idx_player_booster_openings_timestamp ON player_booster_openings(timestamp);
+
+-- Player daily quests lifecycle tracking
+CREATE TABLE IF NOT EXISTS player_quests (
+    quest_id TEXT PRIMARY KEY,
+    loc_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL,
+    colors TEXT NOT NULL,
+    goal INTEGER NOT NULL,
+    current_progress INTEGER NOT NULL,
+    starting_progress INTEGER NOT NULL,
+    reward_gold INTEGER NOT NULL,
+    reward_xp INTEGER NOT NULL,
+    can_swap BOOLEAN NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    completed_at TEXT,
+    duration_seconds INTEGER,
+    matches_played_during INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_player_quests_status ON player_quests(status);
+CREATE INDEX IF NOT EXISTS idx_player_quests_category ON player_quests(category);
+CREATE INDEX IF NOT EXISTS idx_player_quests_first_seen ON player_quests(first_seen_at DESC);
+
+-- Player periodic reward tracks (daily & weekly win resets)
+CREATE TABLE IF NOT EXISTS player_reward_tracks (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    daily_reset_timestamp TEXT NOT NULL,
+    weekly_reset_timestamp TEXT NOT NULL,
+    daily_wins INTEGER NOT NULL DEFAULT 0,
+    weekly_wins INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
+-- Player ranked ladder snapshots
+CREATE TABLE IF NOT EXISTS player_rank_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    season_ordinal INTEGER NOT NULL,
+    constructed_tier TEXT NOT NULL,
+    constructed_level INTEGER NOT NULL,
+    constructed_step INTEGER NOT NULL,
+    constructed_wins INTEGER NOT NULL,
+    constructed_losses INTEGER NOT NULL,
+    limited_tier TEXT NOT NULL,
+    limited_level INTEGER NOT NULL,
+    limited_step INTEGER NOT NULL,
+    limited_wins INTEGER NOT NULL,
+    limited_losses INTEGER NOT NULL,
+    season_end_time TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_player_rank_snapshots_timestamp ON player_rank_snapshots(timestamp);
+CREATE INDEX IF NOT EXISTS idx_player_rank_snapshots_season ON player_rank_snapshots(season_ordinal);
+
+-- Player season schedule info
+CREATE TABLE IF NOT EXISTS player_season_info (
+    season_ordinal INTEGER PRIMARY KEY,
+    season_start_time TEXT,
+    season_end_time TEXT,
+    updated_at TEXT NOT NULL
+);
 "#;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PlayerRankSnapshotDbRecord {
+    pub id: i64,
+    pub timestamp: String,
+    pub season_ordinal: i64,
+    pub constructed_tier: String,
+    pub constructed_level: i32,
+    pub constructed_step: i32,
+    pub constructed_wins: i32,
+    pub constructed_losses: i32,
+    pub limited_tier: String,
+    pub limited_level: i32,
+    pub limited_step: i32,
+    pub limited_wins: i32,
+    pub limited_losses: i32,
+    pub season_end_time: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PlayerRankStatusResponse {
+    pub season_ordinal: i64,
+    pub constructed_tier: String,
+    pub constructed_level: i32,
+    pub constructed_step: i32,
+    pub constructed_wins: i32,
+    pub constructed_losses: i32,
+    pub limited_tier: String,
+    pub limited_level: i32,
+    pub limited_step: i32,
+    pub limited_wins: i32,
+    pub limited_losses: i32,
+    pub season_start_time: Option<String>,
+    pub season_end_time: Option<String>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct QuestRecord {
+    pub quest_id: String,
+    pub loc_key: String,
+    pub title: String,
+    pub description: String,
+    pub category: String,
+    pub colors: Vec<String>,
+    pub goal: u32,
+    pub current_progress: u32,
+    pub starting_progress: u32,
+    pub reward_gold: u32,
+    pub reward_xp: u32,
+    pub can_swap: bool,
+    pub status: String,
+    pub first_seen_at: String,
+    pub last_seen_at: String,
+    pub completed_at: Option<String>,
+    pub duration_seconds: Option<i64>,
+    pub matches_played_during: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ActiveQuestsResponse {
+    pub quests: Vec<QuestRecord>,
+    pub can_swap: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct CategoryStat {
+    pub category: String,
+    pub count: u32,
+    pub percentage: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ColorStat {
+    pub guild: String,
+    pub colors: Vec<String>,
+    pub count: u32,
+    pub percentage: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct QuestFrequencyStat {
+    pub title: String,
+    pub category: String,
+    pub reward_gold: u32,
+    pub times_seen: u32,
+    pub times_completed: u32,
+    pub avg_duration_hours: Option<f64>,
+    pub avg_matches: Option<f64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct QuestStatistics {
+    pub total_quests_tracked: u32,
+    pub gold_500_count: u32,
+    pub gold_750_count: u32,
+    pub gold_500_pct: f64,
+    pub gold_750_pct: f64,
+    pub category_distribution: Vec<CategoryStat>,
+    pub color_distribution: Vec<ColorStat>,
+    pub quest_frequency: Vec<QuestFrequencyStat>,
+    pub avg_duration_hours: Option<f64>,
+    pub avg_matches_to_complete: Option<f64>,
+    pub total_gold_earned: u64,
+    pub total_xp_earned: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct RewardMilestone {
+    pub win_number: u32,
+    pub reward_type: String,
+    pub gold: u32,
+    pub xp: u32,
+    pub has_card: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct RewardTracksStatus {
+    pub daily_reset_timestamp: String,
+    pub weekly_reset_timestamp: String,
+    pub daily_wins: u32,
+    pub weekly_wins: u32,
+    pub daily_milestones: Vec<RewardMilestone>,
+    pub weekly_milestones: Vec<RewardMilestone>,
+    pub next_daily_reward: Option<RewardMilestone>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct EconomySnapshotRecord {
+    pub id: i64,
+    pub timestamp: String,
+    pub gold: u32,
+    pub gems: u32,
+    pub vault_progress_tenths: u32,
+    pub vault_progress_pct: f64,
+    pub wc_track_pos: u32,
+    pub wc_common: u32,
+    pub wc_uncommon: u32,
+    pub wc_rare: u32,
+    pub wc_mythic: u32,
+    pub draft_tokens: u32,
+    pub jump_in_tokens: u32,
+    pub golden_pack_progress: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct BoosterOpeningDbRecord {
+    pub id: i64,
+    pub timestamp: String,
+    pub pack_id: Option<String>,
+    pub cards: Vec<u32>,
+    pub wildcards: std::collections::HashMap<String, u32>,
+    pub vault_delta: Option<f64>,
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EnrichedMatchRecord {
@@ -975,6 +1220,23 @@ impl DatabaseManager {
         let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_matches_opponent_name ON matches(opponent_name)").execute(&pool).await;
         let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_impactful_cards_hero ON match_impactful_cards(seat_id, grp_id)").execute(&pool).await;
         let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_match_turn_events_seat_type ON match_turn_events(seat_id, event_type, grp_id)").execute(&pool).await;
+
+        // Migration: Add daily_wins and weekly_wins columns to player_reward_tracks if missing
+        let daily_wins_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('player_reward_tracks') WHERE name = 'daily_wins'"
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap_or(None);
+
+        if daily_wins_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE player_reward_tracks ADD COLUMN daily_wins INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            let _ = sqlx::query("ALTER TABLE player_reward_tracks ADD COLUMN weekly_wins INTEGER NOT NULL DEFAULT 0").execute(&pool).await;
+            println!("[DB MIGRATION] Added daily_wins and weekly_wins columns to player_reward_tracks table");
+        }
+
+        // Migration: Ensure player_quests title matches authentic MTGA quest objective description
+        let _ = sqlx::query("UPDATE player_quests SET title = description WHERE description IS NOT NULL AND description != '' AND title != description").execute(&pool).await;
 
         let mgr = Self { pool, db_filename };
         #[cfg(not(test))]
@@ -2391,6 +2653,1069 @@ impl DatabaseManager {
 
         Ok(rows)
     }
+
+    /// Record a player economy snapshot into `player_economy_snapshots`.
+    /// Performs smart deduplication: if the latest stored snapshot has identical
+    /// values for all currency, wildcard, and token fields, the insertion is skipped.
+    /// Returns `Ok(true)` if a new row was inserted, or `Ok(false)` if skipped.
+    pub async fn record_economy_snapshot(
+        &self,
+        snapshot: &parser::PlayerEconomyRecord,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        // Fetch latest row to compare
+        let latest = sqlx::query(
+            r#"
+            SELECT gold, gems, vault_progress_tenths, wc_track_pos,
+                   wc_common, wc_uncommon, wc_rare, wc_mythic,
+                   draft_tokens, jump_in_tokens, golden_pack_progress
+            FROM player_economy_snapshots
+            ORDER BY id DESC LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(r) = latest {
+            let gold: i64 = r.get("gold");
+            let gems: i64 = r.get("gems");
+            let vault: i64 = r.get("vault_progress_tenths");
+            let wc_track: i64 = r.get("wc_track_pos");
+            let wc_c: i64 = r.get("wc_common");
+            let wc_u: i64 = r.get("wc_uncommon");
+            let wc_r: i64 = r.get("wc_rare");
+            let wc_m: i64 = r.get("wc_mythic");
+            let draft: i64 = r.get("draft_tokens");
+            let jump: i64 = r.get("jump_in_tokens");
+            let golden: i64 = r.get("golden_pack_progress");
+
+            if gold == snapshot.gold as i64
+                && gems == snapshot.gems as i64
+                && vault == snapshot.vault_progress_tenths as i64
+                && wc_track == snapshot.wc_track_pos as i64
+                && wc_c == snapshot.wc_common as i64
+                && wc_u == snapshot.wc_uncommon as i64
+                && wc_r == snapshot.wc_rare as i64
+                && wc_m == snapshot.wc_mythic as i64
+                && draft == snapshot.draft_tokens as i64
+                && jump == snapshot.jump_in_tokens as i64
+                && golden == snapshot.golden_pack_progress as i64
+            {
+                return Ok(false);
+            }
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO player_economy_snapshots (
+                timestamp, gold, gems, vault_progress_tenths, wc_track_pos,
+                wc_common, wc_uncommon, wc_rare, wc_mythic,
+                draft_tokens, jump_in_tokens, golden_pack_progress
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&now)
+        .bind(snapshot.gold as i64)
+        .bind(snapshot.gems as i64)
+        .bind(snapshot.vault_progress_tenths as i64)
+        .bind(snapshot.wc_track_pos as i64)
+        .bind(snapshot.wc_common as i64)
+        .bind(snapshot.wc_uncommon as i64)
+        .bind(snapshot.wc_rare as i64)
+        .bind(snapshot.wc_mythic as i64)
+        .bind(snapshot.draft_tokens as i64)
+        .bind(snapshot.jump_in_tokens as i64)
+        .bind(snapshot.golden_pack_progress as i64)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(true)
+    }
+
+    /// Retrieve the most recent player economy snapshot.
+    pub async fn get_latest_economy(
+        &self,
+    ) -> Result<Option<EconomySnapshotRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, timestamp, gold, gems, vault_progress_tenths, wc_track_pos,
+                   wc_common, wc_uncommon, wc_rare, wc_mythic,
+                   draft_tokens, jump_in_tokens, golden_pack_progress
+            FROM player_economy_snapshots
+            ORDER BY id DESC LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(r) = row {
+            let vault_tenths: i64 = r.get("vault_progress_tenths");
+            Ok(Some(EconomySnapshotRecord {
+                id: r.get("id"),
+                timestamp: r.get("timestamp"),
+                gold: r.get::<i64, _>("gold") as u32,
+                gems: r.get::<i64, _>("gems") as u32,
+                vault_progress_tenths: vault_tenths as u32,
+                vault_progress_pct: (vault_tenths as f64) / 10.0,
+                wc_track_pos: r.get::<i64, _>("wc_track_pos") as u32,
+                wc_common: r.get::<i64, _>("wc_common") as u32,
+                wc_uncommon: r.get::<i64, _>("wc_uncommon") as u32,
+                wc_rare: r.get::<i64, _>("wc_rare") as u32,
+                wc_mythic: r.get::<i64, _>("wc_mythic") as u32,
+                draft_tokens: r.get::<i64, _>("draft_tokens") as u32,
+                jump_in_tokens: r.get::<i64, _>("jump_in_tokens") as u32,
+                golden_pack_progress: r.get::<i64, _>("golden_pack_progress") as u32,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Retrieve historical player economy snapshots (ordered newest to oldest).
+    pub async fn get_economy_history(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<EconomySnapshotRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let limit = if limit <= 0 { 50 } else { limit.min(500) };
+        let rows = sqlx::query(
+            r#"
+            SELECT id, timestamp, gold, gems, vault_progress_tenths, wc_track_pos,
+                   wc_common, wc_uncommon, wc_rare, wc_mythic,
+                   draft_tokens, jump_in_tokens, golden_pack_progress
+            FROM player_economy_snapshots
+            ORDER BY id DESC LIMIT ?
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            let vault_tenths: i64 = r.get("vault_progress_tenths");
+            list.push(EconomySnapshotRecord {
+                id: r.get("id"),
+                timestamp: r.get("timestamp"),
+                gold: r.get::<i64, _>("gold") as u32,
+                gems: r.get::<i64, _>("gems") as u32,
+                vault_progress_tenths: vault_tenths as u32,
+                vault_progress_pct: (vault_tenths as f64) / 10.0,
+                wc_track_pos: r.get::<i64, _>("wc_track_pos") as u32,
+                wc_common: r.get::<i64, _>("wc_common") as u32,
+                wc_uncommon: r.get::<i64, _>("wc_uncommon") as u32,
+                wc_rare: r.get::<i64, _>("wc_rare") as u32,
+                wc_mythic: r.get::<i64, _>("wc_mythic") as u32,
+                draft_tokens: r.get::<i64, _>("draft_tokens") as u32,
+                jump_in_tokens: r.get::<i64, _>("jump_in_tokens") as u32,
+                golden_pack_progress: r.get::<i64, _>("golden_pack_progress") as u32,
+            });
+        }
+        Ok(list)
+    }
+
+    /// Record a booster opening event and register cards into collection_cards.
+    pub async fn record_booster_opening(
+        &self,
+        booster: &parser::BoosterOpeningRecord,
+    ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let cards_json = serde_json::to_string(&booster.cards_added)?;
+        let wildcards_json = serde_json::to_string(&booster.wildcards)?;
+
+        let res = sqlx::query(
+            r#"
+            INSERT INTO player_booster_openings (timestamp, pack_id, cards_json, wildcards_json, vault_delta)
+            VALUES (?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&now)
+        .bind(&booster.pack_id)
+        .bind(&cards_json)
+        .bind(&wildcards_json)
+        .bind(booster.vault_progress_delta)
+        .execute(&self.pool)
+        .await?;
+
+        let inserted_id = res.last_insert_rowid();
+
+        // Register opened cards into collection_cards
+        for &grp_id in &booster.cards_added {
+            let _ = self.add_collection_booster_card(grp_id as i64).await;
+        }
+
+        Ok(inserted_id)
+    }
+
+    /// Add a card obtained from a booster pack to `collection_cards`.
+    /// Monotonic non-decreasing, capped at 4 (a playset).
+    pub async fn add_collection_booster_card(
+        &self,
+        grp_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO collection_cards (grp_id, owned_count, provenance, first_seen_at, last_updated_at, draw_seen)
+            VALUES (?, 1, 'booster', ?, ?, 0)
+            ON CONFLICT(grp_id) DO UPDATE SET
+                owned_count = MIN(4, owned_count + 1),
+                provenance = CASE WHEN owned_count = 0 THEN 'booster' ELSE provenance END,
+                last_updated_at = excluded.last_updated_at
+            "#
+        )
+        .bind(grp_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Retrieve recent booster pack openings.
+    pub async fn get_recent_booster_openings(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<BoosterOpeningDbRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let limit = if limit <= 0 { 50 } else { limit.min(500) };
+        let rows = sqlx::query(
+            r#"
+            SELECT id, timestamp, pack_id, cards_json, wildcards_json, vault_delta
+            FROM player_booster_openings
+            ORDER BY id DESC LIMIT ?
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            let cards_str: String = r.get("cards_json");
+            let wildcards_str: Option<String> = r.get("wildcards_json");
+            let cards: Vec<u32> = serde_json::from_str(&cards_str).unwrap_or_default();
+            let wildcards: std::collections::HashMap<String, u32> = wildcards_str
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+
+            list.push(BoosterOpeningDbRecord {
+                id: r.get("id"),
+                timestamp: r.get("timestamp"),
+                pack_id: r.get("pack_id"),
+                cards,
+                wildcards,
+                vault_delta: r.get("vault_delta"),
+            });
+        }
+        Ok(list)
+    }
+
+    /// Record or update daily quests from `QuestGetQuests`.
+    /// Performs lifecycle state transitions (active -> completed, active -> swapped).
+    pub async fn record_quests_update(
+        &self,
+        raw_quests: &[crate::parser::RawQuestData],
+        incoming_can_swap: bool,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // 1. Upsert / update each received quest
+        for raw in raw_quests {
+            let resolved = crate::quest_catalog::resolve_quest(&raw.loc_key, raw.goal);
+            let colors_json = serde_json::to_string(&resolved.colors).unwrap_or_else(|_| "[]".to_string());
+
+            let existing = sqlx::query(
+                "SELECT first_seen_at, status, current_progress, goal FROM player_quests WHERE quest_id = ?"
+            )
+            .bind(&raw.quest_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(row) = existing {
+                let first_seen: String = row.get("first_seen_at");
+                let prev_status: String = row.get("status");
+
+                let is_completed = raw.ending_progress >= raw.goal;
+                let new_status = if is_completed {
+                    "completed"
+                } else if prev_status == "completed" {
+                    "completed"
+                } else {
+                    "active"
+                };
+
+                let (completed_at, duration_sec) = if is_completed && prev_status != "completed" {
+                    let duration = chrono::DateTime::parse_from_rfc3339(&now)
+                        .ok()
+                        .and_then(|now_dt| {
+                            chrono::DateTime::parse_from_rfc3339(&first_seen)
+                                .ok()
+                                .map(|fs| (now_dt - fs).num_seconds())
+                        });
+                    (Some(now.clone()), duration)
+                } else {
+                    (None, None)
+                };
+
+                if let Some(comp_at) = completed_at {
+                    sqlx::query(
+                        r#"
+                        UPDATE player_quests
+                        SET current_progress = ?, can_swap = ?, status = ?, last_seen_at = ?,
+                            completed_at = ?, duration_seconds = ?
+                        WHERE quest_id = ?
+                        "#
+                    )
+                    .bind(raw.ending_progress as i64)
+                    .bind(raw.can_swap)
+                    .bind(new_status)
+                    .bind(&now)
+                    .bind(&comp_at)
+                    .bind(duration_sec)
+                    .bind(&raw.quest_id)
+                    .execute(&self.pool)
+                    .await?;
+                } else {
+                    sqlx::query(
+                        r#"
+                        UPDATE player_quests
+                        SET current_progress = ?, can_swap = ?, status = ?, last_seen_at = ?
+                        WHERE quest_id = ?
+                        "#
+                    )
+                    .bind(raw.ending_progress as i64)
+                    .bind(raw.can_swap)
+                    .bind(new_status)
+                    .bind(&now)
+                    .bind(&raw.quest_id)
+                    .execute(&self.pool)
+                    .await?;
+                }
+            } else {
+                let is_completed = raw.ending_progress >= raw.goal;
+                let status = if is_completed { "completed" } else { "active" };
+                let completed_at = if is_completed { Some(now.clone()) } else { None };
+                let duration_sec = if is_completed { Some(0i64) } else { None };
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO player_quests (
+                        quest_id, loc_key, title, description, category, colors,
+                        goal, current_progress, starting_progress, reward_gold, reward_xp,
+                        can_swap, status, first_seen_at, last_seen_at, completed_at, duration_seconds,
+                        matches_played_during
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    "#
+                )
+                .bind(&raw.quest_id)
+                .bind(&raw.loc_key)
+                .bind(&resolved.title)
+                .bind(&resolved.description)
+                .bind(&resolved.category)
+                .bind(&colors_json)
+                .bind(raw.goal as i64)
+                .bind(raw.ending_progress as i64)
+                .bind(raw.starting_progress as i64)
+                .bind(raw.reward_gold as i64)
+                .bind(raw.reward_xp as i64)
+                .bind(raw.can_swap)
+                .bind(status)
+                .bind(&now)
+                .bind(&now)
+                .bind(completed_at)
+                .bind(duration_sec)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+
+        // 2. Detect missing active quests (completed or swapped away)
+        let incoming_ids: Vec<String> = raw_quests.iter().map(|q| q.quest_id.clone()).collect();
+        let active_rows = sqlx::query(
+            "SELECT quest_id, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for row in active_rows {
+            let qid: String = row.get("quest_id");
+            if !incoming_ids.contains(&qid) {
+                let first_seen: String = row.get("first_seen_at");
+                let had_can_swap: bool = row.get("can_swap");
+                let progress: i64 = row.get("current_progress");
+                let goal: i64 = row.get("goal");
+
+                let duration = chrono::DateTime::parse_from_rfc3339(&now)
+                    .ok()
+                    .and_then(|now_dt| {
+                        chrono::DateTime::parse_from_rfc3339(&first_seen)
+                            .ok()
+                            .map(|fs| (now_dt - fs).num_seconds())
+                    });
+
+                // If the player had swap available, and now doesn't, and progress wasn't finished, it was swapped!
+                let final_status = if had_can_swap && !incoming_can_swap && progress < goal {
+                    "swapped"
+                } else {
+                    "completed"
+                };
+
+                let _ = sqlx::query(
+                    r#"
+                    UPDATE player_quests
+                    SET status = ?, completed_at = ?, duration_seconds = ?, last_seen_at = ?
+                    WHERE quest_id = ?
+                    "#
+                )
+                .bind(final_status)
+                .bind(&now)
+                .bind(duration)
+                .bind(&now)
+                .bind(&qid)
+                .execute(&self.pool)
+                .await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Increments matches_played_during for all currently active quests upon match completion.
+    pub async fn increment_active_quests_match_count(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            "UPDATE player_quests SET matches_played_during = matches_played_during + 1 WHERE status = 'active'"
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Updates periodic reward tracks UTC reset timestamps and authoritative win counts from `PeriodicRewardsGetStatus` or `StartHook`.
+    pub async fn record_reward_tracks_update(
+        &self,
+        daily_reset: &str,
+        weekly_reset: &str,
+        daily_wins: Option<u32>,
+        weekly_wins: Option<u32>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        match (daily_wins, weekly_wins) {
+            (Some(dw), Some(ww)) => {
+                sqlx::query(
+                    r#"
+                    INSERT INTO player_reward_tracks (id, daily_reset_timestamp, weekly_reset_timestamp, daily_wins, weekly_wins, updated_at)
+                    VALUES (1, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        daily_reset_timestamp = excluded.daily_reset_timestamp,
+                        weekly_reset_timestamp = excluded.weekly_reset_timestamp,
+                        daily_wins = excluded.daily_wins,
+                        weekly_wins = excluded.weekly_wins,
+                        updated_at = excluded.updated_at
+                    "#
+                )
+                .bind(daily_reset)
+                .bind(weekly_reset)
+                .bind(dw as i64)
+                .bind(ww as i64)
+                .bind(&now)
+                .execute(&self.pool)
+                .await?;
+            }
+            _ => {
+                sqlx::query(
+                    r#"
+                    INSERT INTO player_reward_tracks (id, daily_reset_timestamp, weekly_reset_timestamp, daily_wins, weekly_wins, updated_at)
+                    VALUES (1, ?, ?, 0, 0, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        daily_reset_timestamp = excluded.daily_reset_timestamp,
+                        weekly_reset_timestamp = excluded.weekly_reset_timestamp,
+                        updated_at = excluded.updated_at
+                    "#
+                )
+                .bind(daily_reset)
+                .bind(weekly_reset)
+                .bind(&now)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Retrieve active player quests.
+    pub async fn get_active_quests(
+        &self,
+    ) -> Result<ActiveQuestsResponse, Box<dyn std::error::Error + Send + Sync>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT quest_id, loc_key, title, description, category, colors,
+                   goal, current_progress, starting_progress, reward_gold, reward_xp,
+                   can_swap, status, first_seen_at, last_seen_at, completed_at,
+                   duration_seconds, matches_played_during
+            FROM player_quests
+            WHERE status = 'active'
+            ORDER BY first_seen_at ASC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut quests = Vec::new();
+        let mut overall_can_swap = false;
+
+        for r in rows {
+            let colors_str: String = r.get("colors");
+            let colors: Vec<String> = serde_json::from_str(&colors_str).unwrap_or_default();
+            let can_swap: bool = r.get("can_swap");
+            if can_swap {
+                overall_can_swap = true;
+            }
+
+            quests.push(QuestRecord {
+                quest_id: r.get("quest_id"),
+                loc_key: r.get("loc_key"),
+                title: r.get("title"),
+                description: r.get("description"),
+                category: r.get("category"),
+                colors,
+                goal: r.get::<i64, _>("goal") as u32,
+                current_progress: r.get::<i64, _>("current_progress") as u32,
+                starting_progress: r.get::<i64, _>("starting_progress") as u32,
+                reward_gold: r.get::<i64, _>("reward_gold") as u32,
+                reward_xp: r.get::<i64, _>("reward_xp") as u32,
+                can_swap,
+                status: r.get("status"),
+                first_seen_at: r.get("first_seen_at"),
+                last_seen_at: r.get("last_seen_at"),
+                completed_at: r.get("completed_at"),
+                duration_seconds: r.get("duration_seconds"),
+                matches_played_during: r.get::<i64, _>("matches_played_during") as u32,
+            });
+        }
+
+        Ok(ActiveQuestsResponse {
+            quests,
+            can_swap: overall_can_swap,
+        })
+    }
+
+    /// Retrieve full quest probability and completion statistics.
+    pub async fn get_quest_statistics(
+        &self,
+    ) -> Result<QuestStatistics, Box<dyn std::error::Error + Send + Sync>> {
+        let total_quests: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quests")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let gold_500: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quests WHERE reward_gold <= 500")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let gold_750: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quests WHERE reward_gold >= 750")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let total_u32 = total_quests as u32;
+        let g500_u32 = gold_500 as u32;
+        let g750_u32 = gold_750 as u32;
+
+        let gold_500_pct = if total_u32 > 0 { (g500_u32 as f64 / total_u32 as f64) * 100.0 } else { 0.0 };
+        let gold_750_pct = if total_u32 > 0 { (g750_u32 as f64 / total_u32 as f64) * 100.0 } else { 0.0 };
+
+        // Category breakdown
+        let cat_rows = sqlx::query(
+            "SELECT category, COUNT(*) as c FROM player_quests GROUP BY category ORDER BY c DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut category_distribution = Vec::new();
+        for r in cat_rows {
+            let cat: String = r.get("category");
+            let count: i64 = r.get("c");
+            let pct = if total_u32 > 0 { (count as f64 / total_u32 as f64) * 100.0 } else { 0.0 };
+            category_distribution.push(CategoryStat {
+                category: cat,
+                count: count as u32,
+                percentage: (pct * 10.0).round() / 10.0,
+            });
+        }
+
+        // Color / Guild breakdown
+        let guild_names = [
+            ("Azorius", vec!["W", "U"]),
+            ("Boros", vec!["W", "R"]),
+            ("Dimir", vec!["U", "B"]),
+            ("Golgari", vec!["B", "G"]),
+            ("Gruul", vec!["R", "G"]),
+            ("Izzet", vec!["U", "R"]),
+            ("Orzhov", vec!["W", "B"]),
+            ("Rakdos", vec!["B", "R"]),
+            ("Selesnya", vec!["W", "G"]),
+            ("Simic", vec!["U", "G"]),
+        ];
+
+        let all_colored_quests: Vec<String> = sqlx::query_scalar(
+            "SELECT colors FROM player_quests WHERE colors != '[]'"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+
+        let total_colored = all_colored_quests.len() as f64;
+        let mut color_distribution = Vec::new();
+        for (gname, gcols) in &guild_names {
+            let cols_str1 = serde_json::to_string(gcols).unwrap_or_default();
+            let mut rev_cols = gcols.clone();
+            rev_cols.reverse();
+            let cols_str2 = serde_json::to_string(&rev_cols).unwrap_or_default();
+
+            let count = all_colored_quests.iter().filter(|c| **c == cols_str1 || **c == cols_str2).count() as u32;
+            let pct = if total_colored > 0.0 { (count as f64 / total_colored) * 100.0 } else { 0.0 };
+            color_distribution.push(ColorStat {
+                guild: gname.to_string(),
+                colors: gcols.iter().map(|s| s.to_string()).collect(),
+                count,
+                percentage: (pct * 10.0).round() / 10.0,
+            });
+        }
+
+        // Quest frequency table
+        let freq_rows = sqlx::query(
+            r#"
+            SELECT title, category, reward_gold,
+                   COUNT(*) as times_seen,
+                   SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as times_completed,
+                   AVG(CASE WHEN status = 'completed' AND duration_seconds IS NOT NULL THEN duration_seconds ELSE NULL END) as avg_duration,
+                   AVG(CASE WHEN status = 'completed' THEN matches_played_during ELSE NULL END) as avg_matches
+            FROM player_quests
+            GROUP BY title, reward_gold
+            ORDER BY times_seen DESC, title ASC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut quest_frequency = Vec::new();
+        for r in freq_rows {
+            let title: String = r.get("title");
+            let category: String = r.get("category");
+            let reward_gold: i64 = r.get("reward_gold");
+            let times_seen: i64 = r.get("times_seen");
+            let times_completed: i64 = r.get("times_completed");
+            let avg_dur_sec: Option<f64> = r.get("avg_duration");
+            let avg_matches: Option<f64> = r.get("avg_matches");
+
+            quest_frequency.push(QuestFrequencyStat {
+                title,
+                category,
+                reward_gold: reward_gold as u32,
+                times_seen: times_seen as u32,
+                times_completed: times_completed as u32,
+                avg_duration_hours: avg_dur_sec.map(|s| ((s / 3600.0) * 10.0).round() / 10.0),
+                avg_matches: avg_matches.map(|m| (m * 10.0).round() / 10.0),
+            });
+        }
+
+        let overall_avg_dur_sec: Option<f64> = sqlx::query_scalar(
+            "SELECT AVG(duration_seconds) FROM player_quests WHERE status = 'completed' AND duration_seconds IS NOT NULL"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(None);
+
+        let overall_avg_matches: Option<f64> = sqlx::query_scalar(
+            "SELECT AVG(matches_played_during) FROM player_quests WHERE status = 'completed'"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(None);
+
+        let total_gold: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(reward_gold), 0) FROM player_quests WHERE status = 'completed'"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+
+        let total_xp: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(reward_xp), 0) FROM player_quests WHERE status = 'completed'"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+
+        Ok(QuestStatistics {
+            total_quests_tracked: total_u32,
+            gold_500_count: g500_u32,
+            gold_750_count: g750_u32,
+            gold_500_pct: (gold_500_pct * 10.0).round() / 10.0,
+            gold_750_pct: (gold_750_pct * 10.0).round() / 10.0,
+            category_distribution,
+            color_distribution,
+            quest_frequency,
+            avg_duration_hours: overall_avg_dur_sec.map(|s| ((s / 3600.0) * 10.0).round() / 10.0),
+            avg_matches_to_complete: overall_avg_matches.map(|m| (m * 10.0).round() / 10.0),
+            total_gold_earned: total_gold as u64,
+            total_xp_earned: total_xp as u64,
+        })
+    }
+
+    /// Retrieve the current status of Daily (15) and Weekly (15) Win Tracks.
+    pub async fn get_reward_tracks_status(
+        &self,
+    ) -> Result<RewardTracksStatus, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query(
+            "SELECT daily_reset_timestamp, weekly_reset_timestamp, daily_wins, weekly_wins, updated_at FROM player_reward_tracks WHERE id = 1"
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let now = chrono::Utc::now();
+        let (daily_reset_raw, weekly_reset_raw, stored_daily_wins, stored_weekly_wins, updated_at_raw) = if let Some(r) = row {
+            (
+                r.get::<String, _>("daily_reset_timestamp"),
+                r.get::<String, _>("weekly_reset_timestamp"),
+                r.get::<i64, _>("daily_wins") as u32,
+                r.get::<i64, _>("weekly_wins") as u32,
+                r.get::<String, _>("updated_at"),
+            )
+        } else {
+            let today_reset = now.date_naive().and_hms_opt(9, 0, 0).unwrap().and_utc();
+            let next_daily = if now > today_reset {
+                today_reset + chrono::Duration::days(1)
+            } else {
+                today_reset
+            };
+            let days_until_sun = (7 - now.weekday().num_days_from_sunday()) % 7;
+            let days_until_sun = if days_until_sun == 0 && now.time() >= chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap() {
+                7
+            } else {
+                days_until_sun
+            };
+            let next_weekly = (now.date_naive() + chrono::Duration::days(days_until_sun as i64))
+                .and_hms_opt(9, 0, 0).unwrap().and_utc();
+            (next_daily.to_rfc3339(), next_weekly.to_rfc3339(), 0, 0, now.to_rfc3339())
+        };
+
+        let mut daily_reset_dt = chrono::DateTime::parse_from_rfc3339(&daily_reset_raw)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or(now);
+        let daily_reset_passed = now >= daily_reset_dt;
+        while daily_reset_dt <= now {
+            daily_reset_dt += chrono::Duration::hours(24);
+        }
+
+        let mut weekly_reset_dt = chrono::DateTime::parse_from_rfc3339(&weekly_reset_raw)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or(now);
+        let weekly_reset_passed = now >= weekly_reset_dt;
+        while weekly_reset_dt <= now {
+            weekly_reset_dt += chrono::Duration::days(7);
+        }
+
+        let daily_window_start = (daily_reset_dt - chrono::Duration::hours(24)).to_rfc3339();
+        let weekly_window_start = (weekly_reset_dt - chrono::Duration::days(7)).to_rfc3339();
+
+        // Use authoritative wins from MTGA's _dailyRewardSequenceId when available (stored via
+        // record_reward_tracks_update). If the reset has passed since the last update, or no
+        // authoritative value was recorded, fall back to counting from the matches table.
+        let daily_wins: u32 = if !daily_reset_passed && stored_daily_wins > 0 {
+            stored_daily_wins.min(15)
+        } else {
+            (sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM matches WHERE result = 'win' AND timestamp >= ? AND timestamp < ?"
+            )
+            .bind(&daily_window_start)
+            .bind(daily_reset_dt.to_rfc3339())
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0) as u32).min(15)
+        };
+
+        let weekly_wins: u32 = if !weekly_reset_passed && stored_weekly_wins > 0 {
+            stored_weekly_wins.min(15)
+        } else {
+            (sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM matches WHERE result = 'win' AND timestamp >= ? AND timestamp < ?"
+            )
+            .bind(&weekly_window_start)
+            .bind(weekly_reset_dt.to_rfc3339())
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0) as u32).min(15)
+        };
+
+        let daily_configs: [(u32, u32, bool, &str); 15] = [
+            (250, 25, false, "gold_xp"),
+            (100, 25, false, "gold_xp"),
+            (100, 25, false, "gold_xp"),
+            (100, 25, false, "gold_xp"),
+            (0, 25, true, "card_xp"),
+            (50, 25, false, "gold_xp"),
+            (0, 25, true, "card_xp"),
+            (50, 25, false, "gold_xp"),
+            (0, 25, true, "card_xp"),
+            (50, 25, false, "gold_xp"),
+            (0, 0, true, "card"),
+            (25, 0, false, "gold"),
+            (0, 0, true, "card"),
+            (25, 0, false, "gold"),
+            (0, 0, true, "card"),
+        ];
+
+        let mut daily_milestones = Vec::with_capacity(15);
+        for (idx, (gold, xp, has_card, r_type)) in daily_configs.iter().enumerate() {
+            daily_milestones.push(RewardMilestone {
+                win_number: (idx + 1) as u32,
+                reward_type: r_type.to_string(),
+                gold: *gold,
+                xp: *xp,
+                has_card: *has_card,
+            });
+        }
+
+        let mut weekly_milestones = Vec::with_capacity(15);
+        for i in 1..=15 {
+            weekly_milestones.push(RewardMilestone {
+                win_number: i,
+                reward_type: "xp".to_string(),
+                gold: 0,
+                xp: 250,
+                has_card: false,
+            });
+        }
+
+        let next_daily_reward = if daily_wins < 15 {
+            Some(daily_milestones[daily_wins as usize].clone())
+        } else {
+            None
+        };
+
+        Ok(RewardTracksStatus {
+            daily_reset_timestamp: daily_reset_dt.to_rfc3339(),
+            weekly_reset_timestamp: weekly_reset_dt.to_rfc3339(),
+            daily_wins,
+            weekly_wins,
+            daily_milestones,
+            weekly_milestones,
+            next_daily_reward,
+        })
+    }
+
+    /// Record player rank update from `RankGetCombinedRankInfo`.
+    /// Performs deduplication so identical snapshots are not redundantly written.
+    pub async fn record_rank_update(
+        &self,
+        rank: &crate::parser::PlayerRankRecord,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // 1. Check the most recent snapshot for deduplication
+        let prev = sqlx::query(
+            r#"
+            SELECT season_ordinal, constructed_tier, constructed_level, constructed_step,
+                   constructed_wins, constructed_losses, limited_tier, limited_level,
+                   limited_step, limited_wins, limited_losses
+            FROM player_rank_snapshots
+            ORDER BY id DESC LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(p) = prev {
+            let p_so: i64 = p.get("season_ordinal");
+            let p_ct: String = p.get("constructed_tier");
+            let p_cl: i32 = p.get("constructed_level");
+            let p_cs: i32 = p.get("constructed_step");
+            let p_cw: i32 = p.get("constructed_wins");
+            let p_c_loss: i32 = p.get("constructed_losses");
+            let p_lt: String = p.get("limited_tier");
+            let p_ll: i32 = p.get("limited_level");
+            let p_ls: i32 = p.get("limited_step");
+            let p_lw: i32 = p.get("limited_wins");
+            let p_l_loss: i32 = p.get("limited_losses");
+
+            if p_so == rank.season_ordinal
+                && p_ct == rank.constructed_tier
+                && p_cl == rank.constructed_level
+                && p_cs == rank.constructed_step
+                && p_cw == rank.constructed_wins
+                && p_c_loss == rank.constructed_losses
+                && p_lt == rank.limited_tier
+                && p_ll == rank.limited_level
+                && p_ls == rank.limited_step
+                && p_lw == rank.limited_wins
+                && p_l_loss == rank.limited_losses
+            {
+                // Identical to latest snapshot, skip inserting duplicate
+                return Ok(());
+            }
+        }
+
+        // Get latest season end time if available
+        let season_end: Option<String> = sqlx::query_scalar(
+            "SELECT season_end_time FROM player_season_info WHERE season_ordinal = ?"
+        )
+        .bind(rank.season_ordinal)
+        .fetch_optional(&self.pool)
+        .await
+        .unwrap_or(None);
+
+        sqlx::query(
+            r#"
+            INSERT INTO player_rank_snapshots (
+                timestamp, season_ordinal, constructed_tier, constructed_level,
+                constructed_step, constructed_wins, constructed_losses,
+                limited_tier, limited_level, limited_step, limited_wins,
+                limited_losses, season_end_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&now)
+        .bind(rank.season_ordinal)
+        .bind(&rank.constructed_tier)
+        .bind(rank.constructed_level)
+        .bind(rank.constructed_step)
+        .bind(rank.constructed_wins)
+        .bind(rank.constructed_losses)
+        .bind(&rank.limited_tier)
+        .bind(rank.limited_level)
+        .bind(rank.limited_step)
+        .bind(rank.limited_wins)
+        .bind(rank.limited_losses)
+        .bind(&season_end)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Record season schedule details from `RankGetSeasonAndRankDetails`.
+    pub async fn record_season_update(
+        &self,
+        season: &crate::parser::SeasonDetailsRecord,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            INSERT INTO player_season_info (season_ordinal, season_start_time, season_end_time, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(season_ordinal) DO UPDATE SET
+                season_start_time = COALESCE(excluded.season_start_time, player_season_info.season_start_time),
+                season_end_time = COALESCE(excluded.season_end_time, player_season_info.season_end_time),
+                updated_at = excluded.updated_at
+            "#
+        )
+        .bind(season.season_ordinal)
+        .bind(&season.season_start_time)
+        .bind(&season.season_end_time)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        // Also update any snapshots for this season missing season_end_time
+        if let Some(ref end_time) = season.season_end_time {
+            let _ = sqlx::query(
+                "UPDATE player_rank_snapshots SET season_end_time = ? WHERE season_ordinal = ? AND season_end_time IS NULL"
+            )
+            .bind(end_time)
+            .bind(season.season_ordinal)
+            .execute(&self.pool)
+            .await;
+        }
+
+        Ok(())
+    }
+
+    /// Retrieve the latest ranked ladder status.
+    pub async fn get_latest_rank_status(
+        &self,
+    ) -> Result<Option<PlayerRankStatusResponse>, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query(
+            r#"
+            SELECT s.timestamp, s.season_ordinal, s.constructed_tier, s.constructed_level,
+                   s.constructed_step, s.constructed_wins, s.constructed_losses,
+                   s.limited_tier, s.limited_level, s.limited_step, s.limited_wins,
+                   s.limited_losses, COALESCE(s.season_end_time, info.season_end_time) as season_end_time,
+                   info.season_start_time
+            FROM player_rank_snapshots s
+            LEFT JOIN player_season_info info ON s.season_ordinal = info.season_ordinal
+            ORDER BY s.id DESC LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(r) = row {
+            Ok(Some(PlayerRankStatusResponse {
+                season_ordinal: r.get("season_ordinal"),
+                constructed_tier: r.get("constructed_tier"),
+                constructed_level: r.get("constructed_level"),
+                constructed_step: r.get("constructed_step"),
+                constructed_wins: r.get("constructed_wins"),
+                constructed_losses: r.get("constructed_losses"),
+                limited_tier: r.get("limited_tier"),
+                limited_level: r.get("limited_level"),
+                limited_step: r.get("limited_step"),
+                limited_wins: r.get("limited_wins"),
+                limited_losses: r.get("limited_losses"),
+                season_start_time: r.get("season_start_time"),
+                season_end_time: r.get("season_end_time"),
+                updated_at: r.get("timestamp"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Retrieve player rank history snapshots for climb tracking.
+    pub async fn get_rank_history(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<PlayerRankSnapshotDbRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let limit = if limit <= 0 { 50 } else { limit.min(500) };
+        let rows = sqlx::query(
+            r#"
+            SELECT id, timestamp, season_ordinal, constructed_tier, constructed_level,
+                   constructed_step, constructed_wins, constructed_losses,
+                   limited_tier, limited_level, limited_step, limited_wins,
+                   limited_losses, season_end_time
+            FROM player_rank_snapshots
+            ORDER BY id DESC LIMIT ?
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(PlayerRankSnapshotDbRecord {
+                id: r.get("id"),
+                timestamp: r.get("timestamp"),
+                season_ordinal: r.get("season_ordinal"),
+                constructed_tier: r.get("constructed_tier"),
+                constructed_level: r.get("constructed_level"),
+                constructed_step: r.get("constructed_step"),
+                constructed_wins: r.get("constructed_wins"),
+                constructed_losses: r.get("constructed_losses"),
+                limited_tier: r.get("limited_tier"),
+                limited_level: r.get("limited_level"),
+                limited_step: r.get("limited_step"),
+                limited_wins: r.get("limited_wins"),
+                limited_losses: r.get("limited_losses"),
+                season_end_time: r.get("season_end_time"),
+            });
+        }
+        Ok(list)
+    }
 }
 
 #[cfg(test)]
@@ -3055,6 +4380,268 @@ mod tests {
         // Request cards for 1 match
         let scoped_1 = db.get_recent_match_cards_count(1).await.unwrap();
         assert_eq!(scoped_1, 2);
+    }
+
+    #[tokio::test]
+    async fn test_economy_snapshots_and_deduplication() {
+        let db = in_memory_db().await;
+
+        let snapshot1 = parser::PlayerEconomyRecord {
+            gold: 57200,
+            gems: 3590,
+            vault_progress_tenths: 1886,
+            wc_track_pos: 5,
+            wc_common: 118,
+            wc_uncommon: 108,
+            wc_rare: 8,
+            wc_mythic: 2,
+            draft_tokens: 8,
+            jump_in_tokens: 2,
+            golden_pack_progress: 5,
+        };
+
+        // First insert -> should succeed and return true
+        let inserted1 = db.record_economy_snapshot(&snapshot1).await.unwrap();
+        assert!(inserted1);
+
+        // Identical insert -> should be deduplicated (return false)
+        let inserted2 = db.record_economy_snapshot(&snapshot1).await.unwrap();
+        assert!(!inserted2);
+
+        // Verify latest snapshot
+        let latest = db.get_latest_economy().await.unwrap().expect("Should have latest snapshot");
+        assert_eq!(latest.gold, 57200);
+        assert_eq!(latest.gems, 3590);
+        assert_eq!(latest.vault_progress_tenths, 1886);
+        assert_eq!(latest.vault_progress_pct, 188.6);
+        assert_eq!(latest.wc_rare, 8);
+        assert_eq!(latest.golden_pack_progress, 5);
+
+        // Verify history count is 1
+        let history = db.get_economy_history(10).await.unwrap();
+        assert_eq!(history.len(), 1);
+
+        // Value changes (e.g. earned 250 gold) -> should insert new snapshot
+        let mut snapshot2 = snapshot1.clone();
+        snapshot2.gold = 57450;
+        let inserted3 = db.record_economy_snapshot(&snapshot2).await.unwrap();
+        assert!(inserted3);
+
+        let latest2 = db.get_latest_economy().await.unwrap().expect("Should have updated snapshot");
+        assert_eq!(latest2.gold, 57450);
+
+        let history2 = db.get_economy_history(10).await.unwrap();
+        assert_eq!(history2.len(), 2);
+        assert_eq!(history2[0].gold, 57450);
+        assert_eq!(history2[1].gold, 57200);
+    }
+
+    #[tokio::test]
+    async fn test_booster_opening_and_collection_updates() {
+        let db = in_memory_db().await;
+
+        let mut wildcards = std::collections::HashMap::new();
+        wildcards.insert("Rare".to_string(), 1);
+
+        let booster = parser::BoosterOpeningRecord {
+            pack_id: Some("OTJ_Pack_01".to_string()),
+            cards_added: vec![99001, 99002],
+            wildcards,
+            vault_progress_delta: Some(0.3),
+        };
+
+        let id = db.record_booster_opening(&booster).await.unwrap();
+        assert!(id > 0);
+
+        // Check booster openings query
+        let openings = db.get_recent_booster_openings(10).await.unwrap();
+        assert_eq!(openings.len(), 1);
+        assert_eq!(openings[0].pack_id, Some("OTJ_Pack_01".to_string()));
+        assert_eq!(openings[0].cards, vec![99001, 99002]);
+        assert_eq!(openings[0].vault_delta, Some(0.3));
+        assert_eq!(openings[0].wildcards.get("Rare"), Some(&1));
+
+        // Verify cards were added to collection_cards with provenance 'booster'
+        let card1: (i64, String) = sqlx::query_as("SELECT owned_count, provenance FROM collection_cards WHERE grp_id = 99001")
+            .fetch_one(db.pool()).await.unwrap();
+        assert_eq!(card1.0, 1);
+        assert_eq!(card1.1, "booster");
+
+        // Open another pack with the same card -> owned_count should increment to 2
+        let booster2 = parser::BoosterOpeningRecord {
+            pack_id: Some("OTJ_Pack_02".to_string()),
+            cards_added: vec![99001],
+            wildcards: std::collections::HashMap::new(),
+            vault_progress_delta: None,
+        };
+        db.record_booster_opening(&booster2).await.unwrap();
+
+        let card1_updated: (i64,) = sqlx::query_as("SELECT owned_count FROM collection_cards WHERE grp_id = 99001")
+            .fetch_one(db.pool()).await.unwrap();
+        assert_eq!(card1_updated.0, 2);
+    }
+
+    #[tokio::test]
+    async fn test_record_and_get_active_quests() {
+        let db = in_memory_db().await;
+
+        let q1 = parser::RawQuestData {
+            quest_id: "q-101".to_string(),
+            loc_key: "Quests/Quest_Nissas_Journey".to_string(),
+            goal: 25,
+            starting_progress: 10,
+            ending_progress: 15,
+            can_swap: true,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        let q2 = parser::RawQuestData {
+            quest_id: "q-102".to_string(),
+            loc_key: "Quests/Quest_Azorius_Justiciar".to_string(),
+            goal: 40,
+            starting_progress: 0,
+            ending_progress: 5,
+            can_swap: true,
+            reward_gold: 750,
+            reward_xp: 500,
+        };
+
+        db.record_quests_update(&[q1, q2], true).await.unwrap();
+
+        let active = db.get_active_quests().await.unwrap();
+        assert_eq!(active.quests.len(), 2);
+        assert!(active.can_swap);
+
+        let quest1 = active.quests.iter().find(|q| q.quest_id == "q-101").unwrap();
+        assert_eq!(quest1.title, "Play 25 Lands");
+        assert_eq!(quest1.description, "Play 25 lands.");
+        assert_eq!(quest1.current_progress, 15);
+        assert_eq!(quest1.reward_gold, 500);
+
+        let quest2 = active.quests.iter().find(|q| q.quest_id == "q-102").unwrap();
+        assert_eq!(quest2.title, "Cast 40 White or Blue Spells");
+        assert_eq!(quest2.colors, vec!["W", "U"]);
+        assert_eq!(quest2.reward_gold, 750);
+
+        // Increment matches played while active
+        db.increment_active_quests_match_count().await.unwrap();
+        let active_after_match = db.get_active_quests().await.unwrap();
+        assert_eq!(active_after_match.quests[0].matches_played_during, 1);
+        assert_eq!(active_after_match.quests[1].matches_played_during, 1);
+
+        // Complete q1 by reaching goal
+        let q1_finished = parser::RawQuestData {
+            quest_id: "q-101".to_string(),
+            loc_key: "Quests/Quest_Nissas_Journey".to_string(),
+            goal: 25,
+            starting_progress: 15,
+            ending_progress: 25,
+            can_swap: false,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        db.record_quests_update(&[q1_finished], false).await.unwrap();
+
+        // q1 should now be completed (500g earned), q2 was swapped (0g earned)
+        let stats = db.get_quest_statistics().await.unwrap();
+        assert_eq!(stats.total_quests_tracked, 2);
+        assert_eq!(stats.gold_500_count, 1);
+        assert_eq!(stats.gold_750_count, 1);
+        assert_eq!(stats.gold_500_pct, 50.0);
+        assert_eq!(stats.gold_750_pct, 50.0);
+        assert_eq!(stats.total_gold_earned, 500);
+
+        let q2_row: (String,) = sqlx::query_as("SELECT status FROM player_quests WHERE quest_id = 'q-102'")
+            .fetch_one(db.pool()).await.unwrap();
+        assert_eq!(q2_row.0, "swapped");
+    }
+
+    #[tokio::test]
+    async fn test_reward_tracks_status_and_win_counts() {
+        let db = in_memory_db().await;
+
+        let now = chrono::Utc::now();
+        let daily_reset = (now + chrono::Duration::hours(12)).to_rfc3339();
+        let weekly_reset = (now + chrono::Duration::days(3)).to_rfc3339();
+
+        // Record the reset timestamps (MTGA never sends authoritative win counts)
+        db.record_reward_tracks_update(&daily_reset, &weekly_reset, None, None).await.unwrap();
+
+        // No matches yet — wins should be 0
+        let status0 = db.get_reward_tracks_status().await.unwrap();
+        assert_eq!(status0.daily_wins, 0);
+        assert_eq!(status0.weekly_wins, 0);
+        assert_eq!(status0.daily_milestones.len(), 15);
+        assert_eq!(status0.weekly_milestones.len(), 15);
+        assert!(status0.next_daily_reward.is_some());
+        assert_eq!(status0.next_daily_reward.unwrap().win_number, 1);
+
+        // Insert 2 wins within today's window (now - 1h to now)
+        let win_ts1 = (now - chrono::Duration::minutes(30)).to_rfc3339();
+        let win_ts2 = (now - chrono::Duration::minutes(60)).to_rfc3339();
+        let date_str = now.format("%Y-%m-%d").to_string();
+        sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_seat_id) VALUES ('m1', ?, ?, 'Standard', 'win', 300, 7, 1, 1)")
+            .bind(&win_ts1).bind(&date_str).execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_seat_id) VALUES ('m2', ?, ?, 'Standard', 'win', 240, 5, 0, 1)")
+            .bind(&win_ts2).bind(&date_str).execute(db.pool()).await.unwrap();
+
+        let status = db.get_reward_tracks_status().await.unwrap();
+        assert_eq!(status.daily_wins, 2);
+        assert_eq!(status.weekly_wins, 2);
+        assert!(status.next_daily_reward.is_some());
+        assert_eq!(status.next_daily_reward.unwrap().win_number, 3);
+    }
+
+    #[tokio::test]
+    async fn test_player_rank_snapshots_and_deduplication() {
+        let db = in_memory_db().await;
+
+        // 1. Record season info
+        let season = crate::parser::SeasonDetailsRecord {
+            season_ordinal: 93,
+            season_start_time: Some("2026-08-31T19:05:00".to_string()),
+            season_end_time: Some("2026-09-30T19:00:00".to_string()),
+        };
+        db.record_season_update(&season).await.unwrap();
+
+        // 2. Record rank update
+        let rank1 = crate::parser::PlayerRankRecord {
+            season_ordinal: 93,
+            constructed_tier: "Gold".to_string(),
+            constructed_level: 3,
+            constructed_step: 4,
+            constructed_wins: 2,
+            constructed_losses: 4,
+            limited_tier: "Bronze".to_string(),
+            limited_level: 4,
+            limited_step: 0,
+            limited_wins: 0,
+            limited_losses: 0,
+        };
+        db.record_rank_update(&rank1).await.unwrap();
+
+        // Check latest rank status
+        let status = db.get_latest_rank_status().await.unwrap().expect("status should be present");
+        assert_eq!(status.season_ordinal, 93);
+        assert_eq!(status.constructed_tier, "Gold");
+        assert_eq!(status.constructed_level, 3);
+        assert_eq!(status.constructed_step, 4);
+        assert_eq!(status.season_end_time, Some("2026-09-30T19:00:00".to_string()));
+
+        // 3. Deduplication test: identical update should NOT insert another row
+        db.record_rank_update(&rank1).await.unwrap();
+        let history = db.get_rank_history(50).await.unwrap();
+        assert_eq!(history.len(), 1);
+
+        // 4. Update with a new win: should insert second row
+        let mut rank2 = rank1.clone();
+        rank2.constructed_step = 5;
+        rank2.constructed_wins = 3;
+        db.record_rank_update(&rank2).await.unwrap();
+
+        let history2 = db.get_rank_history(50).await.unwrap();
+        assert_eq!(history2.len(), 2);
+        assert_eq!(history2[0].constructed_step, 5); // Newest first
     }
 }
 

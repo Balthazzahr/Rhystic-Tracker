@@ -9,3 +9,4 @@ pub mod settings;
 pub mod deck_list;
 pub mod dashboard;
 pub mod client_loc;
+pub mod quest_catalog;
