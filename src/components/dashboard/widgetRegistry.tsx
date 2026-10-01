@@ -27,6 +27,7 @@ import { ActiveQuestsWidget } from "./widgets/ActiveQuestsWidget";
 import { RewardTracksWidget } from "./widgets/RewardTracksWidget";
 import { QuestsRewardsOverviewWidget } from "./widgets/QuestsRewardsOverviewWidget";
 import { RankedLadderWidget } from "./widgets/RankedLadderWidget";
+import { MasteryPassWidget } from "./widgets/MasteryPassWidget";
 import {
   Trophy,
   Calendar,
@@ -332,6 +333,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
     defaultHeight: 3,
     defaultSettings: {},
     component: RankedLadderWidget,
+  },
+  mastery_pass: {
+    kind: "mastery_pass",
+    title: "Mastery Pass",
+    subtitle: "Set track & level rewards",
+    icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
+    defaultWidth: 12,
+    defaultHeight: 3,
+    defaultSettings: {},
+    component: MasteryPassWidget,
   },
 };
 

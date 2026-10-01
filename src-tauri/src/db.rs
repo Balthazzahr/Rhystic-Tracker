@@ -272,7 +272,37 @@ CREATE TABLE IF NOT EXISTS player_season_info (
     season_end_time TEXT,
     updated_at TEXT NOT NULL
 );
+
+-- Player mastery pass tracking (current pass, level, XP, rewards, and orbs)
+CREATE TABLE IF NOT EXISTS player_mastery_pass (
+    pass_id TEXT PRIMARY KEY,
+    set_code TEXT NOT NULL,
+    pass_name TEXT NOT NULL,
+    current_level INTEGER NOT NULL,
+    current_xp INTEGER NOT NULL,
+    xp_per_level INTEGER NOT NULL DEFAULT 1000,
+    is_premium BOOLEAN NOT NULL DEFAULT 0,
+    orbs INTEGER NOT NULL DEFAULT 0,
+    max_level INTEGER NOT NULL DEFAULT 40,
+    claimed_levels_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+);
 "#;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct MasteryPassStatusResponse {
+    pub pass_id: String,
+    pub set_code: String,
+    pub pass_name: String,
+    pub current_level: u32,
+    pub current_xp: u32,
+    pub xp_per_level: u32,
+    pub is_premium: bool,
+    pub orbs: u32,
+    pub max_level: u32,
+    pub claimed_levels: Vec<u32>,
+    pub updated_at: String,
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PlayerRankSnapshotDbRecord {
@@ -3716,6 +3746,195 @@ impl DatabaseManager {
         }
         Ok(list)
     }
+
+    /// Record or update the player's active mastery pass progress.
+    pub async fn record_mastery_pass_update(
+        &self,
+        record: &crate::parser::MasteryPassRecord,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let mut set_code = record.set_code.clone();
+        let mut pass_id = record.pass_id.clone();
+
+        // If set_code is generic or empty, try checking if existing row already resolved it
+        if set_code.is_empty() || set_code == "CURRENT" {
+            let existing_set: Option<String> = sqlx::query_scalar(
+                "SELECT set_code FROM player_mastery_pass WHERE set_code != 'CURRENT' AND set_code != '' ORDER BY updated_at DESC LIMIT 1"
+            )
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(es) = existing_set {
+                set_code = es.clone();
+                pass_id = format!("BattlePass_{}", es);
+            }
+        }
+
+        // Resolve friendly pass name using sets_metadata
+        let set_name_opt: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
+        )
+        .bind(&set_code)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let pass_name = match set_name_opt {
+            Some(n) => format!("{} Mastery", n),
+            None => {
+                if set_code.is_empty() || set_code == "CURRENT" {
+                    "Mastery Pass".to_string()
+                } else {
+                    format!("{} Mastery", set_code)
+                }
+            }
+        };
+
+        let claimed_json = serde_json::to_string(&record.claimed_levels).unwrap_or_else(|_| "[]".to_string());
+
+        sqlx::query(
+            r#"
+            INSERT INTO player_mastery_pass (
+                pass_id, set_code, pass_name, current_level, current_xp, xp_per_level,
+                is_premium, orbs, max_level, claimed_levels_json, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(pass_id) DO UPDATE SET
+                set_code = excluded.set_code,
+                pass_name = CASE WHEN excluded.pass_name != 'Mastery Pass' THEN excluded.pass_name ELSE player_mastery_pass.pass_name END,
+                current_level = excluded.current_level,
+                current_xp = excluded.current_xp,
+                xp_per_level = excluded.xp_per_level,
+                is_premium = CASE WHEN excluded.is_premium = 1 THEN 1 ELSE player_mastery_pass.is_premium END,
+                orbs = CASE WHEN excluded.orbs > 0 THEN excluded.orbs ELSE player_mastery_pass.orbs END,
+                max_level = MAX(player_mastery_pass.max_level, excluded.max_level),
+                claimed_levels_json = excluded.claimed_levels_json,
+                updated_at = excluded.updated_at
+            "#
+        )
+        .bind(&pass_id)
+        .bind(&set_code)
+        .bind(&pass_name)
+        .bind(record.current_level as i64)
+        .bind(record.current_xp as i64)
+        .bind(record.xp_per_level as i64)
+        .bind(if record.is_premium { 1 } else { 0 })
+        .bind(record.orbs as i64)
+        .bind(record.max_level as i64)
+        .bind(&claimed_json)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        // If we inserted a specific pass_id (e.g. BattlePass_FRA) and a stale BattlePass_CURRENT row exists,
+        // merge/clean it up so we don't have duplicate or out-of-sync rows.
+        if pass_id != "BattlePass_CURRENT" {
+            let _ = sqlx::query("DELETE FROM player_mastery_pass WHERE pass_id = 'BattlePass_CURRENT'")
+                .execute(&self.pool)
+                .await;
+        }
+
+        Ok(())
+    }
+
+    /// Update mastery orb balance from inventory tokens.
+    pub async fn update_mastery_orbs(
+        &self,
+        token_id: &str,
+        count: u32,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // e.g., token_id: "BattlePass_FRA_Orb" -> set_code "FRA", pass_id "BattlePass_FRA"
+        let set_code = token_id
+            .strip_prefix("BattlePass_")
+            .and_then(|s| s.strip_suffix("_Orb"))
+            .unwrap_or("");
+
+        if !set_code.is_empty() {
+            let pass_id = format!("BattlePass_{}", set_code);
+
+            // Fetch set name for pass_name resolution if updating generic row
+            let set_name_opt: Option<String> = sqlx::query_scalar(
+                "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
+            )
+            .bind(set_code)
+            .fetch_optional(&self.pool)
+            .await
+            .unwrap_or(None);
+
+            let pass_name = set_name_opt
+                .map(|n| format!("{} Mastery", n))
+                .unwrap_or_else(|| format!("{} Mastery", set_code));
+
+            // First try updating exact match
+            let rows_affected = sqlx::query(
+                "UPDATE player_mastery_pass SET orbs = ? WHERE pass_id = ? OR UPPER(set_code) = UPPER(?)"
+            )
+            .bind(count as i64)
+            .bind(&pass_id)
+            .bind(set_code)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
+
+            // If no exact match row existed but a generic 'BattlePass_CURRENT' row is present,
+            // upgrade it to the specific set pass!
+            if rows_affected == 0 {
+                let _ = sqlx::query(
+                    r#"
+                    UPDATE player_mastery_pass
+                    SET pass_id = ?, set_code = ?, pass_name = ?, orbs = ?
+                    WHERE pass_id = 'BattlePass_CURRENT' OR set_code = 'CURRENT'
+                    "#
+                )
+                .bind(&pass_id)
+                .bind(set_code)
+                .bind(&pass_name)
+                .bind(count as i64)
+                .execute(&self.pool)
+                .await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Retrieve the most current active mastery pass.
+    pub async fn get_mastery_pass_status(
+        &self,
+    ) -> Result<Option<MasteryPassStatusResponse>, Box<dyn std::error::Error + Send + Sync>> {
+        let row = sqlx::query(
+            r#"
+            SELECT pass_id, set_code, pass_name, current_level, current_xp, xp_per_level,
+                   is_premium, orbs, max_level, claimed_levels_json, updated_at
+            FROM player_mastery_pass
+            ORDER BY updated_at DESC LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(r) = row {
+            let claimed_str: String = r.get("claimed_levels_json");
+            let claimed_levels: Vec<u32> = serde_json::from_str(&claimed_str).unwrap_or_default();
+            let is_premium_int: i64 = r.get("is_premium");
+
+            Ok(Some(MasteryPassStatusResponse {
+                pass_id: r.get("pass_id"),
+                set_code: r.get("set_code"),
+                pass_name: r.get("pass_name"),
+                current_level: r.get::<i64, _>("current_level") as u32,
+                current_xp: r.get::<i64, _>("current_xp") as u32,
+                xp_per_level: r.get::<i64, _>("xp_per_level") as u32,
+                is_premium: is_premium_int == 1,
+                orbs: r.get::<i64, _>("orbs") as u32,
+                max_level: r.get::<i64, _>("max_level") as u32,
+                claimed_levels,
+                updated_at: r.get("updated_at"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -4398,6 +4617,7 @@ mod tests {
             draft_tokens: 8,
             jump_in_tokens: 2,
             golden_pack_progress: 5,
+            mastery_orbs: std::collections::HashMap::new(),
         };
 
         // First insert -> should succeed and return true
@@ -4642,6 +4862,43 @@ mod tests {
         let history2 = db.get_rank_history(50).await.unwrap();
         assert_eq!(history2.len(), 2);
         assert_eq!(history2[0].constructed_step, 5); // Newest first
+    }
+
+    #[tokio::test]
+    async fn test_mastery_pass_crud() {
+        let db = in_memory_db().await;
+
+        // Seed sets_metadata for name resolution
+        sqlx::query("INSERT INTO sets_metadata (set_code, name, released_at, updated_at) VALUES ('FRA', 'Reality Fracture', '2026-10-02', datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+
+        let pass_record = crate::parser::MasteryPassRecord {
+            pass_id: "BattlePass_FRA".to_string(),
+            set_code: "FRA".to_string(),
+            current_level: 3,
+            current_xp: 750,
+            xp_per_level: 1000,
+            is_premium: true,
+            orbs: 0,
+            max_level: 40,
+            claimed_levels: vec![1, 2],
+        };
+
+        db.record_mastery_pass_update(&pass_record).await.unwrap();
+
+        let status = db.get_mastery_pass_status().await.unwrap().expect("mastery pass should exist");
+        assert_eq!(status.pass_id, "BattlePass_FRA");
+        assert_eq!(status.set_code, "FRA");
+        assert_eq!(status.pass_name, "Reality Fracture Mastery");
+        assert_eq!(status.current_level, 3);
+        assert_eq!(status.current_xp, 750);
+        assert!(status.is_premium);
+        assert_eq!(status.claimed_levels, vec![1, 2]);
+
+        // Update orbs
+        db.update_mastery_orbs("BattlePass_FRA_Orb", 2).await.unwrap();
+        let status2 = db.get_mastery_pass_status().await.unwrap().unwrap();
+        assert_eq!(status2.orbs, 2);
     }
 }
 

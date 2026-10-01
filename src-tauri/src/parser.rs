@@ -42,6 +42,7 @@ pub struct PlayerEconomyRecord {
     pub draft_tokens: u32,
     pub jump_in_tokens: u32,
     pub golden_pack_progress: u32,
+    pub mastery_orbs: std::collections::HashMap<String, u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -86,6 +87,19 @@ pub struct SeasonDetailsRecord {
     pub season_end_time: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct MasteryPassRecord {
+    pub pass_id: String,
+    pub set_code: String,
+    pub current_level: u32,
+    pub current_xp: u32,
+    pub xp_per_level: u32,
+    pub is_premium: bool,
+    pub orbs: u32,
+    pub max_level: u32,
+    pub claimed_levels: Vec<u32>,
+}
+
 #[derive(Debug, Clone)]
 pub enum ParsedEvent {
     Auth { screen_name: String, client_id: String },
@@ -111,6 +125,7 @@ pub enum ParsedEvent {
     },
     RankUpdate(PlayerRankRecord),
     SeasonUpdate(SeasonDetailsRecord),
+    MasteryPassUpdate(MasteryPassRecord),
     Compound(Vec<ParsedEvent>),
     Unknown,
 }
@@ -752,6 +767,18 @@ pub fn parse_line(line: &str) -> ParsedEvent {
         }
     }
 
+    // 11. Mastery Pass Update (GraphGetGraphState for BattlePass or LevelTrack_Level_)
+    if line.contains("LevelTrack_Level_") || line.contains("BattlePass_") {
+        if let Some(start) = line.find('{') {
+            let json_str = &line[start..];
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(record) = extract_mastery_pass(&v, line) {
+                    return ParsedEvent::MasteryPassUpdate(record);
+                }
+            }
+        }
+    }
+
     ParsedEvent::Unknown
 }
 
@@ -945,6 +972,17 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
     let jump_in_tokens = custom_tokens.and_then(|c| c.get("Token_JumpIn").or_else(|| c.get("token_JumpIn"))).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
     let golden_pack_progress = custom_tokens.and_then(|c| c.get("BonusPackProgress").or_else(|| c.get("bonusPackProgress"))).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
 
+    let mut mastery_orbs = std::collections::HashMap::new();
+    if let Some(ct_map) = custom_tokens.and_then(|c| c.as_object()) {
+        for (k, val) in ct_map {
+            if (k.starts_with("BattlePass_") && k.ends_with("_Orb")) || k.contains("Orb") {
+                if let Some(num) = val.as_u64() {
+                    mastery_orbs.insert(k.clone(), num as u32);
+                }
+            }
+        }
+    }
+
     Some(PlayerEconomyRecord {
         gold,
         gems,
@@ -957,6 +995,7 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
         draft_tokens,
         jump_in_tokens,
         golden_pack_progress,
+        mastery_orbs,
     })
 }
 
@@ -1085,6 +1124,126 @@ pub fn extract_booster_opening(v: &serde_json::Value) -> Option<BoosterOpeningRe
         cards_added,
         wildcards,
         vault_progress_delta,
+    })
+}
+
+pub fn extract_mastery_pass(v: &serde_json::Value, raw_line: &str) -> Option<MasteryPassRecord> {
+    let payload = if v.get("NodeStates").is_some() {
+        v
+    } else if let Some(p) = v.get("Payload").or_else(|| v.get("payload")) {
+        p
+    } else {
+        v
+    };
+
+    let node_states = payload.get("NodeStates").and_then(|n| n.as_object())?;
+
+    // Check if this graph contains LevelTrack_Level nodes
+    let has_level_track = node_states.keys().any(|k| k.starts_with("LevelTrack_Level_"));
+    if !has_level_track {
+        return None;
+    }
+
+    // Try extracting pass_id and set_code
+    let mut pass_id = String::new();
+    let mut set_code = String::new();
+
+    // 1. From payload or raw_line
+    if let Some(gid) = payload.get("GraphId").or_else(|| payload.get("graphId")).and_then(|g| g.as_str()) {
+        pass_id = gid.to_string();
+        if let Some(sc) = gid.strip_prefix("BattlePass_") {
+            set_code = sc.to_string();
+        }
+    }
+
+    if pass_id.is_empty() {
+        if let Some(pos) = raw_line.find("BattlePass_") {
+            let rest = &raw_line[pos..];
+            let id_len = rest.find(|c: char| !c.is_alphanumeric() && c != '_').unwrap_or(rest.len());
+            pass_id = rest[..id_len].to_string();
+            if let Some(sc) = pass_id.strip_prefix("BattlePass_") {
+                set_code = sc.to_string();
+            }
+        }
+    }
+
+    if pass_id.is_empty() {
+        pass_id = "BattlePass_CURRENT".to_string();
+        set_code = "CURRENT".to_string();
+    }
+
+    let mut current_level = 1u32;
+    let mut current_xp = 0u32;
+    let mut max_level = 0u32;
+    let mut claimed_levels = Vec::new();
+    let mut is_premium = false;
+
+    // Check if user owns premium pass (RewardTierUpgrade or TierRewardNodeState has premium)
+    if let Some(tier_upgrade) = node_states.get("RewardTierUpgrade") {
+        if tier_upgrade.get("Status").and_then(|s| s.as_str()) == Some("Completed") {
+            is_premium = true;
+        }
+    }
+
+    for (node_name, state) in node_states {
+        if node_name.starts_with("LevelTrack_Level_") && !node_name.ends_with("_Reward") {
+            if let Some(num_str) = node_name.strip_prefix("LevelTrack_Level_") {
+                if let Ok(lvl) = num_str.parse::<u32>() {
+                    if lvl > max_level {
+                        max_level = lvl;
+                    }
+                    let status = state.get("Status").and_then(|s| s.as_str()).unwrap_or("");
+                    if status == "Completed" {
+                        claimed_levels.push(lvl);
+                        if lvl >= current_level {
+                            current_level = lvl;
+                        }
+                    } else if status == "Available" {
+                        current_level = lvl;
+                        if let Some(p) = state.get("ProgressNodeState") {
+                            if let Some(xp) = p.get("CurrentProgress").and_then(|x| x.as_u64()) {
+                                current_xp = xp as u32;
+                            }
+                        }
+                    }
+                }
+            }
+        } else if node_name.ends_with("_Reward") {
+            if let Some(tr) = state.get("TierRewardNodeState") {
+                if let Some(tiers) = tr.get("CurrentTiers").and_then(|t| t.as_array()) {
+                    for t in tiers {
+                        if t.as_str() == Some("premium") {
+                            is_premium = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    claimed_levels.sort_unstable();
+
+    // If max level was reached and completed, current_level is max_level
+    if current_level < 1 {
+        current_level = 1;
+    }
+    if max_level < 44 {
+        max_level = 44;
+    }
+    if max_level < current_level {
+        max_level = current_level;
+    }
+
+    Some(MasteryPassRecord {
+        pass_id,
+        set_code,
+        current_level,
+        current_xp,
+        xp_per_level: 1000,
+        is_premium,
+        orbs: 0, // Ingested/reconciled with inventory orbs
+        max_level,
+        claimed_levels,
     })
 }
 
@@ -1578,6 +1737,24 @@ mod tests {
                 assert_eq!(season.season_end_time, Some("2026-09-30T19:00:00".to_string()));
             }
             other => panic!("expected SeasonUpdate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_mastery_pass() {
+        let line = r#"{"GraphId":"BattlePass_FRA","NodeStates":{"MasteryPassCSAdmin":{"Status":"Available"},"RewardTierUpgrade":{"Status":"Completed"},"LevelTrack_Level_1":{"Status":"Completed"},"LevelTrack_Level_1_Reward":{"Status":"Completed","TierRewardNodeState":{"CurrentTiers":["basic","premium"]}},"LevelTrack_Level_2":{"Status":"Completed"},"LevelTrack_Level_3":{"Status":"Available","ProgressNodeState":{"CurrentProgress":750}}}}"#;
+        match parse_line(line) {
+            ParsedEvent::MasteryPassUpdate(pass) => {
+                assert_eq!(pass.pass_id, "BattlePass_FRA");
+                assert_eq!(pass.set_code, "FRA");
+                assert_eq!(pass.current_level, 3);
+                assert_eq!(pass.current_xp, 750);
+                assert_eq!(pass.xp_per_level, 1000);
+                assert!(pass.is_premium);
+                assert_eq!(pass.claimed_levels, vec![1, 2]);
+                assert_eq!(pass.max_level, 3);
+            }
+            other => panic!("expected MasteryPassUpdate, got {:?}", other),
         }
     }
 }

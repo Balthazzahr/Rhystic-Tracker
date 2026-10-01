@@ -438,6 +438,10 @@ async fn dispatch_parsed_event(
                     eprintln!("[EVENT: INVENTORY_UPDATE] Failed to record snapshot: {}", e);
                 }
             }
+
+            for (token_id, count) in &record.mastery_orbs {
+                let _ = db_manager.update_mastery_orbs(token_id, *count).await;
+            }
         }
         ParsedEvent::BoosterOpened(booster) => {
             match db_manager.record_booster_opening(&booster).await {
@@ -528,6 +532,19 @@ async fn dispatch_parsed_event(
                 }
             }
         }
+        ParsedEvent::MasteryPassUpdate(pass) => {
+            match db_manager.record_mastery_pass_update(&pass).await {
+                Ok(()) => {
+                    println!(
+                        "[EVENT: MASTERY_PASS_UPDATE] {} (set: {}): Level {} ({} / {} XP), premium: {}, orbs: {}, claimed: {}",
+                        pass.pass_id, pass.set_code, pass.current_level, pass.current_xp, pass.xp_per_level, pass.is_premium, pass.orbs, pass.claimed_levels.len()
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[EVENT: MASTERY_PASS_UPDATE] Failed to record mastery pass: {}", e);
+                }
+            }
+        }
         ParsedEvent::Compound(events) => {
             for ev in events {
                 Box::pin(dispatch_parsed_event(ev, assembler, db_manager)).await;
@@ -547,6 +564,8 @@ async fn process_tailer_events(
     let mut brace_depth = 0;
     let mut in_json = false;
 
+    let mut last_battle_pass_id: Option<String> = None;
+
     while let Some(event) = rx.recv().await {
         match event {
             TailerEvent::InitialCatchupComplete => {
@@ -559,6 +578,15 @@ async fn process_tailer_events(
             }
             TailerEvent::Line(line) => {
                 let trimmed = line.trim();
+
+                // Track outgoing GraphGetGraphState request for BattlePass
+                if trimmed.contains("GraphGetGraphState") && trimmed.contains("BattlePass_") {
+                    if let Some(pos) = trimmed.find("BattlePass_") {
+                        let rest = &trimmed[pos..];
+                        let id_len = rest.find(|c: char| !c.is_alphanumeric() && c != '_').unwrap_or(rest.len());
+                        last_battle_pass_id = Some(rest[..id_len].to_string());
+                    }
+                }
 
                 if !in_json && trimmed.starts_with('{') {
                     in_json = true;
@@ -580,14 +608,34 @@ async fn process_tailer_events(
                         let payload_str = json_buffer.clone();
                         json_buffer.clear();
 
-                        let parsed = parse_line(&payload_str);
+                        let mut parsed = parse_line(&payload_str);
+                        if let ParsedEvent::MasteryPassUpdate(ref mut pass) = parsed {
+                            if (pass.set_code == "CURRENT" || pass.set_code.is_empty()) && last_battle_pass_id.is_some() {
+                                if let Some(ref bp_id) = last_battle_pass_id {
+                                    pass.pass_id = bp_id.clone();
+                                    if let Some(sc) = bp_id.strip_prefix("BattlePass_") {
+                                        pass.set_code = sc.to_string();
+                                    }
+                                }
+                            }
+                        }
                         if !matches!(parsed, ParsedEvent::Unknown) {
                             let mut assembler = assembler_ref.lock().await;
                             dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
                         }
                     }
                 } else {
-                    let parsed = parse_line(&line);
+                    let mut parsed = parse_line(&line);
+                    if let ParsedEvent::MasteryPassUpdate(ref mut pass) = parsed {
+                        if (pass.set_code == "CURRENT" || pass.set_code.is_empty()) && last_battle_pass_id.is_some() {
+                            if let Some(ref bp_id) = last_battle_pass_id {
+                                pass.pass_id = bp_id.clone();
+                                if let Some(sc) = bp_id.strip_prefix("BattlePass_") {
+                                    pass.set_code = sc.to_string();
+                                }
+                            }
+                        }
+                    }
                     if !matches!(parsed, ParsedEvent::Unknown) {
                         let mut assembler = assembler_ref.lock().await;
                         dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
@@ -874,7 +922,8 @@ fn main() {
             get_quest_statistics,
             get_reward_tracks_status,
             get_player_rank_status,
-            get_player_rank_history
+            get_player_rank_history,
+            get_mastery_pass_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

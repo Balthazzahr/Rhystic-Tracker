@@ -34,6 +34,7 @@ pub const VALID_WIDGET_KINDS: &[&str] = &[
     "reward_tracks",
     "quests_rewards_overview",
     "ranked_ladder",
+    "mastery_pass",
 ];
 
 fn default_widget_width() -> u32 {

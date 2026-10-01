@@ -23,6 +23,31 @@ export function formatCurrency(val: number | undefined | null): string {
   return val.toLocaleString("en-US");
 }
 
+export interface WildcardWheelsProgress {
+  rareWheel: number;
+  uncommonWheel: number;
+  packsToRare: number;
+  packsToUncommon: number;
+}
+
+export function getWildcardWheelProgress(wcTrackPos: number = 0): WildcardWheelsProgress {
+  // In MTGA, wcTrackPosition tracks progress along the 30-pack rotation (0..29).
+  // Rare/Mythic completes every 6 packs with offset +1:
+  const rareWheel = (wcTrackPos + 1) % 6;
+  const packsToRare = rareWheel === 0 ? 6 : 6 - rareWheel;
+
+  // Uncommon completes every 6 packs with offset +4:
+  const uncommonWheel = (wcTrackPos + 4) % 6;
+  const packsToUncommon = uncommonWheel === 0 ? 6 : 6 - uncommonWheel;
+
+  return {
+    rareWheel,
+    uncommonWheel,
+    packsToRare,
+    packsToUncommon,
+  };
+}
+
 export function usePlayerEconomy(pollIntervalMs = 15000) {
   const [economy, setEconomy] = useState<EconomySnapshot | null>(null);
   const [loading, setLoading] = useState(true);

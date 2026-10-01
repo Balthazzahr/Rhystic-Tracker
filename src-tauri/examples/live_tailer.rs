@@ -143,6 +143,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ParsedEvent::SeasonUpdate(season) => {
                     println!("[LIVE TEST RUNNER] Season Update: Season={}, End={:?}", season.season_ordinal, season.season_end_time);
                 }
+                ParsedEvent::MasteryPassUpdate(pass) => {
+                    println!("[LIVE TEST RUNNER] Mastery Pass: {} (Level {} - {}/{} XP, Orbs: {})", pass.pass_id, pass.current_level, pass.current_xp, pass.xp_per_level, pass.orbs);
+                }
                 ParsedEvent::Unknown => {}
             }
         }

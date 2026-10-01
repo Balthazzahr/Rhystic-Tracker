@@ -185,3 +185,10 @@ pub async fn get_player_rank_history(limit: Option<i64>) -> Result<Vec<crate::db
     db.get_rank_history(limit.unwrap_or(50)).await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn get_mastery_pass_status() -> Result<Option<crate::db::MasteryPassStatusResponse>, String> {
+    let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    db.get_mastery_pass_status().await.map_err(|e| e.to_string())
+}
+
+

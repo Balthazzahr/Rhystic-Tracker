@@ -1,5 +1,5 @@
 import React from "react";
-import { Gem, Coins, Ticket, Sparkles, CheckCircle2 } from "lucide-react";
+import { Gem, Coins, CheckCircle2 } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { usePlayerEconomy, formatCurrency } from "./economyCommon";
@@ -21,60 +21,58 @@ export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget
       isEmpty={!economy && !loading}
       emptyMessage="No economy data detected yet. Log into MTGA to track."
     >
-      <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5">
-        {/* Top Currency Cards */}
-        <div className="grid grid-cols-2 gap-2">
+      <div className="flex-1 min-h-0 flex flex-col justify-between gap-3">
+        {/* Top Currency Cards with Centered Icons */}
+        <div className="grid grid-cols-2 gap-2.5">
           {/* Gold */}
-          <div className="bg-white/[0.03] border border-amber-500/20 hover:border-amber-500/40 p-2.5 flex items-center justify-between transition-colors">
-            <div className="min-w-0">
-              <div className="text-[10px] font-sans font-semibold uppercase tracking-wider text-amber-400/80 flex items-center gap-1.5">
-                <span className="ms ms-counter-gold text-amber-400 text-xs" />
-                <span>Gold</span>
-              </div>
-              <div className="text-xl font-mono font-bold text-amber-300 tabular-nums truncate mt-0.5">
-                {formatCurrency(economy?.gold)}
-              </div>
+          <div className="bg-white/[0.03] border border-amber-500/20 hover:border-amber-500/40 p-3 flex flex-col items-center justify-center text-center transition-colors">
+            <div className="w-10 h-10 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-1.5 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
+              <span className="ms ms-counter-gold text-amber-400 text-xl leading-none" />
             </div>
-            <div className="w-7 h-7 rounded-xs bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-              <Coins className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-amber-400/80">
+              Gold
+            </span>
+            <div className="text-2xl font-mono font-bold text-amber-300 tabular-nums truncate max-w-full mt-0.5">
+              {formatCurrency(economy?.gold)}
             </div>
           </div>
 
           {/* Gems */}
-          <div className="bg-white/[0.03] border border-cyan-500/20 hover:border-cyan-500/40 p-2.5 flex items-center justify-between transition-colors">
-            <div className="min-w-0">
-              <div className="text-[10px] font-sans font-semibold uppercase tracking-wider text-cyan-400/80 flex items-center gap-1.5">
-                <Gem className="w-3 h-3 text-cyan-400" />
-                <span>Gems</span>
-              </div>
-              <div className="text-xl font-mono font-bold text-cyan-300 tabular-nums truncate mt-0.5">
-                {formatCurrency(economy?.gems)}
-              </div>
+          <div className="bg-white/[0.03] border border-cyan-500/20 hover:border-cyan-500/40 p-3 flex flex-col items-center justify-center text-center transition-colors">
+            <div className="w-10 h-10 rounded-full bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-1.5 shadow-[0_0_12px_rgba(6,182,212,0.2)]">
+              <Gem className="w-5 h-5 text-cyan-400" />
             </div>
-            <div className="w-7 h-7 rounded-xs bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0">
-              <Gem className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-cyan-400/80">
+              Gems
+            </span>
+            <div className="text-2xl font-mono font-bold text-cyan-300 tabular-nums truncate max-w-full mt-0.5">
+              {formatCurrency(economy?.gems)}
             </div>
           </div>
         </div>
 
-        {/* Tokens Row */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-white/[0.02] border border-white/10 px-2.5 py-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-neutral-400 text-[11px] font-sans">
-              <Ticket className="w-3 h-3 text-amber-400/80" />
-              <span>Draft Tokens</span>
+        {/* Tokens Row with Centered Icons */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="bg-white/[0.02] border border-white/10 hover:border-white/20 p-2 flex items-center justify-between transition-colors">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                <span className="ms ms-ticket text-amber-400 text-sm leading-none" />
+              </div>
+              <span className="text-neutral-300 text-xs font-sans font-medium">Draft Tokens</span>
             </div>
-            <span className="font-mono font-bold text-sm text-neutral-200 tabular-nums">
+            <span className="font-mono font-bold text-base text-neutral-100 tabular-nums pr-1">
               {economy?.draft_tokens ?? 0}
             </span>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/10 px-2.5 py-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-neutral-400 text-[11px] font-sans">
-              <Sparkles className="w-3 h-3 text-emerald-400/80" />
-              <span>Jump In! Tokens</span>
+          <div className="bg-white/[0.02] border border-white/10 hover:border-white/20 p-2 flex items-center justify-between transition-colors">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <span className="ms ms-token text-emerald-400 text-sm leading-none" />
+              </div>
+              <span className="text-neutral-300 text-xs font-sans font-medium">Jump In!</span>
             </div>
-            <span className="font-mono font-bold text-sm text-neutral-200 tabular-nums">
+            <span className="font-mono font-bold text-base text-neutral-100 tabular-nums pr-1">
               {economy?.jump_in_tokens ?? 0}
             </span>
           </div>
@@ -113,7 +111,11 @@ export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget
           </div>
 
           <div className="flex items-center justify-between text-[10px] font-sans text-neutral-400 pt-0.5">
-            <span>{isVaultReady ? `+${remainingPct.toFixed(1)}% towards vault #${fullVaults + 1}` : `${(100 - vaultPct).toFixed(1)}% needed to open`}</span>
+            <span>
+              {isVaultReady
+                ? `+${remainingPct.toFixed(1)}% towards vault #${fullVaults + 1}`
+                : `${(100 - vaultPct).toFixed(1)}% needed to open`}
+            </span>
             <span className="text-neutral-500">1,000 pips = 100%</span>
           </div>
         </div>
