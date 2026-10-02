@@ -1268,6 +1268,14 @@ impl DatabaseManager {
         // Migration: Ensure player_quests title matches authentic MTGA quest objective description
         let _ = sqlx::query("UPDATE player_quests SET title = description WHERE description IS NOT NULL AND description != '' AND title != description").execute(&pool).await;
 
+        // Migration / Auto-repair: Restore erroneously completed or swapped quests where current progress is less than goal
+        let repaired = sqlx::query("UPDATE player_quests SET status = 'active', completed_at = NULL, duration_seconds = NULL WHERE status != 'active' AND current_progress < goal").execute(&pool).await;
+        if let Ok(res) = repaired {
+            if res.rows_affected() > 0 {
+                println!("[DB MIGRATION] Auto-repaired {} prematurely completed active quests", res.rows_affected());
+            }
+        }
+
         let mgr = Self { pool, db_filename };
         #[cfg(not(test))]
         {
@@ -2965,9 +2973,8 @@ impl DatabaseManager {
                 let prev_status: String = row.get("status");
 
                 let is_completed = raw.ending_progress >= raw.goal;
+                // Game client is authoritative: if ending_progress < goal, it MUST be active!
                 let new_status = if is_completed {
-                    "completed"
-                } else if prev_status == "completed" {
                     "completed"
                 } else {
                     "active"
@@ -2982,44 +2989,30 @@ impl DatabaseManager {
                                 .map(|fs| (now_dt - fs).num_seconds())
                         });
                     (Some(now.clone()), duration)
-                } else {
+                } else if !is_completed {
+                    // Reset completed_at and duration if reactivated / in-progress
                     (None, None)
+                } else {
+                    (row.get("completed_at"), row.get("duration_seconds"))
                 };
 
-                if let Some(comp_at) = completed_at {
-                    sqlx::query(
-                        r#"
-                        UPDATE player_quests
-                        SET current_progress = ?, can_swap = ?, status = ?, last_seen_at = ?,
-                            completed_at = ?, duration_seconds = ?
-                        WHERE quest_id = ?
-                        "#
-                    )
-                    .bind(raw.ending_progress as i64)
-                    .bind(raw.can_swap)
-                    .bind(new_status)
-                    .bind(&now)
-                    .bind(&comp_at)
-                    .bind(duration_sec)
-                    .bind(&raw.quest_id)
-                    .execute(&self.pool)
-                    .await?;
-                } else {
-                    sqlx::query(
-                        r#"
-                        UPDATE player_quests
-                        SET current_progress = ?, can_swap = ?, status = ?, last_seen_at = ?
-                        WHERE quest_id = ?
-                        "#
-                    )
-                    .bind(raw.ending_progress as i64)
-                    .bind(raw.can_swap)
-                    .bind(new_status)
-                    .bind(&now)
-                    .bind(&raw.quest_id)
-                    .execute(&self.pool)
-                    .await?;
-                }
+                sqlx::query(
+                    r#"
+                    UPDATE player_quests
+                    SET current_progress = ?, can_swap = ?, status = ?, last_seen_at = ?,
+                        completed_at = ?, duration_seconds = ?
+                    WHERE quest_id = ?
+                    "#
+                )
+                .bind(raw.ending_progress as i64)
+                .bind(raw.can_swap)
+                .bind(new_status)
+                .bind(&now)
+                .bind(completed_at)
+                .bind(duration_sec)
+                .bind(&raw.quest_id)
+                .execute(&self.pool)
+                .await?;
             } else {
                 let is_completed = raw.ending_progress >= raw.goal;
                 let status = if is_completed { "completed" } else { "active" };
@@ -3058,51 +3051,54 @@ impl DatabaseManager {
             }
         }
 
-        // 2. Detect missing active quests (completed or swapped away)
-        let incoming_ids: Vec<String> = raw_quests.iter().map(|q| q.quest_id.clone()).collect();
-        let active_rows = sqlx::query(
-            "SELECT quest_id, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        // 2. Detect missing active quests (completed or swapped away).
+        // Only run when raw_quests is non-empty to prevent accidental purges from empty transient lines or rotations.
+        if !raw_quests.is_empty() {
+            let incoming_ids: Vec<String> = raw_quests.iter().map(|q| q.quest_id.clone()).collect();
+            let active_rows = sqlx::query(
+                "SELECT quest_id, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
+            )
+            .fetch_all(&self.pool)
+            .await?;
 
-        for row in active_rows {
-            let qid: String = row.get("quest_id");
-            if !incoming_ids.contains(&qid) {
-                let first_seen: String = row.get("first_seen_at");
-                let had_can_swap: bool = row.get("can_swap");
-                let progress: i64 = row.get("current_progress");
-                let goal: i64 = row.get("goal");
+            for row in active_rows {
+                let qid: String = row.get("quest_id");
+                if !incoming_ids.contains(&qid) {
+                    let first_seen: String = row.get("first_seen_at");
+                    let had_can_swap: bool = row.get("can_swap");
+                    let progress: i64 = row.get("current_progress");
+                    let goal: i64 = row.get("goal");
 
-                let duration = chrono::DateTime::parse_from_rfc3339(&now)
-                    .ok()
-                    .and_then(|now_dt| {
-                        chrono::DateTime::parse_from_rfc3339(&first_seen)
-                            .ok()
-                            .map(|fs| (now_dt - fs).num_seconds())
-                    });
+                    let duration = chrono::DateTime::parse_from_rfc3339(&now)
+                        .ok()
+                        .and_then(|now_dt| {
+                            chrono::DateTime::parse_from_rfc3339(&first_seen)
+                                .ok()
+                                .map(|fs| (now_dt - fs).num_seconds())
+                        });
 
-                // If the player had swap available, and now doesn't, and progress wasn't finished, it was swapped!
-                let final_status = if had_can_swap && !incoming_can_swap && progress < goal {
-                    "swapped"
-                } else {
-                    "completed"
-                };
+                    // If the player had swap available, and now doesn't, and progress wasn't finished, it was swapped!
+                    let final_status = if had_can_swap && !incoming_can_swap && progress < goal {
+                        "swapped"
+                    } else {
+                        "completed"
+                    };
 
-                let _ = sqlx::query(
-                    r#"
-                    UPDATE player_quests
-                    SET status = ?, completed_at = ?, duration_seconds = ?, last_seen_at = ?
-                    WHERE quest_id = ?
-                    "#
-                )
-                .bind(final_status)
-                .bind(&now)
-                .bind(duration)
-                .bind(&now)
-                .bind(&qid)
-                .execute(&self.pool)
-                .await;
+                    let _ = sqlx::query(
+                        r#"
+                        UPDATE player_quests
+                        SET status = ?, completed_at = ?, duration_seconds = ?, last_seen_at = ?
+                        WHERE quest_id = ?
+                        "#
+                    )
+                    .bind(final_status)
+                    .bind(&now)
+                    .bind(duration)
+                    .bind(&now)
+                    .bind(&qid)
+                    .execute(&self.pool)
+                    .await;
+                }
             }
         }
 
@@ -3173,7 +3169,7 @@ impl DatabaseManager {
         Ok(())
     }
 
-    /// Retrieve active player quests.
+    /// Retrieve active and recent completed player quests (filling up to 3 MTGA objective slots).
     pub async fn get_active_quests(
         &self,
     ) -> Result<ActiveQuestsResponse, Box<dyn std::error::Error + Send + Sync>> {
@@ -3183,9 +3179,27 @@ impl DatabaseManager {
                    goal, current_progress, starting_progress, reward_gold, reward_xp,
                    can_swap, status, first_seen_at, last_seen_at, completed_at,
                    duration_seconds, matches_played_during
-            FROM player_quests
-            WHERE status = 'active'
-            ORDER BY first_seen_at ASC
+            FROM (
+                SELECT quest_id, loc_key, title, description, category, colors,
+                       goal, current_progress, starting_progress, reward_gold, reward_xp,
+                       can_swap, status, first_seen_at, last_seen_at, completed_at,
+                       duration_seconds, matches_played_during,
+                       0 as sort_prio,
+                       first_seen_at as sort_time
+                FROM player_quests
+                WHERE status = 'active'
+                UNION ALL
+                SELECT quest_id, loc_key, title, description, category, colors,
+                       goal, current_progress, starting_progress, reward_gold, reward_xp,
+                       can_swap, status, first_seen_at, last_seen_at, completed_at,
+                       duration_seconds, matches_played_during,
+                       1 as sort_prio,
+                       COALESCE(completed_at, last_seen_at) as sort_time
+                FROM player_quests
+                WHERE status = 'completed'
+            )
+            ORDER BY sort_prio ASC, sort_time DESC
+            LIMIT 3
             "#
         )
         .fetch_all(&self.pool)
@@ -3198,7 +3212,9 @@ impl DatabaseManager {
             let colors_str: String = r.get("colors");
             let colors: Vec<String> = serde_json::from_str(&colors_str).unwrap_or_default();
             let can_swap: bool = r.get("can_swap");
-            if can_swap {
+            let status: String = r.get("status");
+            // Only active quests allow rerolling/swapping
+            if can_swap && status == "active" {
                 overall_can_swap = true;
             }
 
@@ -3215,7 +3231,7 @@ impl DatabaseManager {
                 reward_gold: r.get::<i64, _>("reward_gold") as u32,
                 reward_xp: r.get::<i64, _>("reward_xp") as u32,
                 can_swap,
-                status: r.get("status"),
+                status,
                 first_seen_at: r.get("first_seen_at"),
                 last_seen_at: r.get("last_seen_at"),
                 completed_at: r.get("completed_at"),
@@ -4774,6 +4790,55 @@ mod tests {
         let q2_row: (String,) = sqlx::query_as("SELECT status FROM player_quests WHERE quest_id = 'q-102'")
             .fetch_one(db.pool()).await.unwrap();
         assert_eq!(q2_row.0, "swapped");
+
+        // Test resilience: Empty raw_quests update must NOT purge remaining active quests
+        let q3 = parser::RawQuestData {
+            quest_id: "q-103".to_string(),
+            loc_key: "Quests/Quest_Boros_Reckoner".to_string(),
+            goal: 20,
+            starting_progress: 10,
+            ending_progress: 15,
+            can_swap: false,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        db.record_quests_update(&[q3], false).await.unwrap();
+        // 1 active quest (q3) + up to 2 recent completed (q1) = 2 quests returned in the 3 slots
+        let res_with_q3 = db.get_active_quests().await.unwrap();
+        assert_eq!(res_with_q3.quests.iter().filter(|q| q.status == "active").count(), 1);
+        assert_eq!(res_with_q3.quests[0].quest_id, "q-103");
+        assert_eq!(res_with_q3.quests[0].status, "active");
+
+        // Sending an empty batch (e.g. transient log line) must not mark q3 as completed
+        db.record_quests_update(&[], false).await.unwrap();
+        let res_after_empty = db.get_active_quests().await.unwrap();
+        assert_eq!(res_after_empty.quests.iter().filter(|q| q.status == "active").count(), 1);
+        assert_eq!(res_after_empty.quests[0].quest_id, "q-103");
+
+        // Test self-healing: If q3 was somehow marked 'completed' in DB, incoming progress < goal MUST restore it to 'active'
+        sqlx::query("UPDATE player_quests SET status = 'completed', completed_at = '2026-10-01T00:00:00Z' WHERE quest_id = 'q-103'")
+            .execute(db.pool()).await.unwrap();
+        let res_when_completed = db.get_active_quests().await.unwrap();
+        assert_eq!(res_when_completed.quests.iter().filter(|q| q.status == "active").count(), 0);
+
+        // Client logs q3 with ending_progress = 19 (< 20 goal)
+        let q3_reactivated = parser::RawQuestData {
+            quest_id: "q-103".to_string(),
+            loc_key: "Quests/Quest_Boros_Reckoner".to_string(),
+            goal: 20,
+            starting_progress: 15,
+            ending_progress: 19,
+            can_swap: false,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        db.record_quests_update(&[q3_reactivated], false).await.unwrap();
+        let restored_active = db.get_active_quests().await.unwrap();
+        let restored_active_item = restored_active.quests.iter().find(|q| q.quest_id == "q-103").unwrap();
+        assert_eq!(restored_active_item.status, "active");
+        assert_eq!(restored_active_item.current_progress, 19);
+        assert!(restored_active_item.completed_at.is_none());
+        assert_eq!(restored_active.quests[0].quest_id, "q-103"); // Active quest is sorted first!
     }
 
     #[tokio::test]

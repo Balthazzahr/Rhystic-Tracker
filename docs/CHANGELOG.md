@@ -2,7 +2,19 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
-## [1.7.0] - 2026-09-30 — 📊 Multi-Page Dashboard, Sticky Controls, Economy Trends & Authentic Quests
+## [1.7.3] - 2026-10-02 — 📜 3-Slot Quests Layout, Completed Stamps & Self-Healing State
+
+### 📜 Active Quests 3-Slot Visual Layout & Snug Progress Bars
+- **Authentic 3-Slot Format**: The Active Quests dashboard widget and the Quests & Rewards Overview widget now consistently render 3 slots reflecting MTGA's native layout.
+- **Snug Progress Bar Placement**: Moved the quest progress bar directly beneath the quest title and reward indicators inside the card body, eliminating the visual gap where progress bars were stranded at the widget floor.
+- **Completed Stamps & Dimmed State**: The most recently completed quests are displayed in remaining slots with dimmed opacity (`opacity-55`) and stamped with a bold MTGA-style angled green watermark badge (`✔ COMPLETED`).
+- **Empty Slot Placeholders**: Render clean dashed empty placeholder cards when fewer than 3 total quests exist in history.
+
+### 🛡️ Backend Self-Healing Quest State Machine
+- **Strict Active Status Enforcement**: Fixed an issue where active quests with incomplete progress could erroneously remain marked as completed. In `record_quests_update`, if `ending_progress < goal`, status is unconditionally kept as `"active"` and `completed_at` is cleared to `NULL`.
+- **Database Startup Auto-Repair**: Added self-healing migration in `DatabaseManager::init()` to automatically restore any historical quests where `status != 'active' AND current_progress < goal`.
+- **Top 3 Quests Query**: Updated `get_active_quests()` to select active quests first, followed by the most recently completed quests up to a total of 3.
+
 
 ### 📑 Multi-Page Modular Dashboard & Sticky Navigation
 - **Multi-Page Layout Support**: Added full support for organizing widgets across distinct dashboard pages (Page 1, 2, 3...).

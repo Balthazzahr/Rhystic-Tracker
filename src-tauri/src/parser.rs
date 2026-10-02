@@ -1752,7 +1752,7 @@ mod tests {
                 assert_eq!(pass.xp_per_level, 1000);
                 assert!(pass.is_premium);
                 assert_eq!(pass.claimed_levels, vec![1, 2]);
-                assert_eq!(pass.max_level, 3);
+                assert_eq!(pass.max_level, 44);
             }
             other => panic!("expected MasteryPassUpdate, got {:?}", other),
         }

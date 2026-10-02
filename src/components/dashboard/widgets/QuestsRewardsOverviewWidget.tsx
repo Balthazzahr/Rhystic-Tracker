@@ -63,84 +63,122 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
               </span>
             </div>
 
-            {quests.length === 0 ? (
-              <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 text-center bg-white/[0.01] border border-white/5">
-                <CheckCircle2 className="w-8 h-8 text-emerald-400/90 mb-2" />
-                <div className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-neutral-200">
-                  All Quests Completed
-                </div>
-                {dailyCountdown && (
-                  <div className="text-xs font-mono text-amber-400/90 mt-1.5">
-                    Next quest in {dailyCountdown}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex-1 min-h-0 flex flex-col justify-between gap-2">
-                {quests.map((q) => {
-                  const pct = Math.min(100, Math.round((q.current_progress / q.goal) * 100));
-                  const is750 = q.reward_gold >= 750;
+            <div className="flex-1 min-h-0 flex flex-col gap-2">
+              {Array.from({ length: 3 }).map((_, slotIdx) => {
+                const q = quests[slotIdx];
 
+                if (!q) {
                   return (
                     <div
-                      key={q.quest_id}
-                      className={`flex-1 min-h-0 bg-white/[0.02] border p-2.5 sm:p-3 flex flex-col justify-between transition-colors ${
-                        is750
-                          ? "border-amber-500/30 hover:border-amber-500/50 bg-amber-500/[0.02]"
-                          : "border-white/10 hover:border-white/20"
-                      }`}
+                      key={`empty-slot-${slotIdx}`}
+                      className="flex-1 min-h-[58px] border border-dashed border-white/10 bg-white/[0.01] p-2 flex flex-col items-center justify-center text-center select-none"
                     >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-display font-bold tracking-wide uppercase text-white truncate">
-                              {q.title}
-                            </span>
-                            {q.colors && q.colors.length > 0 && (
-                              <div className="flex items-center gap-0.5 shrink-0">
-                                {q.colors.map((c) => (
-                                  <ManaPip key={c} symbol={c} size={12} />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-[10px] font-sans text-neutral-400 mt-0.5 line-clamp-1">
-                            {formatQuestCategory(q.category)} • Goal: {q.goal}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span
-                            className={`text-[9px] font-mono px-1.5 py-0.5 border ${
-                              is750
-                                ? "bg-amber-500/20 border-amber-500/40 text-amber-300 font-bold"
-                                : "bg-white/[0.04] border-white/10 text-neutral-300"
-                            }`}
-                          >
-                            {q.reward_gold}g
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-0.5">
-                        <div className="flex items-center justify-between text-[9px] font-mono text-neutral-400">
-                          <span>Progress</span>
-                          <span>
-                            <strong className="text-white">{q.current_progress}</strong> / {q.goal} ({pct}%)
-                          </span>
-                        </div>
-                        <div className="h-1 w-full bg-neutral-900 border border-white/5 overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-300 ${is750 ? "bg-amber-400" : "bg-cyan-500"}`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
+                      <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-neutral-500">
+                        Empty Quest Slot
+                      </span>
+                      {dailyCountdown && slotIdx === 0 && (
+                        <span className="text-[8px] font-mono text-amber-400/80 mt-0.5">
+                          Next in {dailyCountdown}
+                        </span>
+                      )}
                     </div>
                   );
-                })}
-              </div>
-            )}
+                }
+
+                const isActive = q.status === "active";
+                const pct = Math.min(100, Math.round((q.current_progress / q.goal) * 100));
+                const is750 = q.reward_gold >= 750;
+
+                return (
+                  <div
+                    key={q.quest_id}
+                    className={`relative flex-1 min-h-[58px] border p-2 flex flex-col justify-between overflow-hidden transition-all ${
+                      isActive
+                        ? is750
+                          ? "border-amber-500/30 hover:border-amber-500/50 bg-amber-500/[0.03]"
+                          : "border-white/10 hover:border-white/20 bg-white/[0.02]"
+                        : "border-white/5 bg-white/[0.01] opacity-55 hover:opacity-75"
+                    }`}
+                  >
+                    {/* Completed Stamp Badge */}
+                    {!isActive && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 rotate-[-8deg] border border-emerald-500/80 bg-neutral-950/85 px-2 py-0.5 shadow-xl pointer-events-none select-none z-10 flex items-center gap-1 backdrop-blur-xs">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 stroke-[2.5]" />
+                        <span className="text-[9px] font-sans font-black uppercase tracking-widest text-emerald-400">
+                          COMPLETED
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-start justify-between gap-1.5 mb-1">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1">
+                          <span
+                            className={`text-xs font-display font-bold tracking-wide uppercase truncate ${
+                              isActive ? "text-white" : "text-neutral-400 line-through decoration-emerald-500/40"
+                            }`}
+                          >
+                            {q.title}
+                          </span>
+                          {q.colors && q.colors.length > 0 && (
+                            <div className={`flex items-center gap-0.5 shrink-0 ${!isActive ? "opacity-60 grayscale" : ""}`}>
+                              {q.colors.map((c) => (
+                                <ManaPip key={c} symbol={c} size={11} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-[9px] font-sans text-neutral-400 mt-0.5 line-clamp-1">
+                          {formatQuestCategory(q.category)} • Goal: {q.goal}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span
+                          className={`text-[9px] font-mono px-1.5 py-0.5 border flex items-center gap-1 ${
+                            isActive
+                              ? is750
+                                ? "bg-amber-500/20 border-amber-500/40 text-amber-300 font-bold"
+                                : "bg-white/[0.04] border-white/10 text-neutral-300"
+                              : "bg-white/[0.02] border-white/5 text-neutral-400"
+                          }`}
+                        >
+                          <Coins className={`w-2.5 h-2.5 ${isActive ? "text-amber-400" : "text-neutral-400"}`} />
+                          <span>{q.reward_gold}g</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[9px] font-mono text-neutral-400">
+                        <span>{isActive ? "Progress" : "Completed"}</span>
+                        <span>
+                          {isActive ? (
+                            <>
+                              <strong className="text-white">{q.current_progress}</strong> / {q.goal} ({pct}%)
+                            </>
+                          ) : (
+                            <span className="text-emerald-400 font-medium">{q.goal} / {q.goal} (100%)</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-1 w-full bg-neutral-900 border border-white/5 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            !isActive
+                              ? "bg-emerald-600/70"
+                              : is750
+                              ? "bg-amber-400"
+                              : "bg-cyan-500"
+                          }`}
+                          style={{ width: `${!isActive ? 100 : pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Right Column: Daily & Weekly Win Tracks Continuum */}
