@@ -43,7 +43,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
     };
 
     fetchHistory();
-    const interval = setInterval(fetchHistory, 15000);
+    const interval = setInterval(fetchHistory, 60000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -254,6 +254,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   strokeWidth={2}
                   dot={{ r: 3, fill: "#f59e0b" }}
                   activeDot={{ r: 5 }}
+                  isAnimationActive={false}
                 />
                 <Line
                   yAxisId="gems"
@@ -264,6 +265,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   strokeWidth={2}
                   dot={{ r: 3, fill: "#06b6d4" }}
                   activeDot={{ r: 5 }}
+                  isAnimationActive={false}
                 />
               </LineChart>
             ) : activeTab === "vault" ? (
@@ -314,6 +316,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   fill="url(#vaultGradient)"
                   dot={{ r: 3, fill: "#c084fc" }}
                   activeDot={{ r: 5 }}
+                  isAnimationActive={false}
                 />
               </AreaChart>
             ) : (
@@ -348,6 +351,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   stroke="#f97316"
                   strokeWidth={2}
                   dot={{ r: 3, fill: "#f97316" }}
+                  isAnimationActive={false}
                 />
                 <Line
                   type="monotone"
@@ -356,6 +360,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   stroke="#fbbf24"
                   strokeWidth={2}
                   dot={{ r: 3, fill: "#fbbf24" }}
+                  isAnimationActive={false}
                 />
                 <Line
                   type="monotone"
@@ -365,6 +370,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   strokeWidth={1.5}
                   strokeDasharray="2 2"
                   dot={{ r: 2.5, fill: "#38bdf8" }}
+                  isAnimationActive={false}
                 />
                 <Line
                   type="monotone"
@@ -374,6 +380,7 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   strokeWidth={1.5}
                   strokeDasharray="2 2"
                   dot={{ r: 2.5, fill: "#94a3b8" }}
+                  isAnimationActive={false}
                 />
               </LineChart>
             )}

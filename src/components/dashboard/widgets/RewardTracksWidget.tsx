@@ -2,13 +2,10 @@ import React from "react";
 import { Trophy, Clock, Coins, Sparkles, Layers, Check } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
-import { useRewardTracks, useCountdown, RewardMilestone } from "./questCommon";
+import { useRewardTracks, CountdownTimer, RewardMilestone } from "./questCommon";
 
 export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const { status, loading } = useRewardTracks();
-
-  const dailyCountdown = useCountdown(status?.daily_reset_timestamp);
-  const weeklyCountdown = useCountdown(status?.weekly_reset_timestamp);
 
   const dailyWins = Math.max(0, status?.daily_wins ?? 0);
   const weeklyWins = Math.max(0, status?.weekly_wins ?? 0);
@@ -37,10 +34,10 @@ export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget })
               </span>
             </div>
 
-            {dailyCountdown && (
+            {status?.daily_reset_timestamp && (
               <div className="flex items-center gap-1 text-[9px] font-mono text-neutral-400 shrink-0">
                 <Clock className="w-2.5 h-2.5 text-neutral-400" />
-                <span>{dailyCountdown}</span>
+                <CountdownTimer targetIso={status.daily_reset_timestamp} />
               </div>
             )}
           </div>
@@ -68,7 +65,7 @@ export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget })
                         ? "bg-gradient-to-t from-purple-600/50 to-purple-500/20 border-purple-400/80 text-purple-200 shadow-[0_0_6px_rgba(168,85,247,0.3)]"
                         : "bg-gradient-to-t from-amber-600/50 to-amber-500/20 border-amber-400/80 text-amber-200 shadow-[0_0_6px_rgba(245,158,11,0.3)]"
                       : isNext
-                      ? "border-amber-400 bg-amber-400/20 text-white ring-1 ring-amber-400/80 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+                      ? "border-amber-400 bg-amber-400/20 text-white ring-1 ring-amber-400/80 shadow-[0_0_8px_rgba(245,158,11,0.5)]"
                       : "bg-white/[0.03] border-white/10 text-neutral-500 hover:border-white/20"
                   }`}
                   title={`Win #${m.win_number}: ${
@@ -129,10 +126,10 @@ export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget })
               </span>
             </div>
 
-            {weeklyCountdown && (
+            {status?.weekly_reset_timestamp && (
               <div className="flex items-center gap-1 text-[9px] font-mono text-neutral-400 shrink-0">
                 <Clock className="w-2.5 h-2.5 text-neutral-400" />
-                <span>{weeklyCountdown}</span>
+                <CountdownTimer targetIso={status.weekly_reset_timestamp} />
               </div>
             )}
           </div>
@@ -157,7 +154,7 @@ export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget })
                     isEarned
                       ? "bg-gradient-to-t from-cyan-600/50 to-cyan-500/20 border-cyan-400/80 text-cyan-200 shadow-[0_0_6px_rgba(6,182,212,0.3)]"
                       : isNext
-                      ? "border-cyan-400 bg-cyan-400/20 text-white ring-1 ring-cyan-400/80 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.5)]"
+                      ? "border-cyan-400 bg-cyan-400/20 text-white ring-1 ring-cyan-400/80 shadow-[0_0_8px_rgba(6,182,212,0.5)]"
                       : "bg-white/[0.03] border-white/10 text-neutral-500 hover:border-white/20"
                   }`}
                   title={`Win #${winNum}: 250 Mastery Pass XP`}

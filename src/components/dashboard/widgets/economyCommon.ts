@@ -48,7 +48,7 @@ export function getWildcardWheelProgress(wcTrackPos: number = 0): WildcardWheels
   };
 }
 
-export function usePlayerEconomy(pollIntervalMs = 15000) {
+export function usePlayerEconomy(pollIntervalMs = 60000) {
   const [economy, setEconomy] = useState<EconomySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,14 +67,26 @@ export function usePlayerEconomy(pollIntervalMs = 15000) {
   }, []);
 
   useEffect(() => {
+    // Immediate fetch on mount
     fetchEconomy();
 
-    const interval = setInterval(fetchEconomy, pollIntervalMs);
+    // Stagger interval start by a small random offset (0–4 s) so multiple
+    // instances of this hook (CurrenciesVault + WildcardsGoldenPack) don't
+    // fire their intervals at exactly the same time.
+    const jitter = Math.floor(Math.random() * 4000);
+    const jitterTimeout = setTimeout(() => {
+      const interval = setInterval(fetchEconomy, pollIntervalMs);
+      // Store interval ID on the timeout closure for cleanup
+      (jitterTimeout as any).__interval = interval;
+    }, jitter);
+
     const handleFocus = () => fetchEconomy();
     window.addEventListener("focus", handleFocus);
 
     return () => {
-      clearInterval(interval);
+      clearTimeout(jitterTimeout);
+      const interval = (jitterTimeout as any).__interval;
+      if (interval) clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
     };
   }, [fetchEconomy, pollIntervalMs]);

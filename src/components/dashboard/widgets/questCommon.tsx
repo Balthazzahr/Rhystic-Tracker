@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface QuestRecord {
@@ -100,7 +100,7 @@ export function useActiveQuests() {
 
   useEffect(() => {
     fetchQuests();
-    const interval = setInterval(fetchQuests, 8000);
+    const interval = setInterval(fetchQuests, 30000);
     return () => clearInterval(interval);
   }, [fetchQuests]);
 
@@ -124,7 +124,7 @@ export function useRewardTracks() {
 
   useEffect(() => {
     fetchTracks();
-    const interval = setInterval(fetchTracks, 8000);
+    const interval = setInterval(fetchTracks, 30000);
     return () => clearInterval(interval);
   }, [fetchTracks]);
 
@@ -200,3 +200,16 @@ export function formatQuestCategory(cat?: string): string {
   }
 }
 
+/**
+ * CountdownTimer — renders a live countdown string that updates every second.
+ * Isolated as React.memo so ONLY this element re-renders each tick,
+ * not the entire parent widget that contains it.
+ */
+export const CountdownTimer = React.memo(
+  ({ targetIso, className }: { targetIso?: string; className?: string }) => {
+    const time = useCountdown(targetIso);
+    if (!time) return null;
+    return <span className={className}>{time}</span>;
+  }
+);
+CountdownTimer.displayName = "CountdownTimer";

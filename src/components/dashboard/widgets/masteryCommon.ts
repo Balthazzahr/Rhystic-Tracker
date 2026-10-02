@@ -32,7 +32,7 @@ export function useMasteryPass() {
 
   useEffect(() => {
     fetchPass();
-    const interval = setInterval(fetchPass, 15000);
+    const interval = setInterval(fetchPass, 60000);
     return () => clearInterval(interval);
   }, [fetchPass]);
 

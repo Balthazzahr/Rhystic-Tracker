@@ -1,15 +1,13 @@
 import React, { useState } from "react";
-import { Target, CheckCircle2, BarChart2, RefreshCw, Sparkles, Clock, Coins } from "lucide-react";
+import { Target, CheckCircle2, BarChart2, RefreshCw, Coins } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
-import { useActiveQuests, useRewardTracks, useCountdown, formatQuestCategory } from "./questCommon";
+import { useActiveQuests, formatQuestCategory } from "./questCommon";
 import { QuestStatisticsModal } from "./QuestStatisticsModal";
 import { ManaPip } from "../../ManaPip";
 
 export const ActiveQuestsWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const { data, loading, refetch } = useActiveQuests();
-  const { status: tracksStatus } = useRewardTracks();
-  const countdown = useCountdown(tracksStatus?.daily_reset_timestamp);
   const [modalOpen, setModalOpen] = useState(false);
 
   const quests = data?.quests ?? [];
@@ -51,12 +49,6 @@ export const ActiveQuestsWidget: React.FC<WidgetProps> = React.memo(({ widget })
               <div className="text-xs font-sans text-neutral-400 mt-0.5">
                 New daily quest arrives at reset
               </div>
-              {countdown && (
-                <div className="mt-3 flex items-center gap-1.5 px-3 py-1 bg-neutral-900 border border-white/10 font-mono text-xs text-amber-300">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Reset in {countdown}</span>
-                </div>
-              )}
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col justify-between gap-2">

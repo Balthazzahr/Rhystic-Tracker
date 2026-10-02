@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import { Sparkles, Check, ChevronLeft, ChevronRight, Lock, Crown, User, PawPrint, Layers, Coins, Gem, Ticket } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
@@ -333,13 +333,14 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
   const orbs = pass?.orbs ?? 0;
   const passName = pass?.pass_name ?? "Mastery Pass";
   const setCode = pass?.set_code ?? "";
-  const claimedLevels = new Set(pass?.claimed_levels ?? []);
+  const claimedLevels = useMemo(() => new Set(pass?.claimed_levels ?? []), [pass?.claimed_levels]);
   const maxTrackLevel = Math.max(pass?.max_level ?? 44, 44);
 
-  const allLevels: number[] = [];
-  for (let l = 1; l <= maxTrackLevel; l++) {
-    allLevels.push(l);
-  }
+  const allLevels = useMemo(() => {
+    const arr: number[] = [];
+    for (let l = 1; l <= maxTrackLevel; l++) arr.push(l);
+    return arr;
+  }, [maxTrackLevel]);
 
   const handleScroll = (direction: "left" | "right") => {
     if (railScrollRef.current) {
@@ -372,7 +373,7 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
         <div className="flex items-center gap-2">
           {/* Spend Orbs Pill */}
           <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
-            <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+            <Sparkles className="w-3 h-3 text-amber-400" />
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-amber-300">
               {orbs} {orbs === 1 ? "Orb" : "Orbs"}
             </span>
@@ -401,7 +402,7 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
           {/* Level Crest / Badge */}
           <div
             onClick={() => setSelectedModalLevel(currentLevel)}
-            className="relative shrink-0 flex flex-col items-center justify-center w-12 h-12 rounded-lg bg-gradient-to-b from-amber-900/60 via-neutral-900 to-neutral-950 border-2 border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.3)] cursor-pointer hover:border-amber-400 hover:scale-105 transition-all"
+            className="relative shrink-0 flex flex-col items-center justify-center w-12 h-12 rounded-lg bg-gradient-to-b from-amber-900/60 via-neutral-900 to-neutral-950 border-2 border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.3)] cursor-pointer hover:border-amber-400 transition-colors"
             title="Click to view current level rewards"
           >
             <span className="text-[8px] font-sans font-bold uppercase tracking-widest text-amber-400/80 -mb-0.5">
@@ -433,11 +434,9 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
             {/* Glowing XP Progress Bar */}
             <div className="w-full h-2.5 bg-neutral-900/90 border border-white/10 rounded-full overflow-hidden p-0.5 relative">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-yellow-300 shadow-[0_0_10px_rgba(245,158,11,0.6)] transition-all duration-500 relative"
+                className="h-full rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-yellow-300 shadow-[0_0_10px_rgba(245,158,11,0.6)] transition-[width] duration-500"
                 style={{ width: `${Math.max(3, xpPercent)}%` }}
-              >
-                <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
-              </div>
+              />
             </div>
           </div>
 
@@ -445,14 +444,14 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
           <div className="flex items-center gap-1 shrink-0 ml-1">
             <button
               onClick={() => handleScroll("left")}
-              className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-all border border-white/10 hover:border-amber-400/40"
+              className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors border border-white/10 hover:border-amber-400/40"
               title="Scroll Left"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleScroll("right")}
-              className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-all border border-white/10 hover:border-amber-400/40"
+              className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors border border-white/10 hover:border-amber-400/40"
               title="Scroll Right"
             >
               <ChevronRight className="w-4 h-4" />
@@ -494,7 +493,7 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
                   onClick={() => setSelectedModalLevel(lvl)}
                   role="button"
                   tabIndex={0}
-                  className={`w-28 sm:w-32 md:w-36 shrink-0 flex flex-col rounded border relative cursor-pointer select-none transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${
+                  className={`w-28 sm:w-32 md:w-36 shrink-0 flex flex-col rounded border relative cursor-pointer select-none transition-colors ${
                     isCurrent
                       ? "bg-amber-950/30 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)] ring-1 ring-amber-400 hover:border-amber-300"
                       : isPast || isClaimed
