@@ -3400,7 +3400,7 @@ dependencies = [
 
 [[package]]
 name = "rhystic-tracker"
-version = "1.7.4"
+version = "1.7.5"
 dependencies = [
  "chrono",
  "dirs 5.0.1",

@@ -2,6 +2,12 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.7.5] - 2026-10-03 — 📦 Booster Inventory Count Parsing Fix
+
+### 🐛 Bug Fixes & Inventory Engine
+- **Booster Pack Empty Count Fix**: Resolved critical issue where unopened booster packs in the Currencies & Inventory widget remained visible after being opened in MTGA. When all booster packs for a set are cracked, the MTGA client omits the `Count` key from inventory JSON payloads (logging `{"CollationId": ..., "SetCode": "..."}`). The parser previously defaulted missing counts to `1` via `unwrap_or(1)`, causing exhausted pack collations to persist indefinitely. Changed the default fallback to `0` and added regression tests.
+- **Snapshot Hygiene**: Realigned latest player economy snapshots so zero-balance booster inventories immediately clear in the Currencies & Inventory shelf.
+
 ## [1.7.4] - 2026-10-03 — 🪷 Wildcard Spending History, Timeline Craft Markers & Inventory Polish
 
 ### 🪷 Wildcard Spending History Modal & Direct Exploration

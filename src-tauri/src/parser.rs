@@ -1010,7 +1010,7 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
             let count = b.get("Count")
                 .or_else(|| b.get("count"))
                 .and_then(|x| x.as_u64())
-                .unwrap_or(1) as u32;
+                .unwrap_or(0) as u32;
 
             if !set_code.is_empty() && count > 0 {
                 boosters.push(BoosterPackItem {
@@ -1799,6 +1799,19 @@ mod tests {
                 assert_eq!(pass.max_level, 44);
             }
             other => panic!("expected MasteryPassUpdate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_booster_inventory_count_omitted() {
+        let line = r#"{"InventoryInfo":{"Gold":1000,"Gems":500,"Boosters":[{"CollationId":100063,"SetCode":"FRA"},{"CollationId":100064,"SetCode":"HOB","Count":3}]}}"#;
+        match parse_line(line) {
+            ParsedEvent::InventoryUpdate(eco) => {
+                assert_eq!(eco.boosters.len(), 1);
+                assert_eq!(eco.boosters[0].set_code, "HOB");
+                assert_eq!(eco.boosters[0].count, 3);
+            }
+            other => panic!("expected InventoryUpdate, got {:?}", other),
         }
     }
 }
