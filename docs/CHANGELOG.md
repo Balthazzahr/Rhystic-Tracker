@@ -2,6 +2,29 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.7.4] - 2026-10-03 — 🪷 Wildcard Spending History, Timeline Craft Markers & Inventory Polish
+
+### 🪷 Wildcard Spending History Modal & Direct Exploration
+- **Dedicated History Modal**: Added a comprehensive `WildcardHistoryModal` providing an audit trail of cards crafted and wildcards acquired from packs and vault progress.
+- **Direct Card Trigger**: Clicking any of the 4 wildcard cards (Common, Uncommon, Rare, Mythic) in the Wildcards & Golden Pack widget instantly opens the modal pre-filtered to that specific rarity.
+- **Rarity & Type Filters**: Filter transactions by transaction type (`All`, `Crafted Only`, `Added Only`) and rarity (`All`, `Mythic`, `Rare`, `Uncommon`, `Common`) with quick-glance total counts.
+- **Summary Header**: Displays total cards crafted versus wildcards earned across all four tiers with authentic MTGA lotus iconography.
+
+### 📈 Economy Trends Crafting Markers & Enriched Tooltips
+- **Timeline Craft & Acquisition Markers**:
+  - **Red "X"**: Custom SVG cross indicator rendered at points on the wildcard timeline where cards were crafted (balance decreased).
+  - **Green Diamond**: Custom SVG diamond indicator rendered at points where wildcards were added/earned (balance increased).
+- **Enriched Tooltip Badges**: Hovering over points displays clear contextual tags (`✕ Crafted Cards: -1M -1R` or `◆ Added Wildcards: +1R`) alongside minute-precise timestamps and balance levels.
+
+### 📜 Active Quests State Synchronization & Snapshot Hygiene
+- **Sync Fix**: Removed a stale database dump step in `launch-test.sh` that was restoring pre-swapped quest records from dev database dumps over the fresh live production snapshot.
+- **Accurate Active Quests**: Resolved stale active quest counts so the widget strictly reflects MTGA's actual active quest inventory.
+
+### 🎒 Currencies & Inventory Visual Polish
+- **Quadrant Header**: Reorganized currencies into a balanced 2×2 grid (Gold, Gems, Draft Tokens, Jump In!).
+- **Booster Pack Shelf**: Clean scrollable booster shelf with authentic set titles and Keyrune icons (`HOB`, `TLA`, `ZNR`, `THB`, `MSH`, `FRA`), preventing overflow on compact layouts.
+- **Vault Progress Bar**: Enhanced combination-safe styling with rivets and ticks along the progress bar with high-contrast centered progress percentage.
+
 ## [1.7.3] - 2026-10-02 — 📜 3-Slot Quests Layout, Completed Stamps & Self-Healing State
 
 ### 📜 Active Quests 3-Slot Visual Layout & Snug Progress Bars

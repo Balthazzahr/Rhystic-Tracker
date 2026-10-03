@@ -1,73 +1,110 @@
-import React from "react";
-import { Layers, Package } from "lucide-react";
+import React, { useState } from "react";
+import { Layers, Package, History } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { usePlayerEconomy, getWildcardWheelProgress } from "./economyCommon";
 import { WildcardLotusCard } from "./WildcardLotusCard";
+import { WildcardHistoryModal } from "./WildcardHistoryModal";
 
 export const WildcardsGoldenPackWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const { economy, loading } = usePlayerEconomy();
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [selectedRarity, setSelectedRarity] = useState<"all" | "mythic" | "rare" | "uncommon" | "common">("all");
 
   const wcTrack = economy?.wc_track_pos ?? 0;
   const wheels = getWildcardWheelProgress(wcTrack);
   const goldenProgress = economy?.golden_pack_progress ?? 0;
 
-  return (
-    <WidgetShell
-      title="Wildcards & Golden Pack"
-      subtitle="Crafting Resources & Pack Wheels"
-      icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
-      isLoading={loading}
-      isEmpty={!economy && !loading}
-      emptyMessage="No economy data detected yet. Log into MTGA to track."
+  const openHistory = (rarity: "all" | "mythic" | "rare" | "uncommon" | "common" = "all") => {
+    setSelectedRarity(rarity);
+    setHistoryModalOpen(true);
+  };
+
+  const headerActions = (
+    <button
+      onClick={() => openHistory("all")}
+      className="flex items-center gap-1 px-1.5 py-0.5 bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-amber-400/40 text-[10px] font-sans font-semibold uppercase tracking-wider text-neutral-300 hover:text-amber-300 transition-colors cursor-pointer"
+      title="View Wildcard Crafting & Acquisition History"
     >
-      <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5">
-        {/* Wildcard 4-Tier Grid with Centered Lotus Cards */}
-        <div className="grid grid-cols-4 gap-2">
-          {/* Common */}
-          <div className="bg-white/[0.02] border border-slate-500/20 hover:border-slate-500/40 p-2.5 flex flex-col items-center justify-center text-center transition-colors">
-            <WildcardLotusCard rarity="common" size="lg" className="mb-1.5" />
-            <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-slate-300">
-              Common
-            </span>
-            <span className="text-xl font-mono font-bold text-slate-200 tabular-nums mt-0.5">
-              {economy?.wc_common ?? 0}
-            </span>
-          </div>
+      <History className="w-3 h-3 text-amber-400" />
+      <span>History</span>
+    </button>
+  );
 
-          {/* Uncommon */}
-          <div className="bg-white/[0.02] border border-sky-500/20 hover:border-sky-500/40 p-2.5 flex flex-col items-center justify-center text-center transition-colors">
-            <WildcardLotusCard rarity="uncommon" size="lg" className="mb-1.5" />
-            <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-sky-300">
-              Uncommon
-            </span>
-            <span className="text-xl font-mono font-bold text-sky-300 tabular-nums mt-0.5">
-              {economy?.wc_uncommon ?? 0}
-            </span>
-          </div>
+  return (
+    <>
+      <WidgetShell
+        title="Wildcards & Golden Pack"
+        subtitle="Crafting Resources & Pack Wheels"
+        icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
+        headerActions={headerActions}
+        isLoading={loading}
+        isEmpty={!economy && !loading}
+        emptyMessage="No economy data detected yet. Log into MTGA to track."
+      >
+        <div className="flex-1 min-h-0 flex flex-col justify-between gap-2.5">
+          {/* Wildcard 4-Tier Grid with Centered Lotus Cards */}
+          <div className="grid grid-cols-4 gap-2">
+            {/* Common */}
+            <div
+              onClick={() => openHistory("common")}
+              className="bg-white/[0.02] border border-slate-500/20 hover:border-slate-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              title="Click to view Common wildcard history"
+            >
+              <WildcardLotusCard rarity="common" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
+              <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-slate-300 group-hover:text-white">
+                Common
+              </span>
+              <span className="text-xl font-mono font-bold text-slate-200 tabular-nums mt-0.5">
+                {economy?.wc_common ?? 0}
+              </span>
+            </div>
 
-          {/* Rare */}
-          <div className="bg-white/[0.02] border border-amber-500/30 hover:border-amber-500/50 p-2.5 flex flex-col items-center justify-center text-center transition-colors">
-            <WildcardLotusCard rarity="rare" size="lg" className="mb-1.5" />
-            <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-amber-300">
-              Rare
-            </span>
-            <span className="text-xl font-mono font-bold text-amber-300 tabular-nums mt-0.5">
-              {economy?.wc_rare ?? 0}
-            </span>
-          </div>
+            {/* Uncommon */}
+            <div
+              onClick={() => openHistory("uncommon")}
+              className="bg-white/[0.02] border border-sky-500/20 hover:border-sky-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              title="Click to view Uncommon wildcard history"
+            >
+              <WildcardLotusCard rarity="uncommon" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
+              <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-sky-300 group-hover:text-white">
+                Uncommon
+              </span>
+              <span className="text-xl font-mono font-bold text-sky-300 tabular-nums mt-0.5">
+                {economy?.wc_uncommon ?? 0}
+              </span>
+            </div>
 
-          {/* Mythic */}
-          <div className="bg-white/[0.02] border border-orange-500/30 hover:border-orange-500/50 p-2.5 flex flex-col items-center justify-center text-center transition-colors">
-            <WildcardLotusCard rarity="mythic" size="lg" className="mb-1.5" />
-            <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-orange-300">
-              Mythic
-            </span>
-            <span className="text-xl font-mono font-bold text-orange-300 tabular-nums mt-0.5">
-              {economy?.wc_mythic ?? 0}
-            </span>
+            {/* Rare */}
+            <div
+              onClick={() => openHistory("rare")}
+              className="bg-white/[0.02] border border-amber-500/30 hover:border-amber-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              title="Click to view Rare wildcard history"
+            >
+              <WildcardLotusCard rarity="rare" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
+              <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-amber-300 group-hover:text-white">
+                Rare
+              </span>
+              <span className="text-xl font-mono font-bold text-amber-300 tabular-nums mt-0.5">
+                {economy?.wc_rare ?? 0}
+              </span>
+            </div>
+
+            {/* Mythic */}
+            <div
+              onClick={() => openHistory("mythic")}
+              className="bg-white/[0.02] border border-orange-500/30 hover:border-orange-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              title="Click to view Mythic wildcard history"
+            >
+              <WildcardLotusCard rarity="mythic" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
+              <span className="text-[10px] font-sans font-semibold uppercase tracking-wider text-orange-300 group-hover:text-white">
+                Mythic
+              </span>
+              <span className="text-xl font-mono font-bold text-orange-300 tabular-nums mt-0.5">
+                {economy?.wc_mythic ?? 0}
+              </span>
+            </div>
           </div>
-        </div>
 
         {/* Dual Wildcard Wheels: Rare/Mythic & Uncommon */}
         <div className="bg-white/[0.02] border border-white/10 p-2.5 space-y-2.5">
@@ -179,5 +216,12 @@ export const WildcardsGoldenPackWidget: React.FC<WidgetProps> = React.memo(({ wi
         </div>
       </div>
     </WidgetShell>
+
+      <WildcardHistoryModal
+        isOpen={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        initialFilterRarity={selectedRarity}
+      />
+    </>
   );
 });

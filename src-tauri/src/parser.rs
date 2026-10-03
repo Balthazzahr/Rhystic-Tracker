@@ -30,6 +30,13 @@ pub struct GameStateStep {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct BoosterPackItem {
+    pub collation_id: u32,
+    pub set_code: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct PlayerEconomyRecord {
     pub gold: u32,
     pub gems: u32,
@@ -43,6 +50,7 @@ pub struct PlayerEconomyRecord {
     pub jump_in_tokens: u32,
     pub golden_pack_progress: u32,
     pub mastery_orbs: std::collections::HashMap<String, u32>,
+    pub boosters: Vec<BoosterPackItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -983,6 +991,37 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
         }
     }
 
+    let mut boosters = Vec::new();
+    let raw_boosters = inv.get("Boosters")
+        .or_else(|| inv.get("boosters"))
+        .and_then(|b| b.as_array());
+
+    if let Some(booster_list) = raw_boosters {
+        for b in booster_list {
+            let collation_id = b.get("CollationId")
+                .or_else(|| b.get("collationId"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0) as u32;
+            let set_code = b.get("SetCode")
+                .or_else(|| b.get("setCode"))
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let count = b.get("Count")
+                .or_else(|| b.get("count"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(1) as u32;
+
+            if !set_code.is_empty() && count > 0 {
+                boosters.push(BoosterPackItem {
+                    collation_id,
+                    set_code,
+                    count,
+                });
+            }
+        }
+    }
+
     Some(PlayerEconomyRecord {
         gold,
         gems,
@@ -996,6 +1035,7 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
         jump_in_tokens,
         golden_pack_progress,
         mastery_orbs,
+        boosters,
     })
 }
 
@@ -1600,7 +1640,7 @@ mod tests {
 
     #[test]
     fn test_extract_inventory_info() {
-        let line = r#"{ "InventoryInfo": { "SeqId": 1, "Gems": 3590, "Gold": 57200, "TotalVaultProgress": 1886, "WcTrackPosition": 5, "WildCardCommons": 118, "WildCardUnCommons": 108, "WildCardRares": 8, "WildCardMythics": 2, "CustomTokens": { "DraftToken": 8, "Token_JumpIn": 2, "BonusPackProgress": 5 } } }"#;
+        let line = r#"{ "InventoryInfo": { "SeqId": 1, "Gems": 3590, "Gold": 57200, "TotalVaultProgress": 1886, "WcTrackPosition": 5, "WildCardCommons": 118, "WildCardUnCommons": 108, "WildCardRares": 8, "WildCardMythics": 2, "CustomTokens": { "DraftToken": 8, "Token_JumpIn": 2, "BonusPackProgress": 5 }, "Boosters": [ { "CollationId": 100063, "SetCode": "FRA", "Count": 1 } ] } }"#;
         match parse_line(line) {
             ParsedEvent::InventoryUpdate(eco) => {
                 assert_eq!(eco.gems, 3590);
@@ -1614,6 +1654,10 @@ mod tests {
                 assert_eq!(eco.draft_tokens, 8);
                 assert_eq!(eco.jump_in_tokens, 2);
                 assert_eq!(eco.golden_pack_progress, 5);
+                assert_eq!(eco.boosters.len(), 1);
+                assert_eq!(eco.boosters[0].collation_id, 100063);
+                assert_eq!(eco.boosters[0].set_code, "FRA");
+                assert_eq!(eco.boosters[0].count, 1);
             }
             other => panic!("expected InventoryUpdate, got {:?}", other),
         }

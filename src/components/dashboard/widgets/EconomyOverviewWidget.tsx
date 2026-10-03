@@ -73,10 +73,10 @@ export const EconomyOverviewWidget: React.FC<WidgetProps> = React.memo(({ widget
                 <span>Vault Progress</span>
               </span>
               <div className="flex items-center gap-1.5">
-                {isVaultReady && (
-                  <span className="text-[9px] font-mono text-purple-200 bg-purple-500/20 px-1 py-0.2 border border-purple-400/30 flex items-center gap-0.5">
+                {fullVaults > 0 && (
+                  <span className="text-[9px] font-mono text-purple-200 bg-purple-500/20 px-1.5 py-0.2 border border-purple-400/30 flex items-center gap-1">
                     <CheckCircle2 className="w-2.5 h-2.5 text-purple-300" />
-                    {fullVaults}x Open
+                    {fullVaults} {fullVaults === 1 ? "Vault tier" : "Vault tiers"} achieved
                   </span>
                 )}
                 <span className="font-mono font-bold text-purple-300 tabular-nums">

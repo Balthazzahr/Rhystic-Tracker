@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+export interface BoosterPack {
+  collation_id: number;
+  set_code: string;
+  count: number;
+  set_name?: string | null;
+}
+
 export interface EconomySnapshot {
   id: number;
   timestamp: string;
@@ -16,6 +23,7 @@ export interface EconomySnapshot {
   draft_tokens: number;
   jump_in_tokens: number;
   golden_pack_progress: number;
+  boosters?: BoosterPack[];
 }
 
 export function formatCurrency(val: number | undefined | null): string {

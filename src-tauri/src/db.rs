@@ -195,7 +195,8 @@ CREATE TABLE IF NOT EXISTS player_economy_snapshots (
     wc_mythic INTEGER NOT NULL,
     draft_tokens INTEGER NOT NULL DEFAULT 0,
     jump_in_tokens INTEGER NOT NULL DEFAULT 0,
-    golden_pack_progress INTEGER NOT NULL DEFAULT 0
+    golden_pack_progress INTEGER NOT NULL DEFAULT 0,
+    boosters_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_player_economy_snapshots_timestamp ON player_economy_snapshots(timestamp);
 
@@ -430,6 +431,14 @@ pub struct RewardTracksStatus {
     pub next_daily_reward: Option<RewardMilestone>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
+pub struct BoosterPackDto {
+    pub collation_id: u32,
+    pub set_code: String,
+    pub count: u32,
+    pub set_name: Option<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EconomySnapshotRecord {
     pub id: i64,
@@ -446,6 +455,7 @@ pub struct EconomySnapshotRecord {
     pub draft_tokens: u32,
     pub jump_in_tokens: u32,
     pub golden_pack_progress: u32,
+    pub boosters: Vec<BoosterPackDto>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -1265,16 +1275,21 @@ impl DatabaseManager {
             println!("[DB MIGRATION] Added daily_wins and weekly_wins columns to player_reward_tracks table");
         }
 
+        // Migration: Add boosters_json column to player_economy_snapshots if missing
+        let boosters_col_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('player_economy_snapshots') WHERE name = 'boosters_json'"
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap_or(None);
+
+        if boosters_col_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE player_economy_snapshots ADD COLUMN boosters_json TEXT NOT NULL DEFAULT '[]'").execute(&pool).await;
+            println!("[DB MIGRATION] Added boosters_json column to player_economy_snapshots table");
+        }
+
         // Migration: Ensure player_quests title matches authentic MTGA quest objective description
         let _ = sqlx::query("UPDATE player_quests SET title = description WHERE description IS NOT NULL AND description != '' AND title != description").execute(&pool).await;
-
-        // Migration / Auto-repair: Restore erroneously completed or swapped quests where current progress is less than goal
-        let repaired = sqlx::query("UPDATE player_quests SET status = 'active', completed_at = NULL, duration_seconds = NULL WHERE status != 'active' AND current_progress < goal").execute(&pool).await;
-        if let Ok(res) = repaired {
-            if res.rows_affected() > 0 {
-                println!("[DB MIGRATION] Auto-repaired {} prematurely completed active quests", res.rows_affected());
-            }
-        }
 
         let mgr = Self { pool, db_filename };
         #[cfg(not(test))]
@@ -2700,12 +2715,15 @@ impl DatabaseManager {
         &self,
         snapshot: &parser::PlayerEconomyRecord,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let boosters_json_str = serde_json::to_string(&snapshot.boosters)?;
+
         // Fetch latest row to compare
         let latest = sqlx::query(
             r#"
             SELECT gold, gems, vault_progress_tenths, wc_track_pos,
                    wc_common, wc_uncommon, wc_rare, wc_mythic,
-                   draft_tokens, jump_in_tokens, golden_pack_progress
+                   draft_tokens, jump_in_tokens, golden_pack_progress,
+                   boosters_json
             FROM player_economy_snapshots
             ORDER BY id DESC LIMIT 1
             "#
@@ -2725,6 +2743,7 @@ impl DatabaseManager {
             let draft: i64 = r.get("draft_tokens");
             let jump: i64 = r.get("jump_in_tokens");
             let golden: i64 = r.get("golden_pack_progress");
+            let db_boosters: String = r.get("boosters_json");
 
             if gold == snapshot.gold as i64
                 && gems == snapshot.gems as i64
@@ -2737,6 +2756,7 @@ impl DatabaseManager {
                 && draft == snapshot.draft_tokens as i64
                 && jump == snapshot.jump_in_tokens as i64
                 && golden == snapshot.golden_pack_progress as i64
+                && db_boosters == boosters_json_str
             {
                 return Ok(false);
             }
@@ -2748,8 +2768,8 @@ impl DatabaseManager {
             INSERT INTO player_economy_snapshots (
                 timestamp, gold, gems, vault_progress_tenths, wc_track_pos,
                 wc_common, wc_uncommon, wc_rare, wc_mythic,
-                draft_tokens, jump_in_tokens, golden_pack_progress
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                draft_tokens, jump_in_tokens, golden_pack_progress, boosters_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&now)
@@ -2764,6 +2784,7 @@ impl DatabaseManager {
         .bind(snapshot.draft_tokens as i64)
         .bind(snapshot.jump_in_tokens as i64)
         .bind(snapshot.golden_pack_progress as i64)
+        .bind(&boosters_json_str)
         .execute(&self.pool)
         .await?;
 
@@ -2778,7 +2799,7 @@ impl DatabaseManager {
             r#"
             SELECT id, timestamp, gold, gems, vault_progress_tenths, wc_track_pos,
                    wc_common, wc_uncommon, wc_rare, wc_mythic,
-                   draft_tokens, jump_in_tokens, golden_pack_progress
+                   draft_tokens, jump_in_tokens, golden_pack_progress, boosters_json
             FROM player_economy_snapshots
             ORDER BY id DESC LIMIT 1
             "#
@@ -2788,6 +2809,28 @@ impl DatabaseManager {
 
         if let Some(r) = row {
             let vault_tenths: i64 = r.get("vault_progress_tenths");
+            let boosters_raw: String = r.get("boosters_json");
+            let raw_boosters: Vec<crate::parser::BoosterPackItem> =
+                serde_json::from_str(&boosters_raw).unwrap_or_default();
+
+            let mut boosters = Vec::new();
+            for b in raw_boosters {
+                let set_name: Option<String> = sqlx::query_scalar(
+                    "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
+                )
+                .bind(&b.set_code)
+                .fetch_optional(&self.pool)
+                .await
+                .unwrap_or(None);
+
+                boosters.push(BoosterPackDto {
+                    collation_id: b.collation_id,
+                    set_code: b.set_code,
+                    count: b.count,
+                    set_name,
+                });
+            }
+
             Ok(Some(EconomySnapshotRecord {
                 id: r.get("id"),
                 timestamp: r.get("timestamp"),
@@ -2803,6 +2846,7 @@ impl DatabaseManager {
                 draft_tokens: r.get::<i64, _>("draft_tokens") as u32,
                 jump_in_tokens: r.get::<i64, _>("jump_in_tokens") as u32,
                 golden_pack_progress: r.get::<i64, _>("golden_pack_progress") as u32,
+                boosters,
             }))
         } else {
             Ok(None)
@@ -2819,7 +2863,7 @@ impl DatabaseManager {
             r#"
             SELECT id, timestamp, gold, gems, vault_progress_tenths, wc_track_pos,
                    wc_common, wc_uncommon, wc_rare, wc_mythic,
-                   draft_tokens, jump_in_tokens, golden_pack_progress
+                   draft_tokens, jump_in_tokens, golden_pack_progress, boosters_json
             FROM player_economy_snapshots
             ORDER BY id DESC LIMIT ?
             "#
@@ -2831,6 +2875,28 @@ impl DatabaseManager {
         let mut list = Vec::new();
         for r in rows {
             let vault_tenths: i64 = r.get("vault_progress_tenths");
+            let boosters_raw: String = r.get("boosters_json");
+            let raw_boosters: Vec<crate::parser::BoosterPackItem> =
+                serde_json::from_str(&boosters_raw).unwrap_or_default();
+
+            let mut boosters = Vec::new();
+            for b in raw_boosters {
+                let set_name: Option<String> = sqlx::query_scalar(
+                    "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
+                )
+                .bind(&b.set_code)
+                .fetch_optional(&self.pool)
+                .await
+                .unwrap_or(None);
+
+                boosters.push(BoosterPackDto {
+                    collation_id: b.collation_id,
+                    set_code: b.set_code,
+                    count: b.count,
+                    set_name,
+                });
+            }
+
             list.push(EconomySnapshotRecord {
                 id: r.get("id"),
                 timestamp: r.get("timestamp"),
@@ -2846,6 +2912,7 @@ impl DatabaseManager {
                 draft_tokens: r.get::<i64, _>("draft_tokens") as u32,
                 jump_in_tokens: r.get::<i64, _>("jump_in_tokens") as u32,
                 golden_pack_progress: r.get::<i64, _>("golden_pack_progress") as u32,
+                boosters,
             });
         }
         Ok(list)
@@ -4634,6 +4701,7 @@ mod tests {
             jump_in_tokens: 2,
             golden_pack_progress: 5,
             mastery_orbs: std::collections::HashMap::new(),
+            boosters: Vec::new(),
         };
 
         // First insert -> should succeed and return true
@@ -4670,6 +4738,25 @@ mod tests {
         assert_eq!(history2.len(), 2);
         assert_eq!(history2[0].gold, 57450);
         assert_eq!(history2[1].gold, 57200);
+
+        // Booster pack update -> should trigger snapshot and resolve set_name from sets_metadata
+        sqlx::query("INSERT INTO sets_metadata (set_code, name, released_at, updated_at) VALUES ('FRA', 'Reality Fracture', '2026-10-02', 't')")
+            .execute(db.pool()).await.unwrap();
+
+        let mut snapshot3 = snapshot2.clone();
+        snapshot3.boosters = vec![parser::BoosterPackItem {
+            collation_id: 100063,
+            set_code: "FRA".to_string(),
+            count: 1,
+        }];
+        let inserted4 = db.record_economy_snapshot(&snapshot3).await.unwrap();
+        assert!(inserted4);
+
+        let latest3 = db.get_latest_economy().await.unwrap().expect("Should have booster snapshot");
+        assert_eq!(latest3.boosters.len(), 1);
+        assert_eq!(latest3.boosters[0].set_code, "FRA");
+        assert_eq!(latest3.boosters[0].count, 1);
+        assert_eq!(latest3.boosters[0].set_name, Some("Reality Fracture".to_string()));
     }
 
     #[tokio::test]

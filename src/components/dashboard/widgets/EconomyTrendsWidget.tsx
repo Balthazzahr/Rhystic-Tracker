@@ -128,6 +128,26 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
         wc_rare: snap.wc_rare,
         wc_mythic: snap.wc_mythic,
       };
+    }).map((item, idx, arr) => {
+      // Compute delta relative to previous point in timeline
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const deltaM = prev ? item.wc_mythic - prev.wc_mythic : 0;
+      const deltaR = prev ? item.wc_rare - prev.wc_rare : 0;
+      const deltaU = prev ? item.wc_uncommon - prev.wc_uncommon : 0;
+      const deltaC = prev ? item.wc_common - prev.wc_common : 0;
+
+      const hasCrafted = deltaM < 0 || deltaR < 0 || deltaU < 0 || deltaC < 0;
+      const hasAdded = deltaM > 0 || deltaR > 0 || deltaU > 0 || deltaC > 0;
+
+      return {
+        ...item,
+        deltaM,
+        deltaR,
+        deltaU,
+        deltaC,
+        hasCrafted,
+        hasAdded,
+      };
     });
   }, [history, timeRange]);
 
@@ -334,14 +354,75 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   domain={["auto", "auto"]}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(10, 10, 10, 0.95)",
-                    borderColor: "rgba(255, 255, 255, 0.15)",
-                    borderRadius: "2px",
-                    fontSize: "11px",
-                    fontFamily: "monospace",
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const dataPoint = payload[0]?.payload;
+                    const hasCrafted = dataPoint?.hasCrafted;
+                    const hasAdded = dataPoint?.hasAdded;
+
+                    return (
+                      <div className="bg-neutral-950/95 border border-white/20 p-2.5 shadow-xl text-xs font-mono min-w-[190px]">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
+                          <span className="font-bold text-white">{label}</span>
+                          {dataPoint?.timestamp && (
+                            <span className="text-[10px] text-neutral-400">
+                              {new Date(dataPoint.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Crafting / Added Badges */}
+                        {hasCrafted && (
+                          <div className="mb-2 p-1.5 bg-rose-500/15 border border-rose-500/40 text-rose-300 font-sans text-[11px] font-semibold flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <span className="font-mono font-bold text-rose-400">✕</span>
+                              <span>Crafted Cards</span>
+                            </span>
+                            <span className="font-mono text-[10px] text-rose-200">
+                              {[
+                                dataPoint.deltaM < 0 ? `${dataPoint.deltaM}M` : null,
+                                dataPoint.deltaR < 0 ? `${dataPoint.deltaR}R` : null,
+                                dataPoint.deltaU < 0 ? `${dataPoint.deltaU}U` : null,
+                                dataPoint.deltaC < 0 ? `${dataPoint.deltaC}C` : null,
+                              ].filter(Boolean).join(" ")}
+                            </span>
+                          </div>
+                        )}
+
+                        {hasAdded && (
+                          <div className="mb-2 p-1.5 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-sans text-[11px] font-semibold flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <span className="font-mono font-bold text-emerald-400">◆</span>
+                              <span>Added Wildcards</span>
+                            </span>
+                            <span className="font-mono text-[10px] text-emerald-200">
+                              {[
+                                dataPoint.deltaM > 0 ? `+${dataPoint.deltaM}M` : null,
+                                dataPoint.deltaR > 0 ? `+${dataPoint.deltaR}R` : null,
+                                dataPoint.deltaU > 0 ? `+${dataPoint.deltaU}U` : null,
+                                dataPoint.deltaC > 0 ? `+${dataPoint.deltaC}C` : null,
+                              ].filter(Boolean).join(" ")}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Balance lines */}
+                        <div className="space-y-1">
+                          {payload.map((entry: any) => (
+                            <div key={entry.dataKey} className="flex items-center justify-between text-[11px]">
+                              <span style={{ color: entry.color }} className="font-sans font-medium flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                                {entry.name}:
+                              </span>
+                              <span className="font-bold text-neutral-200 tabular-nums">
+                                {entry.value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
                   }}
-                  labelStyle={{ color: "#ffffff", fontWeight: "bold" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", fontFamily: "sans-serif" }} />
                 <Line
@@ -350,7 +431,33 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   name="Mythic"
                   stroke="#f97316"
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "#f97316" }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (!cx || !cy) return <React.Fragment key={`dot-m-${cx}-${cy}`} />;
+                    if (payload?.deltaM < 0) {
+                      return (
+                        <g key={`craft-m-${cx}-${cy}`}>
+                          <circle cx={cx} cy={cy} r={7} fill="rgba(244, 63, 94, 0.25)" />
+                          <line x1={cx - 4} y1={cy - 4} x2={cx + 4} y2={cy + 4} stroke="#f43f5e" strokeWidth={2.5} strokeLinecap="round" />
+                          <line x1={cx - 4} y1={cy + 4} x2={cx + 4} y2={cy - 4} stroke="#f43f5e" strokeWidth={2.5} strokeLinecap="round" />
+                        </g>
+                      );
+                    }
+                    if (payload?.deltaM > 0) {
+                      return (
+                        <g key={`add-m-${cx}-${cy}`}>
+                          <polygon
+                            points={`${cx},${cy - 5.5} ${cx + 5.5},${cy} ${cx},${cy + 5.5} ${cx - 5.5},${cy}`}
+                            fill="#10b981"
+                            stroke="#34d399"
+                            strokeWidth={1}
+                          />
+                        </g>
+                      );
+                    }
+                    return <circle key={`dot-m-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill="#f97316" />;
+                  }}
+                  activeDot={{ r: 5 }}
                   isAnimationActive={false}
                 />
                 <Line
@@ -359,7 +466,33 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   name="Rare"
                   stroke="#fbbf24"
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "#fbbf24" }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (!cx || !cy) return <React.Fragment key={`dot-r-${cx}-${cy}`} />;
+                    if (payload?.deltaR < 0) {
+                      return (
+                        <g key={`craft-r-${cx}-${cy}`}>
+                          <circle cx={cx} cy={cy} r={7} fill="rgba(244, 63, 94, 0.25)" />
+                          <line x1={cx - 4} y1={cy - 4} x2={cx + 4} y2={cy + 4} stroke="#f43f5e" strokeWidth={2.5} strokeLinecap="round" />
+                          <line x1={cx - 4} y1={cy + 4} x2={cx + 4} y2={cy - 4} stroke="#f43f5e" strokeWidth={2.5} strokeLinecap="round" />
+                        </g>
+                      );
+                    }
+                    if (payload?.deltaR > 0) {
+                      return (
+                        <g key={`add-r-${cx}-${cy}`}>
+                          <polygon
+                            points={`${cx},${cy - 5.5} ${cx + 5.5},${cy} ${cx},${cy + 5.5} ${cx - 5.5},${cy}`}
+                            fill="#10b981"
+                            stroke="#34d399"
+                            strokeWidth={1}
+                          />
+                        </g>
+                      );
+                    }
+                    return <circle key={`dot-r-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill="#fbbf24" />;
+                  }}
+                  activeDot={{ r: 5 }}
                   isAnimationActive={false}
                 />
                 <Line
@@ -369,7 +502,33 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   stroke="#38bdf8"
                   strokeWidth={1.5}
                   strokeDasharray="2 2"
-                  dot={{ r: 2.5, fill: "#38bdf8" }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (!cx || !cy) return <React.Fragment key={`dot-u-${cx}-${cy}`} />;
+                    if (payload?.deltaU < 0) {
+                      return (
+                        <g key={`craft-u-${cx}-${cy}`}>
+                          <circle cx={cx} cy={cy} r={6} fill="rgba(244, 63, 94, 0.25)" />
+                          <line x1={cx - 3.5} y1={cy - 3.5} x2={cx + 3.5} y2={cy + 3.5} stroke="#f43f5e" strokeWidth={2} strokeLinecap="round" />
+                          <line x1={cx - 3.5} y1={cy + 3.5} x2={cx + 3.5} y2={cy - 3.5} stroke="#f43f5e" strokeWidth={2} strokeLinecap="round" />
+                        </g>
+                      );
+                    }
+                    if (payload?.deltaU > 0) {
+                      return (
+                        <g key={`add-u-${cx}-${cy}`}>
+                          <polygon
+                            points={`${cx},${cy - 4.5} ${cx + 4.5},${cy} ${cx},${cy + 4.5} ${cx - 4.5},${cy}`}
+                            fill="#10b981"
+                            stroke="#34d399"
+                            strokeWidth={1}
+                          />
+                        </g>
+                      );
+                    }
+                    return <circle key={`dot-u-${cx}-${cy}`} cx={cx} cy={cy} r={2.5} fill="#38bdf8" />;
+                  }}
+                  activeDot={{ r: 4.5 }}
                   isAnimationActive={false}
                 />
                 <Line
@@ -379,7 +538,33 @@ export const EconomyTrendsWidget: React.FC<WidgetProps> = React.memo(({ widget }
                   stroke="#94a3b8"
                   strokeWidth={1.5}
                   strokeDasharray="2 2"
-                  dot={{ r: 2.5, fill: "#94a3b8" }}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    if (!cx || !cy) return <React.Fragment key={`dot-c-${cx}-${cy}`} />;
+                    if (payload?.deltaC < 0) {
+                      return (
+                        <g key={`craft-c-${cx}-${cy}`}>
+                          <circle cx={cx} cy={cy} r={6} fill="rgba(244, 63, 94, 0.25)" />
+                          <line x1={cx - 3.5} y1={cy - 3.5} x2={cx + 3.5} y2={cy + 3.5} stroke="#f43f5e" strokeWidth={2} strokeLinecap="round" />
+                          <line x1={cx - 3.5} y1={cy + 3.5} x2={cx + 3.5} y2={cy - 3.5} stroke="#f43f5e" strokeWidth={2} strokeLinecap="round" />
+                        </g>
+                      );
+                    }
+                    if (payload?.deltaC > 0) {
+                      return (
+                        <g key={`add-c-${cx}-${cy}`}>
+                          <polygon
+                            points={`${cx},${cy - 4.5} ${cx + 4.5},${cy} ${cx},${cy + 4.5} ${cx - 4.5},${cy}`}
+                            fill="#10b981"
+                            stroke="#34d399"
+                            strokeWidth={1}
+                          />
+                        </g>
+                      );
+                    }
+                    return <circle key={`dot-c-${cx}-${cy}`} cx={cx} cy={cy} r={2.5} fill="#94a3b8" />;
+                  }}
+                  activeDot={{ r: 4.5 }}
                   isAnimationActive={false}
                 />
               </LineChart>

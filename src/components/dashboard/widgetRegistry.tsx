@@ -256,8 +256,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   },
   currencies_vault: {
     kind: "currencies_vault",
-    title: "Currencies & Vault",
-    subtitle: "Gold, Gems, Tokens & Vault",
+    title: "Currencies & Inventory",
+    subtitle: "Gold, Gems, Boosters, Tokens & Vault",
     icon: <Coins className="w-3.5 h-3.5 text-amber-400" />,
     defaultWidth: 6,
     defaultHeight: 3,
