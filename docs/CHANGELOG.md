@@ -2,6 +2,21 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.7.6] - 2026-10-04 — 📜 Daily Quest Rerolls, Upgrades & Expanded Modal Analytics
+
+### 📜 Daily Quest Reroll & Upgrade Tracking
+- **Automated Re-roll Detection**: When MTGA syncs daily quest updates (`record_quests_update`), any quest that was active and vanishes without being completed while replaced by a new quest is automatically identified, classified, and persisted as a daily re-roll event.
+- **Dedicated Persistence**: Created `player_quest_rerolls` table tracking original and replacement quest IDs, titles, and gold rewards, net gold impact (`gold_diff`), and exact timestamps.
+- **Historical Backfill Migration**: Added retroactive backfill in database initialization to reconstruct past re-roll events from historical active quest telemetry.
+- **Aggregated IPC Telemetry**: Implemented `get_quest_reroll_stats` returning total re-rolls performed, 500g $\to$ 750g upgrade count, upgrade conversion rate (`%`), net bonus gold earned, and chronological swap history.
+
+### 📊 Widened Quest Statistics Modal & Layout Refinements
+- **Expanded Modal Frame**: Widened the `QuestStatisticsModal` container to `w-[94vw] max-w-7xl max-h-[90vh]` to accommodate multi-column analytics comfortably.
+- **Repositioned Reroll Analytics**: Moved the **Daily Quest Rerolls & Upgrades** section directly above **Individual Quest Records & Velocity**.
+- **Compact 4-Card Summary Grid**: Displays Total Rerolls, 500g $\to$ 750g Upgrades, Net Gold Gained, and Same-Tier Swaps alongside the detailed swap history table.
+- **Single-Row Guild Pair Frequency**: Streamlined the **Guild Color Pair Frequency** container to `grid-cols-5 lg:grid-cols-10 gap-1.5` with compact padding, size 11 mana pips, and responsive typography so all 10 Ravnica guild pairings fit neatly across **one single row**.
+- **Lean Active Quests Widget**: Kept the primary dashboard widget clean and focused on active quest slots while routing comprehensive re-roll and upgrade analytics into the statistics modal.
+
 ## [1.7.5] - 2026-10-03 — 📦 Booster Inventory Count Parsing Fix
 
 ### 🐛 Bug Fixes & Inventory Engine

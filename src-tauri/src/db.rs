@@ -236,6 +236,26 @@ CREATE INDEX IF NOT EXISTS idx_player_quests_status ON player_quests(status);
 CREATE INDEX IF NOT EXISTS idx_player_quests_category ON player_quests(category);
 CREATE INDEX IF NOT EXISTS idx_player_quests_first_seen ON player_quests(first_seen_at DESC);
 
+-- Player daily quest reroll / swap audit log
+CREATE TABLE IF NOT EXISTS player_quest_rerolls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rerolled_at TEXT NOT NULL,
+    old_quest_id TEXT NOT NULL,
+    old_title TEXT NOT NULL,
+    old_reward_gold INTEGER NOT NULL,
+    old_reward_xp INTEGER NOT NULL,
+    old_category TEXT NOT NULL,
+    new_quest_id TEXT NOT NULL,
+    new_title TEXT NOT NULL,
+    new_reward_gold INTEGER NOT NULL,
+    new_reward_xp INTEGER NOT NULL,
+    new_category TEXT NOT NULL,
+    gold_diff INTEGER NOT NULL,
+    is_upgrade BOOLEAN NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_player_quest_rerolls_old_id ON player_quest_rerolls(old_quest_id);
+CREATE INDEX IF NOT EXISTS idx_player_quest_rerolls_at ON player_quest_rerolls(rerolled_at DESC);
+
 -- Player periodic reward tracks (daily & weekly win resets)
 CREATE TABLE IF NOT EXISTS player_reward_tracks (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -364,9 +384,40 @@ pub struct QuestRecord {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct QuestRerollEvent {
+    pub id: i64,
+    pub rerolled_at: String,
+    pub old_quest_id: String,
+    pub old_title: String,
+    pub old_reward_gold: u32,
+    pub old_reward_xp: u32,
+    pub old_category: String,
+    pub new_quest_id: String,
+    pub new_title: String,
+    pub new_reward_gold: u32,
+    pub new_reward_xp: u32,
+    pub new_category: String,
+    pub gold_diff: i32,
+    pub is_upgrade: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Default)]
+pub struct QuestRerollStats {
+    pub total_rerolls: u32,
+    pub upgrade_count: u32,
+    pub same_tier_count: u32,
+    pub downgrade_count: u32,
+    pub upgrade_rate_pct: f64,
+    pub net_bonus_gold: i64,
+    pub latest_reroll: Option<QuestRerollEvent>,
+    pub recent_rerolls: Vec<QuestRerollEvent>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct ActiveQuestsResponse {
     pub quests: Vec<QuestRecord>,
     pub can_swap: bool,
+    pub reroll_stats: QuestRerollStats,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -1290,6 +1341,63 @@ impl DatabaseManager {
 
         // Migration: Ensure player_quests title matches authentic MTGA quest objective description
         let _ = sqlx::query("UPDATE player_quests SET title = description WHERE description IS NOT NULL AND description != '' AND title != description").execute(&pool).await;
+
+        // Migration: Ensure player_quest_rerolls table and populate historical swaps if empty
+        let _ = sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS player_quest_rerolls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rerolled_at TEXT NOT NULL,
+                old_quest_id TEXT NOT NULL,
+                old_title TEXT NOT NULL,
+                old_reward_gold INTEGER NOT NULL,
+                old_reward_xp INTEGER NOT NULL,
+                old_category TEXT NOT NULL,
+                new_quest_id TEXT NOT NULL,
+                new_title TEXT NOT NULL,
+                new_reward_gold INTEGER NOT NULL,
+                new_reward_xp INTEGER NOT NULL,
+                new_category TEXT NOT NULL,
+                gold_diff INTEGER NOT NULL,
+                is_upgrade BOOLEAN NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_player_quest_rerolls_old_id ON player_quest_rerolls(old_quest_id);
+            CREATE INDEX IF NOT EXISTS idx_player_quest_rerolls_at ON player_quest_rerolls(rerolled_at DESC);
+        "#).execute(&pool).await;
+
+        let rerolls_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quest_rerolls")
+            .fetch_one(&pool)
+            .await
+            .unwrap_or(0);
+
+        if rerolls_count == 0 {
+            let _ = sqlx::query(r#"
+                INSERT OR IGNORE INTO player_quest_rerolls (
+                    rerolled_at, old_quest_id, old_title, old_reward_gold, old_reward_xp, old_category,
+                    new_quest_id, new_title, new_reward_gold, new_reward_xp, new_category,
+                    gold_diff, is_upgrade
+                )
+                SELECT 
+                    s.last_seen_at as rerolled_at,
+                    s.quest_id as old_quest_id,
+                    s.title as old_title,
+                    s.reward_gold as old_reward_gold,
+                    s.reward_xp as old_reward_xp,
+                    s.category as old_category,
+                    n.quest_id as new_quest_id,
+                    n.title as new_title,
+                    n.reward_gold as new_reward_gold,
+                    n.reward_xp as new_reward_xp,
+                    n.category as new_category,
+                    (n.reward_gold - s.reward_gold) as gold_diff,
+                    (n.reward_gold > s.reward_gold) as is_upgrade
+                FROM player_quests s
+                JOIN player_quests n ON n.quest_id != s.quest_id
+                  AND ABS(strftime('%s', n.first_seen_at) - strftime('%s', s.last_seen_at)) <= 300
+                WHERE s.status = 'swapped'
+                GROUP BY s.quest_id
+                ORDER BY s.last_seen_at ASC;
+            "#).execute(&pool).await;
+        }
 
         let mgr = Self { pool, db_filename };
         #[cfg(not(test))]
@@ -3022,6 +3130,7 @@ impl DatabaseManager {
         incoming_can_swap: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = chrono::Utc::now().to_rfc3339();
+        let mut newly_inserted_quests: Vec<(String, String, u32, u32, String)> = Vec::new();
 
         // 1. Upsert / update each received quest
         for raw in raw_quests {
@@ -3086,6 +3195,14 @@ impl DatabaseManager {
                 let completed_at = if is_completed { Some(now.clone()) } else { None };
                 let duration_sec = if is_completed { Some(0i64) } else { None };
 
+                newly_inserted_quests.push((
+                    raw.quest_id.clone(),
+                    resolved.title.clone(),
+                    raw.reward_gold,
+                    raw.reward_xp,
+                    resolved.category.clone(),
+                ));
+
                 sqlx::query(
                     r#"
                     INSERT INTO player_quests (
@@ -3120,10 +3237,11 @@ impl DatabaseManager {
 
         // 2. Detect missing active quests (completed or swapped away).
         // Only run when raw_quests is non-empty to prevent accidental purges from empty transient lines or rotations.
+        let mut swapped_quests: Vec<(String, String, u32, u32, String)> = Vec::new();
         if !raw_quests.is_empty() {
             let incoming_ids: Vec<String> = raw_quests.iter().map(|q| q.quest_id.clone()).collect();
             let active_rows = sqlx::query(
-                "SELECT quest_id, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
+                "SELECT quest_id, title, reward_gold, reward_xp, category, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
             )
             .fetch_all(&self.pool)
             .await?;
@@ -3145,7 +3263,15 @@ impl DatabaseManager {
                         });
 
                     // If the player had swap available, and now doesn't, and progress wasn't finished, it was swapped!
-                    let final_status = if had_can_swap && !incoming_can_swap && progress < goal {
+                    let is_swap = had_can_swap && !incoming_can_swap && progress < goal;
+                    let final_status = if is_swap {
+                        swapped_quests.push((
+                            qid.clone(),
+                            row.get::<String, _>("title"),
+                            row.get::<i64, _>("reward_gold") as u32,
+                            row.get::<i64, _>("reward_xp") as u32,
+                            row.get::<String, _>("category"),
+                        ));
                         "swapped"
                     } else {
                         "completed"
@@ -3165,6 +3291,46 @@ impl DatabaseManager {
                     .bind(&qid)
                     .execute(&self.pool)
                     .await;
+                }
+            }
+        }
+
+        // 3. Record quest reroll audit event if any quest was swapped and replaced
+        if !swapped_quests.is_empty() {
+            for (idx, old_q) in swapped_quests.into_iter().enumerate() {
+                if let Some(new_q) = newly_inserted_quests.get(idx) {
+                    let gold_diff = (new_q.2 as i64) - (old_q.2 as i64);
+                    let is_upgrade = gold_diff > 0;
+
+                    let _ = sqlx::query(
+                        r#"
+                        INSERT OR IGNORE INTO player_quest_rerolls (
+                            rerolled_at, old_quest_id, old_title, old_reward_gold, old_reward_xp, old_category,
+                            new_quest_id, new_title, new_reward_gold, new_reward_xp, new_category,
+                            gold_diff, is_upgrade
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        "#
+                    )
+                    .bind(&now)
+                    .bind(&old_q.0)
+                    .bind(&old_q.1)
+                    .bind(old_q.2 as i64)
+                    .bind(old_q.3 as i64)
+                    .bind(&old_q.4)
+                    .bind(&new_q.0)
+                    .bind(&new_q.1)
+                    .bind(new_q.2 as i64)
+                    .bind(new_q.3 as i64)
+                    .bind(&new_q.4)
+                    .bind(gold_diff)
+                    .bind(is_upgrade)
+                    .execute(&self.pool)
+                    .await;
+
+                    println!(
+                        "[EVENT: QUEST_REROLL] Rerolled '{}' ({}g) -> '{}' ({}g) [gold diff: {:+}]",
+                        old_q.1, old_q.2, new_q.1, new_q.2, gold_diff
+                    );
                 }
             }
         }
@@ -3307,9 +3473,126 @@ impl DatabaseManager {
             });
         }
 
+        let reroll_stats = self.get_quest_reroll_stats().await.unwrap_or_default();
+
         Ok(ActiveQuestsResponse {
             quests,
             can_swap: overall_can_swap,
+            reroll_stats,
+        })
+    }
+
+    /// Retrieve daily quest reroll and upgrade statistics.
+    pub async fn get_quest_reroll_stats(
+        &self,
+    ) -> Result<QuestRerollStats, Box<dyn std::error::Error + Send + Sync>> {
+        let total_rerolls: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quest_rerolls")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let upgrade_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quest_rerolls WHERE is_upgrade = 1")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let same_tier_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quest_rerolls WHERE gold_diff = 0")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let downgrade_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quest_rerolls WHERE gold_diff < 0")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let net_bonus_gold: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(gold_diff), 0) FROM player_quest_rerolls")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let rerolled_500: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM player_quest_rerolls WHERE old_reward_gold <= 500")
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+        let upgrade_rate_pct = if rerolled_500 > 0 {
+            ((upgrade_count as f64) / (rerolled_500 as f64)) * 100.0
+        } else if total_rerolls > 0 {
+            ((upgrade_count as f64) / (total_rerolls as f64)) * 100.0
+        } else {
+            0.0
+        };
+
+        let latest_row = sqlx::query(
+            r#"
+            SELECT id, rerolled_at, old_quest_id, old_title, old_reward_gold, old_reward_xp, old_category,
+                   new_quest_id, new_title, new_reward_gold, new_reward_xp, new_category,
+                   gold_diff, is_upgrade
+            FROM player_quest_rerolls
+            ORDER BY rerolled_at DESC, id DESC
+            LIMIT 1
+            "#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let latest_reroll = latest_row.map(|r| QuestRerollEvent {
+            id: r.get("id"),
+            rerolled_at: r.get("rerolled_at"),
+            old_quest_id: r.get("old_quest_id"),
+            old_title: r.get("old_title"),
+            old_reward_gold: r.get::<i64, _>("old_reward_gold") as u32,
+            old_reward_xp: r.get::<i64, _>("old_reward_xp") as u32,
+            old_category: r.get("old_category"),
+            new_quest_id: r.get("new_quest_id"),
+            new_title: r.get("new_title"),
+            new_reward_gold: r.get::<i64, _>("new_reward_gold") as u32,
+            new_reward_xp: r.get::<i64, _>("new_reward_xp") as u32,
+            new_category: r.get("new_category"),
+            gold_diff: r.get::<i64, _>("gold_diff") as i32,
+            is_upgrade: r.get::<bool, _>("is_upgrade"),
+        });
+
+        let recent_rows = sqlx::query(
+            r#"
+            SELECT id, rerolled_at, old_quest_id, old_title, old_reward_gold, old_reward_xp, old_category,
+                   new_quest_id, new_title, new_reward_gold, new_reward_xp, new_category,
+                   gold_diff, is_upgrade
+            FROM player_quest_rerolls
+            ORDER BY rerolled_at DESC, id DESC
+            LIMIT 10
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let recent_rerolls = recent_rows.into_iter().map(|r| QuestRerollEvent {
+            id: r.get("id"),
+            rerolled_at: r.get("rerolled_at"),
+            old_quest_id: r.get("old_quest_id"),
+            old_title: r.get("old_title"),
+            old_reward_gold: r.get::<i64, _>("old_reward_gold") as u32,
+            old_reward_xp: r.get::<i64, _>("old_reward_xp") as u32,
+            old_category: r.get("old_category"),
+            new_quest_id: r.get("new_quest_id"),
+            new_title: r.get("new_title"),
+            new_reward_gold: r.get::<i64, _>("new_reward_gold") as u32,
+            new_reward_xp: r.get::<i64, _>("new_reward_xp") as u32,
+            new_category: r.get("new_category"),
+            gold_diff: r.get::<i64, _>("gold_diff") as i32,
+            is_upgrade: r.get::<bool, _>("is_upgrade"),
+        }).collect();
+
+        Ok(QuestRerollStats {
+            total_rerolls: total_rerolls as u32,
+            upgrade_count: upgrade_count as u32,
+            same_tier_count: same_tier_count as u32,
+            downgrade_count: downgrade_count as u32,
+            upgrade_rate_pct: (upgrade_rate_pct * 10.0).round() / 10.0,
+            net_bonus_gold,
+            latest_reroll,
+            recent_rerolls,
         })
     }
 
@@ -4926,6 +5209,112 @@ mod tests {
         assert_eq!(restored_active_item.current_progress, 19);
         assert!(restored_active_item.completed_at.is_none());
         assert_eq!(restored_active.quests[0].quest_id, "q-103"); // Active quest is sorted first!
+    }
+
+    #[tokio::test]
+    async fn test_quest_reroll_detection_and_analytics() {
+        let db = in_memory_db().await;
+
+        // Player starts with a 500g quest and reroll available
+        let q1 = parser::RawQuestData {
+            quest_id: "q-orig-500".to_string(),
+            loc_key: "Quests/Quest_Nissas_Journey".to_string(),
+            goal: 25,
+            starting_progress: 0,
+            ending_progress: 0,
+            can_swap: true,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        db.record_quests_update(&[q1], true).await.unwrap();
+
+        let initial_active = db.get_active_quests().await.unwrap();
+        assert_eq!(initial_active.quests.len(), 1);
+        assert!(initial_active.can_swap);
+        assert_eq!(initial_active.reroll_stats.total_rerolls, 0);
+
+        // Player rerolls q-orig-500 -> replaced by q-upgraded-750 (can_swap now false)
+        let q_upgraded = parser::RawQuestData {
+            quest_id: "q-upgraded-750".to_string(),
+            loc_key: "Quests/Quest_Azorius_Justiciar".to_string(),
+            goal: 40,
+            starting_progress: 0,
+            ending_progress: 0,
+            can_swap: false,
+            reward_gold: 750,
+            reward_xp: 500,
+        };
+        db.record_quests_update(&[q_upgraded], false).await.unwrap();
+
+        // Verify active quests and reroll stats
+        let active_after_reroll = db.get_active_quests().await.unwrap();
+        assert_eq!(active_after_reroll.quests.len(), 1);
+        assert!(!active_after_reroll.can_swap);
+        assert_eq!(active_after_reroll.quests[0].quest_id, "q-upgraded-750");
+
+        let stats = &active_after_reroll.reroll_stats;
+        assert_eq!(stats.total_rerolls, 1);
+        assert_eq!(stats.upgrade_count, 1);
+        assert_eq!(stats.same_tier_count, 0);
+        assert_eq!(stats.downgrade_count, 0);
+        assert_eq!(stats.upgrade_rate_pct, 100.0);
+        assert_eq!(stats.net_bonus_gold, 250);
+
+        let latest = stats.latest_reroll.as_ref().expect("Must have latest reroll");
+        assert_eq!(latest.old_quest_id, "q-orig-500");
+        assert_eq!(latest.old_reward_gold, 500);
+        assert_eq!(latest.new_quest_id, "q-upgraded-750");
+        assert_eq!(latest.new_reward_gold, 750);
+        assert_eq!(latest.gold_diff, 250);
+        assert!(latest.is_upgrade);
+
+        // Second day: player has another 500g quest and rerolls into another 500g quest (same-tier)
+        let q2 = parser::RawQuestData {
+            quest_id: "q-second-500".to_string(),
+            loc_key: "Quests/Quest_Boros_Reckoner".to_string(),
+            goal: 20,
+            starting_progress: 0,
+            ending_progress: 0,
+            can_swap: true,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        // Also keep q_upgraded active
+        let q_upgraded_still_active = parser::RawQuestData {
+            quest_id: "q-upgraded-750".to_string(),
+            loc_key: "Quests/Quest_Azorius_Justiciar".to_string(),
+            goal: 40,
+            starting_progress: 0,
+            ending_progress: 5,
+            can_swap: true,
+            reward_gold: 750,
+            reward_xp: 500,
+        };
+        db.record_quests_update(&[q_upgraded_still_active.clone(), q2], true).await.unwrap();
+
+        // Reroll q-second-500 into q-same-500
+        let q_same = parser::RawQuestData {
+            quest_id: "q-same-500".to_string(),
+            loc_key: "Quests/Quest_Nissas_Journey".to_string(),
+            goal: 25,
+            starting_progress: 0,
+            ending_progress: 0,
+            can_swap: false,
+            reward_gold: 500,
+            reward_xp: 500,
+        };
+        let mut q_upgraded_after_swap = q_upgraded_still_active.clone();
+        q_upgraded_after_swap.can_swap = false;
+        db.record_quests_update(&[q_upgraded_after_swap, q_same], false).await.unwrap();
+
+        let stats2 = db.get_quest_reroll_stats().await.unwrap();
+        assert_eq!(stats2.total_rerolls, 2);
+        assert_eq!(stats2.upgrade_count, 1);
+        assert_eq!(stats2.same_tier_count, 1);
+        assert_eq!(stats2.downgrade_count, 0);
+        assert_eq!(stats2.upgrade_rate_pct, 50.0);
+        assert_eq!(stats2.net_bonus_gold, 250);
+        assert_eq!(stats2.recent_rerolls.len(), 2);
     }
 
     #[tokio::test]

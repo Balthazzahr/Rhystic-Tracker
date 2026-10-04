@@ -170,7 +170,7 @@ export const ActiveQuestsWidget: React.FC<WidgetProps> = React.memo(({ widget })
         </div>
       </WidgetShell>
 
-      <QuestStatisticsModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <QuestStatisticsModal isOpen={modalOpen} onClose={() => setModalOpen(false)} rerollStats={data?.reroll_stats} />
     </>
   );
 });

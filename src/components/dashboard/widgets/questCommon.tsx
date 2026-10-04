@@ -22,9 +22,38 @@ export interface QuestRecord {
   matches_played_during: number;
 }
 
+export interface QuestRerollEvent {
+  id: number;
+  rerolled_at: string;
+  old_quest_id: string;
+  old_title: string;
+  old_reward_gold: number;
+  old_reward_xp: number;
+  old_category: string;
+  new_quest_id: string;
+  new_title: string;
+  new_reward_gold: number;
+  new_reward_xp: number;
+  new_category: string;
+  gold_diff: number;
+  is_upgrade: boolean;
+}
+
+export interface QuestRerollStats {
+  total_rerolls: number;
+  upgrade_count: number;
+  same_tier_count: number;
+  downgrade_count: number;
+  upgrade_rate_pct: number;
+  net_bonus_gold: number;
+  latest_reroll?: QuestRerollEvent;
+  recent_rerolls: QuestRerollEvent[];
+}
+
 export interface ActiveQuestsResponse {
   quests: QuestRecord[];
   can_swap: boolean;
+  reroll_stats: QuestRerollStats;
 }
 
 export interface CategoryStat {
