@@ -2076,7 +2076,7 @@ impl MatchAssembler {
             self.current_turn = turn;
         }
 
-        if (turn == 1 || self.current_turn == 1) && active_seat > 0 && self.turn_1_active_seat.is_none() {
+        if (turn <= 1 || self.current_turn <= 1) && active_seat > 0 && self.turn_1_active_seat.is_none() {
             self.turn_1_active_seat = Some(active_seat);
             if let Some(m) = &mut self.active_match {
                 m.going_first = active_seat == self.player_seat_id;
@@ -2576,6 +2576,19 @@ use super::*;
 
         let (rec_draw, _, _, _) = assembler_draw.complete_match(2, "Concede").expect("match should complete");
         assert!(!rec_draw.going_first, "Hero should be on the draw when active player on turn 1 is opponent seat");
+
+        // Pre-mulligan concession (turn 0 with activePlayer in turnInfo)
+        let mut assembler_premulligan = MatchAssembler::new();
+        assembler_premulligan.set_player_user_id("user-hero".to_string());
+        assembler_premulligan.start_match("match-premulligan".to_string(), "Standard".to_string(), false);
+        assembler_premulligan.update_reserved_players(&serde_json::json!([
+            { "userId": "user-hero", "playerName": "Hero", "systemSeatId": 1, "teamId": 1 },
+            { "userId": "user-opp", "playerName": "Opponent", "systemSeatId": 2, "teamId": 2 }
+        ]));
+        // Opponent is active player before turn 1 ever starts
+        assembler_premulligan.update_game_state(Some(300), 0, &[(1, 20), (2, 20)], 2);
+        let (rec_premulligan, _, _, _) = assembler_premulligan.complete_match(2, "Concede").expect("match should complete");
+        assert!(!rec_premulligan.going_first, "Hero should be on the draw when opponent is active player even before turn 1 (turn 0)");
     }
 
     #[test]

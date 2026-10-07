@@ -2258,6 +2258,38 @@ impl DatabaseManager {
             let mut opponent_colors_arr: Vec<String> = agg
                 .map(|a| a.opponent_colors.into_iter().collect())
                 .unwrap_or_default();
+
+            // If opponent played 0 cards (e.g. conceded during mulligans), fall back to commander's colors
+            if opponent_colors_arr.is_empty() {
+                if let Some(cmd_id) = m.opponent_commander_id {
+                    if let Ok(Some((color_ident, cols))) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+                        "SELECT color_identity, colors FROM cards_cache WHERE grp_id = ?"
+                    )
+                    .bind(cmd_id as i64)
+                    .fetch_optional(&self.pool)
+                    .await
+                    {
+                        let mut set = std::collections::HashSet::new();
+                        for source_str in [color_ident, cols].into_iter().flatten() {
+                            for ch in source_str.chars() {
+                                if !ch.is_ascii_alphanumeric() {
+                                    continue;
+                                }
+                                match ch {
+                                    '1' | 'W' | 'w' => { set.insert("W".to_string()); },
+                                    '2' | 'U' | 'u' => { set.insert("U".to_string()); },
+                                    '3' | 'B' | 'b' => { set.insert("B".to_string()); },
+                                    '4' | 'R' | 'r' => { set.insert("R".to_string()); },
+                                    '5' | 'G' | 'g' => { set.insert("G".to_string()); },
+                                    _ => {}
+                                }
+                            }
+                        }
+                        opponent_colors_arr = set.into_iter().collect();
+                    }
+                }
+            }
+
             opponent_colors_arr.sort_by_key(|c| order.iter().position(|&x| x == c).unwrap_or(99));
 
             let clean_format = parser::normalize_format(&m.format_name);
@@ -3236,62 +3268,62 @@ impl DatabaseManager {
         }
 
         // 2. Detect missing active quests (completed or swapped away).
-        // Only run when raw_quests is non-empty to prevent accidental purges from empty transient lines or rotations.
+        // Authoritative QuestGetQuests update: any previously active quest not present in incoming_ids
+        // has ended. If quests were present and swap happened, it is swapped; otherwise completed.
         let mut swapped_quests: Vec<(String, String, u32, u32, String)> = Vec::new();
-        if !raw_quests.is_empty() {
-            let incoming_ids: Vec<String> = raw_quests.iter().map(|q| q.quest_id.clone()).collect();
-            let active_rows = sqlx::query(
-                "SELECT quest_id, title, reward_gold, reward_xp, category, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
-            )
-            .fetch_all(&self.pool)
-            .await?;
+        let incoming_ids: Vec<String> = raw_quests.iter().map(|q| q.quest_id.clone()).collect();
+        let active_rows = sqlx::query(
+            "SELECT quest_id, title, reward_gold, reward_xp, category, first_seen_at, can_swap, current_progress, goal FROM player_quests WHERE status = 'active'"
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
-            for row in active_rows {
-                let qid: String = row.get("quest_id");
-                if !incoming_ids.contains(&qid) {
-                    let first_seen: String = row.get("first_seen_at");
-                    let had_can_swap: bool = row.get("can_swap");
-                    let progress: i64 = row.get("current_progress");
-                    let goal: i64 = row.get("goal");
+        for row in active_rows {
+            let qid: String = row.get("quest_id");
+            if !incoming_ids.contains(&qid) {
+                let first_seen: String = row.get("first_seen_at");
+                let had_can_swap: bool = row.get("can_swap");
+                let progress: i64 = row.get("current_progress");
+                let goal: i64 = row.get("goal");
 
-                    let duration = chrono::DateTime::parse_from_rfc3339(&now)
-                        .ok()
-                        .and_then(|now_dt| {
-                            chrono::DateTime::parse_from_rfc3339(&first_seen)
-                                .ok()
-                                .map(|fs| (now_dt - fs).num_seconds())
-                        });
+                let duration = chrono::DateTime::parse_from_rfc3339(&now)
+                    .ok()
+                    .and_then(|now_dt| {
+                        chrono::DateTime::parse_from_rfc3339(&first_seen)
+                            .ok()
+                            .map(|fs| (now_dt - fs).num_seconds())
+                    });
 
-                    // If the player had swap available, and now doesn't, and progress wasn't finished, it was swapped!
-                    let is_swap = had_can_swap && !incoming_can_swap && progress < goal;
-                    let final_status = if is_swap {
-                        swapped_quests.push((
-                            qid.clone(),
-                            row.get::<String, _>("title"),
-                            row.get::<i64, _>("reward_gold") as u32,
-                            row.get::<i64, _>("reward_xp") as u32,
-                            row.get::<String, _>("category"),
-                        ));
-                        "swapped"
-                    } else {
-                        "completed"
-                    };
+                // If the player had swap available, and now doesn't, progress wasn't finished,
+                // AND new quests were received to replace it, it was swapped!
+                let is_swap = !raw_quests.is_empty() && had_can_swap && !incoming_can_swap && progress < goal;
+                let final_status = if is_swap {
+                    swapped_quests.push((
+                        qid.clone(),
+                        row.get::<String, _>("title"),
+                        row.get::<i64, _>("reward_gold") as u32,
+                        row.get::<i64, _>("reward_xp") as u32,
+                        row.get::<String, _>("category"),
+                    ));
+                    "swapped"
+                } else {
+                    "completed"
+                };
 
-                    let _ = sqlx::query(
-                        r#"
-                        UPDATE player_quests
-                        SET status = ?, completed_at = ?, duration_seconds = ?, last_seen_at = ?
-                        WHERE quest_id = ?
-                        "#
-                    )
-                    .bind(final_status)
-                    .bind(&now)
-                    .bind(duration)
-                    .bind(&now)
-                    .bind(&qid)
-                    .execute(&self.pool)
-                    .await;
-                }
+                let _ = sqlx::query(
+                    r#"
+                    UPDATE player_quests
+                    SET status = ?, completed_at = ?, duration_seconds = ?, last_seen_at = ?
+                    WHERE quest_id = ?
+                    "#
+                )
+                .bind(final_status)
+                .bind(&now)
+                .bind(duration)
+                .bind(&now)
+                .bind(&qid)
+                .execute(&self.pool)
+                .await;
             }
         }
 
@@ -4933,6 +4965,19 @@ mod tests {
         assert_eq!(results_2[1].match_id, "m2");
         assert_eq!(results_2[1].deck_colors, vec!["U".to_string()]);
         assert_eq!(results_2[1].mana_curve[2], 2);
+
+        // Seed a Brawl match where opponent conceded during mulligans (0 cards played)
+        // Commander is Niv-Mizzet (UR -> 'U', 'R')
+        sqlx::query("INSERT INTO cards_cache (grp_id, name, mana_cost, cmc, colors, color_identity, card_type, rarity, last_updated) VALUES (999, 'Niv-Mizzet, Parun', 'oUoUoUoRoRoR', 6, 'U,R', '4,2', 'Creature', 4, datetime('now'))")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO matches (id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_deck_name, opponent_commander_id) VALUES ('m4', '2026-01-04T10:00:00Z', '2026-01-04', 'Brawl', 'win', 5, 0, 1, 'My Deck', 999)")
+            .execute(db.pool()).await.unwrap();
+
+        let results_brawl = db.get_enriched_recent_matches(1).await.unwrap();
+        assert_eq!(results_brawl.len(), 1);
+        assert_eq!(results_brawl[0].match_id, "m4");
+        assert_eq!(results_brawl[0].opponent_commander_id, Some(999));
+        assert_eq!(results_brawl[0].opponent_colors, vec!["U".to_string(), "R".to_string()], "Opponent colors should fall back to commander's color identity when no cards were cast");
     }
 
     #[tokio::test]
@@ -5179,15 +5224,15 @@ mod tests {
         assert_eq!(res_with_q3.quests[0].quest_id, "q-103");
         assert_eq!(res_with_q3.quests[0].status, "active");
 
-        // Sending an empty batch (e.g. transient log line) must not mark q3 as completed
+        // Sending an empty batch (`{"quests":[]}`) signifies all quests have been completed by the player
         db.record_quests_update(&[], false).await.unwrap();
         let res_after_empty = db.get_active_quests().await.unwrap();
-        assert_eq!(res_after_empty.quests.iter().filter(|q| q.status == "active").count(), 1);
-        assert_eq!(res_after_empty.quests[0].quest_id, "q-103");
+        assert_eq!(res_after_empty.quests.iter().filter(|q| q.status == "active").count(), 0);
+        let q3_completed = res_after_empty.quests.iter().find(|q| q.quest_id == "q-103").unwrap();
+        assert_eq!(q3_completed.status, "completed");
+        assert!(q3_completed.completed_at.is_some());
 
-        // Test self-healing: If q3 was somehow marked 'completed' in DB, incoming progress < goal MUST restore it to 'active'
-        sqlx::query("UPDATE player_quests SET status = 'completed', completed_at = '2026-10-01T00:00:00Z' WHERE quest_id = 'q-103'")
-            .execute(db.pool()).await.unwrap();
+        // Test self-healing: If q3 was marked 'completed' in DB, incoming progress < goal MUST restore it to 'active'
         let res_when_completed = db.get_active_quests().await.unwrap();
         assert_eq!(res_when_completed.quests.iter().filter(|q| q.status == "active").count(), 0);
 

@@ -2,6 +2,15 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.7.7] - 2026-10-07 — 🎯 Early Concession Telemetry & Active Quest Completion Synchronization
+
+### 🎯 Pre-Game & Early Concession Telemetry
+- **Pre-Mulligan Play vs Draw Resolution**: Resolved issue where conceding during the mulligan phase before turn 1 recorded matches as "Play" by default (#20). MTGA emits an initial `GameStateType_Diff` state payload containing `turnInfo.activePlayer` prior to the start of turn 1 and before mulligan requests are completed. The parser and game assembler now capture this early active seat immediately, ensuring correct Play / Draw classification regardless of when a concession takes place.
+- **Brawl Opponent Colors on Early Concession**: Fixed empty opponent color pips in Match History when an opponent concedes before casting spells or playing lands (#18). When `match_cards` contains 0 observed cards for the opponent, Match History automatically queries the Scryfall color identity and colors of the opponent's identified Commander from `cards_cache`, displaying the correct commander color pips.
+
+### 📜 Active Quests Synchronization & Completion Reliability
+- **End-of-Match Quest Reconciliation**: Addressed persistent incomplete state on the Active Quests widget where quests completed in-game remained displayed as in progress. When MTGA synchronizes quest state with an empty active quest batch (`{"quests": []}`), the database manager now safely transitions all previously active quests to completed, recording accurate completion timestamps and reward tallies.
+
 ## [1.7.6] - 2026-10-04 — 📜 Daily Quest Rerolls, Upgrades & Expanded Modal Analytics
 
 ### 📜 Daily Quest Reroll & Upgrade Tracking

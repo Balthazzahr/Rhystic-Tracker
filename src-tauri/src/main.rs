@@ -270,7 +270,7 @@ async fn dispatch_parsed_event(
                 }
                 if step.turn_number > 0 {
                     assembler.update_game_state(step.msg_id, step.turn_number, &step.life_by_seat, step.active_seat);
-                } else if !step.life_by_seat.is_empty() {
+                } else if !step.life_by_seat.is_empty() || step.active_seat > 0 {
                     assembler.update_game_state(step.msg_id, assembler.current_turn, &step.life_by_seat, step.active_seat);
                 }
                 for (m_seat, is_mul, num_cards) in step.mulligan_events {

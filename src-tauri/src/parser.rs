@@ -446,11 +446,15 @@ pub fn parse_line(line: &str) -> ParsedEvent {
                                 let turn_number = turn_info.and_then(|t| t.get("turnNumber")).and_then(|n| n.as_u64()).unwrap_or(0) as u32;
                                 if turn_number > 0 {
                                     step.turn_number = turn_number;
-                                    let active_seat = turn_info
-                                        .and_then(|t| t.get("activeSeatId").or_else(|| t.get("activePlayer")))
-                                        .and_then(|s| s.as_u64())
-                                        .unwrap_or(1) as u32;
-                                    step.active_seat = active_seat;
+                                }
+                                if let Some(active_seat) = turn_info
+                                    .and_then(|t| t.get("activeSeatId").or_else(|| t.get("activePlayer")))
+                                    .and_then(|s| s.as_u64())
+                                    .map(|s| s as u32)
+                                {
+                                    if active_seat > 0 {
+                                        step.active_seat = active_seat;
+                                    }
                                 }
 
                                 if let Some(players) = gsm.get("players").and_then(|p| p.as_array()) {
