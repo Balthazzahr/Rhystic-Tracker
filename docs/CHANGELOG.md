@@ -2,6 +2,25 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.7.8] - 2026-10-08 — 📦 Graphical Booster Pack Fanning, Economy Widget Alignment & Dashboard Persistence
+
+### 📦 Graphical Booster Packs & Inventory Alignment
+- **Fanned Booster Pack Graphics**: Overhauled unopened booster pack presentation in `CurrenciesVaultWidget` from a plain vertical list into authentic physical foil booster packs. Packs fan dynamically from a shared bottom-center anchor:
+  - 1 Pack: Single upright foil pack.
+  - 2 Packs: Alternating diagonal fan (-14° front, +14° back).
+  - 3 Packs: Centered upright pack with left (-20°) and right (+20°) cards fanning diagonally up and out.
+  - >3 Packs: 3-pack fan visual representation with multiplier text (`X{count}`).
+- **Keyrune Set Logo Sizing**: Set logos scale crisply to 38px with explicit font-size styling overriding global sheet inheritance.
+- **Golden Pack Support**: Added backend detection for MTGA unopened Golden Packs (`CollationId: 900980`) omitting `SetCode` in inventory telemetry. Golden Packs render with radiant golden foil gradients, bright crimp seals, and the authentic Planeswalker emblem (`ms ms-planeswalker`).
+- **Economy Widget Alignment**:
+  - Moved **Golden Pack Progress** (10 segmented pips and pack distance tracker) into **Currencies & Inventory** (`CurrenciesVaultWidget.tsx`) beneath the booster packs.
+  - Moved **Vault Progress** (rotary combination tumbler dial, lock/unlock indicators, tier achievement badge, and stepped safe bar) into **Wildcards & Vault** (`WildcardsGoldenPackWidget.tsx`).
+  - Updated widget titles, subtitles, and added backwards-compatible aliases in `widgetRegistry.tsx`.
+
+### 🧭 Dashboard Page Persistence Setting
+- **Settings Toggle**: Added a **"Remember Dashboard Page"** toggle under **Settings → General & Behavior → Startup & Navigation** to choose between persisting the last viewed dashboard page across tab switches and app restarts, or always resetting to Dashboard Page 1.
+- **Instant Search Integration**: Indexed with search terms like `"persist"`, `"remember dashboard"`, and `"page"`.
+
 ## [1.7.7] - 2026-10-07 — 🎯 Early Concession Telemetry & Active Quest Completion Synchronization
 
 ### 🎯 Pre-Game & Early Concession Telemetry

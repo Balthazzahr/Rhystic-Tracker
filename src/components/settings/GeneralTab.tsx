@@ -16,6 +16,7 @@ export interface GeneralTabProps {
   matchAllowDelete: boolean;
   matchAutoExport: boolean;
   matchStartupTab: boolean;
+  matchPersistDashboardPage: boolean;
   matchSetupWizard: boolean;
 
   // State values
@@ -29,6 +30,7 @@ export interface GeneralTabProps {
   autoExportMatches: boolean;
   autoExportFormat: string;
   defaultStartupTab: string;
+  persistDashboardPage: boolean;
 
   // Options
   autoExportFormatOptions: { value: string; label: string }[];
@@ -45,6 +47,7 @@ export interface GeneralTabProps {
   onToggleAutoExport: (val: boolean) => void;
   onChangeAutoExportFormat: (val: string) => void;
   onChangeDefaultStartupTab: (val: string) => void;
+  onTogglePersistDashboardPage: (val: boolean) => void;
   onOpenResetWizardModal: () => void;
 }
 
@@ -60,6 +63,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   matchAllowDelete,
   matchAutoExport,
   matchStartupTab,
+  matchPersistDashboardPage,
   matchSetupWizard,
   minimizeToTray,
   autoSwitchLiveHud,
@@ -71,6 +75,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   autoExportMatches,
   autoExportFormat,
   defaultStartupTab,
+  persistDashboardPage,
   autoExportFormatOptions,
   startupTabOptions,
   onToggleMinimizeToTray,
@@ -83,6 +88,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   onToggleAutoExport,
   onChangeAutoExportFormat,
   onChangeDefaultStartupTab,
+  onTogglePersistDashboardPage,
   onOpenResetWizardModal,
 }) => {
   return (
@@ -373,7 +379,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
       )}
 
       {/* Startup & Navigation Sub-section */}
-      {(matchStartupTab || matchSetupWizard || !isSearching) && (
+      {(matchStartupTab || matchPersistDashboardPage || matchSetupWizard || !isSearching) && (
         <div className="space-y-3 pt-2">
           <div className="border-b border-white/10 pb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-300 font-sans">
@@ -402,15 +408,45 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               </div>
             )}
 
+            {(matchPersistDashboardPage || !isSearching) && (
+              <div className="flex items-center justify-between p-3 border border-white/10 bg-white/[0.02]">
+                <div className="space-y-0.5 pr-2">
+                  <p className="text-xs font-bold text-white font-sans uppercase">Remember Dashboard Page</p>
+                  <p className="text-[11px] font-sans text-neutral-400">
+                    {persistDashboardPage
+                      ? "Keep last viewed dashboard page across tab switches and restarts."
+                      : "Always reset to Dashboard Page 1 when navigating to dashboard."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={persistDashboardPage}
+                  onClick={() => onTogglePersistDashboardPage(!persistDashboardPage)}
+                  style={persistDashboardPage ? { backgroundColor: MTG_COLORS.blue.bg, borderColor: MTG_COLORS.blue.border } : undefined}
+                  className={`relative inline-flex items-center h-5 w-9 shrink-0 cursor-pointer border transition-colors ${
+                    persistDashboardPage ? '' : 'bg-white/[0.04] border-white/15'
+                  }`}
+                >
+                  <span
+                    style={persistDashboardPage ? { backgroundColor: MTG_COLORS.blue.base } : undefined}
+                    className={`inline-block h-3 w-3 transform transition-transform ${
+                      persistDashboardPage ? 'translate-x-5' : 'translate-x-1 bg-neutral-500'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
+
             {(matchSetupWizard || !isSearching) && (
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <label className="text-[10px] font-mono uppercase text-neutral-400 font-bold">
                   First-Time Setup Assistant
                 </label>
                 <div>
                   <button
                     onClick={onOpenResetWizardModal}
-                    className="w-full px-4 py-2 border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full sm:w-auto px-4 py-2 border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-xs font-mono font-bold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Sliders className="w-3.5 h-3.5" style={{ color: MTG_COLORS.blue.text }} /> Re-run Setup Wizard
                   </button>

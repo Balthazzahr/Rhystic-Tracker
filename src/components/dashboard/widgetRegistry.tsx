@@ -257,7 +257,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   currencies_vault: {
     kind: "currencies_vault",
     title: "Currencies & Inventory",
-    subtitle: "Gold, Gems, Boosters, Tokens & Vault",
+    subtitle: "Gold, Gems, Boosters, Tokens & Golden Pack",
     icon: <Coins className="w-3.5 h-3.5 text-amber-400" />,
     defaultWidth: 6,
     defaultHeight: 3,
@@ -266,8 +266,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
   },
   wildcards_golden_pack: {
     kind: "wildcards_golden_pack",
-    title: "Wildcards & Golden Pack",
-    subtitle: "Crafting resources & pack progress",
+    title: "Wildcards & Vault",
+    subtitle: "Crafting resources & vault progression",
     icon: <Layers className="w-3.5 h-3.5 text-sky-400" />,
     defaultWidth: 6,
     defaultHeight: 3,
@@ -349,6 +349,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
 const WIDGET_ALIASES: Record<string, string> = {
   format_breakdown: "format_distribution",
   radial_format_dial: "format_distribution",
+  wildcards_vault: "wildcards_golden_pack",
+  currencies_inventory: "currencies_vault",
 };
 
 export function getWidgetDefinition(kind: string): WidgetDefinition | undefined {

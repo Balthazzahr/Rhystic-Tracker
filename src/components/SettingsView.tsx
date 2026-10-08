@@ -71,6 +71,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [defaultStartupTab, setDefaultStartupTab] = useState(() => {
     return localStorage.getItem('defaultStartupTab') || 'dashboard';
   });
+  const [persistDashboardPage, setPersistDashboardPage] = useState(() => {
+    return localStorage.getItem('persistDashboardPage') === 'true';
+  });
   const [defaultCollectionSort, setDefaultCollectionSort] = useState(() => {
     return localStorage.getItem('defaultCollectionSort') || 'released';
   });
@@ -336,6 +339,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleChangeDefaultStartupTab = (val: string) => {
     setDefaultStartupTab(val);
     localStorage.setItem('defaultStartupTab', val);
+  };
+
+  const handleTogglePersistDashboardPage = (val: boolean) => {
+    setPersistDashboardPage(val);
+    localStorage.setItem('persistDashboardPage', String(val));
+    window.dispatchEvent(new Event('rhystic_settings_changed'));
   };
 
   const handleChangeDefaultCollectionSort = (val: string) => {
@@ -743,6 +752,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const matchConfirmDelete = matchesSearch(['confirm', 'delete', 'deleting', 'decks', 'deck library', 'remove deck', 'modal', 'confirmation']);
   const matchAllowDelete = matchesSearch(['delete matches', 'delete match', 'match deletion', 'trash', 'remove match', 'bin', 'purge match', 'history']);
   const matchStartupTab = matchesSearch(['startup', 'tab', 'default startup', 'navigation', 'dashboard', 'live hud', 'initial view']);
+  const matchPersistDashboardPage = matchesSearch(['persist', 'remember dashboard', 'remember page', 'active page', 'dashboard page', 'default dashboard', 'switch page']);
   const matchSetupWizard = matchesSearch(['setup', 'wizard', 'assistant', 're-run', 'first-time', 'first time', 'scan', 'index', 'onboarding']);
 
   const matchThemes = matchesSearch(['theme', 'mana', 'color', 'identity', 'white', 'blue', 'black', 'red', 'green', 'accent', 'appearance', 'palette']);
@@ -779,6 +789,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (matchConfirmDelete) count++;
     if (matchAllowDelete) count++;
     if (matchStartupTab) count++;
+    if (matchPersistDashboardPage) count++;
     if (matchSetupWizard) count++;
     if (matchThemes) count++;
     if (matchGlassOpacity) count++;
@@ -801,7 +812,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return count;
   }, [
     q, matchMinimize, matchAutoSwitch, matchAlwaysOnTop, matchAudioCues, matchExcludeSparky, matchAutoExport,
-    matchConfirmDelete, matchAllowDelete, matchStartupTab, matchSetupWizard, matchThemes, matchGlassOpacity,
+    matchConfirmDelete, matchAllowDelete, matchStartupTab, matchPersistDashboardPage, matchSetupWizard, matchThemes, matchGlassOpacity,
     matchManaPipStyle, matchCollectionSort, matchCompactMode, matchDeckFlair, matchBackground,
     matchLogPath, matchBo3Sideboard, matchInstallLocations, matchDbStats, matchAutoBackup, matchImageCache,
     matchCacheQuota, matchCardDbSync, matchSetCatalog, matchAboutSummary, matchLegal
@@ -900,7 +911,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* ========================================================================= */}
           {/* SECTION: GENERAL & BEHAVIOR                                              */}
           {/* ========================================================================= */}
-          {(!isSearching ? activeTab === 'general' : (matchMinimize || matchAutoSwitch || matchAlwaysOnTop || matchAudioCues || matchExcludeSparky || matchAutoExport || matchConfirmDelete || matchAllowDelete || matchStartupTab || matchSetupWizard)) && (
+          {(!isSearching ? activeTab === 'general' : (matchMinimize || matchAutoSwitch || matchAlwaysOnTop || matchAudioCues || matchExcludeSparky || matchAutoExport || matchConfirmDelete || matchAllowDelete || matchStartupTab || matchPersistDashboardPage || matchSetupWizard)) && (
             <GeneralTab
               palette={palette}
               isSearching={isSearching}
@@ -913,6 +924,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               matchAllowDelete={matchAllowDelete}
               matchAutoExport={matchAutoExport}
               matchStartupTab={matchStartupTab}
+              matchPersistDashboardPage={matchPersistDashboardPage}
               matchSetupWizard={matchSetupWizard}
               minimizeToTray={minimizeToTray}
               autoSwitchLiveHud={autoSwitchLiveHud}
@@ -924,6 +936,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               autoExportMatches={autoExportMatches}
               autoExportFormat={autoExportFormat}
               defaultStartupTab={defaultStartupTab}
+              persistDashboardPage={persistDashboardPage}
               autoExportFormatOptions={autoExportFormatOptions}
               startupTabOptions={startupTabOptions}
               onToggleMinimizeToTray={handleToggleMinimizeToTray}
@@ -936,6 +949,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               onToggleAutoExport={handleToggleAutoExport}
               onChangeAutoExportFormat={handleChangeAutoExportFormat}
               onChangeDefaultStartupTab={handleChangeDefaultStartupTab}
+              onTogglePersistDashboardPage={handleTogglePersistDashboardPage}
               onOpenResetWizardModal={() => setShowResetWizardModal(true)}
             />
           )}

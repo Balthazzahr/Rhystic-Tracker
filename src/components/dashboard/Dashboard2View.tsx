@@ -309,7 +309,23 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
     };
   }, []);
 
-  const [activePage, setActivePage] = useState<number>(1);
+  const [activePage, setActivePage] = useState<number>(() => {
+    const shouldPersist = localStorage.getItem("persistDashboardPage") === "true";
+    if (shouldPersist) {
+      const saved = localStorage.getItem("rhystic_dashboard_active_page");
+      const parsed = saved ? parseInt(saved, 10) : 1;
+      return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    }
+    return 1;
+  });
+
+  // Keep localStorage updated with activePage if persistDashboardPage is enabled
+  useEffect(() => {
+    const shouldPersist = localStorage.getItem("persistDashboardPage") === "true";
+    if (shouldPersist) {
+      localStorage.setItem("rhystic_dashboard_active_page", String(activePage));
+    }
+  }, [activePage]);
 
   const totalPages = useMemo(() => {
     let max = 1;

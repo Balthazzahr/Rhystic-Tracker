@@ -19,76 +19,167 @@ const keyruneClass = (code: string) =>
   `ss ss-${(KEYRUNE_CODE_ALIAS[code.toUpperCase()] || code).toLowerCase()}`;
 
 /**
- * Authentic MTGA Physical Booster Pack Component
- * Renders metallic foil packaging, crimp seals, set logo, and 3D stack effect for multi-packs.
+ * Authentic MTGA Physical Foil Booster Pack Graphic
+ * Features crimped/serrated heat seals, metallic amber gradient, and centered Keyrune/Planeswalker set logo.
  */
-interface BoosterPackCardProps {
-  booster: BoosterPack;
-  isSingleSet: boolean;
+interface FoilBoosterPackProps {
+  setCode: string;
+  className?: string;
 }
 
-const BoosterPackCard: React.FC<BoosterPackCardProps> = ({ booster, isSingleSet }) => {
-  const isMulti = booster.count > 1;
+const FoilBoosterPack: React.FC<FoilBoosterPackProps> = ({ setCode, className = "" }) => {
+  const isGolden = setCode.toUpperCase() === "GOLDEN";
 
   return (
     <div
-      className={`relative group overflow-hidden bg-gradient-to-br from-neutral-900/90 via-neutral-950 to-neutral-900/90 border border-amber-500/25 hover:border-amber-400/50 p-2 flex items-center justify-between transition-all duration-200 shadow-sm ${
-        isSingleSet ? "col-span-full" : ""
-      }`}
+      className={`w-[54px] h-[82px] rounded-[1px] ${
+        isGolden
+          ? "bg-gradient-to-b from-amber-700/60 via-amber-950 to-yellow-950 border border-yellow-400/90 shadow-[0_0_14px_rgba(245,158,11,0.4)]"
+          : "bg-gradient-to-b from-neutral-800 via-neutral-900 to-neutral-950 border border-amber-400/50 shadow-md"
+      } flex flex-col items-center justify-between overflow-hidden transition-all duration-200 ${className}`}
     >
-      {/* Background Foil Shimmer Sweep on Hover */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-300/[0.06] to-transparent pointer-events-none -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out" />
-
-      {/* Left: Booster Pack Visual Badge */}
-      <div className="flex items-center gap-2.5 min-w-0 pr-2">
-        <div className="relative shrink-0 flex items-center justify-center">
-          {/* Back Pack Shadow Layer (Only for Multi-packs) */}
-          {isMulti && (
-            <div className="absolute -top-0.5 -right-0.5 w-7 h-9 rounded-[2px] bg-neutral-800 border border-amber-500/30 rotate-3 opacity-70 shadow-sm pointer-events-none" />
-          )}
-
-          {/* Front Booster Foil Pack */}
-          <div className="relative w-7 h-9 rounded-[2px] bg-gradient-to-b from-neutral-800 via-neutral-900 to-neutral-950 border border-amber-400/50 flex flex-col items-center justify-between shadow-sm overflow-hidden z-10 group-hover:scale-105 transition-transform duration-150">
-            {/* Top Crimp Lines (Metallic Heat-Sealed) */}
-            <div className="w-full h-1 bg-gradient-to-r from-amber-600/40 via-amber-400/60 to-amber-600/40 border-b border-amber-400/30" />
-
-            {/* Center: Set Logo Emblem */}
-            <div className="relative flex-1 flex flex-col items-center justify-center w-full px-0.5">
-              <i
-                className={`${keyruneClass(
-                  booster.set_code
-                )} text-amber-300 text-base leading-none drop-shadow-[0_0_6px_rgba(245,158,11,0.5)] group-hover:text-amber-200 transition-colors`}
-              />
-            </div>
-
-            {/* Bottom Crimp Lines */}
-            <div className="w-full h-1 bg-gradient-to-r from-amber-600/40 via-amber-400/60 to-amber-600/40 border-t border-amber-400/30" />
-          </div>
-        </div>
-
-        {/* Set Details (Clean title, no redundant set code or 'Booster Pack') */}
-        <div className="min-w-0 flex flex-col justify-center">
-          <span
-            className="text-neutral-100 text-xs font-sans font-semibold truncate leading-tight group-hover:text-amber-200 transition-colors"
-            title={booster.set_name || booster.set_code}
-          >
-            {booster.set_name || booster.set_code}
-          </span>
-        </div>
+      {/* Top Crimp Seal (Metallic Heat-Sealed Serrated Edge) */}
+      <div
+        className={`w-full shrink-0 flex flex-col items-center ${
+          isGolden
+            ? "bg-gradient-to-b from-yellow-500/80 via-amber-300 to-yellow-600 border-b border-yellow-300/60"
+            : "bg-gradient-to-b from-amber-600/50 via-amber-400/60 to-amber-700/50 border-b border-amber-400/30"
+        }`}
+      >
+        <svg
+          className="w-full h-1 text-neutral-950 fill-current"
+          viewBox="0 0 54 4"
+          preserveAspectRatio="none"
+        >
+          <path d="M0,0 L2.25,3 L4.5,0 L6.75,3 L9,0 L11.25,3 L13.5,0 L15.75,3 L18,0 L20.25,3 L22.5,0 L24.75,3 L27,0 L29.25,3 L31.5,0 L33.75,3 L36,0 L38.25,3 L40.5,0 L42.75,3 L45,0 L47.25,3 L49.5,0 L51.75,3 L54,0 L54,0 Z" />
+        </svg>
+        <div className="w-full h-1 bg-[repeating-linear-gradient(90deg,transparent,transparent_2px,rgba(0,0,0,0.4)_2px,rgba(0,0,0,0.4)_3px)] opacity-70" />
       </div>
 
-      {/* Right: Quantity Badge */}
-      <div className="flex items-center pl-1.5 shrink-0">
-        <span
-          className={`px-2 py-0.5 font-mono font-bold text-[11px] tracking-wider flex items-center gap-1 border shadow-sm transition-all ${
-            isMulti
-              ? "bg-amber-500/20 border-amber-400/60 text-amber-200"
-              : "bg-white/[0.04] border-white/10 text-neutral-300"
-          }`}
+      {/* Foil Sheen Diagonal Accent & Shimmer Sweep */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-amber-300/[0.08] to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.1] to-transparent pointer-events-none -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out" />
+
+      {/* Center: Set Logo Emblem — Enforced 38px font size via inline style to prevent keyrune.css override */}
+      <div className="relative flex-1 flex items-center justify-center w-full px-0.5 overflow-hidden">
+        {isGolden ? (
+          <span
+            className="ms ms-planeswalker text-amber-300 leading-none drop-shadow-[0_0_12px_rgba(251,191,36,0.9)] group-hover:text-amber-200 group-hover:scale-105 transition-all duration-150"
+            style={{ fontSize: "38px" }}
+          />
+        ) : (
+          <i
+            className={`${keyruneClass(
+              setCode
+            )} text-amber-300 leading-none drop-shadow-[0_0_10px_rgba(245,158,11,0.65)] group-hover:text-amber-200 group-hover:scale-105 transition-all duration-150`}
+            style={{ fontSize: "38px" }}
+          />
+        )}
+      </div>
+
+      {/* Bottom Crimp Seal (Metallic Heat-Sealed Serrated Edge) */}
+      <div
+        className={`w-full shrink-0 flex flex-col items-center ${
+          isGolden
+            ? "bg-gradient-to-t from-yellow-500/80 via-amber-300 to-yellow-600 border-t border-yellow-300/60"
+            : "bg-gradient-to-t from-amber-600/50 via-amber-400/60 to-amber-700/50 border-t border-amber-400/30"
+        }`}
+      >
+        <div className="w-full h-1 bg-[repeating-linear-gradient(90deg,transparent,transparent_2px,rgba(0,0,0,0.4)_2px,rgba(0,0,0,0.4)_3px)] opacity-70" />
+        <svg
+          className="w-full h-1 text-neutral-950 fill-current"
+          viewBox="0 0 54 4"
+          preserveAspectRatio="none"
         >
-          {isMulti && <Package className="w-2.5 h-2.5 text-amber-400" />}
-          <span>{booster.count} {booster.count === 1 ? "PACK" : "PACKS"}</span>
+          <path d="M0,4 L2.25,1 L4.5,4 L6.75,1 L9,4 L11.25,1 L13.5,4 L15.75,1 L18,4 L20.25,1 L22.5,4 L24.75,1 L27,4 L29.25,1 L31.5,4 L33.75,1 L36,4 L38.25,1 L40.5,4 L42.75,1 L45,4 L47.25,1 L49.5,4 L51.75,1 L54,4 L54,4 Z" />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Grouped Booster Pack Presentation
+ * Fanned layout:
+ * - 1 Pack: Single upright pack centered.
+ * - 2 Packs: 2 packs fanned out with alternating diagonal angles from bottom center (thinner at bottom, wider at top).
+ * - 3 Packs: 3 packs fanned out from bottom center (middle upright in front, left/right fanning diagonally up and out).
+ * - >3 Packs: 3-pack fan visual representation with "X{count}" displayed underneath.
+ */
+interface BoosterPackGroupProps {
+  booster: BoosterPack;
+}
+
+const BoosterPackGroup: React.FC<BoosterPackGroupProps> = ({ booster }) => {
+  const count = booster.count;
+
+  return (
+    <div
+      className="flex flex-col items-center justify-start group cursor-default shrink-0 select-none w-28"
+      title={`${booster.count}x ${booster.set_name || booster.set_code} (${
+        booster.count === 1 ? "1 Pack" : `${booster.count} Packs`
+      })`}
+    >
+      {/* Visual Booster Fanning Area — All cards anchored to exact bottom-center (left: 50%, bottom: 0, origin-bottom) */}
+      <div className="relative w-full h-[88px]">
+        {count === 1 && (
+          <FoilBoosterPack
+            setCode={booster.set_code}
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 origin-bottom rotate-0 z-10 shadow-lg group-hover:scale-105 group-hover:-translate-y-1"
+          />
+        )}
+
+        {count === 2 && (
+          <>
+            {/* Right Pack (underneath, angled diagonally up to the right from bottom center) */}
+            <FoilBoosterPack
+              setCode={booster.set_code}
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 origin-bottom rotate-[14deg] opacity-90 shadow-md z-0 group-hover:rotate-[17deg] pointer-events-none"
+            />
+            {/* Left Pack (in front, angled diagonally up to the left from bottom center) */}
+            <FoilBoosterPack
+              setCode={booster.set_code}
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 origin-bottom -rotate-[14deg] shadow-xl z-10 group-hover:-rotate-[17deg] group-hover:-translate-y-0.5"
+            />
+          </>
+        )}
+
+        {count >= 3 && (
+          <>
+            {/* Left Pack (underneath, fanning diagonally up and out to the left from bottom center) */}
+            <FoilBoosterPack
+              setCode={booster.set_code}
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 origin-bottom -rotate-[20deg] opacity-90 shadow-md z-0 group-hover:-rotate-[24deg] pointer-events-none"
+            />
+            {/* Right Pack (underneath, fanning diagonally up and out to the right from bottom center) */}
+            <FoilBoosterPack
+              setCode={booster.set_code}
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 origin-bottom rotate-[20deg] opacity-90 shadow-md z-0 group-hover:rotate-[24deg] pointer-events-none"
+            />
+            {/* Center Pack (front and center, straight upright, same size as single cards) */}
+            <FoilBoosterPack
+              setCode={booster.set_code}
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 origin-bottom rotate-0 shadow-2xl z-10 group-hover:-translate-y-1"
+            />
+          </>
+        )}
+      </div>
+
+      {/* Set Title & Count Underneath — Consistent height for uniform horizontal layout */}
+      <div className="mt-2 flex flex-col items-center justify-start w-full min-h-[36px] text-center">
+        <span
+          className="text-neutral-200 text-[11px] font-sans font-semibold line-clamp-2 leading-tight group-hover:text-amber-200 transition-colors"
+          title={booster.set_name || booster.set_code}
+        >
+          {booster.set_name || booster.set_code}
         </span>
+
+        {/* Amount Underneath when beyond 3 packs */}
+        {count > 3 && (
+          <span className="mt-0.5 text-xs font-mono font-bold text-amber-300 drop-shadow-[0_0_6px_rgba(245,158,11,0.5)] tracking-wide">
+            X{count}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -97,20 +188,14 @@ const BoosterPackCard: React.FC<BoosterPackCardProps> = ({ booster, isSingleSet 
 export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const { economy, loading } = usePlayerEconomy();
 
-  const vaultPct = economy?.vault_progress_pct ?? 0;
-  const fullVaults = Math.floor(vaultPct / 100);
-  const remainingPct = vaultPct % 100;
-  const isVaultCracked = fullVaults > 0;
+  const goldenProgress = economy?.golden_pack_progress ?? 0;
   const boosters = economy?.boosters ?? [];
   const totalBoosterCount = boosters.reduce((sum, b) => sum + (b.count || 0), 0);
-
-  // Safe Dial Angle (0 to 360 degrees mapped from remaining progress towards next tier)
-  const dialRotation = Math.round((remainingPct / 100) * 360);
 
   return (
     <WidgetShell
       title="Currencies & Inventory"
-      subtitle="Gold, Gems, Boosters, Tokens & Vault"
+      subtitle="Gold, Gems, Boosters, Tokens & Golden Pack"
       icon={<Coins className="w-3.5 h-3.5 text-amber-400" />}
       isLoading={loading}
       isEmpty={!economy && !loading}
@@ -176,8 +261,8 @@ export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget
           </div>
         </div>
 
-        {/* 2. Unopened Booster Packs Section (Scrollable on overflow to avoid clipping Vault) */}
-        <div className="flex-1 min-h-0 flex flex-col space-y-1.5 overflow-hidden">
+        {/* 2. Unopened Booster Packs Section (Horizontal flow left-to-right, scrollable if needed) */}
+        <div className="flex-1 min-h-0 flex flex-col justify-start space-y-1.5 overflow-hidden">
           <div className="flex items-center justify-between text-[10px] font-sans font-semibold uppercase tracking-wider text-neutral-400 px-0.5 shrink-0">
             <span className="flex items-center gap-1.5 text-amber-300/90">
               <Package className="w-3 h-3 text-amber-400" />
@@ -187,12 +272,11 @@ export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget
           </div>
 
           {totalBoosterCount > 0 ? (
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5 content-start">
+            <div className="flex-1 min-h-0 flex items-start justify-start gap-4 sm:gap-6 overflow-x-auto custom-scrollbar px-3 py-1">
               {boosters.map((b) => (
-                <BoosterPackCard
+                <BoosterPackGroup
                   key={`${b.set_code}_${b.collation_id}`}
                   booster={b}
-                  isSingleSet={boosters.length === 1}
                 />
               ))}
             </div>
@@ -204,86 +288,43 @@ export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget
           )}
         </div>
 
-        {/* 3. Vault Section with Safe Aesthetics & Centered Percentage Bar */}
-        <div className="relative overflow-hidden bg-gradient-to-b from-neutral-900/90 via-neutral-950 to-neutral-900 border border-purple-500/30 p-3 space-y-2 shadow-[0_4px_16px_rgba(0,0,0,0.6)] shrink-0">
-          {/* Subtle Steel Rivet Corner Accents */}
-          <div className="absolute top-1 left-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
-          <div className="absolute top-1 right-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
-          <div className="absolute bottom-1 left-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
-          <div className="absolute bottom-1 right-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
-
-          {/* Safe Header: "Vault" on Left, Unlocked Tiers on Right */}
+        {/* 3. Golden Pack Progress Section */}
+        <div className="relative overflow-hidden bg-gradient-to-b from-neutral-900/90 via-neutral-950 to-neutral-900 border border-amber-500/30 p-2.5 space-y-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.6)] shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {/* Rotary Combination Dial Graphic */}
-              <div className="relative w-7 h-7 rounded-full bg-gradient-to-tr from-neutral-950 via-neutral-800 to-neutral-700 border border-purple-400/60 flex items-center justify-center shadow-[0_0_8px_rgba(168,85,247,0.3)] shrink-0">
-                {/* Radial Dial Tick Marks */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-[1px] h-full bg-white/20" />
-                  <div className="h-[1px] w-full bg-white/20" />
-                  <div className="w-[1px] h-full bg-white/20 rotate-45" />
-                  <div className="h-[1px] w-full bg-white/20 rotate-45" />
-                </div>
-
-                {/* Rotating Needle / Tumbler Core */}
-                <div
-                  className="w-4 h-4 rounded-full bg-neutral-900 border border-purple-300 flex items-center justify-center transition-transform duration-700 ease-out"
-                  style={{ transform: `rotate(${dialRotation}deg)` }}
-                >
-                  <div className="w-0.5 h-1.5 bg-gradient-to-t from-purple-400 to-amber-300 rounded-t-full -translate-y-0.5" />
-                </div>
+              <div className="w-5 h-5 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.25)]">
+                <span className="ms ms-planeswalker text-amber-300 text-xs leading-none" />
               </div>
-
-              <div className="flex items-center gap-1.5 text-xs font-sans font-bold uppercase tracking-wider text-purple-300">
-                {isVaultCracked ? (
-                  <Unlock className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                ) : (
-                  <Lock className="w-3.5 h-3.5 text-purple-400" />
-                )}
-                <span>Vault</span>
-              </div>
-            </div>
-
-            {/* Achievement Badge Pushed to Right */}
-            {fullVaults > 0 ? (
-              <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 bg-gradient-to-r from-purple-600/30 to-amber-500/30 border border-amber-400/50 text-amber-200 flex items-center gap-1 shadow-[0_0_10px_rgba(234,179,8,0.25)] font-bold">
-                <Award className="w-3 h-3 text-amber-300" />
-                {fullVaults} {fullVaults === 1 ? "Vault tier" : "Vault tiers"} Unlocked
+              <span className="text-xs font-sans font-bold uppercase tracking-wider text-amber-300">
+                Golden Pack Progress
               </span>
-            ) : null}
+            </div>
+            <span className="font-mono text-neutral-300 text-xs tabular-nums">
+              <strong className="text-amber-300 font-bold">{goldenProgress}</strong> / 10 packs
+            </span>
           </div>
 
-          {/* Taller Stepped Safe Progress Bar with Rivets, Combination Ticks & Centered Percentage */}
-          <div className="relative w-full h-6 bg-neutral-950 border border-purple-900/80 overflow-hidden shadow-inner flex items-center justify-center rounded-[2px]">
-            {/* Safe Combination Ticks & Rivets along the bar */}
-            <div className="absolute inset-0 flex justify-between items-center pointer-events-none z-10 px-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-white/25 shadow-inner" />
-              <span className="w-[1px] h-3 bg-white/20" />
-              <span className="w-[1px] h-2 bg-white/10" />
-              <span className="w-[1px] h-3 bg-white/20" />
-              <span className="w-1.5 h-1.5 rounded-full bg-white/25 shadow-inner" />
-              <span className="w-[1px] h-3 bg-white/20" />
-              <span className="w-[1px] h-2 bg-white/10" />
-              <span className="w-[1px] h-3 bg-white/20" />
-              <span className="w-1.5 h-1.5 rounded-full bg-white/25 shadow-inner" />
-            </div>
+          {/* 10 Segmented Pips */}
+          <div className="grid grid-cols-10 gap-1">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((idx) => {
+              const isFilled = idx < goldenProgress;
+              return (
+                <div
+                  key={idx}
+                  className={`h-2.5 border transition-all ${
+                    isFilled
+                      ? "bg-gradient-to-r from-amber-400 to-yellow-300 border-yellow-200 shadow-[0_0_6px_rgba(234,179,8,0.35)]"
+                      : "bg-neutral-950 border-white/10"
+                  }`}
+                  title={`Store pack purchase ${idx + 1} of 10`}
+                />
+              );
+            })}
+          </div>
 
-            {/* Fluid Lock Tumbler Progress Fill */}
-            <div
-              className={`absolute left-0 top-0 bottom-0 transition-all duration-700 ease-out ${
-                isVaultCracked
-                  ? "bg-gradient-to-r from-purple-700 via-fuchsia-600 to-amber-400 shadow-[0_0_14px_rgba(234,179,8,0.6)]"
-                  : "bg-gradient-to-r from-purple-900 via-purple-700 to-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]"
-              }`}
-              style={{
-                width: `${Math.min(100, isVaultCracked ? remainingPct || 100 : vaultPct)}%`,
-              }}
-            />
-
-            {/* High-Contrast Centered Vault Percentage */}
-            <span className="relative z-20 font-mono font-black text-xs tracking-wider text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] filter drop-shadow-[0_0_2px_rgba(0,0,0,1)] select-none">
-              {vaultPct.toFixed(1)}%
-            </span>
+          <div className="text-[10px] font-sans text-neutral-500 flex justify-between">
+            <span>Earn 1 Golden Pack (6 Rares/Mythics) every 10 packs</span>
+            <span className="text-amber-400/90 font-medium">{10 - goldenProgress} packs away</span>
           </div>
         </div>
       </div>

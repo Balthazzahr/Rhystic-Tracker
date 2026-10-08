@@ -1006,7 +1006,7 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
                 .or_else(|| b.get("collationId"))
                 .and_then(|x| x.as_u64())
                 .unwrap_or(0) as u32;
-            let set_code = b.get("SetCode")
+            let mut set_code = b.get("SetCode")
                 .or_else(|| b.get("setCode"))
                 .and_then(|x| x.as_str())
                 .unwrap_or("")
@@ -1015,6 +1015,10 @@ pub fn extract_inventory_info(v: &serde_json::Value) -> Option<PlayerEconomyReco
                 .or_else(|| b.get("count"))
                 .and_then(|x| x.as_u64())
                 .unwrap_or(0) as u32;
+
+            if set_code.is_empty() && (collation_id == 900980 || collation_id >= 900000) {
+                set_code = "GOLDEN".to_string();
+            }
 
             if !set_code.is_empty() && count > 0 {
                 boosters.push(BoosterPackItem {

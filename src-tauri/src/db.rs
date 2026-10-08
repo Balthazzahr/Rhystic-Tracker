@@ -2955,13 +2955,17 @@ impl DatabaseManager {
 
             let mut boosters = Vec::new();
             for b in raw_boosters {
-                let set_name: Option<String> = sqlx::query_scalar(
-                    "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
-                )
-                .bind(&b.set_code)
-                .fetch_optional(&self.pool)
-                .await
-                .unwrap_or(None);
+                let set_name: Option<String> = if b.set_code.to_uppercase() == "GOLDEN" {
+                    Some("Golden Pack".to_string())
+                } else {
+                    sqlx::query_scalar(
+                        "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
+                    )
+                    .bind(&b.set_code)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .unwrap_or(None)
+                };
 
                 boosters.push(BoosterPackDto {
                     collation_id: b.collation_id,
@@ -3021,13 +3025,17 @@ impl DatabaseManager {
 
             let mut boosters = Vec::new();
             for b in raw_boosters {
-                let set_name: Option<String> = sqlx::query_scalar(
-                    "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
-                )
-                .bind(&b.set_code)
-                .fetch_optional(&self.pool)
-                .await
-                .unwrap_or(None);
+                let set_name: Option<String> = if b.set_code.to_uppercase() == "GOLDEN" {
+                    Some("Golden Pack".to_string())
+                } else {
+                    sqlx::query_scalar(
+                        "SELECT name FROM sets_metadata WHERE UPPER(set_code) = UPPER(?) LIMIT 1"
+                    )
+                    .bind(&b.set_code)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .unwrap_or(None)
+                };
 
                 boosters.push(BoosterPackDto {
                     collation_id: b.collation_id,

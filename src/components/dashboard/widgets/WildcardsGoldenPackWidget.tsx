@@ -1,19 +1,26 @@
 import React, { useState } from "react";
-import { Layers, Package, History } from "lucide-react";
+import { Layers, Lock, Unlock, Award, History } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { usePlayerEconomy, getWildcardWheelProgress } from "./economyCommon";
 import { WildcardLotusCard } from "./WildcardLotusCard";
 import { WildcardHistoryModal } from "./WildcardHistoryModal";
 
-export const WildcardsGoldenPackWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
+export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const { economy, loading } = usePlayerEconomy();
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedRarity, setSelectedRarity] = useState<"all" | "mythic" | "rare" | "uncommon" | "common">("all");
 
   const wcTrack = economy?.wc_track_pos ?? 0;
   const wheels = getWildcardWheelProgress(wcTrack);
-  const goldenProgress = economy?.golden_pack_progress ?? 0;
+
+  // Vault computations
+  const vaultPct = (economy?.vault_progress ?? 0) / 10; // e.g. 1563 pips = 156.3%
+  const fullVaults = Math.floor(vaultPct / 100);
+  const remainingPct = vaultPct % 100;
+  const isVaultCracked = vaultPct >= 100;
+  // Rotate safe combination dial based on vault progress (each 100% = full 360 deg turn)
+  const dialRotation = Math.round((vaultPct % 100) * 3.6);
 
   const openHistory = (rarity: "all" | "mythic" | "rare" | "uncommon" | "common" = "all") => {
     setSelectedRarity(rarity);
@@ -34,8 +41,8 @@ export const WildcardsGoldenPackWidget: React.FC<WidgetProps> = React.memo(({ wi
   return (
     <>
       <WidgetShell
-        title="Wildcards & Golden Pack"
-        subtitle="Crafting Resources & Pack Wheels"
+        title="Wildcards & Vault"
+        subtitle="Crafting Resources & Vault Progress"
         icon={<Layers className="w-3.5 h-3.5 text-amber-400" />}
         headerActions={headerActions}
         isLoading={loading}
@@ -106,116 +113,163 @@ export const WildcardsGoldenPackWidget: React.FC<WidgetProps> = React.memo(({ wi
             </div>
           </div>
 
-        {/* Dual Wildcard Wheels: Rare/Mythic & Uncommon */}
-        <div className="bg-white/[0.02] border border-white/10 p-2.5 space-y-2.5">
-          {/* Rare / Mythic Wheel */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[10px] font-sans">
-              <div className="flex items-center gap-1.5 text-amber-300 font-semibold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span>Rare / Mythic Wheel</span>
+          {/* Dual Wildcard Wheels: Rare/Mythic & Uncommon */}
+          <div className="bg-white/[0.02] border border-white/10 p-2.5 space-y-2.5">
+            {/* Rare / Mythic Wheel */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10px] font-sans">
+                <div className="flex items-center gap-1.5 text-amber-300 font-semibold uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>Rare / Mythic Wheel</span>
+                </div>
+                <span className="font-mono text-neutral-400 tabular-nums">
+                  <strong className="text-amber-300 font-bold">{wheels.rareWheel}</strong> / 6 packs
+                </span>
               </div>
-              <span className="font-mono text-neutral-400 tabular-nums">
-                <strong className="text-amber-300 font-bold">{wheels.rareWheel}</strong> / 6 packs
-              </span>
+
+              <div className="grid grid-cols-6 gap-1">
+                {[0, 1, 2, 3, 4, 5].map((idx) => {
+                  const isFilled = idx < wheels.rareWheel;
+                  return (
+                    <div
+                      key={idx}
+                      className={`h-2 border transition-all ${
+                        isFilled
+                          ? "bg-amber-400 border-amber-300 shadow-[0_0_6px_rgba(251,191,36,0.35)]"
+                          : "bg-neutral-900 border-white/10"
+                      }`}
+                      title={`Rare/Mythic pip ${idx + 1} of 6`}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="text-[9px] font-sans text-neutral-500 flex justify-between">
+                <span>Next reward: Rare or Mythic Wildcard</span>
+                <span className="text-amber-400/80">{wheels.packsToRare} packs away</span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-6 gap-1">
-              {[0, 1, 2, 3, 4, 5].map((idx) => {
-                const isFilled = idx < wheels.rareWheel;
-                return (
-                  <div
-                    key={idx}
-                    className={`h-2 border transition-all ${
-                      isFilled
-                        ? "bg-amber-400 border-amber-300 shadow-[0_0_6px_rgba(251,191,36,0.35)]"
-                        : "bg-neutral-900 border-white/10"
-                    }`}
-                    title={`Rare/Mythic pip ${idx + 1} of 6`}
-                  />
-                );
-              })}
-            </div>
+            {/* Uncommon Wheel */}
+            <div className="space-y-1 border-t border-white/5 pt-2">
+              <div className="flex items-center justify-between text-[10px] font-sans">
+                <div className="flex items-center gap-1.5 text-sky-300 font-semibold uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                  <span>Uncommon Wheel</span>
+                </div>
+                <span className="font-mono text-neutral-400 tabular-nums">
+                  <strong className="text-sky-300 font-bold">{wheels.uncommonWheel}</strong> / 6 packs
+                </span>
+              </div>
 
-            <div className="text-[9px] font-sans text-neutral-500 flex justify-between">
-              <span>Next reward: Rare or Mythic Wildcard</span>
-              <span className="text-amber-400/80">{wheels.packsToRare} packs away</span>
+              <div className="grid grid-cols-6 gap-1">
+                {[0, 1, 2, 3, 4, 5].map((idx) => {
+                  const isFilled = idx < wheels.uncommonWheel;
+                  return (
+                    <div
+                      key={idx}
+                      className={`h-2 border transition-all ${
+                        isFilled
+                          ? "bg-sky-400 border-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.35)]"
+                          : "bg-neutral-900 border-white/10"
+                      }`}
+                      title={`Uncommon pip ${idx + 1} of 6`}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="text-[9px] font-sans text-neutral-500 flex justify-between">
+                <span>Next reward: Uncommon Wildcard</span>
+                <span className="text-sky-400/80">{wheels.packsToUncommon} packs away</span>
+              </div>
             </div>
           </div>
 
-          {/* Uncommon Wheel */}
-          <div className="space-y-1 border-t border-white/5 pt-2">
-            <div className="flex items-center justify-between text-[10px] font-sans">
-              <div className="flex items-center gap-1.5 text-sky-300 font-semibold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                <span>Uncommon Wheel</span>
-              </div>
-              <span className="font-mono text-neutral-400 tabular-nums">
-                <strong className="text-sky-300 font-bold">{wheels.uncommonWheel}</strong> / 6 packs
-              </span>
-            </div>
+          {/* Vault Section with Safe Aesthetics & Centered Percentage Bar */}
+          <div className="relative overflow-hidden bg-gradient-to-b from-neutral-900/90 via-neutral-950 to-neutral-900 border border-purple-500/30 p-2.5 space-y-2 shadow-[0_4px_16px_rgba(0,0,0,0.6)] shrink-0">
+            {/* Subtle Steel Rivet Corner Accents */}
+            <div className="absolute top-1 left-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
+            <div className="absolute top-1 right-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
+            <div className="absolute bottom-1 left-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
+            <div className="absolute bottom-1 right-1.5 w-1 h-1 rounded-full bg-neutral-600/70 shadow-inner" />
 
-            <div className="grid grid-cols-6 gap-1">
-              {[0, 1, 2, 3, 4, 5].map((idx) => {
-                const isFilled = idx < wheels.uncommonWheel;
-                return (
+            {/* Safe Header: "Vault" on Left, Unlocked Tiers on Right */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {/* Rotary Combination Dial Graphic */}
+                <div className="relative w-6 h-6 rounded-full bg-gradient-to-tr from-neutral-950 via-neutral-800 to-neutral-700 border border-purple-400/60 flex items-center justify-center shadow-[0_0_8px_rgba(168,85,247,0.3)] shrink-0">
+                  {/* Radial Dial Tick Marks */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-[1px] h-full bg-white/20" />
+                    <div className="h-[1px] w-full bg-white/20" />
+                    <div className="w-[1px] h-full bg-white/20 rotate-45" />
+                    <div className="h-[1px] w-full bg-white/20 rotate-45" />
+                  </div>
+
+                  {/* Rotating Needle / Tumbler Core */}
                   <div
-                    key={idx}
-                    className={`h-2 border transition-all ${
-                      isFilled
-                        ? "bg-sky-400 border-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.35)]"
-                        : "bg-neutral-900 border-white/10"
-                    }`}
-                    title={`Uncommon pip ${idx + 1} of 6`}
-                  />
-                );
-              })}
+                    className="w-3.5 h-3.5 rounded-full bg-neutral-900 border border-purple-300 flex items-center justify-center transition-transform duration-700 ease-out"
+                    style={{ transform: `rotate(${dialRotation}deg)` }}
+                  >
+                    <div className="w-0.5 h-1.5 bg-gradient-to-t from-purple-400 to-amber-300 rounded-t-full -translate-y-0.5" />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs font-sans font-bold uppercase tracking-wider text-purple-300">
+                  {isVaultCracked ? (
+                    <Unlock className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5 text-purple-400" />
+                  )}
+                  <span>Vault Progress</span>
+                </div>
+              </div>
+
+              {/* Achievement Badge Pushed to Right */}
+              {fullVaults > 0 ? (
+                <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 bg-gradient-to-r from-purple-600/30 to-amber-500/30 border border-amber-400/50 text-amber-200 flex items-center gap-1 shadow-[0_0_10px_rgba(234,179,8,0.25)] font-bold">
+                  <Award className="w-3 h-3 text-amber-300" />
+                  {fullVaults} {fullVaults === 1 ? "Tier" : "Tiers"} Unlocked
+                </span>
+              ) : null}
             </div>
 
-            <div className="text-[9px] font-sans text-neutral-500 flex justify-between">
-              <span>Next reward: Uncommon Wildcard</span>
-              <span className="text-sky-400/80">{wheels.packsToUncommon} packs away</span>
+            {/* Taller Stepped Safe Progress Bar with Rivets, Combination Ticks & Centered Percentage */}
+            <div className="relative w-full h-6 bg-neutral-950 border border-purple-900/80 overflow-hidden shadow-inner flex items-center justify-center rounded-[2px]">
+              {/* Safe Combination Ticks & Rivets along the bar */}
+              <div className="absolute inset-0 flex justify-between items-center pointer-events-none z-10 px-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-white/25 shadow-inner" />
+                <span className="w-[1px] h-3 bg-white/20" />
+                <span className="w-[1px] h-2 bg-white/10" />
+                <span className="w-[1px] h-3 bg-white/20" />
+                <span className="w-1.5 h-1.5 rounded-full bg-white/25 shadow-inner" />
+                <span className="w-[1px] h-3 bg-white/20" />
+                <span className="w-[1px] h-2 bg-white/10" />
+                <span className="w-[1px] h-3 bg-white/20" />
+                <span className="w-1.5 h-1.5 rounded-full bg-white/25 shadow-inner" />
+              </div>
+
+              {/* Fluid Lock Tumbler Progress Fill */}
+              <div
+                className={`absolute left-0 top-0 bottom-0 transition-all duration-700 ease-out ${
+                  isVaultCracked
+                    ? "bg-gradient-to-r from-purple-700 via-fuchsia-600 to-amber-400 shadow-[0_0_14px_rgba(234,179,8,0.6)]"
+                    : "bg-gradient-to-r from-purple-900 via-purple-700 to-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]"
+                }`}
+                style={{
+                  width: `${Math.min(100, isVaultCracked ? remainingPct || 100 : vaultPct)}%`,
+                }}
+              />
+
+              {/* High-Contrast Centered Vault Percentage */}
+              <span className="relative z-20 font-mono font-black text-xs tracking-wider text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] select-none">
+                {vaultPct.toFixed(1)}%
+              </span>
             </div>
           </div>
         </div>
-
-        {/* Golden Pack Progress (10 Pips) */}
-        <div className="bg-white/[0.02] border border-amber-500/20 p-2.5 space-y-1.5">
-          <div className="flex items-center justify-between text-[10px] font-sans">
-            <div className="flex items-center gap-1.5 text-amber-300 font-semibold uppercase tracking-wider">
-              <Package className="w-3 h-3 text-amber-400" />
-              <span>Golden Pack Progress</span>
-            </div>
-            <span className="font-mono text-neutral-400 tabular-nums">
-              <strong className="text-amber-300 font-bold">{goldenProgress}</strong> / 10 packs
-            </span>
-          </div>
-
-          {/* 10 Segmented Pips */}
-          <div className="grid grid-cols-10 gap-1">
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((idx) => {
-              const isFilled = idx < goldenProgress;
-              return (
-                <div
-                  key={idx}
-                  className={`h-2 border transition-all ${
-                    isFilled
-                      ? "bg-gradient-to-r from-amber-400 to-yellow-300 border-yellow-200 shadow-[0_0_6px_rgba(234,179,8,0.3)]"
-                      : "bg-neutral-900 border-white/10"
-                  }`}
-                  title={`Store pack ${idx + 1} of 10`}
-                />
-              );
-            })}
-          </div>
-
-          <div className="text-[9px] font-sans text-neutral-500 flex justify-between">
-            <span>Earn 1 Golden Pack (6 Rares/Mythics) every 10 packs</span>
-            <span className="text-amber-400/80">{10 - goldenProgress} packs to Golden Pack</span>
-          </div>
-        </div>
-      </div>
-    </WidgetShell>
+      </WidgetShell>
 
       <WildcardHistoryModal
         isOpen={historyModalOpen}
@@ -225,3 +279,6 @@ export const WildcardsGoldenPackWidget: React.FC<WidgetProps> = React.memo(({ wi
     </>
   );
 });
+
+// Alias export for backwards compatibility
+export const WildcardsGoldenPackWidget = WildcardsVaultWidget;
