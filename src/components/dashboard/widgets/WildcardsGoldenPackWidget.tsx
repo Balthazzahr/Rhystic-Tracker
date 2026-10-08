@@ -15,7 +15,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
   const wheels = getWildcardWheelProgress(wcTrack);
 
   // Vault computations
-  const vaultPct = (economy?.vault_progress ?? 0) / 10; // e.g. 1563 pips = 156.3%
+  const vaultPct = economy?.vault_progress_pct ?? 0; // e.g. 199.2%
   const fullVaults = Math.floor(vaultPct / 100);
   const remainingPct = vaultPct % 100;
   const isVaultCracked = vaultPct >= 100;
