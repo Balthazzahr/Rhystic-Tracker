@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search, FolderOpen, Check, Radio } from 'lucide-react';
 import { MTG_COLORS } from './types';
+import { MemoryCollectionPanel } from './MemoryCollectionPanel';
 
 export interface ConnectionTabProps {
   palette: any;
@@ -10,6 +11,7 @@ export interface ConnectionTabProps {
   matchLogPath: boolean;
   matchBo3Sideboard: boolean;
   matchInstallLocations: boolean;
+  matchMemorySync: boolean;
 
   // Log Path State & Handlers
   logPath: string;
@@ -30,6 +32,7 @@ export const ConnectionTab: React.FC<ConnectionTabProps> = ({
   matchLogPath,
   matchBo3Sideboard,
   matchInstallLocations,
+  matchMemorySync,
   logPath,
   setLogPath,
   loadingPath,
@@ -135,6 +138,8 @@ export const ConnectionTab: React.FC<ConnectionTabProps> = ({
           </div>
         </div>
       )}
+
+      {(matchMemorySync || !isSearching) && <MemoryCollectionPanel />}
 
       {/* Where to find Player.log assistant guide */}
       {(matchInstallLocations || !isSearching) && (

@@ -2,6 +2,15 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [Unreleased]
+
+### 🧠 Exact Collection Sync from Arena's Memory (Linux)
+- **Authoritative collection**: New `rhystic-memread` helper reads the real `grpId → count` map (`WrapperController.Instance.InventoryManager.InventoryServiceWrapper.Cards`) out of the running client, read-only, like Untapped.gg's companion. It syncs every 2 minutes while Arena runs, and a sync replaces the log-inferred collection (provenance `inventory`).
+- **Least privilege**: Only the small std-only helper needs `CAP_SYS_PTRACE`; the Tauri app never gets it.
+- **Guided setup**: Settings → MTGA Connection shows live status and copy-paste setup for NixOS, Arch/AUR, Steam Deck, other Linux and macOS, with the detected OS preselected.
+- **One-shot admin sync**: **Sync once as admin** runs the helper through `pkexec` for a single sync, for people who don't want a standing capability.
+- **Packaging**: The Linux release tarball, `install.sh` and both AUR packages ship the helper. The AUR packages run `setcap` in their install hook.
+
 ## [1.7.8] - 2026-10-08 — 📦 Graphical Booster Pack Fanning, Economy Widget Alignment & Dashboard Persistence
 
 ### 📦 Graphical Booster Packs & Inventory Alignment

@@ -766,6 +766,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const matchLogPath = matchesSearch(['log', 'player.log', 'mtga', 'path', 'tailer', 'active log', 'browse', 'directory', 'connection', 'save config']);
   const matchBo3Sideboard = matchesSearch(['sideboard', 'bo3', 'best of three', 'drawer', 'post-sideboard', 'game 2', 'game 3', 'segregation']);
   const matchInstallLocations = matchesSearch(['steam', 'proton', 'lutris', 'wine', 'native linux', 'locations', 'detailed logging', 'compatdata']);
+  const matchMemorySync = matchesSearch(['collection', 'memory', 'ptrace', 'cap_sys_ptrace', 'capability', 'untapped', 'inventory', 'sync']);
 
   const matchDbStats = matchesSearch(['database', 'sqlite', 'db', 'backup', 'export', 'matches', 'file size', 'storage', 'disk path']);
   const matchAutoBackup = matchesSearch(['auto backup', 'automatic backup', 'weekly backup', 'scheduled backup', 'safety']);
@@ -801,6 +802,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (matchLogPath) count++;
     if (matchBo3Sideboard) count++;
     if (matchInstallLocations) count++;
+    if (matchMemorySync) count++;
     if (matchDbStats) count++;
     if (matchAutoBackup) count++;
     if (matchImageCache) count++;
@@ -814,7 +816,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     q, matchMinimize, matchAutoSwitch, matchAlwaysOnTop, matchAudioCues, matchExcludeSparky, matchAutoExport,
     matchConfirmDelete, matchAllowDelete, matchStartupTab, matchPersistDashboardPage, matchSetupWizard, matchThemes, matchGlassOpacity,
     matchManaPipStyle, matchCollectionSort, matchCompactMode, matchDeckFlair, matchBackground,
-    matchLogPath, matchBo3Sideboard, matchInstallLocations, matchDbStats, matchAutoBackup, matchImageCache,
+    matchLogPath, matchBo3Sideboard, matchInstallLocations, matchMemorySync, matchDbStats, matchAutoBackup, matchImageCache,
     matchCacheQuota, matchCardDbSync, matchSetCatalog, matchAboutSummary, matchLegal
   ]);
 
@@ -995,13 +997,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* ========================================================================= */}
           {/* SECTION: MTGA CONNECTION & LOGS                                          */}
           {/* ========================================================================= */}
-          {(!isSearching ? activeTab === 'connection' : (matchLogPath || matchBo3Sideboard || matchInstallLocations)) && (
+          {(!isSearching ? activeTab === 'connection' : (matchLogPath || matchBo3Sideboard || matchInstallLocations || matchMemorySync)) && (
             <ConnectionTab
               palette={palette}
               isSearching={isSearching}
               matchLogPath={matchLogPath}
               matchBo3Sideboard={matchBo3Sideboard}
               matchInstallLocations={matchInstallLocations}
+              matchMemorySync={matchMemorySync}
               logPath={logPath}
               setLogPath={setLogPath}
               loadingPath={loadingPath}
