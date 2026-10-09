@@ -121,9 +121,10 @@ CREATE TABLE IF NOT EXISTS deck_bg_art_overrides (
     grp_id INTEGER,
     updated_at TEXT NOT NULL
 );
--- Collection (draw-based, log-only). owned_count is monotonic
--- non-decreasing, hard-capped at 4 (a playset). Only ever raised by
--- draws (=>1) or TrueDeckList uploads (=> listed count, cap 4).
+-- Collection. owned_count is hard-capped at 4 (a playset). From the log alone
+-- it is a monotonic lower bound, raised by draws (=>1), TrueDeckList uploads
+-- (=> listed count) and boosters. A memory sync (provenance 'inventory', see
+-- memory_collection.rs) replaces every row with the client's real counts.
 CREATE TABLE IF NOT EXISTS collection_cards (
     grp_id INTEGER PRIMARY KEY,
     owned_count INTEGER NOT NULL DEFAULT 0,
@@ -3099,6 +3100,44 @@ impl DatabaseManager {
         Ok(inserted_id)
     }
 
+    /// Replace the whole collection with an authoritative snapshot read from the
+    /// client. Every row not in the snapshot drops to 0 — including 'manual'
+    /// overrides, which only existed to correct the log-based guess. `draw_seen`
+    /// is match history, not ownership, so it is kept.
+    pub async fn replace_collection_from_inventory(
+        &self,
+        cards: &[(i64, i64)],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "UPDATE collection_cards SET owned_count = 0, provenance = 'inventory', last_updated_at = ? WHERE owned_count > 0",
+        )
+        .bind(&now)
+        .execute(&mut *tx)
+        .await?;
+        for &(grp_id, count) in cards {
+            sqlx::query(
+                r#"
+                INSERT INTO collection_cards (grp_id, owned_count, provenance, first_seen_at, last_updated_at, draw_seen)
+                VALUES (?, ?, 'inventory', ?, ?, 0)
+                ON CONFLICT(grp_id) DO UPDATE SET
+                    owned_count = excluded.owned_count,
+                    provenance = 'inventory',
+                    last_updated_at = excluded.last_updated_at
+                "#,
+            )
+            .bind(grp_id)
+            .bind(count.clamp(0, 4))
+            .bind(&now)
+            .bind(&now)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Add a card obtained from a booster pack to `collection_cards`.
     /// Monotonic non-decreasing, capped at 4 (a playset).
     pub async fn add_collection_booster_card(
@@ -5494,6 +5533,30 @@ mod tests {
         let status2 = db.get_mastery_pass_status().await.unwrap().unwrap();
         assert_eq!(status2.orbs, 2);
     }
+
+    #[tokio::test]
+    async fn test_inventory_snapshot_replaces_log_guesses() {
+        let db = in_memory_db().await;
+        db.add_collection_draw(1001).await.unwrap(); // drawn from an event deck, not owned
+        db.upsert_collection_from_decklist(1002, 2).await.unwrap(); // owns more than the list showed
+        db.add_collection_draw(1003).await.unwrap();
+
+        db.replace_collection_from_inventory(&[(1002, 4), (1003, 1), (1004, 9)]).await.unwrap();
+
+        let rows: Vec<(i64, i64, String, i64)> = sqlx::query_as(
+            "SELECT grp_id, owned_count, provenance, draw_seen FROM collection_cards ORDER BY grp_id",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (1001, 0, "inventory".to_string(), 1),
+                (1002, 4, "inventory".to_string(), 0),
+                (1003, 1, "inventory".to_string(), 1),
+                (1004, 4, "inventory".to_string(), 0),
+            ]
+        );
+    }
 }
-
-

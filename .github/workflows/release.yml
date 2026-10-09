@@ -40,13 +40,15 @@ jobs:
         run: |
           npm run build
           npx @tauri-apps/cli build --no-bundle --features production-env
+          cargo build --release --manifest-path src-tauri/Cargo.toml --bin rhystic-memread
 
       - name: Package Linux Artifact
         run: |
           mkdir -p dist-release/scripts
           cp src-tauri/target/release/rhystic-tracker dist-release/rhystic-tracker
+          cp src-tauri/target/release/rhystic-memread dist-release/rhystic-memread
           cp src-tauri/scripts/extract_mtga_avatars.py dist-release/scripts/extract_mtga_avatars.py
-          tar -czvf rhystic-tracker-linux-x86_64.tar.gz -C dist-release rhystic-tracker scripts
+          tar -czvf rhystic-tracker-linux-x86_64.tar.gz -C dist-release rhystic-tracker rhystic-memread scripts
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v5
