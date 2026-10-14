@@ -124,7 +124,9 @@ CREATE TABLE IF NOT EXISTS deck_bg_art_overrides (
 -- Collection. owned_count is hard-capped at 4 (a playset). From the log alone
 -- it is a monotonic lower bound, raised by draws (=>1), TrueDeckList uploads
 -- (=> listed count) and boosters. A memory sync (provenance 'inventory', see
--- memory_collection.rs) replaces every row with the client's real counts.
+-- memory_collection.rs) replaces every row with the client's real counts, and
+-- from then on log writes leave those rows' counts alone: the log is replayed
+-- on every start, so it would keep re-raising them. Only the next sync moves them.
 CREATE TABLE IF NOT EXISTS collection_cards (
     grp_id INTEGER PRIMARY KEY,
     owned_count INTEGER NOT NULL DEFAULT 0,
@@ -2418,8 +2420,8 @@ impl DatabaseManager {
             INSERT INTO collection_cards (grp_id, owned_count, provenance, first_seen_at, last_updated_at, draw_seen)
             VALUES (?, 1, 'draw', ?, ?, 1)
             ON CONFLICT(grp_id) DO UPDATE SET
-                owned_count = MAX(owned_count, 1),
-                provenance = CASE WHEN owned_count < 1 THEN 'draw' ELSE provenance END,
+                owned_count = CASE WHEN provenance = 'inventory' THEN owned_count ELSE MAX(owned_count, 1) END,
+                provenance = CASE WHEN owned_count < 1 AND provenance <> 'inventory' THEN 'draw' ELSE provenance END,
                 last_updated_at = excluded.last_updated_at,
                 draw_seen = draw_seen + 1
             "#
@@ -2453,6 +2455,7 @@ impl DatabaseManager {
                 owned_count = CASE WHEN owned_count < excluded.owned_count THEN excluded.owned_count ELSE owned_count END,
                 provenance = CASE WHEN owned_count < excluded.owned_count THEN 'decklist' ELSE provenance END,
                 last_updated_at = excluded.last_updated_at
+            WHERE collection_cards.provenance <> 'inventory'
             "#
         )
         .bind(grp_id)
@@ -3138,6 +3141,14 @@ impl DatabaseManager {
         Ok(())
     }
 
+    /// Every owned card as `(grp_id, count)`, ordered by grp_id — the same
+    /// shape as an inventory snapshot, so the two compare directly.
+    pub async fn owned_collection(&self) -> Result<Vec<(i64, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(sqlx::query_as("SELECT grp_id, owned_count FROM collection_cards WHERE owned_count > 0 ORDER BY grp_id")
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
     /// Add a card obtained from a booster pack to `collection_cards`.
     /// Monotonic non-decreasing, capped at 4 (a playset).
     pub async fn add_collection_booster_card(
@@ -3153,6 +3164,7 @@ impl DatabaseManager {
                 owned_count = MIN(4, owned_count + 1),
                 provenance = CASE WHEN owned_count = 0 THEN 'booster' ELSE provenance END,
                 last_updated_at = excluded.last_updated_at
+            WHERE collection_cards.provenance <> 'inventory'
             "#
         )
         .bind(grp_id)
@@ -5558,5 +5570,41 @@ mod tests {
                 (1004, 4, "inventory".to_string(), 0),
             ]
         );
+    }
+
+    // The tailer replays the whole Player.log on every app start and re-saves
+    // every decklist on every Arena login, so log writes land after a sync all
+    // the time. They must not undo it.
+    #[tokio::test]
+    async fn test_log_replay_does_not_override_inventory() {
+        let db = in_memory_db().await;
+        // 2001: a deck runs 4 of a printing we own 1 of (the rest are other printings).
+        // 2002: in an event deck, not owned. 2003: booster card, already counted.
+        db.replace_collection_from_inventory(&[(2001, 1), (2003, 2)]).await.unwrap();
+        db.add_collection_draw(2002).await.unwrap();
+        db.replace_collection_from_inventory(&[(2001, 1), (2003, 2)]).await.unwrap();
+
+        db.upsert_collection_from_decklist(2001, 4).await.unwrap();
+        db.add_collection_draw(2001).await.unwrap();
+        db.add_collection_draw(2002).await.unwrap();
+        db.add_collection_booster_card(2003).await.unwrap();
+        db.upsert_collection_from_decklist(2005, 3).await.unwrap(); // never synced: log still counts
+
+        let rows: Vec<(i64, i64, String, i64)> = sqlx::query_as(
+            "SELECT grp_id, owned_count, provenance, draw_seen FROM collection_cards ORDER BY grp_id",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (2001, 1, "inventory".to_string(), 1),
+                (2002, 0, "inventory".to_string(), 2),
+                (2003, 2, "inventory".to_string(), 0),
+                (2005, 3, "decklist".to_string(), 0),
+            ]
+        );
+        assert_eq!(db.owned_collection().await.unwrap(), vec![(2001, 1), (2003, 2), (2005, 3)]);
     }
 }

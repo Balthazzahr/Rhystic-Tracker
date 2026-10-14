@@ -80,14 +80,7 @@ pub struct MemoryCollectionStatus {
     last_sync: Option<SyncReport>,
 }
 
-struct LastSync {
-    report: SyncReport,
-    /// The snapshot last written, so an unchanged collection doesn't rewrite
-    /// ~8k rows every interval.
-    written: Option<Vec<(u32, i64)>>,
-}
-
-static LAST_SYNC: Mutex<Option<LastSync>> = Mutex::new(None);
+static LAST_SYNC: Mutex<Option<SyncReport>> = Mutex::new(None);
 
 fn now() -> String {
     chrono::Utc::now().to_rfc3339()
@@ -271,47 +264,31 @@ pub async fn sync_elevated(db: &DatabaseManager) -> SyncReport {
 }
 
 async fn sync_with(db: &DatabaseManager, helper: PathBuf, run: Run) -> SyncReport {
-    let cards = run_helper(&helper, "collection", run).await.and_then(|stdout| parse_collection(&stdout));
-    let cards = match cards {
-        Ok(c) => c,
-        Err((error, detail)) => {
-            let report = SyncReport::Failed { at: now(), error, detail };
-            remember(report.clone(), None);
-            return report;
-        }
+    let report = match run_helper(&helper, "collection", run).await.and_then(|stdout| parse_collection(&stdout)) {
+        Ok(cards) => write_snapshot(db, &cards).await,
+        Err((error, detail)) => SyncReport::Failed { at: now(), error, detail },
     };
-
-    let unchanged = LAST_SYNC
-        .lock()
-        .unwrap()
-        .as_ref()
-        .and_then(|l| l.written.as_ref())
-        .is_some_and(|w| *w == cards);
-    if unchanged {
-        let report = SyncReport::Unchanged { at: now(), cards: cards.len() };
-        remember(report.clone(), Some(cards));
-        return report;
-    }
-
-    let rows: Vec<(i64, i64)> = cards.iter().map(|&(g, n)| (g as i64, n)).collect();
-    let report = match db.replace_collection_from_inventory(&rows).await {
-        Ok(()) => {
-            crate::commands::clear_universe_cache();
-            SyncReport::Synced { at: now(), cards: cards.len() }
-        }
-        Err(e) => SyncReport::Failed { at: now(), error: "db".to_string(), detail: e.to_string() },
-    };
-    let written = matches!(report, SyncReport::Synced { .. }).then_some(cards);
-    remember(report.clone(), written);
+    *LAST_SYNC.lock().unwrap() = Some(report.clone());
     report
 }
 
-fn remember(report: SyncReport, written: Option<Vec<(u32, i64)>>) {
-    let mut guard = LAST_SYNC.lock().unwrap();
-    // A failed read shouldn't forget what we last wrote, or the next good read
-    // of the same collection would rewrite every row for nothing.
-    let written = written.or_else(|| guard.take().and_then(|l| l.written));
-    *guard = Some(LastSync { report, written });
+/// Compared against the DB rather than the last snapshot we wrote: log replays
+/// can still insert cards the snapshot doesn't have, and only a rewrite clears them.
+async fn write_snapshot(db: &DatabaseManager, cards: &[(u32, i64)]) -> SyncReport {
+    let rows: Vec<(i64, i64)> =
+        cards.iter().map(|&(g, n)| (g as i64, n.clamp(0, 4))).filter(|&(_, n)| n > 0).collect();
+    let result = match db.owned_collection().await {
+        Ok(current) if current == rows => return SyncReport::Unchanged { at: now(), cards: rows.len() },
+        Ok(_) => db.replace_collection_from_inventory(&rows).await,
+        Err(e) => Err(e),
+    };
+    match result {
+        Ok(()) => {
+            crate::commands::clear_universe_cache();
+            SyncReport::Synced { at: now(), cards: rows.len() }
+        }
+        Err(e) => SyncReport::Failed { at: now(), error: "db".to_string(), detail: e.to_string() },
+    }
 }
 
 pub async fn status() -> MemoryCollectionStatus {
@@ -319,7 +296,7 @@ pub async fn status() -> MemoryCollectionStatus {
         access: access().await,
         platform: platform(),
         can_elevate: std::env::consts::OS == "linux" && pkexec_available(),
-        last_sync: LAST_SYNC.lock().unwrap().as_ref().map(|l| l.report.clone()),
+        last_sync: LAST_SYNC.lock().unwrap().clone(),
     }
 }
 
