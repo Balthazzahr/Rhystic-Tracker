@@ -52,6 +52,8 @@ pub enum WalkError {
     NotRunning,
     PermissionDenied(String),
     NotLoggedIn,
+    /// The menu scene, which owns the collection, is torn down during a duel.
+    InMatch,
     /// The memory doesn't look like what we expect: the game updated, or we
     /// raced the client mid-write. Retrying fixes the second; the first needs a
     /// code update.
@@ -65,6 +67,7 @@ impl WalkError {
             WalkError::NotRunning => "not_running",
             WalkError::PermissionDenied(_) => "permission_denied",
             WalkError::NotLoggedIn => "not_logged_in",
+            WalkError::InMatch => "in_match",
             WalkError::Layout(_) => "layout",
             WalkError::Read(_) => "read",
         }
@@ -77,6 +80,7 @@ impl fmt::Display for WalkError {
             WalkError::NotRunning => write!(f, "MTG Arena is not running"),
             WalkError::PermissionDenied(e) => write!(f, "cannot open the Arena process's memory: {e}"),
             WalkError::NotLoggedIn => write!(f, "Arena has not loaded the collection yet (log in first)"),
+            WalkError::InMatch => write!(f, "Arena is in a match; the collection is only readable from the menus"),
             WalkError::Layout(e) => write!(f, "unexpected memory layout: {e}"),
             WalkError::Read(addr) => write!(f, "read failed at {addr:#x}"),
         }
@@ -255,9 +259,9 @@ impl<'p> Runtime<'p> {
         Err(WalkError::Layout(format!("field {class_name}.{name} not found")))
     }
 
-    /// `Ok(None)` when the class hasn't been initialised or the field is null —
-    /// both just mean the client hasn't got that far yet.
-    pub fn static_object(&self, class: Class, name: &str) -> Result<Option<Object>> {
+    /// Address of a static field's storage, or `None` when the class hasn't
+    /// been initialised yet.
+    fn static_addr(&self, class: Class, name: &str) -> Result<Option<u64>> {
         let field = self.field(class, name)?;
         if field.attrs & FIELD_ATTR_STATIC == 0 || field.attrs & FIELD_ATTR_LITERAL != 0 {
             return Err(WalkError::Layout(format!("{name} is not a static field")));
@@ -276,7 +280,24 @@ impl<'p> Runtime<'p> {
         if statics == 0 {
             return Ok(None);
         }
-        self.nullable(self.ptr(statics + field.offset as u64)?)
+        Ok(Some(statics + field.offset as u64))
+    }
+
+    /// `Ok(None)` when the class hasn't been initialised or the field is null —
+    /// both just mean the client hasn't got that far yet.
+    pub fn static_object(&self, class: Class, name: &str) -> Result<Option<Object>> {
+        match self.static_addr(class, name)? {
+            Some(addr) => self.nullable(self.ptr(addr)?),
+            None => Ok(None),
+        }
+    }
+
+    /// An uninitialised class reads as `false`, the field's default.
+    pub fn static_bool(&self, class: Class, name: &str) -> Result<bool> {
+        match self.static_addr(class, name)? {
+            Some(addr) => Ok(self.u8(addr)? != 0),
+            None => Ok(false),
+        }
     }
 
     pub fn object_field(&self, obj: Object, name: &str) -> Result<Option<Object>> {

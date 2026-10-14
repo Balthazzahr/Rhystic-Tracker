@@ -97,7 +97,15 @@ fn read_collection() -> Result<Vec<(u32, i32)>, mono::WalkError> {
     // what mtga-tracker-daemon walks, and what a BepInEx hook on
     // AwsInventoryServiceWrapper.set_Cards observes.
     let controller = rt.find_class("Core", "", "WrapperController")?;
-    let instance = rt.static_object(controller, "<Instance>k__BackingField")?.ok_or(WalkError::NotLoggedIn)?;
+    let Some(instance) = rt.static_object(controller, "<Instance>k__BackingField")? else {
+        // The singleton is nulled when the menu scene unloads for a duel, so a
+        // menu that has existed before means "in a match", not "not logged in".
+        return Err(if rt.static_bool(controller, "wrapperSceneEverLoaded")? {
+            WalkError::InMatch
+        } else {
+            WalkError::NotLoggedIn
+        });
+    };
     let inventory = rt.object_field(instance, "<InventoryManager>k__BackingField")?.ok_or(WalkError::NotLoggedIn)?;
     let service = rt.object_field(inventory, "InventoryServiceWrapper")?.ok_or(WalkError::NotLoggedIn)?;
     let cards = rt.object_field(service, "<Cards>k__BackingField")?.ok_or(WalkError::NotLoggedIn)?;

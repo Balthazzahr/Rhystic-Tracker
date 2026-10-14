@@ -41,6 +41,7 @@ const guideFor = (p: Platform): GuideId => (p === 'windows' ? 'linux' : p);
 const SYNC_ERRORS: Record<string, string> = {
   not_running: 'MTG Arena is not running.',
   not_logged_in: 'Arena is running but has not loaded your collection yet. Log in and try again.',
+  in_match: 'Arena only exposes your collection from the menus. Rhystic retries every couple of minutes, so it will sync once you’re back in the menus.',
   permission_denied: 'The helper was refused access to the Arena process.',
   elevation_cancelled: 'The password prompt was dismissed.',
   elevation_failed: 'Admin authorisation failed.',
