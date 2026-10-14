@@ -103,6 +103,17 @@ echo "  -> Installing binary to $INSTALL_DIR/$EXEC_NAME"
 cp -f "$BIN_SOURCE" "$INSTALL_DIR/$EXEC_NAME"
 chmod +x "$INSTALL_DIR/$EXEC_NAME"
 
+# Memory-reading helper for exact collection sync. It needs CAP_SYS_PTRACE to
+# read the Arena process, which only root can grant; the app's Settings ->
+# MTGA Connection panel shows the exact command for this system.
+HELPER_SOURCE="$(dirname "$BIN_SOURCE")/rhystic-memread"
+if [ -f "$HELPER_SOURCE" ]; then
+    echo "  -> Installing collection helper to $INSTALL_DIR/rhystic-memread"
+    cp -f "$HELPER_SOURCE" "$INSTALL_DIR/rhystic-memread"
+    chmod +x "$INSTALL_DIR/rhystic-memread"
+    echo "     To enable exact collection sync: sudo setcap cap_sys_ptrace+ep $INSTALL_DIR/rhystic-memread"
+fi
+
 # Install helper scripts (e.g. avatar extractor) if present
 SCRIPT_SOURCE=""
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/src-tauri/scripts/extract_mtga_avatars.py" ]; then

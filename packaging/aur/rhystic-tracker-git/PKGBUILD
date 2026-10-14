@@ -23,6 +23,7 @@ makedepends=(
     'npm'
 )
 provides=('rhystic-tracker')
+install=rhystic-tracker.install
 conflicts=('rhystic-tracker' 'rhystic-tracker-bin')
 source=("git+https://github.com/Balthazzahr/Rhystic-Tracker.git")
 sha256sums=('SKIP')
@@ -37,6 +38,7 @@ build() {
     npm ci
     npm run build
     npx @tauri-apps/cli build --no-bundle --features production-env
+    cargo build --release --manifest-path src-tauri/Cargo.toml --bin rhystic-memread
 }
 
 package() {
@@ -44,6 +46,7 @@ package() {
 
     # Install binary
     install -Dm755 "src-tauri/target/release/${_pkgname}" "${pkgdir}/usr/bin/${_pkgname}"
+    install -Dm755 "src-tauri/target/release/rhystic-memread" "${pkgdir}/usr/bin/rhystic-memread"
 
     # Install desktop entry
     install -Dm644 "packaging/${_pkgname}.desktop" "${pkgdir}/usr/share/applications/${_pkgname}.desktop"

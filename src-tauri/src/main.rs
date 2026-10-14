@@ -10,6 +10,7 @@ mod deck_legitimacy;
 mod dashboard;
 mod client_loc;
 mod quest_catalog;
+mod memory_collection;
 
 use tokio::sync::mpsc;
 use std::path::PathBuf;
@@ -781,6 +782,8 @@ fn main() {
                 })
                 .build(app)?;
 
+            tauri::async_runtime::spawn(memory_collection::auto_sync_loop(app.handle().clone()));
+
             // Background task: monitor live match state and update Tray Icon & Context Menu
             let app_handle = app.handle().clone();
             let monitor_assembler = shared_assembler.clone();
@@ -923,7 +926,10 @@ fn main() {
             get_reward_tracks_status,
             get_player_rank_status,
             get_player_rank_history,
-            get_mastery_pass_status
+            get_mastery_pass_status,
+            memory_collection::get_memory_collection_status,
+            memory_collection::sync_collection_from_memory,
+            memory_collection::sync_collection_elevated
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

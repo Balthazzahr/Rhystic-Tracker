@@ -440,6 +440,21 @@ Because MTGA no longer dumps complete raw collections into `Player.log`, Rhystic
 2. **Theft & Copy Protection**: Cards generated in-game via *tokens, copies, clones (e.g. Spark Double), conjure, heist, or theft effects (e.g. Gonti, Ragavan)* never falsely inflate your owned collection.
 3. **Interactive 4-Diamond Ownership Selector**: Adjust owned copies directly in the card detail modal with instant persistence and real-time cross-view synchronization.
 
+#### Exact Collection Sync (Linux)
+Everything above is a lower bound inferred from the log. On Linux, Rhystic Tracker can instead read your exact collection out of the running Arena client every two minutes, the same read-only way Untapped.gg's companion does. Nothing is injected into the game and no game files are touched. A sync replaces the inferred counts, including manual overrides, with what Arena actually holds.
+
+The reading is done by a separate helper, `rhystic-memread`, shipped next to `rhystic-tracker`. Reading another process's memory needs the `CAP_SYS_PTRACE` capability on most distributions (Yama `ptrace_scope = 1`), and only the helper gets it, never the main app. **Settings → MTGA Connection → Exact Collection Sync** detects your setup and shows the command for it:
+
+| Setup | What to do |
+|---|---|
+| Arch (AUR package) | Nothing; the package grants it on install and upgrade. |
+| NixOS | Add a `security.wrappers.rhystic-memread` entry with `capabilities = "cap_sys_ptrace+ep"`. |
+| Steam Deck / other Linux | `sudo setcap cap_sys_ptrace+ep <path to rhystic-memread>`, again after each update. |
+
+If you'd rather not grant a standing capability, **Sync once as admin** does a single sync through a polkit password prompt (`pkexec`). Nothing is kept afterwards, so automatic syncing stays off.
+
+macOS isn't supported: reading another app's memory there needs root, and the Mac client is a native Mach-O build the helper can't read yet.
+
 <p align="center">
   <img src="screenshots/CardLibrary_CardInspector.png" alt="3-Panel Card Inspector" width="900" />
 </p>

@@ -16,6 +16,7 @@ depends=(
     'hicolor-icon-theme'
 )
 provides=('rhystic-tracker')
+install=rhystic-tracker.install
 conflicts=('rhystic-tracker' 'rhystic-tracker-git')
 source=(
     "${_pkgname}-${pkgver}.tar.gz::https://github.com/Balthazzahr/Rhystic-Tracker/releases/download/v${pkgver}/${_pkgname}-linux-x86_64.tar.gz"
@@ -33,6 +34,7 @@ sha256sums=(
 package() {
     # Install binary
     install -Dm755 "${srcdir}/${_pkgname}" "${pkgdir}/usr/bin/${_pkgname}"
+    install -Dm755 "${srcdir}/rhystic-memread" "${pkgdir}/usr/bin/rhystic-memread"
 
     # Install desktop entry
     install -Dm644 "${srcdir}/${_pkgname}.desktop" "${pkgdir}/usr/share/applications/${_pkgname}.desktop"
