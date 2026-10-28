@@ -315,8 +315,8 @@ async fn dispatch_parsed_event(
         ParsedEvent::MulliganEvent { seat_id, is_mulligan, num_cards } => {
             assembler.handle_mulligan_decision(seat_id, is_mulligan, num_cards);
         }
-        ParsedEvent::MatchCompleted { winning_team_id, reason, .. } => {
-            if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match(winning_team_id, &reason) {
+        ParsedEvent::MatchCompleted { match_id, winning_team_id, reason, .. } => {
+            if let Some((mut record, card_records, turn_events, impactful)) = assembler.complete_match_for_id(&match_id, winning_team_id, &reason) {
                 let hero_gids: Vec<i64> = card_records.iter().filter(|c| !c.is_opponent).map(|c| c.grp_id as i64).collect();
                 if record.player_deck_name.is_empty() || record.player_deck_name == "Selected Deck" {
                     if let Ok(Some(resolved_name)) = db_manager.resolve_deck_for_cards(&hero_gids, record.player_commander_id.map(|c| c as i64)).await {
@@ -567,16 +567,107 @@ async fn dispatch_parsed_event(
     }
 }
 
+const MAX_JSON_BUFFER_BYTES: usize = 2 * 1024 * 1024; // 2 MB safety cap
+
+#[derive(Default)]
+struct JsonBlockAccumulator {
+    buffer: String,
+    brace_depth: i32,
+    in_json: bool,
+    in_string: bool,
+    escaped: bool,
+    max_bytes: usize,
+}
+
+impl JsonBlockAccumulator {
+    fn new() -> Self {
+        Self {
+            max_bytes: MAX_JSON_BUFFER_BYTES,
+            ..Self::default()
+        }
+    }
+
+    #[cfg(test)]
+    fn with_max_bytes(max_bytes: usize) -> Self {
+        Self {
+            max_bytes,
+            ..Self::default()
+        }
+    }
+
+    fn reset(&mut self) {
+        self.buffer.clear();
+        self.brace_depth = 0;
+        self.in_json = false;
+        self.in_string = false;
+        self.escaped = false;
+    }
+
+    /// Feeds a log line into the accumulator.
+    /// Returns `Some(payload)` when a complete JSON block (or standalone non-JSON line) is ready to parse,
+    /// or `None` while accumulating a multi-line JSON block (or after dropping an oversized corrupted block).
+    fn feed_line(&mut self, line: &str) -> Option<String> {
+        let trimmed = line.trim();
+
+        if !self.in_json && trimmed.starts_with('{') {
+            self.reset();
+            self.in_json = true;
+        }
+
+        if self.in_json {
+            self.buffer.push_str(line);
+            self.buffer.push('\n');
+
+            for ch in line.chars() {
+                if self.in_string {
+                    if self.escaped {
+                        self.escaped = false;
+                    } else if ch == '\\' {
+                        self.escaped = true;
+                    } else if ch == '"' {
+                        self.in_string = false;
+                    }
+                } else {
+                    match ch {
+                        '"' => self.in_string = true,
+                        '{' => self.brace_depth += 1,
+                        '}' => self.brace_depth -= 1,
+                        _ => {}
+                    }
+                }
+            }
+            // JSON string literals cannot span raw unescaped newlines; reset at line end
+            // so a malformed unclosed quote on one line cannot swallow subsequent lines.
+            self.in_string = false;
+            self.escaped = false;
+
+            if self.brace_depth <= 0 {
+                let payload = std::mem::take(&mut self.buffer);
+                self.reset();
+                Some(payload)
+            } else if self.buffer.len() > self.max_bytes {
+                eprintln!(
+                    "[PROCESSOR] Warning: JSON buffer exceeded {} bytes without closing brace; resetting buffer.",
+                    self.max_bytes
+                );
+                self.reset();
+                None
+            } else {
+                None
+            }
+        } else {
+            Some(line.to_string())
+        }
+    }
+}
+
 /// Process tailer events (line parsing / JSON buffering / match assembly).
 async fn process_tailer_events(
     mut rx: mpsc::Receiver<TailerEvent>,
     db_manager: std::sync::Arc<DatabaseManager>,
     assembler_ref: std::sync::Arc<tokio::sync::Mutex<MatchAssembler>>,
 ) {
-    let mut json_buffer = String::new();
-    let mut brace_depth = 0;
-    let mut in_json = false;
-
+    let mut json_acc = JsonBlockAccumulator::new();
     let mut last_battle_pass_id: Option<String> = None;
 
     while let Some(event) = rx.recv().await {
@@ -587,7 +678,8 @@ async fn process_tailer_events(
                 println!("[PROCESSOR] Tailer caught up with log. Live match event processing active.");
             }
             TailerEvent::Rotated => {
-                println!("[PROCESSOR] Log rotated.");
+                json_acc.reset();
+                println!("[PROCESSOR] Log rotated (JSON buffer reset).");
             }
             TailerEvent::Line(line) => {
                 let trimmed = line.trim();
@@ -601,44 +693,8 @@ async fn process_tailer_events(
                     }
                 }
 
-                if !in_json && trimmed.starts_with('{') {
-                    in_json = true;
-                    json_buffer.clear();
-                }
-
-                if in_json {
-                    json_buffer.push_str(&line);
-                    json_buffer.push('\n');
-
-                    for ch in line.chars() {
-                        if ch == '{' { brace_depth += 1; }
-                        else if ch == '}' { brace_depth -= 1; }
-                    }
-
-                    if brace_depth <= 0 {
-                        in_json = false;
-                        brace_depth = 0;
-                        let payload_str = json_buffer.clone();
-                        json_buffer.clear();
-
-                        let mut parsed = parse_line(&payload_str);
-                        if let ParsedEvent::MasteryPassUpdate(ref mut pass) = parsed {
-                            if (pass.set_code == "CURRENT" || pass.set_code.is_empty()) && last_battle_pass_id.is_some() {
-                                if let Some(ref bp_id) = last_battle_pass_id {
-                                    pass.pass_id = bp_id.clone();
-                                    if let Some(sc) = bp_id.strip_prefix("BattlePass_") {
-                                        pass.set_code = sc.to_string();
-                                    }
-                                }
-                            }
-                        }
-                        if !matches!(parsed, ParsedEvent::Unknown) {
-                            let mut assembler = assembler_ref.lock().await;
-                            dispatch_parsed_event(parsed, &mut assembler, &db_manager).await;
-                        }
-                    }
-                } else {
-                    let mut parsed = parse_line(&line);
+                if let Some(payload_str) = json_acc.feed_line(&line) {
+                    let mut parsed = parse_line(&payload_str);
                     if let ParsedEvent::MasteryPassUpdate(ref mut pass) = parsed {
                         if (pass.set_code == "CURRENT" || pass.set_code.is_empty()) && last_battle_pass_id.is_some() {
                             if let Some(ref bp_id) = last_battle_pass_id {
@@ -1411,5 +1467,54 @@ mod tests {
         assert_eq!(after_list, 0);
         let after_matches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM matches WHERE hero_deck_name='My Deck'").fetch_one(pool).await.unwrap();
         assert_eq!(after_matches, 2, "matches are kept when only the decklist is deleted");
+    }
+
+    #[test]
+    fn test_json_block_accumulator_ignores_braces_in_strings_and_escapes() {
+        let mut acc = JsonBlockAccumulator::new();
+
+        // Multi-line JSON block with unbalanced '{', '}', escaped quotes `\"`, and escaped backslashes `\\"`
+        assert!(acc.feed_line("{").is_none());
+        assert!(acc.feed_line(r#"  "deckName": "Mono-Red {{{ Burn \" { Still In String","#).is_none());
+        assert!(acc.feed_line(r#"  "path": "C:\\Users\\Matt\\", "extra": "} not a real closing brace","#).is_none());
+        assert!(acc.feed_line(r#"  "nested": {"#).is_none());
+        assert!(acc.feed_line(r#"    "note": "}}}""#).is_none());
+        assert!(acc.feed_line("  }").is_none());
+        let completed = acc.feed_line("}").expect("Outer closing brace should finish JSON block");
+
+        let parsed: serde_json::Value = serde_json::from_str(&completed).expect("Valid JSON block");
+        assert_eq!(
+            parsed.get("deckName").and_then(|v| v.as_str()),
+            Some(r#"Mono-Red {{{ Burn " { Still In String"#)
+        );
+        assert_eq!(
+            parsed.get("path").and_then(|v| v.as_str()),
+            Some(r#"C:\Users\Matt\"#)
+        );
+    }
+
+    #[test]
+    fn test_json_block_accumulator_rotation_reset_and_safety_cap() {
+        let mut acc = JsonBlockAccumulator::with_max_bytes(64);
+
+        // 1. Start an unclosed JSON block, then simulate log rotation
+        assert!(acc.feed_line(r#"{"unclosed": true"#).is_none());
+        assert!(acc.in_json);
+        acc.reset();
+        assert!(!acc.in_json);
+        assert_eq!(acc.brace_depth, 0);
+
+        // Next valid single-line JSON block parses immediately
+        let out = acc.feed_line(r#"{"status": "ok"}"#).expect("Should emit complete JSON");
+        assert!(out.contains(r#""status": "ok""#));
+
+        // 2. Oversized corrupted JSON block exceeds safety cap and auto-resets
+        assert!(acc.feed_line(r#"{"corrupted_block": "12345678901234567890"#).is_none());
+        assert!(acc.feed_line(r#"1234567890123456789012345678901234567890""#).is_none());
+        assert!(!acc.in_json, "Safety cap must reset accumulator state");
+
+        // Subsequent normal line is not swallowed
+        let next = acc.feed_line(r#"{"recovered": 1}"#).expect("Accumulator must recover after safety reset");
+        assert!(next.contains(r#""recovered": 1"#));
     }
 }

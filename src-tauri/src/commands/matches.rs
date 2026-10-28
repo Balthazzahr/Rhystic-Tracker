@@ -68,13 +68,46 @@ pub async fn get_match_cards(match_id: String) -> Result<Vec<serde_json::Value>,
     Ok(result)
 }
 
+fn extract_secondary_event_grp_id(event_type: &str) -> Option<i64> {
+    if event_type.starts_with("damage:") {
+        let mut parts = event_type.split(':');
+        let _prefix = parts.next();
+        let _sub = parts.next();
+        let _amt = parts.next();
+        let _tid = parts.next();
+        parts
+            .next()
+            .and_then(|s| s.parse::<i64>().ok())
+            .filter(|&g| g > 0)
+    } else if event_type.starts_with("counterspell:")
+        || event_type.starts_with("countered:")
+        || event_type.starts_with("destroy:")
+        || event_type.starts_with("bounce:")
+        || event_type.starts_with("sacrifice:")
+    {
+        event_type
+            .split(':')
+            .nth(1)
+            .and_then(|s| s.parse::<i64>().ok())
+            .filter(|&g| g > 0)
+    } else {
+        None
+    }
+}
+
 #[tauri::command]
 pub async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    get_match_turn_events_internal(db.pool(), &match_id).await
+}
 
+pub async fn get_match_turn_events_internal(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+    match_id: &str,
+) -> Result<serde_json::Value, String> {
     let hero_row = sqlx::query("SELECT hero_seat_id, opponent_name FROM matches WHERE id = ?")
-        .bind(&match_id)
-        .fetch_optional(db.pool())
+        .bind(match_id)
+        .fetch_optional(pool)
         .await
         .map_err(|e| e.to_string())?;
     let (hero_seat_id, opp_name) = match hero_row {
@@ -89,8 +122,8 @@ pub async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value
     let titles_rows = sqlx::query(
         "SELECT grp_id, titles FROM match_impactful_cards WHERE match_id = ? AND titles IS NOT NULL AND titles != '[]'"
     )
-    .bind(&match_id)
-    .fetch_all(db.pool())
+    .bind(match_id)
+    .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -106,17 +139,66 @@ pub async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value
     let rows = sqlx::query(
         r#"
         SELECT e.turn_number, e.seat_id, e.event_type, e.grp_id, e.timestamp,
-               c.name, c.card_type, c.mana_cost
+               c.name, c.card_type, c.mana_cost, c.cmc
         FROM match_turn_events e
         LEFT JOIN cards_cache c ON e.grp_id = c.grp_id
         WHERE e.match_id = ?
         ORDER BY e.id ASC
         "#
     )
-    .bind(&match_id)
-    .fetch_all(db.pool())
+    .bind(match_id)
+    .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // Seed known (name, card_type) pairs from the primary LEFT JOIN and collect any secondary target grp_ids
+    let mut card_meta_map: std::collections::HashMap<i64, (String, Option<String>)> =
+        std::collections::HashMap::new();
+    let mut missing_secondary_ids: Vec<i64> = Vec::new();
+
+    for r in &rows {
+        let gid: i64 = r.get("grp_id");
+        let name: Option<String> = r.get("name");
+        let card_type: Option<String> = r.get("card_type");
+        if gid > 0 {
+            if let Some(n) = name {
+                card_meta_map.entry(gid).or_insert((n, card_type));
+            }
+        }
+    }
+
+    for r in &rows {
+        let event_type: String = r.get("event_type");
+        if let Some(sec_gid) = extract_secondary_event_grp_id(&event_type) {
+            if !card_meta_map.contains_key(&sec_gid) {
+                missing_secondary_ids.push(sec_gid);
+            }
+        }
+    }
+
+    if !missing_secondary_ids.is_empty() {
+        missing_secondary_ids.sort_unstable();
+        missing_secondary_ids.dedup();
+        for chunk in missing_secondary_ids.chunks(100) {
+            let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let query_str = format!(
+                "SELECT grp_id, name, card_type FROM cards_cache WHERE grp_id IN ({})",
+                placeholders
+            );
+            let mut q = sqlx::query(&query_str);
+            for &gid in chunk {
+                q = q.bind(gid);
+            }
+            if let Ok(sec_rows) = q.fetch_all(pool).await {
+                for sr in sec_rows {
+                    let gid: i64 = sr.get("grp_id");
+                    let name: String = sr.get("name");
+                    let card_type: Option<String> = sr.get("card_type");
+                    card_meta_map.insert(gid, (name, card_type));
+                }
+            }
+        }
+    }
 
     let mut events = Vec::new();
     for r in rows {
@@ -175,9 +257,9 @@ pub async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value
             } else if tid == 1 || tid == 2 || tid == 0 {
                 opp_name.clone()
             } else if tgt_gid > 0 {
-                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), tgt_gid).await {
-                    target_card_type = meta.card_type;
-                    meta.name
+                if let Some((sec_name, sec_type)) = card_meta_map.get(&tgt_gid) {
+                    target_card_type = sec_type.clone();
+                    sec_name.clone()
                 } else {
                     format!("Target #{}", tid)
                 }
@@ -185,40 +267,10 @@ pub async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value
                 format!("Target #{}", tid)
             };
             target_name = Some(t_name);
-        } else if event_type.starts_with("counterspell:") {
-            if let Some(target_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
-                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), target_grp).await {
-                    target_name = Some(meta.name);
-                    target_card_type = meta.card_type;
-                }
-            }
-        } else if event_type.starts_with("countered:") {
-            if let Some(affector_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
-                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), affector_grp).await {
-                    target_name = Some(meta.name);
-                    target_card_type = meta.card_type;
-                }
-            }
-        } else if event_type.starts_with("destroy:") {
-            if let Some(affector_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
-                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), affector_grp).await {
-                    target_name = Some(meta.name);
-                    target_card_type = meta.card_type;
-                }
-            }
-        } else if event_type.starts_with("bounce:") {
-            if let Some(target_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
-                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), target_grp).await {
-                    target_name = Some(meta.name);
-                    target_card_type = meta.card_type;
-                }
-            }
-        } else if event_type.starts_with("sacrifice:") {
-            if let Some(target_grp) = event_type.split(':').nth(1).and_then(|s| s.parse::<i64>().ok()) {
-                if let Ok(Some(meta)) = card_db::get_card_metadata(db.pool(), target_grp).await {
-                    target_name = Some(meta.name);
-                    target_card_type = meta.card_type;
-                }
+        } else if let Some(sec_gid) = extract_secondary_event_grp_id(&event_type) {
+            if let Some((sec_name, sec_type)) = card_meta_map.get(&sec_gid) {
+                target_name = Some(sec_name.clone());
+                target_card_type = sec_type.clone();
             }
         }
 
@@ -250,10 +302,16 @@ pub async fn get_match_turn_events(match_id: String) -> Result<serde_json::Value
 #[tauri::command]
 pub async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, String> {
     let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+    get_impactful_cards_internal(db.pool(), &match_id).await
+}
 
+pub async fn get_impactful_cards_internal(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+    match_id: &str,
+) -> Result<serde_json::Value, String> {
     let hero_row = sqlx::query("SELECT hero_seat_id FROM matches WHERE id = ?")
-        .bind(&match_id)
-        .fetch_optional(db.pool())
+        .bind(match_id)
+        .fetch_optional(pool)
         .await
         .map_err(|e| e.to_string())?;
     let hero_seat_id: i64 = hero_row.as_ref().and_then(|r| r.try_get("hero_seat_id").ok()).unwrap_or(1);
@@ -263,14 +321,14 @@ pub async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, 
         SELECT i.grp_id, i.seat_id, i.total_damage, i.max_hit,
                i.damage_to_player, i.damage_to_permanents, i.damage_combat, i.damage_spell,
                i.titles,
-               c.name, c.card_type, c.mana_cost, c.rarity
+               c.name, c.card_type, c.mana_cost, c.cmc, c.rarity
         FROM match_impactful_cards i
         LEFT JOIN cards_cache c ON i.grp_id = c.grp_id
         WHERE i.match_id = ?
         "#
     )
-    .bind(&match_id)
-    .fetch_all(db.pool())
+    .bind(match_id)
+    .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -295,9 +353,15 @@ pub async fn get_impactful_cards(match_id: String) -> Result<serde_json::Value, 
         let card_type: Option<String> = r.get("card_type");
         let mana_cost: Option<String> = r.get("mana_cost");
         let rarity: Option<i64> = r.get("rarity");
-
-        let cmc = card_db::get_card_metadata(db.pool(), grp_id)
-            .await.ok().flatten().map(|c| c.cmc).unwrap_or(0);
+        let raw_cmc: i64 = r.try_get("cmc").unwrap_or(0);
+        let cmc = if raw_cmc == 0 {
+            mana_cost
+                .as_deref()
+                .map(card_db::parse_mtga_cmc)
+                .unwrap_or(0)
+        } else {
+            raw_cmc
+        };
 
         if total_damage < 5 && titles.is_empty() {
             continue;
@@ -703,6 +767,30 @@ mod tests {
                 updated_at TEXT,
                 deck_id TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS match_turn_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL,
+                turn_number INTEGER NOT NULL,
+                seat_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                grp_id INTEGER NOT NULL,
+                timestamp TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS match_impactful_cards (
+                match_id TEXT NOT NULL,
+                grp_id INTEGER NOT NULL,
+                seat_id INTEGER NOT NULL DEFAULT 0,
+                total_damage INTEGER NOT NULL DEFAULT 0,
+                max_hit INTEGER NOT NULL DEFAULT 0,
+                damage_to_player INTEGER NOT NULL DEFAULT 0,
+                damage_to_permanents INTEGER NOT NULL DEFAULT 0,
+                damage_combat INTEGER NOT NULL DEFAULT 0,
+                damage_spell INTEGER NOT NULL DEFAULT 0,
+                titles TEXT,
+                PRIMARY KEY (match_id, grp_id, seat_id)
+            );
             "#
         )
         .execute(&pool)
@@ -777,5 +865,56 @@ mod tests {
         // Test filtering multiple cards (OR): Counterspell OR Lightning Bolt -> matches m1, m2, m3
         let res_both_or = get_matches_with_cards_internal(&pool, &["Counterspell".to_string(), "Lightning Bolt".to_string()], false).await.unwrap();
         assert_eq!(res_both_or, vec!["m1", "m2", "m3"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_match_turn_events_and_impactful_cards_batch_join() {
+        let pool = setup_test_db().await;
+
+        sqlx::query(
+            "INSERT INTO matches (id, timestamp, hero_seat_id, opponent_name, result) VALUES ('m_events', '2026-09-17T15:00:00Z', 1, 'RivalMage', 'win')"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO match_impactful_cards (match_id, grp_id, seat_id, total_damage, max_hit, titles) VALUES
+             ('m_events', 101, 1, 14, 7, '[\"MVP\",\"Terminator\"]'),
+             ('m_events', 102, 1, 0, 0, '[\"Dream Crusher\"]')"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO match_turn_events (match_id, turn_number, seat_id, event_type, grp_id, timestamp) VALUES
+             ('m_events', 4, 1, 'counterspell:105', 102, '2026-09-17T15:04:00Z'),
+             ('m_events', 5, 1, 'damage:combat:7:999:105', 101, '2026-09-17T15:05:00Z')"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let impactful = get_impactful_cards_internal(&pool, "m_events").await.unwrap();
+        let cards = impactful["cards"].as_array().unwrap();
+        assert_eq!(cards.len(), 2);
+        // 101 ('Atraxa, Grand Unifier', 'o3oWoUoBoG') has 2 titles and 14 damage -> sorted first, cmc parsed as 7
+        assert_eq!(cards[0]["grp_id"], 101);
+        assert_eq!(cards[0]["cmc"], 7);
+        assert_eq!(cards[1]["grp_id"], 102);
+        assert_eq!(cards[1]["cmc"], 2);
+
+        let turn_events = get_match_turn_events_internal(&pool, "m_events").await.unwrap();
+        let events = turn_events["events"].as_array().unwrap();
+        assert_eq!(events.len(), 2);
+        // Counterspell (102) countering Urza (105)
+        assert_eq!(events[0]["name"], "Counterspell");
+        assert_eq!(events[0]["target_name"], "Urza, Lord High Artificer");
+        assert_eq!(events[0]["target_card_type"], "Legendary Creature — Human Artificer");
+        // Atraxa (101) dealing 7 combat damage to permanent instance 999 (Urza, 105)
+        assert_eq!(events[1]["name"], "Atraxa, Grand Unifier");
+        assert_eq!(events[1]["amount"], 7);
+        assert_eq!(events[1]["target_name"], "Urza, Lord High Artificer");
     }
 }
