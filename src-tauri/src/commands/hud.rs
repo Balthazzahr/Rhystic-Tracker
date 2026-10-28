@@ -826,7 +826,6 @@ pub async fn open_deck_tracker_window(app: tauri::AppHandle) -> Result<(), Strin
     .resizable(true)
     .always_on_top(true)
     .decorations(false)
-    .transparent(false)
     .devtools(true);
 
     if let Some((x, y)) = settings.deck_tracker_position {
