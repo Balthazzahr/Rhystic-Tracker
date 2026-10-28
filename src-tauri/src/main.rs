@@ -235,6 +235,15 @@ async fn dispatch_parsed_event(
                 let _ = db_manager.save_auto_deck_list(&deck_name, deck_id.as_deref(), commander_id, &main_deck).await;
             }
         }
+        ParsedEvent::ConnectDeck { deck_cards, commander_cards, system_seat_ids } => {
+            println!(
+                "[EVENT: CONNECT_DECK] Captured starting deck with {} cards, commanders = {:?}, seats = {:?}",
+                deck_cards.len(),
+                commander_cards,
+                system_seat_ids
+            );
+            assembler.set_connect_deck(&deck_cards, &commander_cards, &system_seat_ids);
+        }
         ParsedEvent::DeckCatalogBatch { decks } => {
             let count = decks.len();
             for (did, dname, cmd_id, main_deck) in &decks {
@@ -291,7 +300,11 @@ async fn dispatch_parsed_event(
                 for (affector_id, count) in step.mana_paid_events {
                     assembler.process_mana_paid_event(affector_id, count);
                 }
+                if !step.zones.is_empty() {
+                    assembler.update_zones(&step.zones);
+                }
             }
+            assembler.recalculate_deck_tracker();
             let draws = assembler.drain_collection_draws();
             if !draws.is_empty() {
                 for g in draws {
@@ -885,6 +898,7 @@ fn main() {
             clear_avatar_cache,
             save_avatar_image,
             has_avatar_image,
+            check_new_avatars_status,
             extract_avatars_from_mtga_client,
             get_database_stats,
             export_database_backup,
@@ -923,7 +937,10 @@ fn main() {
             get_reward_tracks_status,
             get_player_rank_status,
             get_player_rank_history,
-            get_mastery_pass_status
+            get_mastery_pass_status,
+            open_deck_tracker_window,
+            save_deck_tracker_position,
+            close_deck_tracker_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

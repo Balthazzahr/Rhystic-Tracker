@@ -174,15 +174,48 @@ def extract_avatars(raw_dir=None, out_dir=None, log_path=None):
                             img = tight_alpha_crop(img, alpha_threshold=25)
                             stem = os.path.splitext(os.path.basename(rel))[0]
                             clean_stem = stem.replace("AvatarBust_", "").replace("Avatar_Bust_", "")
-                            img.save(os.path.join(out_dir, f"{stem}.png"))
-                            img.save(os.path.join(out_dir, f"{clean_stem}.png"))
+                            img.save(os.path.join(out_dir, f"{stem}.png"), "PNG")
+                            img.save(os.path.join(out_dir, f"{clean_stem}.png"), "PNG")
                             for av_id in rel_to_avatar_ids.get(rel.lower(), []):
-                                img.save(os.path.join(out_dir, f"{av_id}.png"))
+                                img.save(os.path.join(out_dir, f"{av_id}.png"), "PNG")
                                 total_saved += 1
                     except Exception:
                         pass
         except Exception as e:
             print(f"Error {b_path}: {e}", file=sys.stderr)
+
+    # 3. Extract NPE atlas avatars if present (e.g. Atlas_NPEAvatar_*.mtga)
+    npe_bundles = glob.glob(os.path.join(bundle_dir, "Atlas_NPEAvatar_*.mtga"))
+    npe_map = {
+        "avatar_ruthless_ripper_npe_phaseladder": ["NPE_GOTH"],
+        "avatar_goblin_rabblemaster_npe_phaseladder": ["NPE_GOBBO"],
+        "avatar_herald_of_secret_streams_npe_phaseladder": ["NPE_WET_ELF"],
+        "avatar_bolas_devastation_npe_phaseladder": ["NPE_BOLAS"],
+        "avatar_elfhame_druid_npe": ["NPE_ELF"],
+    }
+    for npe_bundle in npe_bundles:
+        try:
+            env = UnityPy.load(npe_bundle)
+            atlas = None
+            for obj in env.objects:
+                if obj.type.name == "SpriteAtlas":
+                    atlas = obj.read()
+                    break
+            if atlas and hasattr(atlas, "m_PackedSpriteNamesToIndex") and hasattr(atlas, "m_PackedSprites"):
+                for name, pptr in zip(atlas.m_PackedSpriteNamesToIndex, atlas.m_PackedSprites):
+                    try:
+                        sp = pptr.read()
+                        img = sp.image
+                        if img:
+                            img = tight_alpha_crop(img, alpha_threshold=25)
+                            img.save(os.path.join(out_dir, f"{name}.png"), "PNG")
+                            for alias in npe_map.get(name, []):
+                                img.save(os.path.join(out_dir, f"{alias}.png"), "PNG")
+                                total_saved += 1
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Error extracting NPE atlas {npe_bundle}: {e}", file=sys.stderr)
 
     print(f"Successfully extracted {total_saved} avatars to {out_dir}")
     return total_saved

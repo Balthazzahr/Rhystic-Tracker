@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS matches (
     hero_platform TEXT,
     hero_avatar TEXT,
     opponent_name TEXT,
+    opponent_colors TEXT,
     opponent_commander_id INTEGER,
     opponent_mulligans INTEGER,
     opponent_life_end INTEGER,
@@ -712,6 +713,18 @@ impl DatabaseManager {
             let _ = sqlx::query("ALTER TABLE matches ADD COLUMN opponent_platform TEXT").execute(&pool).await;
             let _ = sqlx::query("ALTER TABLE matches ADD COLUMN opponent_avatar TEXT").execute(&pool).await;
             println!("[DB MIGRATION] Added platform and avatar columns to matches table");
+        }
+
+        // Migration: add opponent_colors column to matches table if not present
+        let opp_colors_check: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM pragma_table_info('matches') WHERE name = 'opponent_colors'"
+        )
+        .fetch_optional(&pool)
+        .await?;
+
+        if opp_colors_check.is_none() {
+            let _ = sqlx::query("ALTER TABLE matches ADD COLUMN opponent_colors TEXT").execute(&pool).await;
+            println!("[DB MIGRATION] Added opponent_colors column to matches table");
         }
 
         // Migration: add deck_id column to deck_lists for MTGA UUID synchronization & auto-renaming
@@ -1399,6 +1412,75 @@ impl DatabaseManager {
             "#).execute(&pool).await;
         }
 
+        // Migration: Backfill missing opponent_commander_id in Brawl matches where opponent cards contain exactly 1 legendary creature/planeswalker
+        let missing_cmdr_matches = sqlx::query_as::<_, (String, i64)>(
+            r#"
+            SELECT m.id, mc.grp_id
+            FROM matches m
+            JOIN match_cards mc ON m.id = mc.match_id AND mc.is_opponent = 1
+            JOIN cards_cache c ON mc.grp_id = c.grp_id
+            WHERE m.format LIKE '%Brawl%'
+              AND m.opponent_commander_id IS NULL
+              AND (c.card_type LIKE '%Legendary%Creature%' OR c.card_type LIKE '%Legendary%Planeswalker%')
+            GROUP BY m.id
+            HAVING COUNT(DISTINCT mc.grp_id) = 1
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+        for (mid, cmdr_id) in missing_cmdr_matches {
+            let _ = sqlx::query("UPDATE matches SET opponent_commander_id = ? WHERE id = ?")
+                .bind(cmdr_id)
+                .bind(&mid)
+                .execute(&pool)
+                .await;
+            println!("[DB MIGRATION] Backfilled opponent_commander_id ({}) for Brawl match {}", cmdr_id, mid);
+        }
+
+        // Migration: Backfill matches.opponent_colors from opponent commander's color identity
+        let uncolored_cmdr_matches = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
+            r#"
+            SELECT m.id, c.color_identity, c.colors
+            FROM matches m
+            JOIN cards_cache c ON m.opponent_commander_id = c.grp_id
+            WHERE m.opponent_commander_id IS NOT NULL
+              AND (m.opponent_colors IS NULL OR m.opponent_colors = '')
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+
+        for (mid, color_ident, cols) in uncolored_cmdr_matches {
+            let mut set = std::collections::HashSet::new();
+            for source_str in [color_ident, cols].into_iter().flatten() {
+                for ch in source_str.chars() {
+                    if !ch.is_ascii_alphanumeric() {
+                        continue;
+                    }
+                    match ch {
+                        '1' | 'W' | 'w' => { set.insert("W"); },
+                        '2' | 'U' | 'u' => { set.insert("U"); },
+                        '3' | 'B' | 'b' => { set.insert("B"); },
+                        '4' | 'R' | 'r' => { set.insert("R"); },
+                        '5' | 'G' | 'g' => { set.insert("G"); },
+                        _ => {}
+                    }
+                }
+            }
+            let order = ["W", "U", "B", "R", "G"];
+            let mut sorted: Vec<&str> = set.into_iter().collect();
+            sorted.sort_by_key(|c| order.iter().position(|&x| x == *c).unwrap_or(99));
+            let opp_colors_str = sorted.join(",");
+            let _ = sqlx::query("UPDATE matches SET opponent_colors = ? WHERE id = ?")
+                .bind(&opp_colors_str)
+                .bind(&mid)
+                .execute(&pool)
+                .await;
+        }
+
         let mgr = Self { pool, db_filename };
         #[cfg(not(test))]
         {
@@ -1798,8 +1880,26 @@ impl DatabaseManager {
             return "Midweek Magic (Momir)".to_string();
         }
 
+        let is_starter_deck = fmt_lower.contains("starter deck")
+            || fmt_lower.contains("starterdeck")
+            || fmt_lower.contains("dualcolor")
+            || fmt_lower.contains("precon");
+
+        // If it's a Starter Deck Duel / Precon event, try matching hero cards against known deck_lists
+        if is_starter_deck && !hero_grp_ids.is_empty() {
+            if let Ok(Some(matched_deck)) = self.resolve_deck_for_cards(hero_grp_ids, None).await {
+                return matched_deck;
+            }
+        }
+
         let is_jump_in = fmt_lower.contains("jump in") || fmt_lower.contains("jumpin");
-        let prefix = if is_jump_in { "Jump In!" } else { "Event Deck" };
+        let prefix = if is_jump_in {
+            "Jump In!"
+        } else if is_starter_deck {
+            "Starter Deck"
+        } else {
+            "Event Deck"
+        };
 
         if hero_grp_ids.is_empty() {
             return format!("{} (Unidentified)", prefix);
@@ -1914,6 +2014,61 @@ impl DatabaseManager {
             resolved_deck_name = self.resolve_event_deck_name(&match_rec.format_name, &hero_gids).await;
         }
 
+        // Determine opponent colors from opponent cards seen or commander fallback
+        let mut opp_color_set = std::collections::HashSet::new();
+        let opp_gids: Vec<i64> = cards.iter().filter(|c| c.is_opponent).map(|c| c.grp_id as i64).collect();
+        let mut query_gids = opp_gids;
+        if let Some(oc_id) = match_rec.opponent_commander_id {
+            if !query_gids.contains(&(oc_id as i64)) {
+                query_gids.push(oc_id as i64);
+            }
+        }
+        if !query_gids.is_empty() {
+            let opp_card_metas = sqlx::query(
+                "SELECT grp_id, color_identity, colors, card_type FROM cards_cache WHERE grp_id IN (SELECT value FROM json_each(?))"
+            )
+            .bind(serde_json::to_string(&query_gids).unwrap_or_else(|_| "[]".to_string()))
+            .fetch_all(&self.pool)
+            .await
+            .unwrap_or_default();
+
+            for r in opp_card_metas {
+                let color_ident: Option<String> = r.get("color_identity");
+                let colors: Option<String> = r.get("colors");
+                let ctype: Option<String> = r.get("card_type");
+                let is_land = ctype.map(|t| t.to_lowercase().contains("land")).unwrap_or(false);
+                let gid: i64 = r.get("grp_id");
+                let is_cmdr = match_rec.opponent_commander_id.map(|c| c as i64) == Some(gid);
+
+                // Use identity for commanders; for other cards use color_identity / colors if not basic land
+                if is_cmdr || !is_land {
+                    for source_str in [color_ident, colors].into_iter().flatten() {
+                        for ch in source_str.chars() {
+                            if !ch.is_ascii_alphanumeric() {
+                                continue;
+                            }
+                            match ch {
+                                '1' | 'W' | 'w' => { opp_color_set.insert("W"); },
+                                '2' | 'U' | 'u' => { opp_color_set.insert("U"); },
+                                '3' | 'B' | 'b' => { opp_color_set.insert("B"); },
+                                '4' | 'R' | 'r' => { opp_color_set.insert("R"); },
+                                '5' | 'G' | 'g' => { opp_color_set.insert("G"); },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let order = ["W", "U", "B", "R", "G"];
+        let mut sorted_opp_colors: Vec<&str> = opp_color_set.into_iter().collect();
+        sorted_opp_colors.sort_by_key(|c| order.iter().position(|&x| x == *c).unwrap_or(99));
+        let computed_opp_colors_str = if sorted_opp_colors.is_empty() {
+            None
+        } else {
+            Some(sorted_opp_colors.join(","))
+        };
+
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -1921,9 +2076,9 @@ impl DatabaseManager {
             INSERT INTO matches (
                 id, timestamp, date_str, format, result, duration_seconds, turns, going_first, hero_seat_id,
                 hero_deck_name, hero_commander_id, hero_life_end, hero_mulligans, hero_platform, hero_avatar,
-                opponent_name, opponent_commander_id, opponent_mulligans, opponent_life_end, opponent_platform, opponent_avatar,
+                opponent_name, opponent_colors, opponent_commander_id, opponent_mulligans, opponent_life_end, opponent_platform, opponent_avatar,
                 result_reason, raw_payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 result = excluded.result,
                 duration_seconds = excluded.duration_seconds,
@@ -1934,6 +2089,7 @@ impl DatabaseManager {
                 hero_mulligans = excluded.hero_mulligans,
                 hero_platform = COALESCE(excluded.hero_platform, matches.hero_platform),
                 hero_avatar = COALESCE(excluded.hero_avatar, matches.hero_avatar),
+                opponent_colors = COALESCE(excluded.opponent_colors, matches.opponent_colors),
                 opponent_platform = COALESCE(excluded.opponent_platform, matches.opponent_platform),
                 opponent_avatar = COALESCE(excluded.opponent_avatar, matches.opponent_avatar),
                 opponent_mulligans = excluded.opponent_mulligans,
@@ -1957,6 +2113,7 @@ impl DatabaseManager {
         .bind(&match_rec.hero_platform)
         .bind(&match_rec.hero_avatar)
         .bind(&match_rec.opponent_name)
+        .bind(computed_opp_colors_str)
         .bind(match_rec.opponent_commander_id.map(|c| c as i64))
         .bind(match_rec.opponent_mulligans.map(|m| m as i64))
         .bind(match_rec.opponent_life_end)
@@ -4926,6 +5083,24 @@ mod tests {
 
         let resolved_momir_sub = db.resolve_event_deck_name("Momir MWM", &[]).await;
         assert_eq!(resolved_momir_sub, "Midweek Magic (Momir)");
+
+        // Starter Deck Duels resolution:
+        // When matching a known deck list in deck_lists
+        let deck_cards_json = serde_json::to_string(&vec![
+            serde_json::json!({ "grp_id": 1, "count": 4 }),
+            serde_json::json!({ "grp_id": 2, "count": 4 }),
+            serde_json::json!({ "grp_id": 3, "count": 20 }),
+        ]).unwrap();
+        sqlx::query("INSERT INTO deck_lists (deck_name, cards_json, source, created_at, updated_at) VALUES ('Angelic Accountants', ?, 'auto', datetime('now'), datetime('now'))")
+            .bind(&deck_cards_json)
+            .execute(db.pool()).await.unwrap();
+
+        let resolved_starter = db.resolve_event_deck_name("Starter Deck Duels", &[1, 2, 3]).await;
+        assert_eq!(resolved_starter, "Angelic Accountants");
+
+        // When unrecognised cards in Starter Deck Duels
+        let resolved_unidentified = db.resolve_event_deck_name("Starter Deck Duels", &[]).await;
+        assert_eq!(resolved_unidentified, "Starter Deck (Unidentified)");
     }
 
     #[tokio::test]
@@ -4986,6 +5161,42 @@ mod tests {
         assert_eq!(results_brawl[0].match_id, "m4");
         assert_eq!(results_brawl[0].opponent_commander_id, Some(999));
         assert_eq!(results_brawl[0].opponent_colors, vec!["U".to_string(), "R".to_string()], "Opponent colors should fall back to commander's color identity when no cards were cast");
+
+        // Verify upsert_match computes and persists opponent_colors into SQLite matches table
+        let match_rec = MatchRecord {
+            match_id: "m5-upsert".to_string(),
+            timestamp: chrono::Utc::now(),
+            date_str: "2026-01-05".to_string(),
+            format_name: "Brawl".to_string(),
+            result: "win".to_string(),
+            duration_seconds: 15,
+            turns: 0,
+            going_first: true,
+            hero_seat_id: 1,
+            player_deck_name: "My Deck".to_string(),
+            player_commander_id: None,
+            player_commander_name: None,
+            player_life_end: Some(25),
+            player_mulligans: Some(0),
+            hero_platform: None,
+            hero_avatar: None,
+            opponent_name: Some("Opp".to_string()),
+            opponent_commander_id: Some(999),
+            opponent_commander_name: None,
+            opponent_mulligans: Some(1),
+            opponent_life_end: Some(25),
+            opponent_platform: None,
+            opponent_avatar: None,
+            result_reason: Some("Concede".to_string()),
+            min_player_life: Some(25),
+        };
+        db.upsert_match(&match_rec, &[], &[], &[]).await.unwrap();
+
+        let persisted_opp_colors: Option<String> = sqlx::query_scalar("SELECT opponent_colors FROM matches WHERE id = 'm5-upsert'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(persisted_opp_colors, Some("U,R".to_string()));
     }
 
     #[tokio::test]

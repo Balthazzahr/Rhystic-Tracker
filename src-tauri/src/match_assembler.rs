@@ -219,6 +219,22 @@ pub struct MatchAssembler {
     pub processed_msg_ids: HashSet<u64>,
     pub last_completed: Option<(MatchRecord, chrono::DateTime<Utc>)>,
     pub is_live: bool,
+    /// Live Deck Tracker state: initial starting deck card counts (grp_id -> initial_count)
+    pub deck_tracker_initial_cards: HashMap<u32, u32>,
+    /// Live Deck Tracker state: instances currently confirmed outside the library (grp_id -> count outside library)
+    pub deck_tracker_outside_library: HashMap<u32, u32>,
+    /// Live Deck Tracker state: cards currently in hand (grp_id -> count in hand)
+    pub deck_tracker_hand_cards: HashMap<u32, u32>,
+    /// Live Deck Tracker state: cards currently on the battlefield (grp_id -> count on board)
+    pub deck_tracker_battlefield_cards: HashMap<u32, u32>,
+    /// Live Deck Tracker state: cards currently in the graveyard (grp_id -> count in grave)
+    pub deck_tracker_graveyard_cards: HashMap<u32, u32>,
+    /// Live Deck Tracker state: cards currently in exile (grp_id -> count in exile)
+    pub deck_tracker_exile_cards: HashMap<u32, u32>,
+    /// Live Deck Tracker state: explicit library instance IDs reported in ZoneType_Library (zone 32/36)
+    pub deck_tracker_library_instances: Option<Vec<u32>>,
+    /// Staged starting deck captured from GREMessageType_ConnectResp prior to MatchCreated
+    pub pending_connect_deck: Option<(Vec<u32>, Vec<u32>, Vec<u32>)>,
 }
 
 impl MatchAssembler {
@@ -282,6 +298,14 @@ impl MatchAssembler {
             processed_msg_ids: HashSet::new(),
             last_completed: None,
             is_live: false,
+            deck_tracker_initial_cards: HashMap::new(),
+            deck_tracker_outside_library: HashMap::new(),
+            deck_tracker_hand_cards: HashMap::new(),
+            deck_tracker_battlefield_cards: HashMap::new(),
+            deck_tracker_graveyard_cards: HashMap::new(),
+            deck_tracker_exile_cards: HashMap::new(),
+            deck_tracker_library_instances: None,
+            pending_connect_deck: None,
         }
     }
 
@@ -368,6 +392,13 @@ impl MatchAssembler {
         self.collection_draws.clear();
         self.turn_1_active_seat = None;
         self.match_start_time = Some(now);
+        self.deck_tracker_initial_cards.clear();
+        self.deck_tracker_outside_library.clear();
+        self.deck_tracker_hand_cards.clear();
+        self.deck_tracker_battlefield_cards.clear();
+        self.deck_tracker_graveyard_cards.clear();
+        self.deck_tracker_exile_cards.clear();
+        self.deck_tracker_library_instances = None;
 
         // Resolve deck name from cached deck or catalog lookup by cached_deck_id.
         //
@@ -417,7 +448,7 @@ impl MatchAssembler {
             timestamp: now,
             date_str: now.format("%Y-%m-%d %H:%M:%S").to_string(),
             format_name,
-            player_deck_name: deck_name,
+            player_deck_name: deck_name.clone(),
             player_commander_id: commander_id,
             player_commander_name: None,
             opponent_name: None,
@@ -439,6 +470,37 @@ impl MatchAssembler {
             min_player_life: None,
             hero_seat_id: self.player_seat_id,
         });
+
+        // If a ConnectDeck event arrived prior to start_match, apply it immediately now
+        if let Some((deck_cards, commander_cards, system_seat_ids)) = self.pending_connect_deck.take() {
+            self.set_connect_deck(&deck_cards, &commander_cards, &system_seat_ids);
+        } else if self.deck_tracker_initial_cards.is_empty() {
+            // Check known_decks by cached_deck_id
+            let known_cards = self.cached_deck_id.as_ref()
+                .and_then(|did| self.known_decks.get(did))
+                .map(|(_, _, main)| main.clone())
+                .filter(|main| !main.is_empty())
+                // Or fallback to match by deck_name
+                .or_else(|| {
+                    if !deck_name.is_empty() && deck_name != "Selected Deck" {
+                        self.known_decks.values()
+                            .find(|(name, _, _)| name.eq_ignore_ascii_case(&deck_name))
+                            .map(|(_, _, main)| main.clone())
+                            .filter(|main| !main.is_empty())
+                    } else {
+                        None
+                    }
+                });
+
+            if let Some(main) = known_cards {
+                for gid in &main {
+                    if *gid > 0 {
+                        *self.deck_tracker_initial_cards.entry(*gid).or_insert(0) += 1;
+                        *self.player_cards_seen.entry(*gid).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
     }
 
     pub fn update_reserved_players(&mut self, players: &serde_json::Value) {
@@ -584,6 +646,93 @@ impl MatchAssembler {
         }
     }
 
+    /// Updates zone states from GameStateMessage.zones.
+    pub fn update_zones(&mut self, zones: &[crate::parser::ZoneStateInfo]) {
+        for z in zones {
+            let is_hero_zone = z.owner_seat_id.map(|s| s == self.player_seat_id).unwrap_or(false);
+            if z.zone_type == "ZoneType_Library" && is_hero_zone {
+                self.deck_tracker_library_instances = Some(z.object_instance_ids.clone());
+            }
+            for inst in &z.object_instance_ids {
+                self.instance_zone_map.insert(*inst, z.zone_id);
+                if let Some(seat) = z.owner_seat_id {
+                    self.instance_owner_map.insert(*inst, seat);
+                }
+            }
+        }
+    }
+
+    /// Recalculates cards currently outside the hero library, broken down by zone.
+    pub fn recalculate_deck_tracker(&mut self) {
+        if self.deck_tracker_initial_cards.is_empty() {
+            return;
+        }
+        let mut outside_counts: HashMap<u32, u32> = HashMap::new();
+        let mut hand_counts: HashMap<u32, u32> = HashMap::new();
+        let mut battlefield_counts: HashMap<u32, u32> = HashMap::new();
+        let mut graveyard_counts: HashMap<u32, u32> = HashMap::new();
+        let mut exile_counts: HashMap<u32, u32> = HashMap::new();
+
+        // Zone mapping:
+        // Hand: 31, 35
+        // Battlefield: 28
+        // Graveyard: 33, 37
+        // Exile: 29
+        // Stack: 27, Command: 26, Sideboard: 34, 38
+        let outside_zones = [26, 27, 28, 29, 31, 33, 34, 35, 37, 38];
+
+        for (inst, zone) in &self.instance_zone_map {
+            let owner = self.instance_owner_map.get(inst).copied().unwrap_or(0);
+            if owner == self.player_seat_id || (owner == 0 && self.instance_owner_map.is_empty()) {
+                if outside_zones.contains(zone) {
+                    if let Some(gid) = self.instance_map.get(inst).copied() {
+                        if !self.token_grp_ids.contains(&gid) && self.deck_tracker_initial_cards.contains_key(&gid) {
+                            *outside_counts.entry(gid).or_insert(0) += 1;
+                            if *zone == 31 || *zone == 35 {
+                                *hand_counts.entry(gid).or_insert(0) += 1;
+                            } else if *zone == 28 {
+                                *battlefield_counts.entry(gid).or_insert(0) += 1;
+                            } else if *zone == 33 || *zone == 37 {
+                                *graveyard_counts.entry(gid).or_insert(0) += 1;
+                            } else if *zone == 29 {
+                                *exile_counts.entry(gid).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also count any cards currently buffered in opening hand before turn 1 finalization
+        if !self.opening_hand_finalized {
+            for (_, gid) in &self.player_opening_hand {
+                if self.deck_tracker_initial_cards.contains_key(gid) {
+                    let entry = outside_counts.entry(*gid).or_insert(0);
+                    let initial = self.deck_tracker_initial_cards.get(gid).copied().unwrap_or(0);
+                    if *entry < initial {
+                        *entry += 1;
+                        *hand_counts.entry(*gid).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+        // Cap outside counts at initial counts for safety
+        for (gid, out_cnt) in outside_counts.iter_mut() {
+            if let Some(initial) = self.deck_tracker_initial_cards.get(gid) {
+                if *out_cnt > *initial {
+                    *out_cnt = *initial;
+                }
+            }
+        }
+
+        self.deck_tracker_outside_library = outside_counts;
+        self.deck_tracker_hand_cards = hand_counts;
+        self.deck_tracker_battlefield_cards = battlefield_counts;
+        self.deck_tracker_graveyard_cards = graveyard_counts;
+        self.deck_tracker_exile_cards = exile_counts;
+    }
+
     pub fn set_deck(&mut self, mut deck_name: String, deck_id: Option<String>, mut commander_id: Option<u32>, mut main_deck: Vec<u32>) {
         if deck_name.is_empty() {
             if let Some(did) = &deck_id {
@@ -619,8 +768,44 @@ impl MatchAssembler {
             }
             m.player_commander_id = commander_id;
         }
+        if self.deck_tracker_initial_cards.is_empty() && !main_deck.is_empty() {
+            for gid in &main_deck {
+                *self.deck_tracker_initial_cards.entry(*gid).or_insert(0) += 1;
+            }
+        }
         for grp_id in main_deck {
             *self.player_cards_seen.entry(grp_id).or_insert(0) += 1;
+        }
+    }
+
+    /// Sets the authoritative starting deck from GREMessageType_ConnectResp.
+    pub fn set_connect_deck(&mut self, deck_cards: &[u32], commander_cards: &[u32], system_seat_ids: &[u32]) {
+        // If match has not officially started yet, stage it in pending_connect_deck as well
+        if self.active_match.is_none() {
+            self.pending_connect_deck = Some((deck_cards.to_vec(), commander_cards.to_vec(), system_seat_ids.to_vec()));
+        }
+
+        if let Some(seat) = system_seat_ids.first() {
+            if *seat > 0 {
+                self.player_seat_id = *seat;
+            }
+        }
+        self.deck_tracker_initial_cards.clear();
+        for gid in deck_cards {
+            if *gid > 0 {
+                *self.deck_tracker_initial_cards.entry(*gid).or_insert(0) += 1;
+                *self.player_cards_seen.entry(*gid).or_insert(0) += 1;
+            }
+        }
+        if let Some(cmd) = commander_cards.first() {
+            if *cmd > 0 {
+                self.cached_commander_id = Some(*cmd);
+                if let Some(m) = &mut self.active_match {
+                    if m.player_commander_id.is_none() {
+                        m.player_commander_id = Some(*cmd);
+                    }
+                }
+            }
         }
     }
 
@@ -732,10 +917,12 @@ impl MatchAssembler {
                 if is_card && zone_id == 26 {
                     let seat = owner_seat.unwrap_or(0);
                     if let Some(m) = &mut self.active_match {
-                        if seat == self.player_seat_id && m.player_commander_id.is_none() {
+                        if (seat == self.player_seat_id || (seat == 0 && m.player_commander_id.is_none())) && m.player_commander_id.is_none() {
                             m.player_commander_id = Some(gid);
-                        } else if seat > 0 && seat != self.player_seat_id && m.opponent_commander_id.is_none() {
-                            m.opponent_commander_id = Some(gid);
+                        } else if (seat > 0 && seat != self.player_seat_id) || (seat == 0 && m.player_commander_id.is_some() && m.opponent_commander_id.is_none()) {
+                            if m.opponent_commander_id.is_none() {
+                                m.opponent_commander_id = Some(gid);
+                            }
                         }
                     }
                 }
@@ -2192,12 +2379,30 @@ impl MatchAssembler {
                     count: *count,
                 });
             }
+            if let Some(hero_cmd) = m.player_commander_id {
+                if !self.player_cards_seen.contains_key(&hero_cmd) {
+                    card_records.push(MatchCardRecord {
+                        grp_id: hero_cmd,
+                        is_opponent: false,
+                        count: 1,
+                    });
+                }
+            }
             for (grp_id, count) in &self.opp_cards_seen {
                 card_records.push(MatchCardRecord {
                     grp_id: *grp_id,
                     is_opponent: true,
                     count: *count,
                 });
+            }
+            if let Some(opp_cmd) = m.opponent_commander_id {
+                if !self.opp_cards_seen.contains_key(&opp_cmd) {
+                    card_records.push(MatchCardRecord {
+                        grp_id: opp_cmd,
+                        is_opponent: true,
+                        count: 1,
+                    });
+                }
             }
 
             // Evaluate Closer achievements with individual damage magnitude tiering

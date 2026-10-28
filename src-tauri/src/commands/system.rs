@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use crate::db::{self, DatabaseManager};
@@ -242,6 +242,280 @@ pub struct AvatarExtractResult {
     message: String,
 }
 
+#[derive(Serialize)]
+pub struct AvatarSyncStatus {
+    new_avatars_available: bool,
+    client_detected: bool,
+    client_bundle_mtime: u64,
+    last_synced_mtime: u64,
+    cached_avatar_count: u32,
+}
+
+/// Discovers the MTGA Downloads directory containing AssetBundle and ALT folders.
+fn find_mtga_downloads_dir() -> Option<PathBuf> {
+    // 1. Try from raw card db
+    if let Some(raw) = crate::card_db::find_latest_raw_card_db() {
+        if let Some(parent) = raw.parent() {
+            if parent.file_name().and_then(|s| s.to_str()) == Some("Raw") {
+                if let Some(dl) = parent.parent() {
+                    if dl.join("AssetBundle").exists() || dl.join("ALT").exists() {
+                        return Some(dl.to_path_buf());
+                    }
+                }
+            } else if parent.join("AssetBundle").exists() || parent.join("ALT").exists() {
+                return Some(parent.to_path_buf());
+            }
+        }
+    }
+
+    // 2. Try from settings / log path
+    let settings = crate::settings::load_settings();
+    let log_path = settings.mtga_log_path
+        .map(PathBuf::from)
+        .or_else(|| crate::tailer::discover_log_path());
+
+    if let Some(lp) = log_path {
+        let mut curr = lp.parent();
+        for _ in 0..8 {
+            if let Some(c) = curr {
+                let cand = c.join("MTGA_Data/Downloads");
+                if cand.exists() {
+                    return Some(cand);
+                }
+                if c.file_name().and_then(|s| s.to_str()) == Some("drive_c") {
+                    for sub in [
+                        "Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads",
+                        "Program Files (x86)/Wizards of the Coast/MTGA/MTGA_Data/Downloads",
+                        "Program Files/MTGA/MTGA_Data/Downloads",
+                        "Program Files (x86)/MTGA/MTGA_Data/Downloads",
+                        "MTGA/MTGA_Data/Downloads",
+                        "Games/MTGA/MTGA_Data/Downloads",
+                    ] {
+                        let sc = c.join(sub);
+                        if sc.exists() {
+                            return Some(sc);
+                        }
+                    }
+                }
+                curr = c.parent();
+            } else {
+                break;
+            }
+        }
+    }
+
+    // 3. Scan common paths
+    if let Some(home) = dirs::home_dir() {
+        let candidates = [
+            home.join(".steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            home.join(".steam/root/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            home.join(".local/share/Steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            home.join(".var/app/com.valvesoftware.Steam/.steam/steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/MTGA/MTGA_Data/Downloads"),
+            home.join("Games/magic-the-gathering-arena/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            home.join("Games/mtga/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            home.join("Games/Magic-The-Gathering-Arena/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            home.join(".local/share/lutris/runners/wine/mtga/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            home.join(".wine/drive_c/Program Files/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+            home.join(".wine/drive_c/Program Files (x86)/Wizards of the Coast/MTGA/MTGA_Data/Downloads"),
+        ];
+        for c in candidates {
+            if c.exists() {
+                return Some(c);
+            }
+        }
+    }
+
+    None
+}
+
+/// Finds the newest modification time among avatar asset bundles and ALT files.
+fn get_latest_client_avatar_mtime(downloads_dir: &Path) -> u64 {
+    let mut latest_mtime = 0u64;
+
+    // Check ALT directory
+    let alt_dir = downloads_dir.join("ALT");
+    if let Ok(entries) = std::fs::read_dir(&alt_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if name.starts_with("ALT_Avatar_") && name.ends_with(".mtga") {
+                    if let Ok(meta) = entry.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
+                                latest_mtime = latest_mtime.max(duration.as_secs());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check AssetBundle directory for BustPayload
+    let bundle_dir = downloads_dir.join("AssetBundle");
+    if let Ok(entries) = std::fs::read_dir(&bundle_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if name.starts_with("Bucket_Avatar.BustPayload_") && name.ends_with(".mtga") {
+                    if let Ok(meta) = entry.metadata() {
+                        if let Ok(modified) = meta.modified() {
+                            if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
+                                latest_mtime = latest_mtime.max(duration.as_secs());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    latest_mtime
+}
+
+#[tauri::command]
+pub async fn check_new_avatars_status(app: tauri::AppHandle) -> Result<AvatarSyncStatus, String> {
+    let out_dir = avatar_cache_dir(&app)?;
+    let cached_avatar_count = match std::fs::read_dir(&out_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("png"))
+            .count() as u32,
+        Err(_) => 0,
+    };
+
+    let downloads_opt = find_mtga_downloads_dir();
+    let client_detected = downloads_opt.is_some();
+
+    let client_bundle_mtime = if let Some(ref dl) = downloads_opt {
+        get_latest_client_avatar_mtime(dl)
+    } else {
+        0
+    };
+
+    let settings = crate::settings::load_settings();
+    let last_synced_mtime = settings.last_avatar_sync_bundle_mtime;
+
+    // New avatars are available if:
+    // 1. Client has avatar bundles, AND
+    // 2. Either cached avatar count is 0 (first sync needed), OR
+    //    client bundles have a newer mtime than what was previously synced.
+    let new_avatars_available = client_detected
+        && client_bundle_mtime > 0
+        && (cached_avatar_count == 0 || client_bundle_mtime > last_synced_mtime);
+
+    Ok(AvatarSyncStatus {
+        new_avatars_available,
+        client_detected,
+        client_bundle_mtime,
+        last_synced_mtime,
+        cached_avatar_count,
+    })
+}
+
+/// Ensures a working Python environment with UnityPy and Pillow is available.
+/// Returns the path to the python binary.
+fn resolve_or_bootstrap_python(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    // 1. Check dedicated rhystic-tracker data directory venv: ~/.local/share/rhystic-tracker/venv/bin/python3
+    let mut candidate_pythons = Vec::new();
+
+    if let Some(data_dir) = dirs::data_dir() {
+        candidate_pythons.push(data_dir.join("rhystic-tracker/venv/bin/python3"));
+        candidate_pythons.push(data_dir.join("rhystic-tracker/venv/bin/python"));
+    }
+
+    // 2. Check app config dir venv
+    if let Ok(cfg_dir) = app.path().app_config_dir() {
+        candidate_pythons.push(cfg_dir.join("venv/bin/python3"));
+        candidate_pythons.push(cfg_dir.join("venv/bin/python"));
+    }
+
+    // 3. Check legacy /tmp/unity_env/bin/python3
+    candidate_pythons.push(PathBuf::from("/tmp/unity_env/bin/python3"));
+
+    // 4. System pythons
+    candidate_pythons.push(PathBuf::from("python3"));
+    candidate_pythons.push(PathBuf::from("python"));
+
+    // Check if any existing candidate already has UnityPy and PIL installed
+    for py in &candidate_pythons {
+        let test_output = std::process::Command::new(py)
+            .args(["-c", "import UnityPy, PIL; print('OK')"])
+            .output();
+
+        if let Ok(out) = test_output {
+            if out.status.success() {
+                return Ok(py.clone());
+            }
+        }
+    }
+
+    // If none has UnityPy installed, bootstrap a persistent virtual environment in data_dir
+    let venv_dir = dirs::data_dir()
+        .map(|d| d.join("rhystic-tracker/venv"))
+        .or_else(|| app.path().app_config_dir().ok().map(|d| d.join("venv")))
+        .unwrap_or_else(|| std::env::temp_dir().join("rhystic-tracker-venv"));
+
+    let venv_python = if cfg!(windows) {
+        venv_dir.join("Scripts/python.exe")
+    } else {
+        venv_dir.join("bin/python3")
+    };
+
+    let venv_pip = if cfg!(windows) {
+        venv_dir.join("Scripts/pip.exe")
+    } else {
+        venv_dir.join("bin/pip")
+    };
+
+    // If the venv doesn't exist, create it
+    if !venv_python.exists() {
+        if let Some(parent) = venv_dir.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
+        let create_status = std::process::Command::new("python3")
+            .args(["-m", "venv", &venv_dir.to_string_lossy()])
+            .output();
+
+        if let Err(e) = create_status {
+            return Err(format!("Failed to create Python virtual environment via python3: {}", e));
+        }
+    }
+
+    // Install UnityPy and Pillow
+    if venv_pip.exists() {
+        let install_status = std::process::Command::new(&venv_pip)
+            .args(["install", "UnityPy", "Pillow"])
+            .output();
+
+        if let Ok(out) = install_status {
+            if !out.status.success() {
+                let err = String::from_utf8_lossy(&out.stderr);
+                return Err(format!("pip install UnityPy Pillow failed: {}", err));
+            }
+        } else if let Err(e) = install_status {
+            return Err(format!("Failed to run pip install: {}", e));
+        }
+    }
+
+    // Verify newly bootstrapped python
+    let verify = std::process::Command::new(&venv_python)
+        .args(["-c", "import UnityPy, PIL; print('OK')"])
+        .output();
+
+    if let Ok(out) = verify {
+        if out.status.success() {
+            return Ok(venv_python);
+        }
+        let err = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("Bootstrapped python failed verification: {}", err));
+    }
+
+    Err("Could not configure a valid Python environment with UnityPy and Pillow.".to_string())
+}
+
 /// Directory where custom background images uploaded by the user are stored.
 fn background_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
@@ -314,34 +588,46 @@ pub async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<A
         embedded_path
     };
 
-    let py_bins = ["/tmp/unity_env/bin/python3", "python3", "python"];
-    let mut script_ran = false;
+    let py_bin = match resolve_or_bootstrap_python(&app) {
+        Ok(p) => p,
+        Err(bootstrap_err) => {
+            return Ok(AvatarExtractResult {
+                success: false,
+                count: 0,
+                message: format!("Python environment error: {}. Please ensure Python 3 is installed.", bootstrap_err),
+            });
+        }
+    };
+
+    let output = std::process::Command::new(&py_bin)
+        .arg(&script)
+        .arg(&raw_arg)
+        .arg(&out_dir)
+        .arg(&log_arg)
+        .output();
+
     let mut last_error = String::new();
-
-    for py in &py_bins {
-        let output = std::process::Command::new(py)
-            .arg(&script)
-            .arg(&raw_arg)
-            .arg(&out_dir)
-            .arg(&log_arg)
-            .output();
-
-        match output {
-            Ok(out) => {
-                script_ran = true;
-                if out.status.success() {
-                    last_error.clear();
-                    break;
-                } else {
-                    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-                    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-                    let combined = format!("{} {}", stdout.trim(), stderr.trim());
-                    last_error = combined.trim().to_string();
-                }
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                let combined = format!("{} {}", stdout.trim(), stderr.trim());
+                last_error = combined.trim().to_string();
             }
-            Err(e) => {
-                last_error = format!("Failed to launch {}: {}", py, e);
-            }
+        }
+        Err(e) => {
+            last_error = format!("Failed to launch {:?}: {}", py_bin, e);
+        }
+    }
+
+    // Ensure default adventurer / NPE avatar fallback exists in local cache
+    let def_avatar = out_dir.join("default_adventurer.png");
+    if !def_avatar.exists() {
+        // If an NPE image was extracted, copy it over
+        let npe_cand = out_dir.join("Avatar_Basic_NPE.png");
+        if npe_cand.exists() {
+            let _ = std::fs::copy(&npe_cand, &def_avatar);
         }
     }
 
@@ -353,20 +639,22 @@ pub async fn extract_avatars_from_mtga_client(app: tauri::AppHandle) -> Result<A
         Err(_) => 0,
     };
 
-    if !script_ran {
-        return Ok(AvatarExtractResult {
-            success: false,
-            count,
-            message: "Python 3 is required to extract MTGA avatars. Please ensure python3 with UnityPy and Pillow is installed.".to_string(),
-        });
-    }
-
     if count == 0 && !last_error.is_empty() {
         return Ok(AvatarExtractResult {
             success: false,
             count: 0,
             message: format!("Avatar extraction failed: {}", last_error),
         });
+    }
+
+    // Update settings with latest synced bundle mtime if MTGA downloads dir is found
+    if let Some(dl) = find_mtga_downloads_dir() {
+        let latest_mtime = get_latest_client_avatar_mtime(&dl);
+        if latest_mtime > 0 {
+            let mut updated_settings = crate::settings::load_settings();
+            updated_settings.last_avatar_sync_bundle_mtime = latest_mtime;
+            let _ = crate::settings::save_settings(&updated_settings);
+        }
     }
 
     Ok(AvatarExtractResult {

@@ -8,6 +8,8 @@ import symbolIcon from '../assets/RhysticTrackerICON.svg';
 import { RoundTurnGroup } from './timeline/RoundTurnGroup';
 import { TurnActionRow } from './timeline/TurnActionRow';
 import { enrichActionsWithCombatContext } from './timeline/roundHighlightUtils';
+import { LiveDeckTrackerPanel } from './deck_tracker/LiveDeckTrackerPanel';
+import { invoke } from '@tauri-apps/api/core';
 
 interface LiveHUDViewProps {
   palette?: any;
@@ -1229,21 +1231,37 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
 
 
 
-          {/* Top Timeline Column Labels (Left = Opponent, Right = You) */}
-          <div className="flex items-center justify-between px-3.5 pt-0.5 shrink-0">
-            <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${leftColorClass} pl-1`}>
-              {leftLabel}
-            </div>
-            <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${rightColorClass} pr-1`}>
-              {rightLabel}
-            </div>
-          </div>
+          {/* MAIN TIMELINE & SIDEBAR ROW */}
+          <div className="flex-1 min-h-0 flex gap-2 overflow-hidden relative">
+            {/* Left-hand Docked Deck Tracker Rail */}
+            <LiveDeckTrackerPanel
+              trackerData={liveMatchState?.deck_tracker || null}
+              turn={liveMatchState?.turn || 1}
+              deckName={liveMatchState?.player_deck_name || 'Active Deck'}
+              formatName={liveMatchState?.format}
+              isOverlay={false}
+              onPopOut={() => {
+                invoke('open_deck_tracker_window').catch(console.error);
+              }}
+            />
 
-          {/* UNIFIED TIMELINE CONTAINER (Standardized bg-neutral-950/50, All Rounds Expanded by Default) */}
-          <div
-            ref={timelineRef}
-            className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md p-3 overflow-y-auto custom-scrollbar flex flex-col space-y-2.5"
-          >
+            {/* TIMELINE COLUMN WITH HEADER LABELS DIRECTLY ABOVE IT */}
+            <div className="flex-1 min-h-0 flex flex-col space-y-1 overflow-hidden">
+              {/* Top Timeline Column Labels (Left = Opponent, Right = You) */}
+              <div className="flex items-center justify-between px-3.5 pt-0.5 shrink-0">
+                <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${leftColorClass} pl-1`}>
+                  {leftLabel}
+                </div>
+                <div className={`text-[11px] font-sans font-black tracking-[0.15em] uppercase ${rightColorClass} pr-1`}>
+                  {rightLabel}
+                </div>
+              </div>
+
+              {/* UNIFIED TIMELINE CONTAINER (Standardized bg-neutral-950/50, All Rounds Expanded by Default) */}
+              <div
+                ref={timelineRef}
+                className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md p-3 overflow-y-auto custom-scrollbar flex flex-col space-y-2.5"
+              >
             {/* Opening Phase Row (if any) */}
             {openingEvents.length > 0 && (
               <div className="border-b border-white/10 pb-1 shrink-0">
@@ -1313,7 +1331,9 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
                 {query ? 'No matching actions found' : 'Awaiting first game actions...'}
               </p>
             )}
+            </div>
           </div>
+        </div>
 
           {/* BOTTOM ROW: LAST THREE ACTIONS TICKER */}
           <div className="p-2 border border-white/10 bg-white/[0.02] flex items-center justify-between gap-3 shrink-0 font-mono text-xs">

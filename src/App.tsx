@@ -29,6 +29,7 @@ import { FirstTimeSetupWizard } from './components/FirstTimeSetupWizard';
 import { AvatarOnboardingModal } from './components/AvatarOnboardingModal';
 import { WhatsNewModal } from './components/WhatsNewModal';
 import { NewSetReminderModal, DetectedSet } from './components/NewSetReminderModal';
+import { NewAvatarReminderModal } from './components/NewAvatarReminderModal';
 import { BlurredCardBackground } from './components/BlurredCardBackground';
 import { MemoryStatsPanel } from './components/MemoryStatsPanel';
 import logoImg from './assets/RhysticTrackerLogo.svg';
@@ -237,26 +238,72 @@ export default function App() {
     }
   }, []);
 
-  // One-time What's New Splash Modal for v1.5.3 (New Dashboard Widgets)
+  // New Avatars Reminder Modal
+  const [showAvatarReminder, setShowAvatarReminder] = useState(false);
+  const [avatarReminderData, setAvatarReminderData] = useState<{ cachedCount: number; bundleMtime: number }>({
+    cachedCount: 0,
+    bundleMtime: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkNewAvatars = async () => {
+      try {
+        const status = await invoke<{
+          new_avatars_available: boolean;
+          client_detected: boolean;
+          client_bundle_mtime: number;
+          last_synced_mtime: number;
+          cached_avatar_count: number;
+        }>('check_new_avatars_status');
+
+        if (cancelled) return;
+
+        const dismissedMtime = Number(localStorage.getItem('rhystic_dismissed_avatar_bundle_mtime') || '0');
+        if (
+          status.new_avatars_available &&
+          status.client_bundle_mtime > dismissedMtime
+        ) {
+          setAvatarReminderData({
+            cachedCount: status.cached_avatar_count,
+            bundleMtime: status.client_bundle_mtime,
+          });
+          setShowAvatarReminder(true);
+        }
+      } catch (err) {
+        // Silently ignore if MTGA not installed or status check error
+      }
+    };
+
+    const timer = setTimeout(checkNewAvatars, 3500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  // One-time What's New Splash Modal for v1.8.0 (Live Deck Tracker Pop-Up)
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   useEffect(() => {
-    const seen = localStorage.getItem('rhystic_whats_new_1_5_3_seen');
+    const seen = localStorage.getItem('rhystic_whats_new_1_8_0_seen');
     if (!seen) {
       setShowWhatsNew(true);
     }
   }, []);
 
   const handleDismissWhatsNew = () => {
-    localStorage.setItem('rhystic_whats_new_1_5_3_seen', 'true');
+    localStorage.setItem('rhystic_whats_new_1_8_0_seen', 'true');
     setShowWhatsNew(false);
   };
 
-  const handleOpenCustomizeFromWhatsNew = () => {
+  const handleOpenDeckTrackerFromWhatsNew = () => {
     handleDismissWhatsNew();
-    setActiveTab('dashboard');
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('rhystic-open-dashboard-customize'));
-    }, 100);
+    invoke('open_deck_tracker_window').catch(console.error);
+  };
+
+  const handleOpenSettingsFromWhatsNew = () => {
+    handleDismissWhatsNew();
+    setActiveTab('settings');
   };
 
   // Listen for navigation events from the system tray menu
@@ -763,6 +810,9 @@ export default function App() {
             if (localStorage.getItem('autoSwitchLiveHud') === 'true') {
               setActiveTab('live');
             }
+            if (localStorage.getItem('autoOpenDeckTracker') === 'true') {
+              invoke('open_deck_tracker_window').catch(console.error);
+            }
           }
           setLiveMatchState({
             status: 'IN_MATCH',
@@ -783,6 +833,7 @@ export default function App() {
             opponent_cards_seen: liveState.opponent_cards_seen || 0,
             last_event: liveState.last_event,
             recent_events: liveState.recent_events || [],
+            deck_tracker: liveState.deck_tracker || null,
           });
         } else if (liveState && liveState.just_completed) {
           // Keep the HUD up showing the result overlay instead of blanking.
@@ -1008,6 +1059,8 @@ export default function App() {
       return { bg: '#5B699418', fg: '#8C9AC4', border: '#5B699438' };
     } else if (f.includes('draft') || f.includes('sealed') || f.includes('limited')) {
       return { bg: '#D4A23718', fg: '#E2BF6F', border: '#D4A23738' };
+    } else if (f.includes('starter deck') || f.includes('precon')) {
+      return { bg: '#3D7D7D18', fg: '#6EA8A8', border: '#3D7D7D38' };
     } else if (f.includes('bot') || f.includes('sparky')) {
       return { bg: '#3D7D7D18', fg: '#6EA8A8', border: '#3D7D7D38' };
     } else if (f.includes('direct') || f.includes('challenge') || f.includes('friendly')) {
@@ -1574,12 +1627,13 @@ export default function App() {
         <AvatarOnboardingModal onClose={() => setShowAvatarOnboarding(false)} />
       )}
 
-      {/* ONE-TIME WHAT'S NEW SPLASH MODAL (v1.5.3 DASHBOARD WIDGETS) */}
+      {/* ONE-TIME WHAT'S NEW SPLASH MODAL (v1.8.0 LIVE DECK TRACKER) */}
       {showWhatsNew && !showSplash && !showSetupWizard && !showAvatarOnboarding && (
         <WhatsNewModal
           isOpen={showWhatsNew}
           onClose={handleDismissWhatsNew}
-          onOpenCustomize={handleOpenCustomizeFromWhatsNew}
+          onOpenDeckTracker={handleOpenDeckTrackerFromWhatsNew}
+          onOpenSettings={handleOpenSettingsFromWhatsNew}
         />
       )}
 
@@ -1593,6 +1647,19 @@ export default function App() {
           palette={palette}
           onSyncComplete={() => {
             setCollectionRefreshTrigger((prev) => prev + 1);
+          }}
+        />
+      )}
+
+      {/* NEW AVATARS DETECTED REMINDER MODAL */}
+      {showAvatarReminder && !showSplash && !showSetupWizard && !showAvatarOnboarding && (
+        <NewAvatarReminderModal
+          isOpen={showAvatarReminder}
+          onClose={() => setShowAvatarReminder(false)}
+          cachedCount={avatarReminderData.cachedCount}
+          bundleMtime={avatarReminderData.bundleMtime}
+          onSyncComplete={(count) => {
+            setAvatarReminderData(prev => ({ ...prev, cachedCount: count }));
           }}
         />
       )}

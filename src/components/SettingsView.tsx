@@ -54,6 +54,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [liveHudAlwaysOnTop, setLiveHudAlwaysOnTop] = useState(() => {
     return localStorage.getItem('liveHudAlwaysOnTop') === 'true';
   });
+  const [autoOpenDeckTracker, setAutoOpenDeckTracker] = useState(() => {
+    return localStorage.getItem('autoOpenDeckTracker') === 'true';
+  });
+  const [rememberDeckTrackerPosition, setRememberDeckTrackerPosition] = useState(() => {
+    return localStorage.getItem('rememberDeckTrackerPosition') !== 'false';
+  });
   const [enableAudioCues, setEnableAudioCues] = useState(() => {
     return localStorage.getItem('enableAudioCues') !== 'false';
   });
@@ -313,6 +319,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } catch (e) {
       console.error('Failed to set always on top:', e);
     }
+  };
+
+  const handleToggleAutoOpenDeckTracker = (val: boolean) => {
+    setAutoOpenDeckTracker(val);
+    localStorage.setItem('autoOpenDeckTracker', String(val));
+  };
+
+  const handleToggleRememberDeckTrackerPosition = (val: boolean) => {
+    setRememberDeckTrackerPosition(val);
+    localStorage.setItem('rememberDeckTrackerPosition', String(val));
   };
 
   const handleToggleAudioCues = (val: boolean) => {
@@ -746,6 +762,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const matchMinimize = matchesSearch(['minimize', 'tray', 'background', 'system tray', 'close', 'desktop', 'lifecycle', 'window']);
   const matchAutoSwitch = matchesSearch(['auto-switch', 'auto switch', 'live match', 'live hud', 'game start', 'automatic', 'tab switch']);
   const matchAlwaysOnTop = matchesSearch(['always on top', 'pin window', 'floating', 'overlay', 'window pin', 'hud pin', 'borderless']);
+  const matchAutoOpenDeckTracker = matchesSearch(['deck tracker', 'live deck tracker', 'overlay', 'auto open', 'remember position', 'screen position', 'pop up', 'floating deck']);
   const matchAudioCues = matchesSearch(['audio', 'sound', 'cues', 'sound effects', 'alerts', 'notifications', 'victory fanfare', 'chime']);
   const matchExcludeSparky = matchesSearch(['sparky', 'bot', 'tutorial', 'color challenge', 'exclude bot', 'practice', 'filter bot']);
   const matchAutoExport = matchesSearch(['auto-export', 'export', 'csv', 'json', 'spreadsheet', 'match archive', 'dump']);
@@ -911,13 +928,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* ========================================================================= */}
           {/* SECTION: GENERAL & BEHAVIOR                                              */}
           {/* ========================================================================= */}
-          {(!isSearching ? activeTab === 'general' : (matchMinimize || matchAutoSwitch || matchAlwaysOnTop || matchAudioCues || matchExcludeSparky || matchAutoExport || matchConfirmDelete || matchAllowDelete || matchStartupTab || matchPersistDashboardPage || matchSetupWizard)) && (
+          {(!isSearching ? activeTab === 'general' : (matchMinimize || matchAutoSwitch || matchAlwaysOnTop || matchAutoOpenDeckTracker || matchAudioCues || matchExcludeSparky || matchAutoExport || matchConfirmDelete || matchAllowDelete || matchStartupTab || matchPersistDashboardPage || matchSetupWizard)) && (
             <GeneralTab
               palette={palette}
               isSearching={isSearching}
               matchMinimize={matchMinimize}
               matchAutoSwitch={matchAutoSwitch}
               matchAlwaysOnTop={matchAlwaysOnTop}
+              matchAutoOpenDeckTracker={matchAutoOpenDeckTracker}
               matchAudioCues={matchAudioCues}
               matchExcludeSparky={matchExcludeSparky}
               matchConfirmDelete={matchConfirmDelete}
@@ -929,6 +947,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               minimizeToTray={minimizeToTray}
               autoSwitchLiveHud={autoSwitchLiveHud}
               liveHudAlwaysOnTop={liveHudAlwaysOnTop}
+              autoOpenDeckTracker={autoOpenDeckTracker}
+              rememberDeckTrackerPosition={rememberDeckTrackerPosition}
               excludeSparkyMatches={excludeSparkyMatches}
               enableAudioCues={enableAudioCues}
               confirmDeckDelete={confirmDeckDelete}
@@ -942,6 +962,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               onToggleMinimizeToTray={handleToggleMinimizeToTray}
               onToggleAutoSwitchLiveHud={handleToggleAutoSwitchLiveHud}
               onToggleAlwaysOnTop={handleToggleAlwaysOnTop}
+              onToggleAutoOpenDeckTracker={handleToggleAutoOpenDeckTracker}
+              onToggleRememberDeckTrackerPosition={handleToggleRememberDeckTrackerPosition}
               onToggleExcludeSparky={handleToggleExcludeSparky}
               onToggleAudioCues={handleToggleAudioCues}
               onToggleConfirmDeckDelete={handleToggleConfirmDeckDelete}

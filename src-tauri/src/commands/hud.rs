@@ -6,6 +6,31 @@ use sqlx::Row;
 #[derive(Clone)]
 pub struct SharedMatchState(pub std::sync::Arc<tokio::sync::Mutex<MatchAssembler>>);
 
+/// Hypergeometric calculation: probability of drawing at least 1 desired card in `draws` draws.
+/// Formula: P(X >= 1) = 1 - binom(N - K, n) / binom(N, n)
+fn calculate_hypergeom_odds(k: u32, n_deck: u32, draws: u32) -> f64 {
+    if k == 0 || n_deck == 0 || draws == 0 {
+        return 0.0;
+    }
+    if k >= n_deck {
+        return 100.0;
+    }
+    let n = draws.min(n_deck);
+    if n_deck - k < n {
+        return 100.0;
+    }
+
+    let mut prob_zero = 1.0f64;
+    for i in 0..n {
+        let num = (n_deck - k - i) as f64;
+        let den = (n_deck - i) as f64;
+        prob_zero *= num / den;
+    }
+
+    let prob_at_least_one = (1.0 - prob_zero) * 100.0;
+    prob_at_least_one.clamp(0.0, 100.0)
+}
+
 #[tauri::command]
 pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> Result<serde_json::Value, String> {
     let (active_opt, completed_opt) = {
@@ -40,6 +65,13 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
                     assembler.player_cards_seen.keys().copied().collect::<Vec<u32>>(),
                     assembler.opp_cards_seen.keys().copied().collect::<Vec<u32>>(),
                     last_event,
+                    assembler.deck_tracker_initial_cards.clone(),
+                    assembler.deck_tracker_outside_library.clone(),
+                    assembler.deck_tracker_hand_cards.clone(),
+                    assembler.deck_tracker_battlefield_cards.clone(),
+                    assembler.deck_tracker_graveyard_cards.clone(),
+                    assembler.deck_tracker_exile_cards.clone(),
+                    assembler.deck_tracker_library_instances.clone(),
                 )),
                 None,
             )
@@ -68,8 +100,40 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
         player_cards_seen,
         opp_cards_seen,
         last_event,
+        dt_initial_cards,
+        dt_outside_cards,
+        dt_hand_cards,
+        dt_battlefield_cards,
+        dt_graveyard_cards,
+        dt_exile_cards,
+        dt_library_instances,
     )) = active_opt {
         let db = DatabaseManager::init().await.map_err(|e| e.to_string())?;
+
+        // Fallback: If dt_initial_cards is empty, check known decklists in db for player_deck_name
+        let mut dt_initial_cards = dt_initial_cards;
+        if dt_initial_cards.is_empty() && !active.player_deck_name.is_empty() && active.player_deck_name != "Selected Deck" {
+            let clean_name = active.player_deck_name.replace('\'', "").replace('"', "");
+            let row: Option<(String,)> = sqlx::query_as(
+                "SELECT cards_json FROM deck_lists WHERE REPLACE(REPLACE(deck_name, '''', ''), '\"', '') = ? COLLATE NOCASE LIMIT 1"
+            )
+            .bind(&clean_name)
+            .fetch_optional(db.pool())
+            .await
+            .unwrap_or(None);
+
+            if let Some((cards_json,)) = row {
+                if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&cards_json) {
+                    for entry in entries {
+                        let gid = entry.get("grp_id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let count = entry.get("count").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        if gid > 0 && count > 0 {
+                            *dt_initial_cards.entry(gid).or_insert(0) += count;
+                        }
+                    }
+                }
+            }
+        }
 
         // Collect all unique grp_ids across turn events, life events, damage events, commanders, and seen cards
         let mut needed_gids: std::collections::HashSet<i64> = std::collections::HashSet::new();
@@ -102,6 +166,7 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
         if let Some(gid) = active.opponent_commander_id { needed_gids.insert(gid as i64); }
         for &gid in &player_cards_seen { needed_gids.insert(gid as i64); }
         for &gid in &opp_cards_seen { needed_gids.insert(gid as i64); }
+        for &gid in dt_initial_cards.keys() { needed_gids.insert(gid as i64); }
 
         let gid_list: Vec<i64> = needed_gids.into_iter().collect();
         let meta_map = card_db::get_batch_card_metadata(db.pool(), &gid_list).await.unwrap_or_default();
@@ -311,6 +376,136 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
             opp_colors = order.iter().filter(|c| os.contains(**c)).map(|c| c.to_string()).collect();
         }
 
+        // Live Deck Tracker computation
+        let mut live_deck_tracker = serde_json::Value::Null;
+        if !dt_initial_cards.is_empty() {
+            let initial_total: u32 = dt_initial_cards.values().sum();
+            let outside_total: u32 = dt_outside_cards.values().sum();
+            
+            // Current remaining cards in library:
+            // Prefer actual library instance count if reported, else initial_total - outside_total
+            let total_library_cards = if let Some(ref lib_insts) = dt_library_instances {
+                lib_insts.len() as u32
+            } else {
+                initial_total.saturating_sub(outside_total)
+            };
+
+            let mut tracker_cards = Vec::new();
+            let mut lands_initial = 0u32;
+            let mut lands_remaining = 0u32;
+            let mut creatures_remaining = 0u32;
+            let mut spells_remaining = 0u32;
+
+            for (gid, initial_cnt) in &dt_initial_cards {
+                let out_cnt = dt_outside_cards.get(gid).copied().unwrap_or(0);
+                let remaining_cnt = initial_cnt.saturating_sub(out_cnt);
+                let meta = meta_map.get(&(*gid as i64));
+                let name = meta.map(|m| m.name.clone()).unwrap_or_else(|| format!("Card #{}", gid));
+                let mana_cost = meta.and_then(|m| m.mana_cost.clone());
+                let cmc = meta.map(|m| m.cmc).unwrap_or(0);
+                let rarity = meta.map(|m| m.rarity).unwrap_or(1);
+                let card_type = meta.and_then(|m| m.card_type.clone());
+                let type_lower = card_type.as_deref().unwrap_or("").to_lowercase();
+                let is_land = type_lower.contains("land");
+                let is_creature = type_lower.contains("creature");
+
+                if is_land {
+                    lands_initial += *initial_cnt;
+                    lands_remaining += remaining_cnt;
+                } else if is_creature {
+                    creatures_remaining += remaining_cnt;
+                } else {
+                    // Non-creature spells (instants, sorceries, artifacts, enchantments, planeswalkers, battles)
+                    spells_remaining += remaining_cnt;
+                }
+
+                let odds_next = calculate_hypergeom_odds(remaining_cnt, total_library_cards, 1);
+                let odds_in_2 = calculate_hypergeom_odds(remaining_cnt, total_library_cards, 2);
+                let odds_in_3 = calculate_hypergeom_odds(remaining_cnt, total_library_cards, 3);
+
+                let in_hand = dt_hand_cards.get(gid).copied().unwrap_or(0);
+                let on_battlefield = dt_battlefield_cards.get(gid).copied().unwrap_or(0);
+                let in_graveyard = dt_graveyard_cards.get(gid).copied().unwrap_or(0);
+                let in_exile = dt_exile_cards.get(gid).copied().unwrap_or(0);
+
+                tracker_cards.push(serde_json::json!({
+                    "grp_id": gid,
+                    "name": name,
+                    "mana_cost": mana_cost,
+                    "cmc": cmc,
+                    "rarity": rarity,
+                    "card_type": card_type,
+                    "is_land": is_land,
+                    "initial_count": initial_cnt,
+                    "remaining_count": remaining_cnt,
+                    "in_hand": in_hand,
+                    "on_battlefield": on_battlefield,
+                    "in_graveyard": in_graveyard,
+                    "in_exile": in_exile,
+                    "odds_next": odds_next,
+                    "odds_in_2": odds_in_2,
+                    "odds_in_3": odds_in_3,
+                }));
+            }
+
+            // Sort cards by CMC ascending, then name
+            tracker_cards.sort_by(|a, b| {
+                let a_cmc = a.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
+                let b_cmc = b.get("cmc").and_then(|v| v.as_i64()).unwrap_or(0);
+                if a_cmc != b_cmc {
+                    a_cmc.cmp(&b_cmc)
+                } else {
+                    let a_name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    let b_name = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    a_name.cmp(b_name)
+                }
+            });
+
+            let land_odds_next = calculate_hypergeom_odds(lands_remaining, total_library_cards, 1);
+            let creature_odds_next = calculate_hypergeom_odds(creatures_remaining, total_library_cards, 1);
+            let spell_odds_next = calculate_hypergeom_odds(spells_remaining, total_library_cards, 1);
+
+            let land_odds_in_2 = calculate_hypergeom_odds(lands_remaining, total_library_cards, 2);
+            let land_odds_in_3 = calculate_hypergeom_odds(lands_remaining, total_library_cards, 3);
+
+            let commander_json = player_cmdr.as_ref().map(|c| {
+                serde_json::json!({
+                    "grp_id": c.grp_id,
+                    "name": c.name,
+                    "mana_cost": c.mana_cost,
+                    "cmc": c.cmc,
+                    "rarity": c.rarity,
+                    "card_type": c.card_type,
+                    "is_land": false,
+                    "initial_count": 1,
+                    "remaining_count": 0,
+                    "in_hand": 0,
+                    "on_battlefield": 0,
+                    "in_graveyard": 0,
+                    "in_exile": 0,
+                    "odds_next": 0.0,
+                    "odds_in_2": 0.0,
+                    "odds_in_3": 0.0,
+                })
+            });
+
+            live_deck_tracker = serde_json::json!({
+                "initial_total": initial_total,
+                "total_library_cards": total_library_cards,
+                "lands_initial": lands_initial,
+                "lands_remaining": lands_remaining,
+                "creatures_remaining": creatures_remaining,
+                "spells_remaining": spells_remaining,
+                "land_odds_next": land_odds_next,
+                "creature_odds_next": creature_odds_next,
+                "spell_odds_next": spell_odds_next,
+                "land_odds_in_2": land_odds_in_2,
+                "land_odds_in_3": land_odds_in_3,
+                "commander": commander_json,
+                "cards": tracker_cards,
+            });
+        }
+
         Ok(serde_json::json!({
             "is_active": true,
             "match_id": active.match_id,
@@ -331,6 +526,7 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
             "turn_events_count": turn_events.len(),
             "last_event": last_event,
             "recent_events": recent_events,
+            "deck_tracker": live_deck_tracker,
         }))
     } else {
         // No active match. If a match just completed, keep reporting its result
@@ -605,4 +801,55 @@ pub async fn get_live_match_state(state: tauri::State<'_, SharedMatchState>) -> 
             "is_active": false
         }))
     }
+}
+
+#[tauri::command]
+pub async fn open_deck_tracker_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(existing) = app.get_webview_window("live-deck-tracker") {
+        let _ = existing.show();
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        return Ok(());
+    }
+
+    let settings = crate::settings::load_settings();
+
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        "live-deck-tracker",
+        tauri::WebviewUrl::App("index.html#/overlay/deck-tracker".into()),
+    )
+    .title("Rhystic Tracker — Live Deck Tracker")
+    .inner_size(280.0, 560.0)
+    .min_inner_size(60.0, 120.0)
+    .resizable(true)
+    .always_on_top(true)
+    .decorations(false)
+    .transparent(false)
+    .devtools(true);
+
+    if let Some((x, y)) = settings.deck_tracker_position {
+        builder = builder.position(x, y);
+    }
+
+    builder.build().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn save_deck_tracker_position(x: f64, y: f64) -> Result<(), String> {
+    let mut settings = crate::settings::load_settings();
+    settings.deck_tracker_position = Some((x, y));
+    crate::settings::save_settings(&settings)
+}
+
+#[tauri::command]
+pub async fn close_deck_tracker_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(existing) = app.get_webview_window("live-deck-tracker") {
+        let _ = existing.close();
+    }
+    Ok(())
 }

@@ -10,6 +10,7 @@ export interface GeneralTabProps {
   matchMinimize: boolean;
   matchAutoSwitch: boolean;
   matchAlwaysOnTop: boolean;
+  matchAutoOpenDeckTracker?: boolean;
   matchAudioCues: boolean;
   matchExcludeSparky: boolean;
   matchConfirmDelete: boolean;
@@ -23,6 +24,8 @@ export interface GeneralTabProps {
   minimizeToTray: boolean;
   autoSwitchLiveHud: boolean;
   liveHudAlwaysOnTop: boolean;
+  autoOpenDeckTracker?: boolean;
+  rememberDeckTrackerPosition?: boolean;
   excludeSparkyMatches: boolean;
   enableAudioCues: boolean;
   confirmDeckDelete: boolean;
@@ -40,6 +43,8 @@ export interface GeneralTabProps {
   onToggleMinimizeToTray: (val: boolean) => void;
   onToggleAutoSwitchLiveHud: (val: boolean) => void;
   onToggleAlwaysOnTop: (val: boolean) => void;
+  onToggleAutoOpenDeckTracker?: (val: boolean) => void;
+  onToggleRememberDeckTrackerPosition?: (val: boolean) => void;
   onToggleExcludeSparky: (val: boolean) => void;
   onToggleAudioCues: (val: boolean) => void;
   onToggleConfirmDeckDelete: (val: boolean) => void;
@@ -57,6 +62,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   matchMinimize,
   matchAutoSwitch,
   matchAlwaysOnTop,
+  matchAutoOpenDeckTracker,
   matchAudioCues,
   matchExcludeSparky,
   matchConfirmDelete,
@@ -68,6 +74,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   minimizeToTray,
   autoSwitchLiveHud,
   liveHudAlwaysOnTop,
+  autoOpenDeckTracker,
+  rememberDeckTrackerPosition,
   excludeSparkyMatches,
   enableAudioCues,
   confirmDeckDelete,
@@ -81,6 +89,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   onToggleMinimizeToTray,
   onToggleAutoSwitchLiveHud,
   onToggleAlwaysOnTop,
+  onToggleAutoOpenDeckTracker,
+  onToggleRememberDeckTrackerPosition,
   onToggleExcludeSparky,
   onToggleAudioCues,
   onToggleConfirmDeckDelete,
@@ -193,6 +203,68 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                     style={liveHudAlwaysOnTop ? { backgroundColor: MTG_COLORS.green.base } : undefined}
                     className={`inline-block h-3.5 w-3.5 transform transition-transform ${
                       liveHudAlwaysOnTop ? 'translate-x-5' : 'translate-x-0.5 bg-neutral-500'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
+
+            {/* Auto Open Live Deck Tracker Popup */}
+            {(matchAutoOpenDeckTracker || !isSearching) && (
+              <div className="flex items-center justify-between py-3">
+                <div className="space-y-0.5 pr-4">
+                  <p className="text-xs font-bold text-white uppercase tracking-wide font-sans">
+                    Auto-Open Live Deck Tracker Overlay
+                  </p>
+                  <p className="text-xs font-sans text-neutral-400">
+                    Automatically launch the floating, detached live deck tracker pop-up window when a new match begins.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoOpenDeckTracker}
+                  onClick={() => onToggleAutoOpenDeckTracker?.(!autoOpenDeckTracker)}
+                  style={autoOpenDeckTracker ? { backgroundColor: MTG_COLORS.green.bg, borderColor: MTG_COLORS.green.border } : undefined}
+                  className={`relative inline-flex items-center h-5 w-10 shrink-0 cursor-pointer border transition-colors ${
+                    autoOpenDeckTracker ? '' : 'bg-white/[0.04] border-white/15'
+                  }`}
+                >
+                  <span
+                    style={autoOpenDeckTracker ? { backgroundColor: MTG_COLORS.green.base } : undefined}
+                    className={`inline-block h-3.5 w-3.5 transform transition-transform ${
+                      autoOpenDeckTracker ? 'translate-x-5' : 'translate-x-0.5 bg-neutral-500'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
+
+            {/* Remember Deck Tracker Window Position */}
+            {(matchAutoOpenDeckTracker || !isSearching) && (
+              <div className="flex items-center justify-between py-3">
+                <div className="space-y-0.5 pr-4">
+                  <p className="text-xs font-bold text-white uppercase tracking-wide font-sans">
+                    Remember Deck Tracker Screen Position
+                  </p>
+                  <p className="text-xs font-sans text-neutral-400">
+                    Preserve the exact screen coordinates where you last dragged the deck tracker pop-up on this machine.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={rememberDeckTrackerPosition}
+                  onClick={() => onToggleRememberDeckTrackerPosition?.(!rememberDeckTrackerPosition)}
+                  style={rememberDeckTrackerPosition ? { backgroundColor: MTG_COLORS.green.bg, borderColor: MTG_COLORS.green.border } : undefined}
+                  className={`relative inline-flex items-center h-5 w-10 shrink-0 cursor-pointer border transition-colors ${
+                    rememberDeckTrackerPosition ? '' : 'bg-white/[0.04] border-white/15'
+                  }`}
+                >
+                  <span
+                    style={rememberDeckTrackerPosition ? { backgroundColor: MTG_COLORS.green.base } : undefined}
+                    className={`inline-block h-3.5 w-3.5 transform transition-transform ${
+                      rememberDeckTrackerPosition ? 'translate-x-5' : 'translate-x-0.5 bg-neutral-500'
                     }`}
                   />
                 </button>

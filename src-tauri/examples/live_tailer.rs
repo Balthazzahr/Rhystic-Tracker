@@ -146,6 +146,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ParsedEvent::MasteryPassUpdate(pass) => {
                     println!("[LIVE TEST RUNNER] Mastery Pass: {} (Level {} - {}/{} XP, Orbs: {})", pass.pass_id, pass.current_level, pass.current_xp, pass.xp_per_level, pass.orbs);
                 }
+                ParsedEvent::ConnectDeck { deck_cards, commander_cards, .. } => {
+                    println!("[LIVE TEST RUNNER] ConnectDeck: {} cards, {} commanders", deck_cards.len(), commander_cards.len());
+                }
                 ParsedEvent::Unknown => {}
             }
         }

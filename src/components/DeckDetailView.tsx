@@ -47,6 +47,8 @@ const formatChipColor = (formatStr?: string) => {
     return { bg: '#5B699418', fg: '#8C9AC4', border: '#5B699438' };
   } else if (f.includes('draft') || f.includes('sealed') || f.includes('limited')) {
     return { bg: '#D4A23718', fg: '#E2BF6F', border: '#D4A23738' };
+  } else if (f.includes('starter deck') || f.includes('precon')) {
+    return { bg: '#3D7D7D18', fg: '#6EA8A8', border: '#3D7D7D38' };
   } else if (f.includes('bot') || f.includes('sparky')) {
     return { bg: '#3D7D7D18', fg: '#6EA8A8', border: '#3D7D7D38' };
   } else if (f.includes('direct') || f.includes('challenge') || f.includes('friendly')) {

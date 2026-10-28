@@ -11,6 +11,10 @@ pub struct AppSettings {
     pub minimize_to_tray: bool,
     #[serde(default)]
     pub setup_completed: bool,
+    #[serde(default)]
+    pub last_avatar_sync_bundle_mtime: u64,
+    #[serde(default)]
+    pub deck_tracker_position: Option<(f64, f64)>,
 }
 
 fn default_minimize_to_tray() -> bool {
@@ -24,6 +28,8 @@ impl Default for AppSettings {
             mtga_raw_dir: None,
             minimize_to_tray: true,
             setup_completed: false,
+            last_avatar_sync_bundle_mtime: 0,
+            deck_tracker_position: None,
         }
     }
 }

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.7.8-38BDF8?style=flat-square&logo=git" alt="Version 1.7.8" /></a>
+  <a href="https://github.com/Balthazzahr/Rhystic-Tracker/releases"><img src="https://img.shields.io/badge/version-1.8.0-38BDF8?style=flat-square&logo=git" alt="Version 1.8.0" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Steam%20Deck-1793D1?style=flat-square&logo=linux" alt="Cross-Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%20v2%20%7C%20Rust%20%7C%20React-24C8D8?style=flat-square&logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/database-SQLite-003B57?style=flat-square&logo=sqlite" alt="SQLite" />
@@ -46,7 +46,7 @@ Built with **Tauri v2**, **Rust**, **React 18**, and **TypeScript**, it delivers
 - 🧙‍♂️ **First-Time Setup Wizard & Dynamic Discovery**: Guided 3-step setup with real-time log detection across all prefixes, plus instant startup card indexing (26,000+ cards in ~150ms).
 - 🏅 **Comprehensive MTGA Formats Coverage**: Native categorization and distinct colored badges for all 13 formats (Standard, Standard Brawl, Brawl, Alchemy, Historic, Timeless, Explorer, Draft, Sealed, Bot Match with precon resolution, Direct Challenge, Midweek Magic, and Gladiator).
 - 📊 **Dashboard & Time-Series Win Rate Analytics**: Today's and all-time records, active streak counter, daily match grouping, overhauled 3x2 format breakdown, and time-series graph with 5 time windows (`Today`, `7 Days`, `30 Days`, `12 Months`, `All Time`), dual-colored 50% threshold trend line (green/red), and volume histograms.
-- ⚔️ **Live Match HUD**: Real-time game state tracker showing hero/opponent commanders, life swings, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions with authentic MTG font icons.
+- ⚔️ **Live Match HUD & Floating Deck Tracker Pop-Up**: Real-time game state tracker showing hero/opponent commanders, life swings, card plays, token creations, death/exile logs, and detailed combat/spell damage attributions. Includes an always-on-top, movable pop-out window with live hypergeometric draw odds (Lands, Creatures, Spells), foldable zones (Hand, Battlefield, Dead), Brawl Command Zone, and smart coordinate persistence.
 - 📈 **Lifetime Card Combat Analytics**: Persistent per-card metrics — win rate when cast, total damage dealt (face vs permanent splits), combat vs spell classification, MVP decks, and turn cast frequency histograms.
 - 🎴 **Deck Library & 3-Column Inspector**: Automatic and manual True-decklist management, starter deck exclusions, responsive 3-column decklist expansion for widescreen displays, enlarged mana distribution pie chart, and centered `MANA VALUE` histogram pill overlay.
 - 🖼️ **Card Library & Real-Time Collection Sync**: Visual collection explorer synced with submitted decks, calibrated 4×3 full-card grid, 4-diamond interactive ownership controls, and persistent alternate set printing selection.

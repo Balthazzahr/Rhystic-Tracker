@@ -1,6 +1,6 @@
 # Rhystic Tracker — Official User Manual & Setup Guide
 
-Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.7.8**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux, macOS, or Windows environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
+Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v1.8.0**. This document explains how Rhystic Tracker operates under the hood, how to configure your Linux, macOS, or Windows environment, how to use every feature and analytical tool, and how to troubleshoot common questions.
 
 ---
 
@@ -28,6 +28,7 @@ Welcome to the comprehensive user manual and setup guide for **Rhystic Tracker v
    - [Comprehensive MTGA Formats Coverage](#comprehensive-mtga-formats-coverage)
    - [Mulligan Tracking & Opening Phase Replay](#mulligan-tracking--opening-phase-replay)
    - [Live Match HUD & Real-Time Combat Feed](#live-match-hud--real-time-combat-feed)
+   - [Live Deck Tracker Pop-Up Window & Odds Telemetry](#live-deck-tracker-pop-up-window--odds-telemetry)
    - [Match History & Full Match Inspector](#match-history--full-match-inspector)
    - [Deck Library, 3-Column Inspector & True Decklists](#deck-library-3-column-inspector--true-decklists)
    - [Card Library, Full-Card View & Real-Time Ownership Sync](#card-library-full-card-view--real-time-ownership-sync)
@@ -242,22 +243,24 @@ The **Achievements** view transforms your match history into an interactive trop
   <img src="screenshots/Achievements.png" alt="Achievements Trophy Case" width="900" />
 </p>
 
-#### 21 Custom Vector Badges Across 7 Categories
-Every achievement represents a distinct gameplay feat across 7 MTG disciplines:
+#### 26 Custom Badges Across 8 Categories
+Every achievement represents a distinct gameplay feat across MTG disciplines:
 - 🥊 **Combat**: *Haymaker* (single-hit blow), *Juggernaut* (total match damage), *Royal Assassin* (creature destruction in combat).
 - 🛡️ **Defense**: *Ironclad* (blocking lethal attacks), *Stalwart* (damage absorbed across match).
-- 🔮 **Arcane Devastation / Spells**: *Cataclysm* (board wipe devastation), *Executioner* (lethal spell strikes), *Sweeper* (multi-target removal).
+- 🔮 **Arcane Devastation / Spells**: *Cataclysm* (board wipe devastation), *Executioner* (lethal spell strikes), *Sweeper* (multi-target removal), *Rider of the Storm* (storm copies).
 - ⚔️ **Counters & P/T Growth**: *Hardened* (+1/+1 counter accumulation), *Ozolithic!* (massive single-turn counter surge).
 - 🌾 **Ramp & Mana**: *Mana Dynamo* (huge mana generation turns), *Blinkmaster* (flicker & enter-the-battlefield triggers).
-- 👥 **Tokens & Swarm**: *Swarmer* (creature tokens created), *Cat Burglar* (graveyard theft & reanimation).
+- 👥 **Tokens & Swarm**: *Swarmer* (creature tokens created), *Cat Burglar* (graveyard theft), *Reanimator* (graveyard resurrections).
 - 📜 **Card Advantage & Finishers**: *Rhystic Tracker* (cards drawn in single turn), *Scoop Inducer* (causing opponent concession), *Over-Killer* (massive overkill lethal damage).
+- 🧠 **Disruption & Tempo**: *Brain Freeze* (mill), *Bouncer* (tempo/bounce), *Thought Seizer* (targeted hand discard).
 
-#### Dynamic Tier Thresholds & Highest-Tier Display
-- Each achievement features **Bronze**, **Silver**, and **Gold** progression tiers with objective, value-based $X+$ thresholds (e.g. `12+`, `18+`, `25+`).
-- Trophy cards display the **highest tier achieved** (`Gold > Silver > Bronze`) along with the total lifetime awards won across all your matches.
-- **Center-Out Symmetrical Clustering**: Square trophy cards (`330px × 330px`) cluster gracefully in the center of the screen, dynamically expanding to fill widescreen resolutions.
+#### Progressive 6-Tier Progression Hierarchy
+- Each achievement features a **6-tier progression system**: `Iron` $\to$ `Bronze` $\to$ `Silver` $\to$ `Gold` $\to$ `Platinum` $\to$ `Legendary` with objective, value-based $X+$ thresholds.
+- Each individual card earns tiers progressively, recording the exact `match_id` and timestamp of the award.
+- Trophy cards display the **highest tier achieved** (`Legendary > Platinum > Gold > Silver > Bronze > Iron`) along with the total lifetime awards won across all your matches.
+- **Center-Out Symmetrical Clustering**: Square trophy cards cluster gracefully in the center of the screen, dynamically expanding to fill widescreen resolutions.
 - **All-Time MVP Card**: Each trophy highlights the all-time MVP card that earned the badge most frequently, complete with its **Scryfall art crop thumbnail** and full untruncated name.
-- **Drill-Down Inspection Modal**: Click any trophy to inspect every card that has earned it, view objective requirements, read flavor lore quotes, and click to inspect individual card stats. Press <kbd>Esc</kbd> or click the backdrop to close.
+- **Drill-Down Inspection Modal**: Click any trophy to inspect every card that has earned it, view objective requirements, read flavor lore quotes, and click any achievement award to jump directly to the Full Match Inspector for that game. Press <kbd>Esc</kbd> or click the backdrop to close.
 
 <p align="center">
   <img src="screenshots/Achievements_Details.png" alt="Achievements Drill-Down Modal" width="900" />
@@ -320,7 +323,17 @@ The overhauled trend graph combines volume histogram bars with rolling win rate 
   - Transitions cleanly across the exact $50\%$ midline with a subtle blend.
 - **Background Area Wash**: Subtle horizontal time-series shading beneath the curve matching the win status.
 - **Outlined Histogram Bars**: Thin white borders around win and loss bars for clear visual separation.
-- **Format Breakdown Matrix**: Clean 3-column × 2-row summary at the base of the dashboard displaying games played and individual format win rates.
+#### Modular Bento Grid, Multi-Page Layout & Widget Customizer
+- **Customizable Bento-Box Architecture**: Rearrange, resize (1c–12c width, 1r–8r height), and configure your telemetry widgets using the interactive **Customize** mode.
+- **Multi-Page Organization**: Organize widgets across multiple distinct dashboard pages (`Page 1`, `Page 2`...) with sticky navigation, rapid page switching, and active page persistence.
+- **Widget Catalog**: Add modules from a rich library: All-Time Win Rate, Today Win Rate, Current Streak, Trending Win Rate, Recent Matches, Deck Spotlight, Featured Leaderboards, Recent Achievements, Format Breakdown, Fun Facts, Active Quests, Currencies & Inventory, Wildcards & Vault, and Mastery Pass.
+- **Per-Widget Color Customization**: Set custom positive/negative color pairings for win rates, streaks, and charts with HSV color wheel and hex input support.
+
+#### Active Quests, Re-rolls & Economy Intelligence
+- **3-Slot Active Quests Widget**: Real-time tracking of active daily/weekly quests matching MTGA's native layout, complete with progress bars, completed stamps, and gold reward counters.
+- **Daily Quest Re-rolls & Upgrades**: Dedicated modal tracking all quest swaps, 500g $\to$ 750g upgrades, upgrade rates, net gold gained, and Ravnica guild pair frequencies.
+- **Currencies, Vault & Fanned Booster Packs**: Visualizes Gold, Gems, Draft Tokens, Golden Pack progress, combination tumbler Vault progress, and authentic 3D fanned foil booster packs.
+- **Wildcard Spending History & Timeline**: Direct exploration modal auditing crafted cards and wildcards earned from packs/vault, plus craft markers (red 'X' for crafts, green diamonds for acquisitions) on the Economy Trends chart.
 
 ---
 
@@ -365,6 +378,37 @@ While in an active match, click **Live Match HUD** in the left navigation sideba
   - 🌀 `[EXILE]`: Permanents exiled from the battlefield.
   - 💥 `[X DMG]`: Granular combat and spell damage dealt with source and target attributions.
   - ❤️ `[LIFE +/-X]`: Dynamic life total changes.
+
+---
+
+### Live Deck Tracker Pop-Up Window & Odds Telemetry
+
+Rhystic Tracker features an **independent, always-on-top, movable pop-out deck tracker window** designed specifically for seamless overlay gaming across single-monitor and multi-monitor setups.
+
+#### How to Open & Activate
+- **Manual Launch**: Click the <span className="font-bold text-white bg-white/10 px-1 py-0.5 border border-white/20">↗</span> pop-out icon at the top of the docked rail in the Live Match HUD at any time.
+- **Automatic Match Start Opening**: Head to **Settings → General & Behavior** and enable **"Auto-Open Live Deck Tracker Pop-Up"**. Whenever a game start is detected, the pop-up window opens automatically without any manual intervention.
+- **Smart Window Position Memory**: Drag or position the pop-out window anywhere on your screen. The application remembers the exact coordinates across match transitions, game restarts, and system reboots.
+
+#### Core Deck Tracking Telemetry
+1. **Dynamic Draw Odds Banner**:
+   - **Lands**: Live hypergeometric odds of drawing a land on your immediate next draw (`ms ms-land`), along with remaining and initial counts.
+   - **Creatures**: Live odds of drawing a creature (`ms ms-creature`) and remaining pool count.
+   - **Spells**: Live odds of drawing non-creature spells (`ms ms-instant` — instants, sorceries, artifacts, enchantments, planeswalkers, and battles).
+2. **Dedicated Brawl Commander Section**:
+   - In Brawl or Commander matches, your Commander is pinned directly to the very top in a dedicated Command Zone section. In non-Brawl formats, this section remains gracefully hidden.
+3. **Smart Foldable Zones**:
+   - **Cards in Hand**: Shows cards currently held in your hand with quick zone counts. Click the chevron header to fold or collapse.
+   - **Cards on Battlefield**: Shows all your active permanents currently on board. Click to fold/unfold.
+   - **Cards Still in Deck**: Full remaining deck inventory with per-card next-draw probabilities (`%`), remaining counts (`remaining / initial`), mana costs, and rarity indicators.
+   - **Cards in Graveyard & Exile**: Consolidated dead-zone tracker showing cards that have left the game.
+   - *Fold states are automatically persisted across games and sessions.*
+4. **Flexible Sorting & Instant Search**:
+   - Sort cards by **Draw Probability (`%`)**, **Mana Value (`Mana`)**, or **Alphabetical (`Name`)**. Your sorting mode preference is remembered permanently.
+   - Filter your remaining library on the fly using the built-in search bar.
+5. **Interactive Card Previews & Safe Close**:
+   - Click any card in the list to reveal an authentic Scryfall card preview tray with full rules text and multi-turn draw odds ($1$, $2$, and $3$ turns ahead).
+   - When a match ends, the overlay transitions through a victory/defeat recap before settling into a standby screen displaying the Rhystic Tracker emblem and a dedicated close button.
 
 ---
 

@@ -42,6 +42,8 @@ const formatChipColor = (
     f.includes("limited")
   ) {
     return { bg: "#D4A23718", fg: "#E2BF6F", border: "#D4A23738" };
+  } else if (f.includes("starter deck") || f.includes("precon")) {
+    return { bg: "#3D7D7D18", fg: "#6EA8A8", border: "#3D7D7D38" };
   } else if (f.includes("bot") || f.includes("sparky")) {
     return { bg: "#3D7D7D18", fg: "#6EA8A8", border: "#3D7D7D38" };
   } else if (
