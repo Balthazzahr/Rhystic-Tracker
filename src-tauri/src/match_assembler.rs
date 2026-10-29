@@ -209,6 +209,7 @@ pub struct MatchAssembler {
     pub card_cmc_map: HashMap<u32, u32>, // grp_id -> cmc
     pub feed_seq: u64,
     pub current_turn: u32,
+    pub completed_games_turns: u32,
     pub turn_1_active_seat: Option<u32>,
     pub match_start_time: Option<chrono::DateTime<Utc>>,
     pub impactful_cards: HashMap<u32, CardDamageStats>, // grp_id -> CardDamageStats
@@ -290,6 +291,7 @@ impl MatchAssembler {
             card_cmc_map: HashMap::new(),
             feed_seq: 0,
             current_turn: 0,
+            completed_games_turns: 0,
             turn_1_active_seat: None,
             match_start_time: None,
             impactful_cards: HashMap::new(),
@@ -307,6 +309,60 @@ impl MatchAssembler {
             deck_tracker_library_instances: None,
             pending_connect_deck: None,
         }
+    }
+
+    fn default_life_for_format(format_name: &str) -> i32 {
+        let lower_fmt = format_name.to_lowercase();
+        let is_commander = lower_fmt.contains("commander") && !lower_fmt.contains("brawl");
+        let is_brawl = lower_fmt.contains("brawl") || is_commander;
+        if is_commander {
+            40
+        } else if is_brawl {
+            25
+        } else {
+            20
+        }
+    }
+
+    /// Resets per-game state (life totals, zone/instance maps, turn counters, opening hand buffer,
+    /// and processed GRE msg_ids) while preserving match-wide accumulators (`player_cards_seen`,
+    /// `opp_cards_seen`, `turn_events`, `impactful_cards`, `match_start_time`, etc.).
+    pub fn reset_per_game_state(&mut self, default_life: i32) {
+        self.evaluate_ironclad();
+        self.current_player_life = default_life;
+        self.current_opp_life = default_life;
+        self.opp_life_before_combat = default_life;
+        self.current_turn_hero_hits.clear();
+        self.last_hero_damage_hit = None;
+        self.player_opening_hand.clear();
+        self.opening_hand_finalized = false;
+        self.instance_map.clear();
+        self.instance_zone_map.clear();
+        self.instance_owner_map.clear();
+        self.instance_controller_map.clear();
+        self.instance_flicker_pending.clear();
+        self.instance_reanimator_map.clear();
+        self.ability_parent_map.clear();
+        self.creature_instance_ids.clear();
+        self.token_instance_names.clear();
+        self.token_instance_ids.clear();
+        self.counted_token_instances.clear();
+        self.recorded_actions.clear();
+        self.seen_damage_annotation_ids.clear();
+        self.active_life_sources.clear();
+        self.turn_damage_taken_by_instance.clear();
+        self.turn_damage_to_seat.clear();
+        self.turn_mana_by_instance.clear();
+        self.token_spawner_map.clear();
+        self.instance_wipe_counts.clear();
+        self.processed_msg_ids.clear();
+        self.current_turn = 0;
+        self.deck_tracker_outside_library.clear();
+        self.deck_tracker_hand_cards.clear();
+        self.deck_tracker_battlefield_cards.clear();
+        self.deck_tracker_graveyard_cards.clear();
+        self.deck_tracker_exile_cards.clear();
+        self.deck_tracker_library_instances = None;
     }
 
     pub fn set_player_user_id(&mut self, user_id: String) {
@@ -340,6 +396,20 @@ impl MatchAssembler {
     }
 
     pub fn start_match(&mut self, match_id: String, format_name: String, assigned_deck_event: bool) {
+        // If `start_match` is called again with the SAME `match_id` (e.g., duplicate
+        // `matchGameRoomStateChangedEvent` or Bo3 inter-game state transition),
+        // preserve match-wide accumulators (`match_start_time`, `player_cards_seen`,
+        // `opp_cards_seen`, `turn_events`, `impactful_cards`, and `deck_tracker`).
+        if self.active_match.as_ref().map(|m| m.match_id == match_id).unwrap_or(false) {
+            if let Some(m) = &mut self.active_match {
+                if (m.format_name.is_empty() || m.format_name == "Unknown") && !format_name.is_empty() && format_name != "Unknown" {
+                    m.format_name = format_name.clone();
+                }
+            }
+            return;
+        }
+
+        self.completed_games_turns = 0;
         let now = Utc::now();
         let is_brawl = format_name.to_lowercase().contains("brawl") || format_name.to_lowercase().contains("commander");
         if !is_brawl {
@@ -347,7 +417,7 @@ impl MatchAssembler {
         }
         self.last_assigned_deck_event = assigned_deck_event;
 
-        let default_life = if is_brawl { 25 } else { 20 };
+        let default_life = Self::default_life_for_format(&format_name);
 
         self.current_player_life = default_life;
         self.min_player_life = default_life;
@@ -2252,7 +2322,19 @@ impl MatchAssembler {
         }
 
         if turn > 0 {
-            if turn > self.current_turn {
+            if turn < self.current_turn {
+                // Best-of-3 game transition detected (new game starts at turn 1).
+                // Accumulate completed game's turns into total match turns.
+                self.completed_games_turns += self.current_turn;
+                let default_life = self.active_match.as_ref()
+                    .map(|m| Self::default_life_for_format(&m.format_name))
+                    .unwrap_or(20);
+                self.reset_per_game_state(default_life);
+                println!(
+                    "[ASSEMBLER] Bo3 game transition detected. Preserved match-wide stats; accumulated {} turns.",
+                    self.completed_games_turns
+                );
+            } else if turn > self.current_turn {
                 self.evaluate_ironclad();
                 self.turn_mana_by_instance.clear();
                 self.turn_damage_to_seat.clear();
@@ -2318,13 +2400,43 @@ impl MatchAssembler {
         }
     }
 
+    pub fn complete_match_for_id(
+        &mut self,
+        match_id: &str,
+        winning_team_id: u32,
+        reason: &str,
+    ) -> Option<(MatchRecord, Vec<MatchCardRecord>, Vec<MatchTurnEventRecord>, Vec<MatchImpactfulRecord>)> {
+        let is_known_id = |id: &str| {
+            let t = id.trim();
+            !t.is_empty() && t != "UNKNOWN_MATCH_ID" && t != "unknown"
+        };
+
+        if let Some(active) = self.active_match.as_mut() {
+            let incoming = match_id.trim();
+            if is_known_id(incoming) && is_known_id(&active.match_id) && active.match_id != incoming {
+                eprintln!(
+                    "[ASSEMBLER] Ignoring out-of-order MatchCompleted for '{}' (active match is '{}')",
+                    incoming, active.match_id
+                );
+                return None;
+            }
+            if !is_known_id(&active.match_id) && is_known_id(incoming) {
+                active.match_id = incoming.to_string();
+            }
+        } else {
+            return None;
+        }
+
+        self.complete_match(winning_team_id, reason)
+    }
+
     pub fn complete_match(&mut self, winning_team_id: u32, reason: &str) -> Option<(MatchRecord, Vec<MatchCardRecord>, Vec<MatchTurnEventRecord>, Vec<MatchImpactfulRecord>)> {
         self.finalize_opening_hand();
 
         if let Some(mut m) = self.active_match.take() {
             let is_win = winning_team_id == self.player_seat_id;
             m.result = if is_win { "win".to_string() } else { "loss".to_string() };
-            m.turns = self.current_turn;
+            m.turns = self.completed_games_turns + self.current_turn;
             m.player_life_end = Some(self.current_player_life);
             m.min_player_life = Some(self.min_player_life);
             m.opponent_life_end = Some(self.current_opp_life);
@@ -2415,7 +2527,7 @@ impl MatchAssembler {
                         }
                     }
 
-                    for (grp, amt, life_before) in &lethal_hits {
+                    for (grp, _amt, life_before) in &lethal_hits {
                         if self.token_grp_ids.contains(grp) {
                             continue;
                         }
@@ -4217,5 +4329,87 @@ use super::*;
         // Crucially: A board wipe must NOT award Royal Assassin even though single-target annotations were emitted!
         assert_eq!(entry.creatures_eliminated, 0, "Board wipe with >3 creatures must not award creatures_eliminated");
         assert!(!entry.titles.iter().any(|t| t.starts_with("Royal Assassin")), "Board wipe must not receive Royal Assassin");
+    }
+
+    #[test]
+    fn test_duplicate_start_match_preserves_state_and_new_match_resets_all_maps() {
+        let mut assembler = MatchAssembler::new();
+        assembler.start_match("match-uuid-1".to_string(), "Unknown".to_string(), false);
+        assembler.set_connect_deck(&[101, 101, 102, 103], &[], &[1]);
+
+        // Advance to Turn 2, play a card, deal damage, and populate internal tracking maps
+        assembler.update_game_state(Some(10), 2, &[(1, 20), (2, 17)], 1);
+        assembler.process_game_object(500, Some(101), Some(1), 28, true, false, None);
+        assembler.process_damage_event(1, 500, 2, 3, 1);
+        assembler.turn_damage_taken_by_instance.insert(500, 4);
+
+        let initial_start_time = assembler.match_start_time;
+        assert_eq!(assembler.player_cards_seen.get(&101), Some(&1));
+        assert!(!assembler.turn_events.is_empty());
+        assert!(!assembler.impactful_cards.is_empty());
+        assert!(assembler.last_hero_damage_hit.is_some());
+        assert_eq!(assembler.deck_tracker_initial_cards.get(&101), Some(&2));
+
+        // 1. Duplicate `start_match` with the SAME `match_id` (and resolved format name)
+        assembler.start_match("match-uuid-1".to_string(), "Traditional_Standard".to_string(), false);
+
+        assert_eq!(
+            assembler.active_match.as_ref().map(|m| m.format_name.as_str()),
+            Some("Traditional_Standard"),
+            "Duplicate start_match should upgrade 'Unknown' format_name"
+        );
+        assert_eq!(assembler.match_start_time, initial_start_time, "match_start_time must be preserved");
+        assert_eq!(assembler.player_cards_seen.get(&101), Some(&1), "player_cards_seen must be preserved");
+        assert!(!assembler.turn_events.is_empty(), "turn_events must be preserved");
+        assert!(!assembler.impactful_cards.is_empty(), "impactful_cards must be preserved");
+        assert_eq!(
+            assembler.deck_tracker_initial_cards.get(&101),
+            Some(&2),
+            "deck_tracker initial cards must be preserved"
+        );
+
+        // 2. Simulate Best-of-3 Game 2 transition (Turn 1 after Game 1 was at Turn 2, with msg_id 10 reused by GRE)
+        assembler.update_game_state(Some(10), 1, &[(1, 20), (2, 20)], 2);
+        assert_eq!(assembler.completed_games_turns, 2, "Game 1 turns must be accumulated into completed_games_turns");
+        assert_eq!(assembler.current_turn, 1, "Game 2 current_turn must reset to 1");
+        assert_eq!(assembler.current_opp_life, 20, "Opponent life must reset to 20 for Game 2");
+        assert!(assembler.instance_map.is_empty(), "Per-game instance_map must be cleared for Game 2");
+        assert!(assembler.last_hero_damage_hit.is_none(), "last_hero_damage_hit must be cleared for Game 2");
+        assert_eq!(assembler.player_cards_seen.get(&101), Some(&1), "Match-wide player_cards_seen must survive into Game 2");
+
+        // 3. Starting a genuinely NEW `match_id` must wipe all per-match and per-game maps completely
+        assembler.turn_damage_taken_by_instance.insert(777, 5);
+        assembler.last_hero_damage_hit = Some((101, 5, 15));
+
+        assembler.start_match("match-uuid-2".to_string(), "Standard".to_string(), false);
+        assert!(assembler.player_cards_seen.is_empty(), "New match_id must clear player_cards_seen");
+        assert!(assembler.turn_events.is_empty(), "New match_id must clear turn_events");
+        assert!(assembler.impactful_cards.is_empty(), "New match_id must clear impactful_cards");
+        assert!(assembler.turn_damage_taken_by_instance.is_empty(), "New match_id must clear turn_damage_taken_by_instance");
+        assert!(assembler.last_hero_damage_hit.is_none(), "New match_id must clear last_hero_damage_hit");
+        assert_eq!(assembler.completed_games_turns, 0, "New match_id must reset completed_games_turns");
+    }
+
+    #[test]
+    fn test_complete_match_for_id_guards_mismatch_and_populates_unknown_id() {
+        let mut assembler = MatchAssembler::new();
+        assembler.start_match("active-match-111".to_string(), "Standard".to_string(), false);
+
+        // Out-of-order MatchCompleted for a different match_id must NOT close active-match-111
+        let stale = assembler.complete_match_for_id("stale-match-000", 1, "Concede");
+        assert!(stale.is_none(), "Mismatched match_id must be ignored");
+        assert!(assembler.active_match.is_some(), "Active match must remain open after stale completion event");
+
+        // Matching match_id closes the active match
+        let completed = assembler.complete_match_for_id("active-match-111", 1, "Concede");
+        assert!(completed.is_some(), "Matching match_id must complete active match");
+        assert_eq!(completed.unwrap().0.match_id, "active-match-111");
+
+        // If active match started with UNKNOWN_MATCH_ID, a real match_id on completion populates it
+        assembler.start_match("UNKNOWN_MATCH_ID".to_string(), "Brawl".to_string(), false);
+        let populated = assembler
+            .complete_match_for_id("resolved-match-222", 1, "Loss_Life")
+            .expect("Match should complete and populate match_id");
+        assert_eq!(populated.0.match_id, "resolved-match-222");
     }
 }
