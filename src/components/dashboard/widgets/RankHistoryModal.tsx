@@ -1,6 +1,12 @@
 import React from "react";
 import { X, Award, Shield, Swords, Calendar, Clock, Trophy } from "lucide-react";
-import { PlayerRankStatus, usePlayerRankHistory, formatRomanLevel, getTierTheme } from "./rankCommon";
+import {
+  PlayerRankStatus,
+  usePlayerRankHistory,
+  formatRomanLevel,
+  getTierTheme,
+  getMaxStepsForTier,
+} from "./rankCommon";
 import { useModalEscape } from "../../../utils/modalStack";
 
 interface RankHistoryModalProps {
@@ -17,6 +23,8 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
 
   const constructedTheme = currentRank ? getTierTheme(currentRank.constructed_tier) : getTierTheme("Bronze");
   const limitedTheme = currentRank ? getTierTheme(currentRank.limited_tier) : getTierTheme("Bronze");
+  const constructedMaxSteps = getMaxStepsForTier(currentRank?.constructed_tier || "Bronze", false);
+  const limitedMaxSteps = getMaxStepsForTier(currentRank?.limited_tier || "Bronze", true);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 select-none">
@@ -32,7 +40,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
                 Ranked Ladder & Season Progression
               </h2>
               <div className="text-xs font-sans text-neutral-400">
-                Season {currentRank?.season_ordinal ?? 93} Climb & Pip History
+                Season {currentRank?.season_ordinal ?? 93} Climb & Tier Points History
               </div>
             </div>
           </div>
@@ -61,7 +69,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-xs font-mono text-neutral-300">
-                  Step {currentRank?.constructed_step ?? 0} pips
+                  {currentRank?.constructed_step ?? 0} / {constructedMaxSteps} Tier Points
                 </span>
                 <span className="text-xs font-mono font-bold text-amber-300">
                   {currentRank?.constructed_wins ?? 0}W - {currentRank?.constructed_losses ?? 0}L
@@ -82,7 +90,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-xs font-mono text-neutral-300">
-                  Step {currentRank?.limited_step ?? 0} pips
+                  {currentRank?.limited_step ?? 0} / {limitedMaxSteps} Tier Points
                 </span>
                 <span className="text-xs font-mono font-bold text-cyan-300">
                   {currentRank?.limited_wins ?? 0}W - {currentRank?.limited_losses ?? 0}L
@@ -117,6 +125,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
                     hour: "2-digit",
                     minute: "2-digit",
                   });
+                  const snapMaxSteps = getMaxStepsForTier(snap.constructed_tier, false);
 
                   return (
                     <div
@@ -132,7 +141,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
                           {snap.constructed_tier} {formatRomanLevel(snap.constructed_level)}
                         </span>
                         <span className="font-mono text-neutral-400 text-[11px]">
-                          (Pip {snap.constructed_step})
+                          ({snap.constructed_step} / {snapMaxSteps} Tier Points)
                         </span>
                       </div>
 
@@ -155,7 +164,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
         {/* Footer */}
         <div className="p-3 border-t border-white/10 bg-neutral-900/50 flex items-center justify-between text-[11px] font-sans text-neutral-400 shrink-0">
           <span>Season {currentRank?.season_ordinal ?? 93}</span>
-          <span>Automatic ladder & pip synchronization</span>
+          <span>Automatic ladder & tier point synchronization</span>
         </div>
       </div>
     </div>

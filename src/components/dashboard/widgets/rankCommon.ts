@@ -121,6 +121,40 @@ export function getMaxStepsForTier(tier: string, isLimited: boolean): number {
   return 6;
 }
 
+export const TIER_ORDER = ["bronze", "silver", "gold", "platinum", "diamond", "mythic"] as const;
+
+export function getRankClimbScore(
+  tier: string,
+  level: number,
+  step: number,
+  isLimited: boolean
+): number {
+  const t = (tier || "bronze").toLowerCase();
+  const tierIdx = Math.max(0, TIER_ORDER.indexOf(t as any));
+  if (t === "mythic") {
+    return 120 + (step || 0);
+  }
+  const maxSteps = getMaxStepsForTier(tier, isLimited);
+  const divIndex = Math.max(0, Math.min(3, 4 - (level || 4)));
+  // Normalize each division to 6 units so background bands and ticks remain perfectly uniform
+  const scaledStep = maxSteps === 6 ? Math.max(0, step || 0) : Math.round((Math.max(0, step || 0) / maxSteps) * 6);
+  return tierIdx * 24 + divIndex * 6 + scaledStep;
+}
+
+export function formatRankLabel(
+  tier: string,
+  level: number,
+  step: number,
+  isLimited: boolean = false
+): string {
+  const t = (tier || "Bronze").charAt(0).toUpperCase() + (tier || "Bronze").slice(1).toLowerCase();
+  if (t.toLowerCase() === "mythic") {
+    return "Mythic";
+  }
+  const maxSteps = getMaxStepsForTier(tier, isLimited);
+  return `${t} ${formatRomanLevel(level)} (${step} / ${maxSteps} Tier Points)`;
+}
+
 let cachedRankStatus: PlayerRankStatus | null = null;
 let cachedRankJson = "";
 let lastRankFetchAt = 0;
@@ -168,7 +202,7 @@ export function usePlayerRank() {
   return { rank, loading, refetch: () => fetchRank(true) };
 }
 
-export function usePlayerRankHistory(limit = 50) {
+export function usePlayerRankHistory(limit = 500) {
   const [history, setHistory] = useState<PlayerRankSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
 

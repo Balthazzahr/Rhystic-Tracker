@@ -2,6 +2,21 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.8.3] - 2026-11-05 — 🏆 Ranked Ladder Overhaul & Victory/Defeat Breakdown Analytics
+
+### 🏆 Ranked Ladder Widget Overhaul
+- **Continuous Over-Time Climb Progression**: Replaced the static snapshot view with an interactive, continuous climb graph supporting `1D` (intra-day match climb), `7D`, `30D`, `This Season`, `Last Season`, and `All Time` filters.
+- **Seamless Multi-Season Boundaries**: Reconstructed season transitions with an exact 50/50 day-gap distribution, a fixed 8px dark dividing gap, solid capping borders, and matching continuous gradient fills up to each season's border without dipping to zero or producing dark gaps.
+- **Sub-Division Tier Points Tracking**: Integrated exact tier-point (pip) vertical attribution (6 units per division across all tiers from Bronze IV to Mythic) so intra-division wins and losses dynamically shift the climb curve.
+- **Visual Tier Standard Compliance**: Tier indicator lines (`── SILVER ──`, etc.) now sit strictly above the line inside the higher tier space with automatic horizontal collision avoidance on season breaks.
+- **Instant Filter Switching**: Disabled layout transition animations on the chart Area series for snappy 0ms switching across time horizons.
+- **Terminology Alignment**: Standardized all UI references from legacy "steps/pips" to authentic "Tier Points" across the widget continuum rail, tooltips, and climb history modals.
+
+### ⚔️ Victory & Defeat Breakdown Widget Overhaul
+- **5-Category Result Analytics**: Upgraded match resolution tracking into 5 explicit categories: Complete Match Win, Opponent Conceded, Timeout/Game Rule, Standard Defeat (Zero Life / Deckout), and Player Conceded.
+- **Color-Coded Segmented Breakdown Bar**: High-contrast visual ratio bar displaying exact percentages and counts for every win and loss modality.
+- **Detailed Drill-Down Inspection Modal**: Interactive modal allowing one-click drill-downs into match lists, opponent commanders, turn durations, and final life totals for each resolution category.
+
 ## [1.8.2] - 2026-11-05 — 🎯 Match History Opponent Search Synchronization Hotfix
 
 ### 🎯 Match History Search & Filter Synchronization

@@ -1049,6 +1049,19 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
+        // Migration: deduplicate redundant snapshots in player_rank_snapshots caused by log replays
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM player_rank_snapshots
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM player_rank_snapshots
+                GROUP BY season_ordinal, constructed_tier, constructed_level, constructed_step,
+                         constructed_wins, constructed_losses, limited_tier, limited_level,
+                         limited_step, limited_wins, limited_losses
+            );
+            "#
+        ).execute(&pool).await;
+
         // Migration: sanitize historical achievement titles in match_impactful_cards
         if let Ok(rows) = sqlx::query_as::<_, (i64, i64, String)>(
             "SELECT i.id, i.grp_id, i.titles FROM match_impactful_cards i WHERE i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'"
@@ -3867,47 +3880,41 @@ impl DatabaseManager {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = chrono::Utc::now().to_rfc3339();
 
-        // 1. Check the most recent snapshot for deduplication
-        let prev = sqlx::query(
+        // 1. Check if an identical snapshot already exists anywhere for this season
+        let exists: Option<i64> = sqlx::query_scalar(
             r#"
-            SELECT season_ordinal, constructed_tier, constructed_level, constructed_step,
-                   constructed_wins, constructed_losses, limited_tier, limited_level,
-                   limited_step, limited_wins, limited_losses
-            FROM player_rank_snapshots
-            ORDER BY id DESC LIMIT 1
+            SELECT id FROM player_rank_snapshots
+            WHERE season_ordinal = ?
+              AND constructed_tier = ?
+              AND constructed_level = ?
+              AND constructed_step = ?
+              AND constructed_wins = ?
+              AND constructed_losses = ?
+              AND limited_tier = ?
+              AND limited_level = ?
+              AND limited_step = ?
+              AND limited_wins = ?
+              AND limited_losses = ?
+            LIMIT 1
             "#
         )
+        .bind(rank.season_ordinal)
+        .bind(&rank.constructed_tier)
+        .bind(rank.constructed_level)
+        .bind(rank.constructed_step)
+        .bind(rank.constructed_wins)
+        .bind(rank.constructed_losses)
+        .bind(&rank.limited_tier)
+        .bind(rank.limited_level)
+        .bind(rank.limited_step)
+        .bind(rank.limited_wins)
+        .bind(rank.limited_losses)
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(p) = prev {
-            let p_so: i64 = p.get("season_ordinal");
-            let p_ct: String = p.get("constructed_tier");
-            let p_cl: i32 = p.get("constructed_level");
-            let p_cs: i32 = p.get("constructed_step");
-            let p_cw: i32 = p.get("constructed_wins");
-            let p_c_loss: i32 = p.get("constructed_losses");
-            let p_lt: String = p.get("limited_tier");
-            let p_ll: i32 = p.get("limited_level");
-            let p_ls: i32 = p.get("limited_step");
-            let p_lw: i32 = p.get("limited_wins");
-            let p_l_loss: i32 = p.get("limited_losses");
-
-            if p_so == rank.season_ordinal
-                && p_ct == rank.constructed_tier
-                && p_cl == rank.constructed_level
-                && p_cs == rank.constructed_step
-                && p_cw == rank.constructed_wins
-                && p_c_loss == rank.constructed_losses
-                && p_lt == rank.limited_tier
-                && p_ll == rank.limited_level
-                && p_ls == rank.limited_step
-                && p_lw == rank.limited_wins
-                && p_l_loss == rank.limited_losses
-            {
-                // Identical to latest snapshot, skip inserting duplicate
-                return Ok(());
-            }
+        if exists.is_some() {
+            // Snapshot for this exact rank state already recorded; skip duplicate
+            return Ok(());
         }
 
         // Get latest season end time if available
