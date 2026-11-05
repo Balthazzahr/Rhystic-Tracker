@@ -2,6 +2,13 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.8.2] - 2026-11-05 — 🎯 Match History Opponent Search Synchronization Hotfix
+
+### 🎯 Match History Search & Filter Synchronization
+- **Two-Way Search State Sync**: Added `onSearchChange` communication between `MatchHistoryView` and parent `App.tsx` state. Resolves issue where clearing an opponent name (e.g. from table clicks or the dashboard Frequent Opponents widget) would re-apply the filter when navigating away from Match History and back.
+- **Table Opponent Click Handlers**: Updated opponent name clicks in both Matchup and Opponent columns to sync search terms directly through `handleSearchChange`.
+- **Search Clear Handling**: Bound `onClear` and `onChange` on `GlassSearchInput` so clicking the clear button (`×`) or deleting query text immediately resets root application search filter state.
+
 ## [1.8.1] - 2026-11-05 — ⚡ Performance Overhaul, Modal Escape Stack & Engine Stability
 
 ### ⚡ WebKitGTK & Linux Rendering Performance Overhaul

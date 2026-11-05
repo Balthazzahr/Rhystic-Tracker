@@ -164,6 +164,7 @@ interface MatchHistoryViewProps {
   onSelectDeck?: (deckName: string) => void;
   onShowCard?: (card: { name: string; grp_id?: number }, isCommander: boolean) => void;
   initialSearch?: string;
+  onSearchChange?: (search: string) => void;
   onDeleteMatch?: (matchId: string) => void;
 }
 
@@ -176,12 +177,18 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   onSelectDeck,
   onShowCard,
   initialSearch,
+  onSearchChange,
   onDeleteMatch,
 }) => {
   const accentColor = palette?.accent || '#A855F7';
 
   // --- Filter State ---
   const [searchTerm, setSearchTerm] = useState(initialSearch || '');
+
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term);
+    onSearchChange?.(term);
+  };
   const [colorFilter, setColorFilter] = useState<string[]>([]);
   const [formatFilter, setFormatFilter] = useState('ALL');
   const [timeFilter, setTimeFilter] = useState<'ALL' | '7D' | 'LAST_WEEK' | '30D' | 'PREV_MONTH' | 'THIS_YEAR' | 'PREV_YEAR'>('ALL');
@@ -333,7 +340,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
   };
 
   useEffect(() => {
-    if (initialSearch !== undefined && initialSearch !== '') setSearchTerm(initialSearch);
+    if (initialSearch !== undefined && initialSearch !== searchTerm) {
+      setSearchTerm(initialSearch);
+    }
   }, [initialSearch]);
 
   // Modal Escape stack integrations for Advanced Filters and Delete Confirmation
@@ -786,7 +795,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
                 onClick={(e) => {
                   if (m.opponent_name) {
                     e.stopPropagation();
-                    setSearchTerm(m.opponent_name);
+                    handleSearchChange(m.opponent_name);
                   }
                 }}
                 title="Click to filter matches by this opponent"
@@ -835,7 +844,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
               onClick={(e) => {
                 if (m.opponent_name) {
                   e.stopPropagation();
-                  setSearchTerm(m.opponent_name);
+                  handleSearchChange(m.opponent_name);
                 }
               }}
               title="Click to filter matches by this opponent"
@@ -1126,7 +1135,8 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
         <GlassSearchInput
           placeholder="Search deck, opponent..."
           value={searchTerm}
-          onChange={setSearchTerm}
+          onChange={handleSearchChange}
+          onClear={() => handleSearchChange('')}
           clearTitle="Clear search filter"
         />
 

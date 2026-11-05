@@ -1453,6 +1453,7 @@ export default function App() {
             onSelectDeck={handleSelectDeck}
             onShowCard={openCardOverlay}
             initialSearch={matchHistorySearch}
+            onSearchChange={setMatchHistorySearch}
             onDeleteMatch={() => loadData()}
           />
         )}
