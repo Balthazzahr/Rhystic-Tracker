@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Sparkles, RefreshCw, Check, Calendar } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { useModalEscape } from '../utils/modalStack';
 
 export interface DetectedSet {
   code: string;
@@ -45,16 +46,7 @@ export const NewSetReminderModal: React.FC<NewSetReminderModalProps> = ({
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSyncing) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, isSyncing]);
+  useModalEscape(isOpen && !isSyncing, onClose, 20);
 
   if (!isOpen || newSets.length === 0) return null;
 
@@ -108,7 +100,7 @@ export const NewSetReminderModal: React.FC<NewSetReminderModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-black/85 select-none"
       onClick={!isSyncing ? onClose : undefined}
     >
       <div

@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { getDeckAchievementMeta, AchievementTier } from '../utils/achievementBadges';
+import { useModalEscape } from '../utils/modalStack';
 
 export interface DeckAchievementDetailModalProps {
   achievement: any;
@@ -15,16 +16,7 @@ export const DeckAchievementDetailModal: React.FC<DeckAchievementDetailModalProp
   onClose,
   palette,
 }) => {
-  useEffect(() => {
-    if (!achievement) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [achievement, onClose]);
+  useModalEscape(!!achievement, onClose, 30);
 
   if (!achievement) return null;
 
@@ -45,7 +37,7 @@ export const DeckAchievementDetailModal: React.FC<DeckAchievementDetailModalProp
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] flex flex-col items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none overflow-y-auto custom-scrollbar animate-fade-in"
+      className="fixed inset-0 z-[99999] flex flex-col items-center justify-center p-6 bg-black/85 select-none overflow-y-auto custom-scrollbar"
       onClick={onClose}
     >
       <div className="flex flex-col items-center justify-center max-w-5xl w-full my-auto relative pt-12">
@@ -105,7 +97,7 @@ export const DeckAchievementDetailModal: React.FC<DeckAchievementDetailModalProp
 
         {/* Main Content Window */}
         <div
-          className="w-full max-h-[74vh] flex flex-col bg-neutral-950/75 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden relative z-10"
+          className="w-full max-h-[74vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden relative z-10"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0">

@@ -564,7 +564,7 @@ export const LiveDeckTrackerPanel: React.FC<LiveDeckTrackerPanelProps> = ({
         {/* Commander Section (Only shown in Brawl / Commander games) */}
         {isBrawl && commanderCard && (
           <div>
-            <div className="w-full bg-amber-950/40 border-y border-amber-500/30 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
+            <div className="w-full bg-amber-950/90 border-y border-amber-500/30 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10">
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
                 <i className="ms ms-planeswalker text-[11px] text-amber-400" />
                 Commander
@@ -583,7 +583,7 @@ export const LiveDeckTrackerPanel: React.FC<LiveDeckTrackerPanelProps> = ({
             <button
               type="button"
               onClick={handleToggleHandFold}
-              className="w-full bg-sky-950/40 hover:bg-sky-900/40 border-y border-sky-500/20 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm cursor-pointer transition-colors"
+              className="w-full bg-sky-950/90 hover:bg-sky-900/90 border-y border-sky-500/20 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 cursor-pointer transition-colors"
             >
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
@@ -605,7 +605,7 @@ export const LiveDeckTrackerPanel: React.FC<LiveDeckTrackerPanelProps> = ({
             <button
               type="button"
               onClick={handleToggleBoardFold}
-              className="w-full bg-emerald-950/40 hover:bg-emerald-900/40 border-y border-emerald-500/20 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm cursor-pointer transition-colors"
+              className="w-full bg-emerald-950/90 hover:bg-emerald-900/90 border-y border-emerald-500/20 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 cursor-pointer transition-colors"
             >
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -623,7 +623,7 @@ export const LiveDeckTrackerPanel: React.FC<LiveDeckTrackerPanelProps> = ({
 
         {/* Section 3: Cards Still in Deck */}
         <div>
-          <div className="bg-neutral-900/90 border-y border-white/10 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
+          <div className="bg-neutral-900 border-y border-white/10 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10">
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               Cards Still in Deck ({deckCards.reduce((acc, c) => acc + c.remaining_count, 0)})
@@ -644,7 +644,7 @@ export const LiveDeckTrackerPanel: React.FC<LiveDeckTrackerPanelProps> = ({
             <button
               type="button"
               onClick={handleToggleDeadFold}
-              className="w-full bg-black/60 hover:bg-neutral-900/60 border-y border-white/5 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm cursor-pointer transition-colors"
+              className="w-full bg-neutral-950 hover:bg-neutral-900 border-y border-white/5 px-2.5 py-1 flex items-center justify-between sticky top-0 z-10 cursor-pointer transition-colors"
             >
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-600" />

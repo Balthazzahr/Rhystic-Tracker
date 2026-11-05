@@ -303,7 +303,7 @@ export const AchievementBadge: React.FC<AchievementBadgeProps> = ({
       {/* Top-Layer Portaled Tooltip */}
       {showTooltip && isHovered && tooltipPos && createPortal(
         <div
-          className="fixed z-[99999] pointer-events-none w-72 p-3.5 border border-white/20 bg-neutral-950/95 shadow-2xl space-y-2 text-left animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl max-h-[calc(100vh-24px)] overflow-y-auto"
+          className="fixed z-[99999] pointer-events-none w-72 p-3.5 border border-white/20 bg-neutral-950/95 shadow-2xl space-y-2 text-left animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100vh-24px)] overflow-y-auto"
           style={{
             top: tooltipPos.top !== undefined ? `${tooltipPos.top}px` : undefined,
             bottom: tooltipPos.bottom !== undefined ? `${tooltipPos.bottom}px` : undefined,

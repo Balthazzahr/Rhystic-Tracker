@@ -2,6 +2,26 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.8.1] - 2026-11-05 — ⚡ Performance Overhaul, Modal Escape Stack & Engine Stability
+
+### ⚡ WebKitGTK & Linux Rendering Performance Overhaul
+- **Elimination of Backdrop Filters**: Replaced 31 performance-degrading instances of CSS `backdrop-blur-*` across modals, Bento-box widgets, toolbars, tables, and overlays with opaque, hardware-accelerated dark backgrounds (`bg-neutral-950/95` and `bg-neutral-900/90`). Eliminates severe frame drops and window stutter under WebKitGTK and composited Linux window managers.
+- **Instant Card Inspector Opening**: Switched `CardInspectorModal` opening to zero-latency synchronous display (`hoverArtCardId || selectedMatchCardId || inspectionCardId`), eliminating modal open delays.
+- **Deck Detail Instant Skeleton**: Added an immediate skeleton loading state and deferred async deck calculations via `requestAnimationFrame`, eliminating UI freezes when opening decks from the Deck Library.
+- **60fps Pure-CSS Deck Box Animation**: Refactored the Deck Box Card lid animation from JavaScript-timed intervals to hardware-accelerated pure CSS (`transform: translateY(-8px) scale(1.02)`), delivering fluid hover transitions.
+
+### ⌨️ Global Modal Escape-Key Stack & Horizontal Paging
+- **Hierarchical Modal Escape Stack**: Built a centralized `useModalEscape` hook tracking active modal depths. Pressing `Escape` now cleanly dismisses the topmost modal without closing underlying modals or losing state.
+- **Universal Escape Support**: Integrated escape handling across all 20+ modals (Card Inspector, Match Info, Deck Detail, Leaderboard modals, Quest Stats, Rank History, Wildcards, and column customizers).
+- **Achievements View Mouse Wheel Paging**: Added horizontal mouse wheel and trackpad scroll handling (`wheelRef`) to the Achievements card view to match the Deck and Card libraries.
+
+### 🛡️ Core Engine Stability & Backend Enhancements (PR #26)
+- **Single-Flight Database Initialization**: Added `tokio::sync::OnceCell` to `DatabaseManager::get_pool()` to eliminate concurrent initialization races on startup.
+- **String-Aware JSON Block Accumulation**: Upgraded log parsing accumulator with string state tracking, preventing GRE JSON parsing errors from escaped brackets within nested strings.
+- **Bo3 Turn & Damage State Isolation**: Hardened match assembler to reset combat turn maps, hero damage tracking, and combat attribution cleanly between Best-of-3 games even when message IDs repeat.
+- **Batched Card Metadata Lookups**: Optimized Match Timeline and details queries with batched card lookups (`WHERE grp_id IN (...)`), reducing database round-trips.
+- **Timeline Row Memoization**: Wrapped `RoundTurnGroup` and `TurnActionRow` in `React.memo` to eliminate redundant re-renders during combat replay scrolling.
+
 ## [1.8.0] - 2026-10-28 — 🎴 Live Deck Tracker Pop-Up Window & Dynamic Odds Telemetry
 
 ### 🎴 Live Deck Tracker Pop-Up Window

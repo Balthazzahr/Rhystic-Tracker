@@ -241,7 +241,7 @@ export const RewardVisual: React.FC<{ item: RewardItem; setCode: string; size?: 
         <div className="relative flex flex-col items-center justify-center">
           <div className={`${cardDims} rounded-[3px] bg-gradient-to-b from-orange-500 via-red-950 to-neutral-950 border-2 border-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.6)] flex flex-col items-center justify-center relative overflow-hidden transition-transform duration-150 group-hover:scale-105`}>
             <div className="w-[60%] h-[60%] rounded-full bg-gradient-to-b from-orange-400/40 to-black/80 flex items-center justify-center shadow-inner">
-              <i className="ms ms-planeswalker text-orange-200 text-sm sm:text-base drop-shadow-[0_0_4px_rgba(249,115,22,0.9)]" />
+              <i className="ms ms-planeswalker text-orange-200 text-sm sm:text-base" />
             </div>
             {item.count && item.count > 1 && (
               <span className="absolute bottom-0.5 font-mono text-[9px] sm:text-[10px] font-black text-white px-1 rounded-sm bg-black/85 shadow">
@@ -255,7 +255,7 @@ export const RewardVisual: React.FC<{ item: RewardItem; setCode: string; size?: 
       return (
         <div className="flex flex-col items-center justify-center">
           <div className={`${cardDims} rounded-[3px] bg-gradient-to-b from-neutral-800 via-neutral-900 to-black border-2 border-amber-500/60 flex flex-col items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] transition-transform duration-150 group-hover:scale-105`}>
-            <i className={`ss ss-${setCode.toLowerCase() || "c19"} text-amber-400 text-base sm:text-lg drop-shadow-[0_0_4px_rgba(245,158,11,0.8)]`} />
+            <i className={`ss ss-${setCode.toLowerCase() || "c19"} text-amber-400 text-base sm:text-lg`} />
             <span className="text-[7px] sm:text-[8px] font-sans font-black uppercase text-amber-300 mt-1 leading-none tracking-tight">PACK</span>
           </div>
         </div>
@@ -263,15 +263,15 @@ export const RewardVisual: React.FC<{ item: RewardItem; setCode: string; size?: 
     case "orb":
       return (
         <div className="relative flex items-center justify-center">
-          <div className={`${orbDims} rounded-full bg-gradient-to-b from-sky-400 via-sky-700 to-indigo-950 border-2 border-sky-300 shadow-[0_0_16px_rgba(56,189,248,0.7)] flex items-center justify-center animate-pulse transition-transform duration-150 group-hover:scale-105`}>
-            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.95)]" />
+          <div className={`${orbDims} rounded-full bg-gradient-to-b from-sky-400 via-sky-700 to-indigo-950 border-2 border-sky-300 shadow-[0_0_16px_rgba(56,189,248,0.7)] flex items-center justify-center transition-transform duration-150 group-hover:scale-105`}>
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </div>
         </div>
       );
     case "style":
       return (
         <div className={`${cardDims} rounded-[3px] bg-gradient-to-b from-sky-900/60 via-purple-950/60 to-black border-2 border-cyan-400/60 shadow-[0_0_10px_rgba(6,182,212,0.3)] flex flex-col items-center justify-center relative transition-transform duration-150 group-hover:scale-105`}>
-          <Sparkles className="w-5 h-5 text-cyan-300 drop-shadow-[0_0_4px_rgba(6,182,212,0.8)]" />
+          <Sparkles className="w-5 h-5 text-cyan-300" />
           <span className="text-[7px] sm:text-[8px] font-sans font-bold uppercase text-cyan-300 mt-1 leading-none">STYLE</span>
         </div>
       );
@@ -302,14 +302,14 @@ export const RewardVisual: React.FC<{ item: RewardItem; setCode: string; size?: 
     case "gems":
       return (
         <div className="flex flex-col items-center justify-center">
-          <Gem className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.7)]" />
+          <Gem className="w-7 h-7 sm:w-8 sm:h-8 text-cyan-400" />
           <span className="text-[9px] sm:text-[10px] font-mono font-bold text-cyan-300 leading-none mt-1">{item.count}</span>
         </div>
       );
     case "gold":
       return (
         <div className="flex flex-col items-center justify-center">
-          <Coins className="w-7 h-7 sm:w-8 sm:h-8 text-yellow-400 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]" />
+          <Coins className="w-7 h-7 sm:w-8 sm:h-8 text-yellow-400" />
           <span className="text-[9px] sm:text-[10px] font-mono font-bold text-yellow-300 leading-none mt-1">{item.count}</span>
         </div>
       );
@@ -397,7 +397,7 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
       <div className="flex-1 flex flex-col justify-between gap-1.5 min-h-0 pt-0.5 relative">
         {/* Header Ribbon: Level Crest & XP Bar */}
         <div className="shrink-0 flex items-center gap-3 bg-gradient-to-r from-amber-950/20 via-neutral-900/40 to-neutral-950/60 border border-white/10 p-2 relative overflow-hidden">
-          <div className="absolute -left-6 top-1/2 -translate-y-1/2 w-28 h-28 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
+          <div className="absolute -left-6 top-1/2 -translate-y-1/2 w-28 h-28 bg-[radial-gradient(circle,rgba(245,158,11,0.12)_0%,transparent_70%)] rounded-full pointer-events-none" />
 
           {/* Level Crest / Badge */}
           <div
@@ -408,7 +408,7 @@ export const MasteryPassWidget: React.FC<WidgetProps> = React.memo(({ widget }) 
             <span className="text-[8px] font-sans font-bold uppercase tracking-widest text-amber-400/80 -mb-0.5">
               LVL
             </span>
-            <span className="text-xl font-mono font-black text-amber-300 tracking-tight leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+            <span className="text-xl font-mono font-black text-amber-300 tracking-tight leading-none">
               {currentLevel}
             </span>
             <div className="absolute -bottom-1 w-6 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent" />

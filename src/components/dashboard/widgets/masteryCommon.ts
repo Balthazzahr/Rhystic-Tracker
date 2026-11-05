@@ -15,14 +15,37 @@ export interface MasteryPassStatus {
   updated_at: string;
 }
 
-export function useMasteryPass() {
-  const [pass, setPass] = useState<MasteryPassStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+let cachedMasteryPass: MasteryPassStatus | null = null;
+let cachedMasteryJson = "";
+let lastMasteryFetchAt = 0;
+let inFlightMasteryPromise: Promise<MasteryPassStatus | null> | null = null;
 
-  const fetchPass = useCallback(async () => {
+export function useMasteryPass() {
+  const [pass, setPass] = useState<MasteryPassStatus | null>(cachedMasteryPass);
+  const [loading, setLoading] = useState(cachedMasteryPass === null);
+
+  const fetchPass = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && cachedMasteryPass !== null && now - lastMasteryFetchAt < 5000) {
+      setPass((prev) => (prev === cachedMasteryPass ? prev : cachedMasteryPass));
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await invoke<MasteryPassStatus | null>("get_mastery_pass_status");
-      setPass(res);
+      if (!inFlightMasteryPromise) {
+        inFlightMasteryPromise = invoke<MasteryPassStatus | null>("get_mastery_pass_status").finally(() => {
+          inFlightMasteryPromise = null;
+        });
+      }
+      const res = await inFlightMasteryPromise;
+      lastMasteryFetchAt = Date.now();
+      const nextJson = JSON.stringify(res);
+      if (nextJson !== cachedMasteryJson) {
+        cachedMasteryJson = nextJson;
+        cachedMasteryPass = res;
+      }
+      setPass((prev) => (prev === cachedMasteryPass ? prev : cachedMasteryPass));
     } catch (e) {
       console.error("Failed to fetch mastery pass status:", e);
     } finally {
@@ -32,9 +55,9 @@ export function useMasteryPass() {
 
   useEffect(() => {
     fetchPass();
-    const interval = setInterval(fetchPass, 60000);
+    const interval = setInterval(() => fetchPass(false), 60000);
     return () => clearInterval(interval);
   }, [fetchPass]);
 
-  return { pass, loading, refetch: fetchPass };
+  return { pass, loading, refetch: () => fetchPass(true) };
 }

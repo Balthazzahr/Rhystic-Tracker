@@ -20,6 +20,7 @@ import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
 import { parseMtgaManaCost } from '../utils/manaUtils';
+import { useModalEscape } from '../utils/modalStack';
 
 // Date Formatters matching Dashboard
 const formatTimeAgo = (ts: string): string => {
@@ -335,15 +336,9 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     if (initialSearch !== undefined && initialSearch !== '') setSearchTerm(initialSearch);
   }, [initialSearch]);
 
-  // Close the advanced-filter modal on Escape
-  useEffect(() => {
-    if (!showAdvModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowAdvModal(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showAdvModal]);
+  // Modal Escape stack integrations for Advanced Filters and Delete Confirmation
+  useModalEscape(showAdvModal, () => setShowAdvModal(false), 20);
+  useModalEscape(!!matchToDelete, () => setMatchToDelete(null), 30);
 
   const TIME_FILTER_OPTIONS: Array<{ id: 'ALL' | '7D' | 'LAST_WEEK' | '30D' | 'PREV_MONTH' | 'THIS_YEAR' | 'PREV_YEAR'; label: string; description: string }> = [
     { id: 'ALL', label: 'All Time', description: 'Entire recorded match history' },
@@ -429,6 +424,8 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
     defaultColumns: DEFAULT_COLUMNS,
     filterColumn: (col) => allowMatchDeletion || col.key !== 'delete',
   });
+
+  useModalEscape(showColumnModal, () => setShowColumnModal(false), 30);
 
   // Map deck names to key cards for fast lookup
   const deckKeyCardsMap = useMemo(() => {
@@ -1285,11 +1282,11 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* ========================================================================= */}
       {showAdvModal && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85 select-none"
           onClick={() => setShowAdvModal(false)}
         >
           <div
-            className="w-[850px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
+            className="w-[850px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1761,7 +1758,7 @@ export const MatchHistoryView: React.FC<MatchHistoryViewProps> = ({
       {/* ========================================================================= */}
       {matchToDelete && (
         <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85 select-none"
           onClick={() => setMatchToDelete(null)}
         >
           <div 

@@ -360,7 +360,7 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
               >
                 <svg
                   viewBox="0 0 160 160"
-                  className="w-full h-full max-h-full max-w-full drop-shadow-md transform transition-transform"
+                  className="w-full h-full max-h-full max-w-full"
                 >
                   {donutSegments.map((seg) => {
                     const isDimmed =
@@ -374,7 +374,7 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
                         d={seg.pathD}
                         fill={seg.color}
                         opacity={isDimmed ? 0.25 : 0.95}
-                        className="cursor-pointer transition-all duration-300 hover:opacity-100 hover:brightness-110"
+                        className="cursor-pointer transition-opacity duration-200 hover:opacity-100"
                         onMouseEnter={() => !selectedData && setHoveredFormat(seg.key)}
                         onMouseLeave={() => !selectedData && setHoveredFormat(null)}
                         onClick={() => !selectedData && handleFormatClick(seg.key)}
@@ -464,7 +464,7 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
                     onClick={() => handleFormatClick(seg.format)}
                     onMouseEnter={() => !selectedFormat && setHoveredFormat(seg.format)}
                     onMouseLeave={() => !selectedFormat && setHoveredFormat(null)}
-                    className={`relative overflow-hidden flex items-center justify-between p-1.5 border transition-all cursor-pointer rounded-[2px] ${
+                    className={`relative overflow-hidden flex items-center justify-between p-1.5 border transition-colors cursor-pointer rounded-[2px] ${
                       isSelected
                         ? "border-white/40 shadow-sm"
                         : isHovered
@@ -476,7 +476,7 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
                     <div className="absolute inset-0 z-0 flex w-full h-full pointer-events-none">
                       {seg.winRate > 0 && (
                         <div
-                          className="h-full transition-all duration-300"
+                          className="h-full transition-colors duration-200"
                           style={{
                             width: `${seg.winRate}%`,
                             backgroundColor: winBg,
@@ -485,7 +485,7 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
                       )}
                       {seg.winRate < 100 && (
                         <div
-                          className="h-full transition-all duration-300"
+                          className="h-full transition-colors duration-200"
                           style={{
                             width: `${100 - seg.winRate}%`,
                             backgroundColor: lossBg,
@@ -500,12 +500,12 @@ export const FormatDistributionWidget: React.FC<WidgetProps> = React.memo(({
                         className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
                         style={{ backgroundColor: seg.color }}
                       />
-                      <span className="text-xs font-sans font-semibold text-white truncate drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                      <span className="text-xs font-sans font-semibold text-white truncate">
                         {seg.format}
                       </span>
                     </div>
 
-                    <div className="relative z-10 flex items-center gap-1.5 font-mono tabular-nums text-xs shrink-0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                    <div className="relative z-10 flex items-center gap-1.5 font-mono tabular-nums text-xs shrink-0">
                       <span className="text-neutral-300 text-[11px] font-medium">
                         {seg.total}G
                       </span>

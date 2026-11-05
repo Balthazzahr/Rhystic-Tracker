@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import CardImage from './CardImage';
 import { ManaPip } from './ManaPip';
 
@@ -39,7 +39,6 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
   showFlair = true,
   onSelectDeck,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const artName = deck.top_commander_name || deck.top_card_name;
   const colors: string[] = deck.colors || [];
   const isSmallMode = width <= 270;
@@ -75,7 +74,7 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
     return { tapeAngle: tAngle, stampAngle: sAngle, qcAngle: qAngle, hash: abs };
   }, [deck.deck_name]);
 
-  // Extract up to 3 cards for the peek-through interior preview (only mounted on hover)
+  // Extract up to 3 cards for the peek-through interior preview
   const peekCards: { name: string; grp_id?: number }[] = useMemo(() => {
     const list: { name: string; grp_id?: number }[] = [];
     if (deck.key_cards && deck.key_cards.length > 0) {
@@ -100,15 +99,10 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
       style={{
         width,
         height,
-        perspective: isHovered ? '1000px' : undefined,
         contain: 'layout paint',
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
       }}
       className="group relative select-none text-left cursor-pointer focus:outline-none shrink-0 bg-transparent"
       onClick={() => onSelectDeck(deck.deck_name)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       {/* --- 1. NARROWER INNER CARDBOARD BODY (INSET BY 6PX WITH PURE BACKGROUND OUTSIDE) --- */}
       <div
@@ -232,7 +226,6 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
         style={{
           height: `${lidHeightPct}%`,
           clipPath: 'url(#deckBoxLidClip)',
-          transform: 'translateZ(0)',
         }}
       >
         {/* Dark Interior Cavity */}
@@ -243,51 +236,45 @@ export const DeckBoxCard: React.FC<DeckBoxCardProps> = React.memo(({
             boxShadow: 'inset 0 8px 16px rgba(0, 0, 0, 0.98)',
           }}
         >
-          {/* 3 Revealed Cards with Full Borders and Text (version="small" for memory footprint & crisp thumbnail rendering) */}
-          {isHovered && (
-            <div className="absolute inset-x-2 top-2 bottom-0 flex items-start justify-between gap-1.5 animate-fadeIn">
-              {peekCards.map((c, i) => (
-                <div
-                  key={c.grp_id || c.name || i}
-                  className="flex-1 h-[140%] relative rounded-[2px] overflow-hidden border border-white/25 shadow-md bg-neutral-900"
-                  style={{
-                    transform: i === 0 ? 'rotate(-2.5deg)' : i === 2 ? 'rotate(2.5deg)' : 'none',
-                  }}
-                >
-                  <CardImage
-                    name={c.name}
-                    version="small"
-                    alt={c.name}
-                    className="w-full h-full object-cover object-top"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />
-                </div>
-              ))}
-            </div>
-          )}
+          {/* 3 Revealed Cards with Full Borders and Text (pre-mounted, revealed smoothly on hover) */}
+          <div className="absolute inset-x-2 top-2 bottom-0 flex items-start justify-between gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            {peekCards.map((c, i) => (
+              <div
+                key={c.grp_id || c.name || i}
+                className="flex-1 h-[140%] relative rounded-[2px] overflow-hidden border border-white/25 shadow-md bg-neutral-900"
+                style={{
+                  transform: i === 0 ? 'rotate(-2.5deg)' : i === 2 ? 'rotate(2.5deg)' : 'none',
+                }}
+              >
+                <CardImage
+                  name={c.name}
+                  version="small"
+                  alt={c.name}
+                  className="w-full h-full object-cover object-top"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />
+              </div>
+            ))}
+          </div>
 
           {/* Top Hinge Ambient Shadow */}
           <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-black/95 to-transparent pointer-events-none z-10" />
         </div>
       </div>
 
-      {/* --- 3. 3D TILTING LID (FULL OUTER WIDTH OVERHANGING NARROWER BODY) --- */}
+      {/* --- 3. LID OVERHANG (SLIDES UP SMOOTHLY ON HOVER TO REVEAL DECK INTERIOR) --- */}
       <div
         className="absolute top-0 left-0 right-0 z-20 pointer-events-none"
         style={{
           height: `${lidHeightPct}%`,
           transformOrigin: 'top center',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden',
         }}
       >
-        {/* Inner 3D Transform Container */}
+        {/* Inner 2D Transform Container */}
         <div
-          className="w-full h-full relative group-hover:[transform:rotateX(-26deg)_translateY(-3px)]"
+          className="w-full h-full relative transition-transform duration-200 ease-out group-hover:-translate-y-4"
           style={{
             transformOrigin: 'top center',
-            transition: 'transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2)',
-            willChange: isHovered ? 'transform' : 'auto',
           }}
         >
           {/* Clipped Lid Surface with Continuous Artwork */}

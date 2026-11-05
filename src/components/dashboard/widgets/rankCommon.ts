@@ -121,14 +121,37 @@ export function getMaxStepsForTier(tier: string, isLimited: boolean): number {
   return 6;
 }
 
-export function usePlayerRank() {
-  const [rank, setRank] = useState<PlayerRankStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+let cachedRankStatus: PlayerRankStatus | null = null;
+let cachedRankJson = "";
+let lastRankFetchAt = 0;
+let inFlightRankPromise: Promise<PlayerRankStatus | null> | null = null;
 
-  const fetchRank = useCallback(async () => {
+export function usePlayerRank() {
+  const [rank, setRank] = useState<PlayerRankStatus | null>(cachedRankStatus);
+  const [loading, setLoading] = useState(cachedRankStatus === null);
+
+  const fetchRank = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && cachedRankStatus !== null && now - lastRankFetchAt < 5000) {
+      setRank((prev) => (prev === cachedRankStatus ? prev : cachedRankStatus));
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await invoke<PlayerRankStatus | null>("get_player_rank_status");
-      setRank(res);
+      if (!inFlightRankPromise) {
+        inFlightRankPromise = invoke<PlayerRankStatus | null>("get_player_rank_status").finally(() => {
+          inFlightRankPromise = null;
+        });
+      }
+      const res = await inFlightRankPromise;
+      lastRankFetchAt = Date.now();
+      const nextJson = JSON.stringify(res);
+      if (nextJson !== cachedRankJson) {
+        cachedRankJson = nextJson;
+        cachedRankStatus = res;
+      }
+      setRank((prev) => (prev === cachedRankStatus ? prev : cachedRankStatus));
     } catch (e) {
       console.error("Failed to fetch player rank status:", e);
     } finally {
@@ -138,11 +161,11 @@ export function usePlayerRank() {
 
   useEffect(() => {
     fetchRank();
-    const interval = setInterval(fetchRank, 15000);
+    const interval = setInterval(() => fetchRank(false), 30000);
     return () => clearInterval(interval);
   }, [fetchRank]);
 
-  return { rank, loading, refetch: fetchRank };
+  return { rank, loading, refetch: () => fetchRank(true) };
 }
 
 export function usePlayerRankHistory(limit = 50) {

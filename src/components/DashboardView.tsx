@@ -1180,7 +1180,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       if (active && payload && payload.length) {
                         const d = payload[0].payload;
                         return (
-                          <div className="px-3 py-2 bg-neutral-900/95 border border-white/20 text-xs font-sans text-white shadow-2xl backdrop-blur-md">
+                          <div className="px-3 py-2 bg-neutral-900 border border-white/20 text-xs font-sans text-white shadow-2xl">
                             <div className="font-semibold text-neutral-200">
                               {d.label}
                             </div>

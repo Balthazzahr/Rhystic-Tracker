@@ -112,14 +112,37 @@ export interface RewardTracksStatus {
   next_daily_reward?: RewardMilestone;
 }
 
-export function useActiveQuests() {
-  const [data, setData] = useState<ActiveQuestsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+let cachedQuests: ActiveQuestsResponse | null = null;
+let cachedQuestsJson = "";
+let lastQuestsFetchAt = 0;
+let inFlightQuestsPromise: Promise<ActiveQuestsResponse> | null = null;
 
-  const fetchQuests = useCallback(async () => {
+export function useActiveQuests() {
+  const [data, setData] = useState<ActiveQuestsResponse | null>(cachedQuests);
+  const [loading, setLoading] = useState(cachedQuests === null);
+
+  const fetchQuests = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && cachedQuests !== null && now - lastQuestsFetchAt < 5000) {
+      setData((prev) => (prev === cachedQuests ? prev : cachedQuests));
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await invoke<ActiveQuestsResponse>("get_active_quests");
-      setData(res);
+      if (!inFlightQuestsPromise) {
+        inFlightQuestsPromise = invoke<ActiveQuestsResponse>("get_active_quests").finally(() => {
+          inFlightQuestsPromise = null;
+        });
+      }
+      const res = await inFlightQuestsPromise;
+      lastQuestsFetchAt = Date.now();
+      const nextJson = JSON.stringify(res);
+      if (nextJson !== cachedQuestsJson) {
+        cachedQuestsJson = nextJson;
+        cachedQuests = res;
+      }
+      setData((prev) => (prev === cachedQuests ? prev : cachedQuests));
     } catch (e) {
       console.error("Failed to load active quests:", e);
     } finally {
@@ -129,21 +152,44 @@ export function useActiveQuests() {
 
   useEffect(() => {
     fetchQuests();
-    const interval = setInterval(fetchQuests, 30000);
+    const interval = setInterval(() => fetchQuests(false), 30000);
     return () => clearInterval(interval);
   }, [fetchQuests]);
 
-  return { data, loading, refetch: fetchQuests };
+  return { data, loading, refetch: () => fetchQuests(true) };
 }
 
-export function useRewardTracks() {
-  const [status, setStatus] = useState<RewardTracksStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+let cachedRewardTracks: RewardTracksStatus | null = null;
+let cachedRewardTracksJson = "";
+let lastRewardTracksFetchAt = 0;
+let inFlightRewardTracksPromise: Promise<RewardTracksStatus> | null = null;
 
-  const fetchTracks = useCallback(async () => {
+export function useRewardTracks() {
+  const [status, setStatus] = useState<RewardTracksStatus | null>(cachedRewardTracks);
+  const [loading, setLoading] = useState(cachedRewardTracks === null);
+
+  const fetchTracks = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && cachedRewardTracks !== null && now - lastRewardTracksFetchAt < 5000) {
+      setStatus((prev) => (prev === cachedRewardTracks ? prev : cachedRewardTracks));
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await invoke<RewardTracksStatus>("get_reward_tracks_status");
-      setStatus(res);
+      if (!inFlightRewardTracksPromise) {
+        inFlightRewardTracksPromise = invoke<RewardTracksStatus>("get_reward_tracks_status").finally(() => {
+          inFlightRewardTracksPromise = null;
+        });
+      }
+      const res = await inFlightRewardTracksPromise;
+      lastRewardTracksFetchAt = Date.now();
+      const nextJson = JSON.stringify(res);
+      if (nextJson !== cachedRewardTracksJson) {
+        cachedRewardTracksJson = nextJson;
+        cachedRewardTracks = res;
+      }
+      setStatus((prev) => (prev === cachedRewardTracks ? prev : cachedRewardTracks));
     } catch (e) {
       console.error("Failed to load reward tracks status:", e);
     } finally {
@@ -153,11 +199,11 @@ export function useRewardTracks() {
 
   useEffect(() => {
     fetchTracks();
-    const interval = setInterval(fetchTracks, 30000);
+    const interval = setInterval(() => fetchTracks(false), 30000);
     return () => clearInterval(interval);
   }, [fetchTracks]);
 
-  return { status, loading, refetch: fetchTracks };
+  return { status, loading, refetch: () => fetchTracks(true) };
 }
 
 export function useCountdown(targetIso?: string) {

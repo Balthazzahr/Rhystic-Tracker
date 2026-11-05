@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Swords, CheckCircle2, XCircle, BarChart3, Award } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { useModalEscape } from '../utils/modalStack';
 
 interface OpponentH2HModalProps {
   isOpen: boolean;
@@ -49,27 +50,18 @@ export function OpponentH2HModal({
     fetchData();
   }, [isOpen, opponentName]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  useModalEscape(isOpen, onClose, 20);
 
   if (!isOpen || !opponentName) return null;
 
   return (
     <div 
       onClick={onClose}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85 select-none"
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl h-[75vh] rounded-none border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden relative backdrop-blur-md"
+        className="w-full max-w-4xl h-[75vh] rounded-none border border-white/20 bg-neutral-950 shadow-2xl flex flex-col overflow-hidden relative"
       >
         {/* Header Bar */}
         <div className="p-4 border-b border-white/10 bg-white/[0.02] flex items-center justify-between shrink-0">

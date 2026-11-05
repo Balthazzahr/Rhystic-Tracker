@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Award } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { CardImage } from './CardImage';
 import { getAchievementMeta } from '../utils/achievementBadges';
+import { useModalEscape } from '../utils/modalStack';
 
 interface DeckAchievementsModalProps {
   isOpen: boolean;
@@ -29,16 +30,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
   onShowCard,
 }) => {
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  useModalEscape(isOpen, onClose, 20);
 
   const accentColor = palette?.accent || '#EAB308';
 
@@ -87,7 +79,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none overflow-y-auto custom-scrollbar"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 bg-black/85 select-none overflow-y-auto custom-scrollbar"
       onClick={onClose}
     >
       <div
@@ -131,7 +123,7 @@ export const DeckAchievementsModal: React.FC<DeckAchievementsModalProps> = ({
         </div>
 
         {/* Modal Container */}
-        <div className="w-full max-h-[82vh] bg-neutral-950 border border-white/20 rounded-none flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl">
+        <div className="w-full max-h-[82vh] bg-neutral-950 border border-white/20 rounded-none flex flex-col overflow-hidden shadow-2xl">
           {/* Sub-header Navigation */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-white/[0.02]">
             <div className="flex items-center gap-2">

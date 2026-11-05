@@ -14,6 +14,7 @@ import { CardImage } from './CardImage';
 import { APP_VERSION } from '../version';
 import mtgaAvatarCatalog from '../data/mtgaAvatars.json';
 import { GeneralTab, AppearanceTab, ConnectionTab, StorageTab, AboutTab, MTG_COLORS, BG_WINDOWS, SettingsTab } from './settings';
+import { useModalEscape } from '../utils/modalStack';
 
 interface SettingsViewProps {
   palette: any;
@@ -283,6 +284,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [cardDbSyncing, setCardDbSyncing] = useState(false);
   const [cardDbSyncResult, setCardDbSyncResult] = useState<{ success: boolean; count: number; elapsedMs: number; error?: string } | null>(null);
   const [showResetWizardModal, setShowResetWizardModal] = useState(false);
+
+  useModalEscape(showResetWizardModal, () => setShowResetWizardModal(false), 20);
+  useModalEscape(bgSearchOpen, () => setBgSearchOpen(false), 20);
 
   useEffect(() => {
     let cancelled = false;
@@ -907,7 +911,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* 3. MAIN CONTENT BODY - Left Justified */}
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-neutral-950/50 backdrop-blur-md border border-white/10 p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-neutral-950/85 border border-white/10 p-6">
         <div className="max-w-4xl w-full space-y-6">
 
           {/* Empty Search Result */}
@@ -1102,7 +1106,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Re-run Setup Wizard Modal */}
       {showResetWizardModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none"
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85 select-none"
           onClick={() => setShowResetWizardModal(false)}
         >
           <div 
@@ -1155,7 +1159,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Background Card Search Modal */}
       {bgSearchOpen && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/85 select-none"
           onClick={() => setBgSearchOpen(false)}
         >
           <div

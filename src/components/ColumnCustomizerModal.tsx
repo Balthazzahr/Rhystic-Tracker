@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Columns3, X, GripVertical, Check, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
 import { BaseColumn } from '../hooks/useColumnManager';
+import { useModalEscape } from '../utils/modalStack';
 
 function getContrastTextColor(hexColor?: string): string {
   if (!hexColor) return '#FFFFFF';
@@ -44,15 +45,8 @@ export function ColumnCustomizerModal<T extends BaseColumn>({
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  // Close on Escape key (priority 30 to sit above host tables and views)
+  useModalEscape(isOpen, onClose, 30);
 
   if (!isOpen) return null;
 
@@ -109,11 +103,11 @@ export function ColumnCustomizerModal<T extends BaseColumn>({
   return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md select-none animate-fade-in"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-6 bg-black/85 select-none"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
+        className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
       >
         {/* Modal Header */}
         <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">

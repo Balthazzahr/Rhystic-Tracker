@@ -30,7 +30,7 @@ export const WidgetShell: React.FC<WidgetShellProps> = ({
 }) => {
   return (
     <div
-      className={`bg-neutral-950/50 backdrop-blur-md border border-white/10 p-4 flex flex-col h-full rounded-none transition-all duration-200 select-none relative overflow-hidden ${className}`}
+      className={`bg-neutral-950/85 border border-white/10 p-4 flex flex-col h-full rounded-none transition-colors duration-150 select-none relative overflow-hidden ${className}`}
     >
       {/* Full-shell background underneath header and body */}
       {background}

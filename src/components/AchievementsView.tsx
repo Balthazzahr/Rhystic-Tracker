@@ -7,6 +7,7 @@ import { DeckAchievementBadge } from './DeckAchievementBadge';
 import { DeckAchievementDetailModal } from './DeckAchievementDetailModal';
 import { getAchievementMeta, ACHIEVEMENTS_REGISTRY, getDeckAchievementMeta, DECK_ACHIEVEMENTS_REGISTRY, AchievementTier } from '../utils/achievementBadges';
 import CardImage from './CardImage';
+import { useModalEscape } from '../utils/modalStack';
 import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
@@ -74,19 +75,9 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
     loadDeckAchievements();
   }, []);
 
-  // Global Escape key listener to dismiss drill-down modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedAchievement(null);
-        setSelectedDeckAchievement(null);
-      }
-    };
-    if (selectedAchievement || selectedDeckAchievement) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [selectedAchievement, selectedDeckAchievement]);
+  // Global Escape key stack integration to dismiss drill-down modals
+  useModalEscape(!!selectedAchievement, () => setSelectedAchievement(null), 20);
+  useModalEscape(!!selectedDeckAchievement, () => setSelectedDeckAchievement(null), 20);
 
   const loadAchievements = async () => {
     setLoading(true);
@@ -297,6 +288,8 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
     defaultColumns: DEFAULT_ACH_COLUMNS,
   });
 
+  useModalEscape(showColumnModal, () => setShowColumnModal(false), 30);
+
   // Pagination
   const [page, setPage] = useState(1);
   const TABLE_PAGE_SIZE = 30;
@@ -359,15 +352,17 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
     if (!el || achView !== 'cards') return;
     let lock = false;
     const onWheel = (e: WheelEvent) => {
-      if (lock || totalPages <= 1 || Math.abs(e.deltaY) < 10) return;
+      if (lock || totalPages <= 1) return;
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (Math.abs(delta) < 10) return;
       e.preventDefault();
       lock = true;
-      goPage(e.deltaY > 0 ? 'next' : 'prev');
+      goPage(delta > 0 ? 'next' : 'prev');
       setTimeout(() => { lock = false; }, 450);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [achView, totalPages, goPage]);
+  }, [achView, totalPages, goPage, cardArea]);
 
   // Helper to determine if a specific tier has been achieved
   const isTierAchieved = (targetTier: 'gold' | 'silver' | 'bronze', ach: any) => {
@@ -484,7 +479,13 @@ export const AchievementsView: React.FC<AchievementsViewProps> = ({
             </div>
           ) : achView === 'cards' ? (
             /* Card View: paginated grid */
-            <div ref={setCardWrapRef} className="flex-1 flex flex-col min-h-0">
+            <div
+              ref={(node) => {
+                setCardWrapRef(node);
+                wheelRef.current = node;
+              }}
+              className="flex-1 flex flex-col min-h-0"
+            >
               <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
                 <div
                   className="grid justify-center gap-5"

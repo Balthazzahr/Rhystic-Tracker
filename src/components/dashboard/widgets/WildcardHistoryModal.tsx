@@ -3,6 +3,7 @@ import { X, History, Sparkles, Filter, ArrowDownRight, ArrowUpRight, Calendar, A
 import { invoke } from "@tauri-apps/api/core";
 import { EconomySnapshot } from "./economyCommon";
 import { WildcardLotusCard } from "./WildcardLotusCard";
+import { useModalEscape } from "../../../utils/modalStack";
 
 export interface WildcardTransaction {
   id: number;
@@ -31,6 +32,7 @@ export const WildcardHistoryModal: React.FC<WildcardHistoryModalProps> = ({
   onClose,
   initialFilterRarity = "all",
 }) => {
+  useModalEscape(isOpen, onClose, 10);
   const [history, setHistory] = useState<EconomySnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<"all" | "crafted" | "added">("all");
@@ -180,7 +182,7 @@ export const WildcardHistoryModal: React.FC<WildcardHistoryModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 select-none">
       <div className="bg-neutral-950 border border-white/20 shadow-2xl rounded-none w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">

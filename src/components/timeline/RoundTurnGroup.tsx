@@ -4,7 +4,7 @@ import { TimelineAction, getRoundHighlight } from './roundHighlightUtils';
 import { TurnActionRow } from './TurnActionRow';
 import { cleanCardName } from '../../utils/cardImageCache';
 
-interface RoundTurnGroupProps {
+export interface RoundTurnGroupProps {
   roundNum: number;
   firstTurnNum: number;
   secondTurnNum: number;
@@ -13,15 +13,98 @@ interface RoundTurnGroupProps {
   firstPlayerIsHero: boolean;
   opponentName?: string;
   isRoundCollapsed: boolean;
-  onToggleRound: () => void;
-  collapsedTurns: Set<number>;
+  onToggleRound: (roundNum?: number) => void;
+  collapsedTurns?: Set<number>;
+  isFirstTurnCollapsed?: boolean;
+  isSecondTurnCollapsed?: boolean;
   onToggleTurn: (turnNum: number) => void;
   density?: 'compact' | 'detailed';
   searchTerm?: string;
   onCardClick?: (card: any, turn: number) => void;
 }
 
-export const RoundTurnGroup: React.FC<RoundTurnGroupProps> = ({
+export interface TurnBlockProps {
+  turnNum: number;
+  isOwnerHero: boolean;
+  isCollapsed: boolean;
+  onToggleTurn: (turnNum: number) => void;
+  events: TimelineAction[];
+  opponentName?: string;
+  density?: 'compact' | 'detailed';
+  searchTerm?: string;
+  onCardClick?: (card: any, turn: number) => void;
+}
+
+export const TurnBlock = React.memo<TurnBlockProps>(function TurnBlock({
+  turnNum,
+  isOwnerHero,
+  isCollapsed,
+  onToggleTurn,
+  events,
+  opponentName = 'Opponent',
+  density = 'detailed',
+  searchTerm = '',
+  onCardClick,
+}) {
+  const handleToggle = React.useCallback(() => {
+    onToggleTurn(turnNum);
+  }, [onToggleTurn, turnNum]);
+
+  return (
+    <div className="space-y-0.5">
+      {/* Turn Header with Left Accent Line - lightweight solid background */}
+      <div
+        className={`flex items-center justify-between py-1.5 px-3 bg-neutral-900/60 hover:bg-neutral-900/90 cursor-pointer select-none border-l-2 ${
+          isOwnerHero ? 'border-[#76A382]' : 'border-[#D57C69]'
+        }`}
+        onClick={handleToggle}
+      >
+        <div className="flex items-center gap-2">
+          {isCollapsed ? (
+            <ChevronRight className="w-3 h-3 text-neutral-400" />
+          ) : (
+            <ChevronDown className="w-3 h-3 text-neutral-400" />
+          )}
+          <span
+            className={`text-[11px] font-mono font-bold tracking-wider uppercase ${
+              isOwnerHero ? 'text-[#76A382]' : 'text-[#D57C69]'
+            }`}
+          >
+            TURN {turnNum} · {isOwnerHero ? 'YOUR TURN' : `${opponentName.toUpperCase()}'S TURN`}
+          </span>
+        </div>
+        <span className="text-[9.5px] font-mono text-neutral-500 tabular-nums">
+          {events.length} {events.length === 1 ? 'action' : 'actions'}
+        </span>
+      </div>
+
+      {/* Turn Actions */}
+      {!isCollapsed && (
+        <div className="space-y-0 pt-0.5 pb-1">
+          {events.length === 0 ? (
+            <div className="text-[11px] font-sans italic text-neutral-500 py-1.5 px-4">
+              No actions recorded
+            </div>
+          ) : (
+            events.map((ev, idx) => (
+              <TurnActionRow
+                key={`t-${turnNum}-${idx}`}
+                action={ev}
+                isTurnActivePlayer={isOwnerHero}
+                density={density}
+                opponentName={opponentName}
+                onCardClick={onCardClick}
+                searchTerm={searchTerm}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+export const RoundTurnGroup = React.memo<RoundTurnGroupProps>(function RoundTurnGroup({
   roundNum,
   firstTurnNum,
   secondTurnNum,
@@ -32,11 +115,13 @@ export const RoundTurnGroup: React.FC<RoundTurnGroupProps> = ({
   isRoundCollapsed,
   onToggleRound,
   collapsedTurns,
+  isFirstTurnCollapsed,
+  isSecondTurnCollapsed,
   onToggleTurn,
   density = 'detailed',
   searchTerm = '',
   onCardClick,
-}) => {
+}) {
   // Odd turns are First Player, Even turns are Second Player
   const firstTurnOwnerIsHero = firstPlayerIsHero;
   const secondTurnOwnerIsHero = !firstPlayerIsHero;
@@ -53,8 +138,16 @@ export const RoundTurnGroup: React.FC<RoundTurnGroupProps> = ({
     return getRoundHighlight(allRoundEvents, firstPlayerIsHero);
   }, [allRoundEvents, firstPlayerIsHero]);
 
-  const isFirstTurnCollapsed = collapsedTurns.has(firstTurnNum);
-  const isSecondTurnCollapsed = collapsedTurns.has(secondTurnNum);
+  const isFirstCollapsed = isFirstTurnCollapsed !== undefined
+    ? isFirstTurnCollapsed
+    : (collapsedTurns?.has(firstTurnNum) ?? false);
+  const isSecondCollapsed = isSecondTurnCollapsed !== undefined
+    ? isSecondTurnCollapsed
+    : (collapsedTurns?.has(secondTurnNum) ?? false);
+
+  const handleToggleRound = React.useCallback(() => {
+    onToggleRound(roundNum);
+  }, [onToggleRound, roundNum]);
 
   // Render Highlight preview when round is collapsed
   const renderHighlightPreview = () => {
@@ -110,8 +203,8 @@ export const RoundTurnGroup: React.FC<RoundTurnGroupProps> = ({
     <div className="border-b border-white/10 pb-1">
       {/* Outer Round Banner (Clean full-width divider) */}
       <div
-        className="flex items-center justify-between px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.07] border-y border-white/10 cursor-pointer transition-colors select-none"
-        onClick={onToggleRound}
+        className="flex items-center justify-between px-3 py-1.5 bg-neutral-900/60 hover:bg-neutral-900/90 border-y border-white/10 cursor-pointer select-none"
+        onClick={handleToggleRound}
       >
         <div className="flex items-center gap-2">
           {isRoundCollapsed ? (
@@ -119,7 +212,7 @@ export const RoundTurnGroup: React.FC<RoundTurnGroupProps> = ({
           ) : (
             <ChevronDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           )}
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
           <span className="font-mono text-xs font-bold text-white tracking-wider uppercase">
             ROUND {roundNum}
           </span>
@@ -143,111 +236,30 @@ export const RoundTurnGroup: React.FC<RoundTurnGroupProps> = ({
       {/* Expanded Round Content: Distinctive Turn Sections with Left Accent Bars */}
       {!isRoundCollapsed && (
         <div className="pt-2 pb-1 space-y-3">
-          {/* Turn 1 Section */}
-          <div className="space-y-0.5">
-            {/* Turn 1 Header with Left Accent Line */}
-            <div
-              className={`flex items-center justify-between py-1.5 px-3 bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer select-none border-l-2 ${
-                firstTurnOwnerIsHero ? 'border-[#76A382]' : 'border-[#D57C69]'
-              }`}
-              onClick={() => onToggleTurn(firstTurnNum)}
-            >
-              <div className="flex items-center gap-2">
-                {isFirstTurnCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-neutral-400" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-neutral-400" />
-                )}
-                <span
-                  className={`text-[11px] font-mono font-bold tracking-wider uppercase ${
-                    firstTurnOwnerIsHero ? 'text-[#76A382]' : 'text-[#D57C69]'
-                  }`}
-                >
-                  TURN {firstTurnNum} · {firstTurnOwnerIsHero ? 'YOUR TURN' : `${opponentName.toUpperCase()}'S TURN`}
-                </span>
-              </div>
-              <span className="text-[9.5px] font-mono text-neutral-500 tabular-nums">
-                {firstTurnEvents.length} {firstTurnEvents.length === 1 ? 'action' : 'actions'}
-              </span>
-            </div>
-
-            {/* Turn 1 Actions (Unboxed, floating on surface) */}
-            {!isFirstTurnCollapsed && (
-              <div className="space-y-0 pt-0.5 pb-1">
-                {firstTurnEvents.length === 0 ? (
-                  <div className="text-[11px] font-sans italic text-neutral-500 py-1.5 px-4">
-                    No actions recorded
-                  </div>
-                ) : (
-                  firstTurnEvents.map((ev, idx) => (
-                    <TurnActionRow
-                      key={`t-${firstTurnNum}-${idx}`}
-                      action={ev}
-                      isTurnActivePlayer={firstTurnOwnerIsHero}
-                      density={density}
-                      opponentName={opponentName}
-                      onCardClick={onCardClick}
-                      searchTerm={searchTerm}
-                    />
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Turn 2 Section */}
-          <div className="space-y-0.5">
-            {/* Turn 2 Header with Left Accent Line */}
-            <div
-              className={`flex items-center justify-between py-1.5 px-3 bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer select-none border-l-2 ${
-                secondTurnOwnerIsHero ? 'border-[#76A382]' : 'border-[#D57C69]'
-              }`}
-              onClick={() => onToggleTurn(secondTurnNum)}
-            >
-              <div className="flex items-center gap-2">
-                {isSecondTurnCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-neutral-400" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-neutral-400" />
-                )}
-                <span
-                  className={`text-[11px] font-mono font-bold tracking-wider uppercase ${
-                    secondTurnOwnerIsHero ? 'text-[#76A382]' : 'text-[#D57C69]'
-                  }`}
-                >
-                  TURN {secondTurnNum} · {secondTurnOwnerIsHero ? 'YOUR TURN' : `${opponentName.toUpperCase()}'S TURN`}
-                </span>
-              </div>
-              <span className="text-[9.5px] font-mono text-neutral-500 tabular-nums">
-                {secondTurnEvents.length} {secondTurnEvents.length === 1 ? 'action' : 'actions'}
-              </span>
-            </div>
-
-            {/* Turn 2 Actions (Unboxed, floating on surface) */}
-            {!isSecondTurnCollapsed && (
-              <div className="space-y-0 pt-0.5 pb-1">
-                {secondTurnEvents.length === 0 ? (
-                  <div className="text-[11px] font-sans italic text-neutral-500 py-1.5 px-4">
-                    No actions recorded
-                  </div>
-                ) : (
-                  secondTurnEvents.map((ev, idx) => (
-                    <TurnActionRow
-                      key={`t-${secondTurnNum}-${idx}`}
-                      action={ev}
-                      isTurnActivePlayer={secondTurnOwnerIsHero}
-                      density={density}
-                      opponentName={opponentName}
-                      onCardClick={onCardClick}
-                      searchTerm={searchTerm}
-                    />
-                  ))
-                )}
-              </div>
-            )}
-          </div>
+          <TurnBlock
+            turnNum={firstTurnNum}
+            isOwnerHero={firstTurnOwnerIsHero}
+            isCollapsed={isFirstCollapsed}
+            onToggleTurn={onToggleTurn}
+            events={firstTurnEvents}
+            opponentName={opponentName}
+            density={density}
+            searchTerm={searchTerm}
+            onCardClick={onCardClick}
+          />
+          <TurnBlock
+            turnNum={secondTurnNum}
+            isOwnerHero={secondTurnOwnerIsHero}
+            isCollapsed={isSecondCollapsed}
+            onToggleTurn={onToggleTurn}
+            events={secondTurnEvents}
+            opponentName={opponentName}
+            density={density}
+            searchTerm={searchTerm}
+            onCardClick={onCardClick}
+          />
         </div>
       )}
     </div>
   );
-};
+});

@@ -56,15 +56,38 @@ export function getWildcardWheelProgress(wcTrackPos: number = 0): WildcardWheels
   };
 }
 
+let cachedEconomy: EconomySnapshot | null = null;
+let cachedEconomyJson = "";
+let lastEconomyFetchAt = 0;
+let inFlightEconomyPromise: Promise<EconomySnapshot | null> | null = null;
+
 export function usePlayerEconomy(pollIntervalMs = 60000) {
-  const [economy, setEconomy] = useState<EconomySnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [economy, setEconomy] = useState<EconomySnapshot | null>(cachedEconomy);
+  const [loading, setLoading] = useState(cachedEconomy === null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchEconomy = useCallback(async () => {
+  const fetchEconomy = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && cachedEconomy !== null && now - lastEconomyFetchAt < 5000) {
+      setEconomy((prev) => (prev === cachedEconomy ? prev : cachedEconomy));
+      setLoading(false);
+      return;
+    }
+
     try {
-      const data = await invoke<EconomySnapshot | null>("get_player_economy");
-      setEconomy(data);
+      if (!inFlightEconomyPromise) {
+        inFlightEconomyPromise = invoke<EconomySnapshot | null>("get_player_economy").finally(() => {
+          inFlightEconomyPromise = null;
+        });
+      }
+      const data = await inFlightEconomyPromise;
+      lastEconomyFetchAt = Date.now();
+      const nextJson = JSON.stringify(data);
+      if (nextJson !== cachedEconomyJson) {
+        cachedEconomyJson = nextJson;
+        cachedEconomy = data;
+      }
+      setEconomy((prev) => (prev === cachedEconomy ? prev : cachedEconomy));
       setError(null);
     } catch (err: any) {
       console.error("Failed to load player economy:", err);
@@ -75,29 +98,23 @@ export function usePlayerEconomy(pollIntervalMs = 60000) {
   }, []);
 
   useEffect(() => {
-    // Immediate fetch on mount
     fetchEconomy();
 
-    // Stagger interval start by a small random offset (0–4 s) so multiple
-    // instances of this hook (CurrenciesVault + WildcardsGoldenPack) don't
-    // fire their intervals at exactly the same time.
     const jitter = Math.floor(Math.random() * 4000);
+    let interval: ReturnType<typeof setInterval> | null = null;
     const jitterTimeout = setTimeout(() => {
-      const interval = setInterval(fetchEconomy, pollIntervalMs);
-      // Store interval ID on the timeout closure for cleanup
-      (jitterTimeout as any).__interval = interval;
+      interval = setInterval(() => fetchEconomy(false), pollIntervalMs);
     }, jitter);
 
-    const handleFocus = () => fetchEconomy();
+    const handleFocus = () => fetchEconomy(false);
     window.addEventListener("focus", handleFocus);
 
     return () => {
       clearTimeout(jitterTimeout);
-      const interval = (jitterTimeout as any).__interval;
       if (interval) clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
     };
   }, [fetchEconomy, pollIntervalMs]);
 
-  return { economy, loading, error, refetch: fetchEconomy };
+  return { economy, loading, error, refetch: () => fetchEconomy(true) };
 }

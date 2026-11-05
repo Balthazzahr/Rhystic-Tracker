@@ -41,7 +41,7 @@ export const EconomyOverviewWidget: React.FC<WidgetProps> = React.memo(({ widget
             {/* Gold */}
             <div className="p-3 bg-amber-500/[0.04] border border-amber-500/20 hover:border-amber-500/40 flex flex-col items-center justify-center text-center transition-colors">
               <div className="w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-1.5 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
-                <Coins className="w-5 h-5 text-yellow-400 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)]" />
+                <Coins className="w-5 h-5 text-yellow-400" />
               </div>
               <span className="text-[9px] font-sans font-semibold uppercase tracking-wider text-amber-400/80">
                 Gold
@@ -170,7 +170,7 @@ export const EconomyOverviewWidget: React.FC<WidgetProps> = React.memo(({ widget
                 {[0, 1, 2, 3, 4, 5].map((idx) => (
                   <div
                     key={idx}
-                    className={`h-1.5 border transition-all ${
+                    className={`h-1.5 border transition-colors ${
                       idx < wheels.rareWheel
                         ? "bg-amber-400 border-amber-300 shadow-[0_0_4px_rgba(251,191,36,0.4)]"
                         : "bg-neutral-900 border-white/10"
@@ -195,7 +195,7 @@ export const EconomyOverviewWidget: React.FC<WidgetProps> = React.memo(({ widget
                 {[0, 1, 2, 3, 4, 5].map((idx) => (
                   <div
                     key={idx}
-                    className={`h-1.5 border transition-all ${
+                    className={`h-1.5 border transition-colors ${
                       idx < wheels.uncommonWheel
                         ? "bg-sky-400 border-sky-300 shadow-[0_0_4px_rgba(56,189,248,0.4)]"
                         : "bg-neutral-900 border-white/10"
@@ -257,7 +257,7 @@ export const EconomyOverviewWidget: React.FC<WidgetProps> = React.memo(({ widget
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((idx) => (
                 <div
                   key={idx}
-                  className={`h-2 border transition-all ${
+                  className={`h-2 border transition-colors ${
                     idx < goldenProgress
                       ? "bg-amber-400 border-yellow-200 shadow-[0_0_4px_rgba(234,179,8,0.3)]"
                       : "bg-neutral-900 border-white/10"

@@ -66,7 +66,7 @@ export const ActiveQuestsWidget: React.FC<WidgetProps> = React.memo(({ widget })
             return (
               <div
                 key={q.quest_id}
-                className={`relative flex-1 min-h-[64px] border p-2.5 flex flex-col justify-between overflow-hidden transition-all ${
+                className={`relative flex-1 min-h-[64px] border p-2.5 flex flex-col justify-between overflow-hidden transition-colors ${
                   isActive
                     ? is750
                       ? "border-amber-500/30 hover:border-amber-500/50 bg-amber-500/[0.03]"
@@ -76,7 +76,7 @@ export const ActiveQuestsWidget: React.FC<WidgetProps> = React.memo(({ widget })
               >
                 {/* Completed Stamp Watermark Badge */}
                 {!isActive && (
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 rotate-[-8deg] border-2 border-emerald-500/80 bg-neutral-950/85 px-3 py-1 shadow-2xl pointer-events-none select-none z-10 flex items-center gap-1.5 backdrop-blur-xs">
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 rotate-[-8deg] border-2 border-emerald-500/80 bg-neutral-950/95 px-3 py-1 shadow-lg pointer-events-none select-none z-10 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
                     <span className="text-xs font-sans font-black uppercase tracking-widest text-emerald-400">
                       COMPLETED

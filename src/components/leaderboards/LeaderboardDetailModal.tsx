@@ -6,6 +6,7 @@ import CardImage from '../CardImage';
 import { ManaFontPip } from '../ManaFontPip';
 import { parseMtgaManaCost } from '../../utils/manaUtils';
 import { LeaderboardCategory } from './types';
+import { useModalEscape } from '../../utils/modalStack';
 
 interface LeaderboardDetailModalProps {
   category: LeaderboardCategory | null;
@@ -24,16 +25,7 @@ export const LeaderboardDetailModal: React.FC<LeaderboardDetailModalProps> = ({
     setSearchQuery('');
   }, [category]);
 
-  useEffect(() => {
-    if (!category) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [category, onClose]);
+  useModalEscape(!!category, onClose, 10);
 
   if (!category) return null;
 
@@ -55,7 +47,7 @@ export const LeaderboardDetailModal: React.FC<LeaderboardDetailModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none overflow-y-auto custom-scrollbar"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 bg-black/85 select-none overflow-y-auto custom-scrollbar"
       onClick={onClose}
     >
       <div
@@ -88,8 +80,8 @@ export const LeaderboardDetailModal: React.FC<LeaderboardDetailModalProps> = ({
           </button>
         </div>
 
-        {/* Main Modal Window (Transparent Frosted Glass) */}
-        <div className="w-full h-[78vh] max-h-[800px] flex flex-col bg-neutral-950/75 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden relative z-10">
+        {/* Main Modal Window */}
+        <div className="w-full h-[78vh] max-h-[800px] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden relative z-10">
           {/* Subheader banner inside window */}
           <div className="px-5 py-2.5 border-b border-white/10 bg-white/[0.03] flex items-center justify-between gap-4 shrink-0">
             <GlassSearchInput

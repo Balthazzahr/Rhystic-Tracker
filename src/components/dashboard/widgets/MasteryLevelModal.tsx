@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Check, Lock, Crown, ChevronRight, Zap, Gift } from "lucide-react";
 import { getRewardsForLevel, getRewardTheme, RewardVisual } from "./MasteryPassWidget";
 import { MasteryPassStatus } from "./masteryCommon";
+import { useModalEscape } from "../../../utils/modalStack";
 
 interface MasteryLevelModalProps {
   level: number | null;
@@ -17,6 +18,8 @@ export const MasteryLevelModal: React.FC<MasteryLevelModalProps> = ({
   onClose,
   onSelectLevel,
 }) => {
+  useModalEscape(level !== null, onClose, 20);
+
   if (level === null) return null;
 
   const currentLevel = pass?.current_level ?? 1;
@@ -56,7 +59,7 @@ export const MasteryLevelModal: React.FC<MasteryLevelModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 select-none"
       onClick={onClose}
     >
       <div

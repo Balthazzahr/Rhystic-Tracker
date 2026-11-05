@@ -220,25 +220,14 @@ pub struct FileTailer {
     path: PathBuf,
     sender: mpsc::Sender<TailerEvent>,
     running: Arc<AtomicBool>,
-    read_from_start: bool,
 }
 
 impl FileTailer {
-    pub fn new(path: PathBuf, sender: mpsc::Sender<TailerEvent>) -> Self {
-        Self {
-            path,
-            sender,
-            running: Arc::new(AtomicBool::new(true)),
-            read_from_start: true,
-        }
-    }
-
     pub fn new_from_end(path: PathBuf, sender: mpsc::Sender<TailerEvent>) -> Self {
         Self {
             path,
             sender,
             running: Arc::new(AtomicBool::new(true)),
-            read_from_start: false,
         }
     }
 
@@ -279,24 +268,20 @@ impl FileTailer {
 
         let mut reader = BufReader::new(current_file);
 
-        if !self.read_from_start {
-            // Seek backwards up to 16MB to catch recent pre-match deck submissions (EventSetDeckV3), Auth packets, and active MatchGameRoomStateChangedEvent if launched mid-game
-            let file_len = current_meta.len();
-            let lookback = 16 * 1024 * 1024; // 16MB
-            let start_pos = if file_len > lookback {
-                file_len - lookback
-            } else {
-                0
-            };
-            if let Err(e) = reader.seek(SeekFrom::Start(start_pos)) {
-                eprintln!("[TAILER] Error seeking startup lookback: {}", e);
-            } else if start_pos > 0 {
-                // Discard the first line as it may be a partial line from mid-byte seek
-                let mut discard = String::new();
-                let _ = reader.read_line(&mut discard);
-            }
+        // Seek backwards up to 16MB to catch recent pre-match deck submissions (EventSetDeckV3), Auth packets, and active MatchGameRoomStateChangedEvent if launched mid-game
+        let file_len = current_meta.len();
+        let lookback = 16 * 1024 * 1024; // 16MB
+        let start_pos = if file_len > lookback {
+            file_len - lookback
         } else {
-            println!("[TAILER] Reading log from beginning (catching existing game state)...");
+            0
+        };
+        if let Err(e) = reader.seek(SeekFrom::Start(start_pos)) {
+            eprintln!("[TAILER] Error seeking startup lookback: {}", e);
+        } else if start_pos > 0 {
+            // Discard the first line as it may be a partial line from mid-byte seek
+            let mut discard = String::new();
+            let _ = reader.read_line(&mut discard);
         }
 
         let mut line_buf = String::new();

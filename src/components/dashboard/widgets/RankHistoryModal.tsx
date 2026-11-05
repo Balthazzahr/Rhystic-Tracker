@@ -1,6 +1,7 @@
 import React from "react";
 import { X, Award, Shield, Swords, Calendar, Clock, Trophy } from "lucide-react";
 import { PlayerRankStatus, usePlayerRankHistory, formatRomanLevel, getTierTheme } from "./rankCommon";
+import { useModalEscape } from "../../../utils/modalStack";
 
 interface RankHistoryModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface RankHistoryModalProps {
 }
 
 export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onClose, currentRank }) => {
+  useModalEscape(isOpen, onClose, 10);
   const { history, loading } = usePlayerRankHistory(50);
 
   if (!isOpen) return null;
@@ -17,7 +19,7 @@ export const RankHistoryModal: React.FC<RankHistoryModalProps> = ({ isOpen, onCl
   const limitedTheme = currentRank ? getTierTheme(currentRank.limited_tier) : getTierTheme("Bronze");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 select-none">
       <div className="bg-neutral-950 border border-white/20 shadow-2xl rounded-none w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">

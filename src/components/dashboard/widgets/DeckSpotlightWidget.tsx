@@ -98,7 +98,7 @@ export const DeckSpotlightWidget: React.FC<WidgetProps> = React.memo(({
           name={deckArtName}
           version="art_crop"
           alt={deckArtName}
-          className="w-full h-full object-cover object-center scale-105 filter blur-[0.2px]"
+          className="w-full h-full object-cover object-center scale-105"
         />
       ) : (
         <div className="w-full h-full bg-neutral-900" />
@@ -115,7 +115,7 @@ export const DeckSpotlightWidget: React.FC<WidgetProps> = React.memo(({
       isEmpty={!spotlight}
       emptyMessage="No qualifying deck recorded (requires 10+ games and 50%+ win rate)."
       className="relative overflow-hidden cursor-pointer group"
-      headerClassName="bg-black/25 backdrop-blur-xs px-4 pt-3 pb-2 -mx-4 -mt-4 border-b border-white/10 cursor-pointer"
+      headerClassName="bg-black/60 px-4 pt-3 pb-2 -mx-4 -mt-4 border-b border-white/10 cursor-pointer"
       background={backgroundNode}
     >
       {spotlight && (

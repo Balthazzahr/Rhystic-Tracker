@@ -3,6 +3,7 @@ import { Sparkles, RefreshCw, CheckCircle2, X, ShieldCheck, Download, Gamepad2 }
 import { invoke } from '@tauri-apps/api/core';
 import defaultAvatarImg from '../assets/avatars/_npe_Player.png';
 import { getAvatarCacheStats } from '../utils/avatarImageCache';
+import { useModalEscape } from '../utils/modalStack';
 
 interface AvatarOnboardingModalProps {
   onClose: () => void;
@@ -38,8 +39,10 @@ export const AvatarOnboardingModal: React.FC<AvatarOnboardingModalProps> = ({ on
     onClose();
   };
 
+  useModalEscape(!extracting, handleDismiss, 20);
+
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 select-none">
       <div 
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-lg bg-neutral-950 border border-white/20 shadow-2xl p-6 relative flex flex-col gap-5 text-left animate-scale-in"

@@ -9,6 +9,7 @@ import { AchievementBadge } from './AchievementBadge';
 import { DeckAchievementsModal } from './DeckAchievementsModal';
 import CardImage from './CardImage';
 import { ensureLocalImage } from '../utils/cardImageCache';
+import { useModalEscape } from '../utils/modalStack';
 
 interface DeckDetailViewProps {
   isOpen: boolean;
@@ -521,28 +522,32 @@ export function DeckDetailView({
     };
   }, [isOpen, deckName]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (chooseArtOpen) {
-          setChooseArtOpen(false);
-        } else if (achievementsModalOpen) {
-          setAchievementsModalOpen(false);
-        } else if (exportOpen) {
-          setExportOpen(false);
-        } else if (importOpen) {
-          if (!importBusy) setImportOpen(false);
-        } else {
-          onBack();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, chooseArtOpen, achievementsModalOpen, exportOpen, importOpen, importBusy, onBack]);
+  // Stacked modal Escape handling: inner modals register with higher priority, outer view with base priority
+  useModalEscape(isOpen && chooseArtOpen, () => setChooseArtOpen(false), 15);
+  useModalEscape(isOpen && exportOpen, () => setExportOpen(false), 15);
+  useModalEscape(isOpen && importOpen && !importBusy, () => setImportOpen(false), 15);
+  useModalEscape(isOpen, onBack, 5);
 
-  if (!isOpen || !detail) return null;
+  if (!isOpen) return null;
+
+  if (!detail) {
+    return (
+      <div 
+        onClick={onBack}
+        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 select-none"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-[95vw] max-w-[1520px] h-[95vh] max-h-[1150px] bg-neutral-950 border border-white/20 p-8 flex flex-col items-center justify-center space-y-4"
+        >
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <div className="text-sm font-mono text-neutral-300 uppercase tracking-wider">
+            Loading {deckName}...
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const winrateNum = parseFloat(detail.winrate) || 0;
   const playTotal = (detail.play?.wins || 0) + (detail.play?.losses || 0);
@@ -574,7 +579,7 @@ export function DeckDetailView({
   return (
     <div 
       onClick={onBack}
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-2xl animate-fade-in select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 select-none"
       style={{ transform: 'translateZ(0)' }}
     >
       {/* Ambient Background Card Art Crop spanning full window */}
@@ -582,10 +587,9 @@ export function DeckDetailView({
         <img
           src={bgImageUrl}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0 transition-opacity duration-500"
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none z-0 opacity-20"
           style={{
             objectPosition: 'center 30%',
-            filter: 'saturate(0.60) brightness(0.60)',
           }}
           draggable={false}
         />
@@ -593,11 +597,7 @@ export function DeckDetailView({
 
       {/* Ambient darkness layers preserving sharp text contrast and clear background art */}
       <div
-        className="absolute inset-0 bg-neutral-950/70 pointer-events-none z-0"
-        style={{ mixBlendMode: 'multiply' }}
-      />
-      <div
-        className="absolute inset-0 bg-neutral-950/50 pointer-events-none z-0"
+        className="absolute inset-0 bg-neutral-950/80 pointer-events-none z-0"
       />
 
       {/* Floating Close Button in Top-Right */}
@@ -715,7 +715,7 @@ export function DeckDetailView({
         {/* 2. MAIN WORKSPACE (Unboxed parent, translucent sidebar + translucent decklist table) */}
         <div className="flex-1 flex gap-4 min-h-0 overflow-hidden relative z-10">
           {/* Left sidebar: Translucent box */}
-          <div className="w-[320px] shrink-0 border border-white/10 bg-neutral-950/45 backdrop-blur-md p-4 flex flex-col min-h-0 space-y-4 shadow-xl">
+          <div className="w-[320px] shrink-0 border border-white/10 bg-neutral-950/90 p-4 flex flex-col min-h-0 space-y-4 shadow-xl">
             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
               {/* Winrate */}
               <div className="border-b border-white/10 pb-3 flex items-center justify-between">
@@ -958,7 +958,7 @@ export function DeckDetailView({
             </div>
 
             {/* Decklist Container: The only box on the right, translucent */}
-            <div className="flex-1 overflow-hidden min-h-0 border border-white/10 bg-neutral-950/45 backdrop-blur-md p-3 shadow-xl">
+            <div className="flex-1 overflow-hidden min-h-0 border border-white/10 bg-neutral-950/90 p-3 shadow-xl">
               {listMode === 'true' && deckListData ? (
                 <TrueDeckListView
                   data={deckListData}
@@ -1003,7 +1003,7 @@ export function DeckDetailView({
       {/* Import Decklist Modal */}
       {importOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85"
           onClick={closeImport}
         >
           <div
@@ -1085,7 +1085,7 @@ export function DeckDetailView({
       {/* Export Decklist Modal */}
       {exportOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85"
           onClick={() => setExportOpen(false)}
         >
           <div
@@ -1175,7 +1175,7 @@ export function DeckDetailView({
       {/* Choose Cover Art / Background Art Modal */}
       {chooseArtOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85"
           onClick={() => setChooseArtOpen(false)}
         >
           <div

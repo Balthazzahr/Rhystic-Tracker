@@ -3,6 +3,7 @@ import { X, Sparkles, Coins, Zap, Clock, Swords, CheckCircle2, RefreshCw } from 
 import { invoke } from "@tauri-apps/api/core";
 import { QuestStatistics, QuestRerollStats, formatQuestCategory } from "./questCommon";
 import { ManaPip } from "../../ManaPip";
+import { useModalEscape } from "../../../utils/modalStack";
 
 interface QuestStatisticsModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface QuestStatisticsModalProps {
 }
 
 export const QuestStatisticsModal: React.FC<QuestStatisticsModalProps> = ({ isOpen, onClose, rerollStats }) => {
+  useModalEscape(isOpen, onClose, 10);
   const [stats, setStats] = useState<QuestStatistics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +37,7 @@ export const QuestStatisticsModal: React.FC<QuestStatisticsModalProps> = ({ isOp
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 select-none">
       <div
         className="bg-neutral-950 border border-white/20 shadow-2xl rounded-none w-[94vw] max-w-7xl max-h-[90vh] flex flex-col overflow-hidden text-neutral-200"
         onClick={(e) => e.stopPropagation()}

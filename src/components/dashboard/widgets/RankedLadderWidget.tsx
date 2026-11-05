@@ -3,14 +3,12 @@ import { Award, Shield, Trophy, Clock, History, Swords, Sparkles, TrendingUp } f
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
 import { usePlayerRank, formatRomanLevel, getTierTheme, getMaxStepsForTier } from "./rankCommon";
-import { useCountdown } from "./questCommon";
+import { CountdownTimer } from "./questCommon";
 import { RankHistoryModal } from "./RankHistoryModal";
 
 export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const { rank, loading } = usePlayerRank();
   const [modalOpen, setModalOpen] = useState(false);
-
-  const countdown = useCountdown(rank?.season_end_time);
 
   const constructedTier = rank?.constructed_tier || "Bronze";
   const constructedLevel = rank?.constructed_level ?? 4;
@@ -43,15 +41,15 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
         emptyMessage="No ranked data detected yet. Log into MTGA to track."
         headerActions={
           <div className="flex items-center gap-1.5">
-            {countdown && (
+            {rank?.season_end_time && (
               <div className="hidden sm:flex items-center gap-1 text-[9px] font-mono text-neutral-400 px-1.5 py-0.5 bg-white/[0.03] border border-white/5">
                 <Clock className="w-2.5 h-2.5 text-neutral-400" />
-                <span>Ends in {countdown}</span>
+                <span>Ends in <CountdownTimer targetIso={rank.season_end_time} /></span>
               </div>
             )}
             <button
               onClick={() => setModalOpen(true)}
-              className="text-[10px] font-sans font-semibold uppercase tracking-wider px-2 py-0.5 bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/30 text-neutral-300 hover:text-white transition-all flex items-center gap-1"
+              className="text-[10px] font-sans font-semibold uppercase tracking-wider px-2 py-0.5 bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/30 text-neutral-300 hover:text-white transition-colors flex items-center gap-1"
               title="Open Season Ladder Climb History"
             >
               <History className="w-3 h-3 text-amber-400" />
@@ -108,11 +106,11 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
                 return (
                   <div
                     key={`constructed-pip-${idx}`}
-                    className={`h-full min-h-[18px] border rounded-[2px] flex items-center justify-center transition-all ${
+                    className={`h-full min-h-[18px] border rounded-[2px] flex items-center justify-center transition-colors ${
                       isEarned
                         ? constructedTheme.pipActive
                         : isNext
-                        ? "border-amber-400/80 bg-amber-400/10 text-neutral-300 ring-1 ring-amber-400/40 animate-pulse"
+                        ? "border-amber-400/80 bg-amber-400/10 text-neutral-300 ring-1 ring-amber-400/40"
                         : "bg-white/[0.03] border-white/10 text-neutral-600 hover:border-white/20"
                     }`}
                     title={`Pip ${idx + 1} of ${constructedMaxSteps}`}
@@ -183,11 +181,11 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
                 return (
                   <div
                     key={`limited-pip-${idx}`}
-                    className={`h-full min-h-[18px] border rounded-[2px] flex items-center justify-center transition-all ${
+                    className={`h-full min-h-[18px] border rounded-[2px] flex items-center justify-center transition-colors ${
                       isEarned
                         ? limitedTheme.pipActive
                         : isNext
-                        ? "border-cyan-400/80 bg-cyan-400/10 text-neutral-300 ring-1 ring-cyan-400/40 animate-pulse"
+                        ? "border-cyan-400/80 bg-cyan-400/10 text-neutral-300 ring-1 ring-cyan-400/40"
                         : "bg-white/[0.03] border-white/10 text-neutral-600 hover:border-white/20"
                     }`}
                     title={`Pip ${idx + 1} of ${limitedMaxSteps}`}

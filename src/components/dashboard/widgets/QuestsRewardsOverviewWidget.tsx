@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Target, Trophy, Clock, Coins, Sparkles, Layers, Check, RefreshCw, BarChart2, CheckCircle2 } from "lucide-react";
 import { WidgetProps } from "../types";
 import { WidgetShell } from "../WidgetShell";
-import { useActiveQuests, useRewardTracks, useCountdown, formatQuestCategory } from "./questCommon";
+import { useActiveQuests, useRewardTracks, CountdownTimer, formatQuestCategory } from "./questCommon";
 import { QuestStatisticsModal } from "./QuestStatisticsModal";
 import { ManaPip } from "../../ManaPip";
 
@@ -10,9 +10,6 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
   const { data: questsData, loading: questsLoading } = useActiveQuests();
   const { status: tracksStatus, loading: tracksLoading } = useRewardTracks();
   const [modalOpen, setModalOpen] = useState(false);
-
-  const dailyCountdown = useCountdown(tracksStatus?.daily_reset_timestamp);
-  const weeklyCountdown = useCountdown(tracksStatus?.weekly_reset_timestamp);
 
   const quests = questsData?.quests ?? [];
   const canSwap = questsData?.can_swap ?? false;
@@ -76,9 +73,9 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                       <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-neutral-500">
                         Empty Quest Slot
                       </span>
-                      {dailyCountdown && slotIdx === 0 && (
+                      {tracksStatus?.daily_reset_timestamp && slotIdx === 0 && (
                         <span className="text-[8px] font-mono text-amber-400/80 mt-0.5">
-                          Next in {dailyCountdown}
+                          Next in <CountdownTimer targetIso={tracksStatus.daily_reset_timestamp} />
                         </span>
                       )}
                     </div>
@@ -92,7 +89,7 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                 return (
                   <div
                     key={q.quest_id}
-                    className={`relative flex-1 min-h-[58px] border p-2 flex flex-col justify-between overflow-hidden transition-all ${
+                    className={`relative flex-1 min-h-[58px] border p-2 flex flex-col justify-between overflow-hidden transition-colors ${
                       isActive
                         ? is750
                           ? "border-amber-500/30 hover:border-amber-500/50 bg-amber-500/[0.03]"
@@ -102,7 +99,7 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                   >
                     {/* Completed Stamp Badge */}
                     {!isActive && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 rotate-[-8deg] border border-emerald-500/80 bg-neutral-950/85 px-2 py-0.5 shadow-xl pointer-events-none select-none z-10 flex items-center gap-1 backdrop-blur-xs">
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 rotate-[-8deg] border border-emerald-500/80 bg-neutral-950/95 px-2 py-0.5 shadow-lg pointer-events-none select-none z-10 flex items-center gap-1">
                         <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 stroke-[2.5]" />
                         <span className="text-[9px] font-sans font-black uppercase tracking-widest text-emerald-400">
                           COMPLETED
@@ -195,10 +192,10 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                     {dailyWins} <span className="text-neutral-500 font-normal text-[10px]">/ 15</span>
                   </span>
                 </div>
-                {dailyCountdown && (
+                {tracksStatus?.daily_reset_timestamp && (
                   <div className="flex items-center gap-1 text-[9px] font-mono text-neutral-400 shrink-0">
                     <Clock className="w-2.5 h-2.5 text-neutral-400" />
-                    <span>{dailyCountdown}</span>
+                    <CountdownTimer targetIso={tracksStatus.daily_reset_timestamp} />
                   </div>
                 )}
               </div>
@@ -219,13 +216,13 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                   return (
                     <div
                       key={`d-${m.win_number}`}
-                      className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-all ${
+                      className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-colors ${
                         isEarned
                           ? isCard
                             ? "bg-gradient-to-t from-purple-600/50 to-purple-500/20 border-purple-400/80 text-purple-200 shadow-[0_0_6px_rgba(168,85,247,0.3)]"
                             : "bg-gradient-to-t from-amber-600/50 to-amber-500/20 border-amber-400/80 text-amber-200 shadow-[0_0_6px_rgba(245,158,11,0.3)]"
                           : isNext
-                          ? "border-amber-400 bg-amber-400/20 text-white ring-1 ring-amber-400/80 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+                          ? "border-amber-400 bg-amber-400/20 text-white ring-1 ring-amber-400/80 shadow-[0_0_8px_rgba(245,158,11,0.5)]"
                           : "bg-white/[0.03] border-white/10 text-neutral-500 hover:border-white/20"
                       }`}
                       title={`Win #${m.win_number}: ${m.has_card ? "Uncommon Card (ICR)" : `${m.gold}g`}${m.xp ? ` + ${m.xp} XP` : ""}`}
@@ -280,10 +277,10 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                     {Math.min(weeklyWins, 15)} <span className="text-neutral-500 font-normal text-[10px]">/ 15</span>
                   </span>
                 </div>
-                {weeklyCountdown && (
+                {tracksStatus?.weekly_reset_timestamp && (
                   <div className="flex items-center gap-1 text-[9px] font-mono text-neutral-400 shrink-0">
                     <Clock className="w-2.5 h-2.5 text-neutral-400" />
-                    <span>{weeklyCountdown}</span>
+                    <CountdownTimer targetIso={tracksStatus.weekly_reset_timestamp} />
                   </div>
                 )}
               </div>
@@ -303,11 +300,11 @@ export const QuestsRewardsOverviewWidget: React.FC<WidgetProps> = React.memo(({ 
                   return (
                     <div
                       key={`w-${w}`}
-                      className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-all ${
+                      className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-colors ${
                         isEarned
                           ? "bg-gradient-to-t from-cyan-600/50 to-cyan-500/20 border-cyan-400/80 text-cyan-200 shadow-[0_0_6px_rgba(6,182,212,0.3)]"
                           : isNext
-                          ? "border-cyan-400 bg-cyan-400/20 text-white ring-1 ring-cyan-400/80 animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.5)]"
+                          ? "border-cyan-400 bg-cyan-400/20 text-white ring-1 ring-cyan-400/80 shadow-[0_0_8px_rgba(6,182,212,0.5)]"
                           : "bg-white/[0.03] border-white/10 text-neutral-500 hover:border-white/20"
                       }`}
                       title={`Win #${w}: 250 Mastery Pass XP`}

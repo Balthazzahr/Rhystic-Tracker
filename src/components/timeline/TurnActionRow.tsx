@@ -22,14 +22,14 @@ const CARD_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
   Land: { icon: 'ms-land', color: '#C89B5F' },
 };
 
-export const TurnActionRow: React.FC<TurnActionRowProps> = ({
+export const TurnActionRow = React.memo<TurnActionRowProps>(function TurnActionRow({
   action,
   isTurnActivePlayer,
   density = 'detailed',
   opponentName = 'Opponent',
   onCardClick,
   searchTerm = '',
-}) => {
+}) {
   const isPlayer = Boolean(action.is_player);
   const isOutOfTurn = isPlayer !== isTurnActivePlayer;
 
@@ -642,4 +642,4 @@ export const TurnActionRow: React.FC<TurnActionRowProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -46,15 +46,85 @@ function pickRandom<T>(arr: T[], exclude: T | null): T | null {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-// Pre-decode a local image URL so that when attached to an <img> DOM element it paints instantly
-async function preloadAndDecodeImage(srcUrl: string): Promise<boolean> {
+// Pre-decode and composite a local image URL onto an offscreen canvas so that
+// runtime CSS filters (`saturate`, `brightness`, `blur`) and `mix-blend-mode`
+// are baked once into a flat bitmap rather than recalculated on the CPU every frame.
+const bakedCanvasCache = new Map<string, string>();
+
+async function bakeBackgroundBitmap(
+  srcUrl: string,
+  saturate: number,
+  brightness: number,
+  baseHex: string,
+  baseOpacity: number,
+  accentHex: string,
+  accentOpacity: number
+): Promise<string | null> {
+  const cacheKey = `${srcUrl}|${saturate}|${brightness}|${baseHex}|${baseOpacity}|${accentHex}|${accentOpacity}`;
+  if (bakedCanvasCache.has(cacheKey)) {
+    return bakedCanvasCache.get(cacheKey)!;
+  }
+
   try {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.src = srcUrl;
     await img.decode();
-    return true;
+
+    // Downscale slightly to 960x540 — background is ambient and softly blurred,
+    // which saves ~75% memory and pixel fill rate while naturally softening edges.
+    const w = 960;
+    const h = 540;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return srcUrl;
+
+    // Calculate cover crop with center 30% vertical anchor
+    const imgRatio = img.naturalWidth / (img.naturalHeight || 1);
+    const canvasRatio = w / h;
+    let drawW = w;
+    let drawH = h;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imgRatio > canvasRatio) {
+      drawH = h;
+      drawW = h * imgRatio;
+      offsetX = (w - drawW) * 0.5;
+    } else {
+      drawW = w;
+      drawH = w / imgRatio;
+      offsetY = (h - drawH) * 0.3;
+    }
+
+    ctx.filter = `saturate(${saturate}) brightness(${brightness}) blur(4px)`;
+    // Slight overscan (-8px) so the 4px blur doesn't vignette edges
+    ctx.drawImage(img, offsetX - 8, offsetY - 8, drawW + 16, drawH + 16);
+    ctx.filter = 'none';
+
+    // Base dark overlay
+    ctx.globalAlpha = baseOpacity;
+    ctx.fillStyle = baseHex;
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle accent screen tint
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = accentOpacity;
+    ctx.fillStyle = accentHex;
+    ctx.fillRect(0, 0, w, h);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    // Cap cache size to prevent unbounded growth
+    if (bakedCanvasCache.size > 24) {
+      const firstKey = bakedCanvasCache.keys().next().value;
+      if (firstKey) bakedCanvasCache.delete(firstKey);
+    }
+    bakedCanvasCache.set(cacheKey, dataUrl);
+    return dataUrl;
   } catch {
-    return false;
+    return srcUrl;
   }
 }
 
@@ -91,6 +161,27 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
 
   // --- Display state ---
   const [displayed, setDisplayed] = useState<{ url: string; name: string | null } | null>(null);
+  const [bakedUrl, setBakedUrl] = useState<string | null>(null);
+
+  const opacityConfig = useMemo(() => {
+    switch (glassOpacity) {
+      case 'subtle':
+        return { baseOpacity: 0.65, brightness: 0.50, saturate: 0.65 };
+      case 'high':
+        return { baseOpacity: 0.88, brightness: 0.35, saturate: 0.40 };
+      case 'opaque':
+        return { baseOpacity: 0.97, brightness: 0.15, saturate: 0.20 };
+      case 'standard':
+      default:
+        return { baseOpacity: 0.78, brightness: 0.45, saturate: 0.50 };
+    }
+  }, [glassOpacity]);
+
+  const opacityConfigRef = useRef(opacityConfig);
+  opacityConfigRef.current = opacityConfig;
+
+  const paletteRef = useRef(palette);
+  paletteRef.current = palette;
 
   // --- Refs ---
   const activeTabRef = useRef(activeTab);
@@ -119,7 +210,43 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
 
   const swapTo = useCallback((url: string, name: string | null) => {
     setDisplayed({ url, name });
+    const cfg = opacityConfigRef.current;
+    const pal = paletteRef.current;
+    bakeBackgroundBitmap(
+      url,
+      cfg.saturate,
+      cfg.brightness,
+      pal?.base || '#0E0E10',
+      cfg.baseOpacity,
+      pal?.accent || '#4A7FA3',
+      ACCENT_OVERLAY_OPACITY
+    ).then((baked) => {
+      if (baked) setBakedUrl(baked);
+    });
   }, []);
+
+  // Re-bake if theme palette or glass opacity changes while an image is displayed
+  useEffect(() => {
+    if (!displayed?.url) {
+      setBakedUrl(null);
+      return;
+    }
+    let cancelled = false;
+    bakeBackgroundBitmap(
+      displayed.url,
+      opacityConfig.saturate,
+      opacityConfig.brightness,
+      palette?.base || '#0E0E10',
+      opacityConfig.baseOpacity,
+      palette?.accent || '#4A7FA3',
+      ACCENT_OVERLAY_OPACITY
+    ).then((baked) => {
+      if (!cancelled && baked) setBakedUrl(baked);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [displayed?.url, opacityConfig, palette?.base, palette?.accent]);
 
   // Fetch + cache a preset card URL (deduplicates concurrent in-flight requests)
   const resolveAndCachePreset = useCallback(async (presetVal: string): Promise<string | null> => {
@@ -142,7 +269,17 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
         }
 
         if (!localUrl) return null;
-        await preloadAndDecodeImage(localUrl);
+        const cfg = opacityConfigRef.current;
+        const pal = paletteRef.current;
+        await bakeBackgroundBitmap(
+          localUrl,
+          cfg.saturate,
+          cfg.brightness,
+          pal?.base || '#0E0E10',
+          cfg.baseOpacity,
+          pal?.accent || '#4A7FA3',
+          ACCENT_OVERLAY_OPACITY
+        );
         presetCacheRef.current.set(presetVal, localUrl);
         return localUrl;
       } finally {
@@ -172,7 +309,17 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
       try {
         const localUrl = await ensureLocalImage(name, 'art_crop');
         if (!localUrl) return;
-        await preloadAndDecodeImage(localUrl);
+        const cfg = opacityConfigRef.current;
+        const pal = paletteRef.current;
+        await bakeBackgroundBitmap(
+          localUrl,
+          cfg.saturate,
+          cfg.brightness,
+          pal?.base || '#0E0E10',
+          cfg.baseOpacity,
+          pal?.accent || '#4A7FA3',
+          ACCENT_OVERLAY_OPACITY
+        );
 
         lastPickedName = name;
         const prepared = { url: localUrl, name };
@@ -296,49 +443,18 @@ export const BlurredCardBackground: React.FC<BlurredCardBackgroundProps> = ({
     }
   }, [bgPresets]);
 
-  const opacityConfig = useMemo(() => {
-    switch (glassOpacity) {
-      case 'subtle':
-        return { baseOpacity: 0.65, brightness: 0.50, saturate: 0.65 };
-      case 'high':
-        return { baseOpacity: 0.88, brightness: 0.35, saturate: 0.40 };
-      case 'opaque':
-        return { baseOpacity: 0.97, brightness: 0.15, saturate: 0.20 };
-      case 'standard':
-      default:
-        return { baseOpacity: 0.78, brightness: 0.45, saturate: 0.50 };
-    }
-  }, [glassOpacity]);
-
   if (bgMode === 'none') return null;
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
-      {displayed && (
+      {bakedUrl && (
         <img
-          src={displayed.url}
+          src={bakedUrl}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover transition-all duration-300"
-          style={{
-            objectPosition: 'center 30%',
-            filter: `saturate(${opacityConfig.saturate}) brightness(${opacityConfig.brightness})`,
-          }}
+          className="absolute inset-0 w-full h-full object-cover"
           draggable={false}
         />
       )}
-
-      <div
-        className="absolute inset-0 transition-opacity duration-300"
-        style={{ backgroundColor: palette?.base || '#0E0E10', opacity: opacityConfig.baseOpacity }}
-      />
-      <div
-        className="absolute inset-0 transition-opacity duration-300"
-        style={{
-          backgroundColor: palette?.accent || '#4A7FA3',
-          opacity: ACCENT_OVERLAY_OPACITY,
-          mixBlendMode: 'screen',
-        }}
-      />
     </div>
   );
 };

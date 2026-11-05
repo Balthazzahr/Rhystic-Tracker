@@ -37,7 +37,7 @@ export function HoverArtPreview({ card, palette }: HoverArtPreviewProps) {
           (e.target as HTMLElement).style.display = 'none';
         }}
       />
-      <div className="absolute bottom-2 left-2 right-2 bg-black/80 backdrop-blur-md p-1.5 rounded-none border text-center truncate" style={{ borderColor: palette?.border }}>
+      <div className="absolute bottom-2 left-2 right-2 bg-black/90 p-1.5 rounded-none border text-center truncate" style={{ borderColor: palette?.border }}>
         <p className="text-xs font-bold truncate" style={{ color: palette?.text }}>{card.name}</p>
         <p className="text-[9px] font-mono opacity-60">GRP ID: {card.grp_id} {card.set_code ? `• ${card.set_code}` : ''}</p>
       </div>

@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Award } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { getAchievementMeta, cleanAchievementTitle, extractTierFromTitle, AchievementTier } from '../utils/achievementBadges';
+import { useModalEscape } from '../utils/modalStack';
 
 interface CardTrophyCaseModalProps {
   isOpen: boolean;
@@ -21,16 +22,7 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
   palette,
   onSelectMatch,
 }) => {
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  useModalEscape(isOpen, onClose, 20);
 
   const accentColor = palette?.accent || '#EAB308';
 
@@ -88,7 +80,7 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none overflow-y-auto custom-scrollbar"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 bg-black/85 select-none overflow-y-auto custom-scrollbar"
       onClick={onClose}
     >
       <div
@@ -123,8 +115,8 @@ export const CardTrophyCaseModal: React.FC<CardTrophyCaseModalProps> = ({
           </button>
         </div>
 
-        {/* Main Modal Window (Transparent Frosted Glass) */}
-        <div className="w-full max-h-[78vh] flex flex-col bg-neutral-950/75 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden relative z-10">
+        {/* Main Modal Window */}
+        <div className="w-full max-h-[78vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden relative z-10">
           {/* Subheader banner inside window */}
           <div className="px-5 py-3 border-b border-white/10 bg-white/[0.03] flex items-center justify-between shrink-0">
             <span className="text-xs font-mono text-neutral-400 uppercase tracking-wider">

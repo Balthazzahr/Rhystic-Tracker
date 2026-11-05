@@ -19,7 +19,7 @@ interface MatchTimelineProps {
   searchTerm?: string;
 }
 
-export function MatchTimeline({
+export const MatchTimeline = React.memo<MatchTimelineProps>(function MatchTimeline({
   matchId,
   turns,
   goingFirst,
@@ -118,7 +118,7 @@ export function MatchTimeline({
     }
 
     return { openingEvents: opening, roundsData: rounds, totalRounds: maxRound };
-  }, [turnEvents, turns]);
+  }, [turnEvents, turns, formatName, opponentName]);
 
   // Collapse all rounds by default on initial load of a match
   useEffect(() => {
@@ -133,7 +133,8 @@ export function MatchTimeline({
     }
   }, [loading, totalRounds, hasInitializedRounds]);
 
-  const toggleRound = (roundNum: number) => {
+  const toggleRound = React.useCallback((roundNum?: number) => {
+    if (roundNum === undefined) return;
     setCollapsedRounds((prev) => {
       const next = new Set(prev);
       if (next.has(roundNum)) {
@@ -143,9 +144,9 @@ export function MatchTimeline({
       }
       return next;
     });
-  };
+  }, []);
 
-  const toggleTurn = (turnNum: number) => {
+  const toggleTurn = React.useCallback((turnNum: number) => {
     setCollapsedTurns((prev) => {
       const next = new Set(prev);
       if (next.has(turnNum)) {
@@ -155,11 +156,11 @@ export function MatchTimeline({
       }
       return next;
     });
-  };
+  }, []);
 
   const areAllCollapsed = collapsedRounds.size >= totalRounds;
 
-  const toggleAllRounds = () => {
+  const toggleAllRounds = React.useCallback(() => {
     if (areAllCollapsed) {
       // Expand all
       setCollapsedRounds(new Set());
@@ -173,7 +174,7 @@ export function MatchTimeline({
       setCollapsedRounds(all);
       setOpeningCollapsed(true);
     }
-  };
+  }, [areAllCollapsed, totalRounds]);
 
   return (
     <div className="h-full flex flex-col space-y-3 p-4 min-h-0 overflow-hidden">
@@ -291,8 +292,9 @@ export function MatchTimeline({
                 firstPlayerIsHero={goingFirst}
                 opponentName={opponentName}
                 isRoundCollapsed={collapsedRounds.has(r.round)}
-                onToggleRound={() => toggleRound(r.round)}
-                collapsedTurns={collapsedTurns}
+                onToggleRound={toggleRound}
+                isFirstTurnCollapsed={collapsedTurns.has(r.firstTurn)}
+                isSecondTurnCollapsed={collapsedTurns.has(r.secondTurn)}
                 onToggleTurn={toggleTurn}
                 density="detailed"
                 searchTerm={searchTerm}
@@ -319,6 +321,6 @@ export function MatchTimeline({
       </div>
     </div>
   );
-}
+});
 
 export default MatchTimeline;

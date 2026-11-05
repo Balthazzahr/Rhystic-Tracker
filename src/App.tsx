@@ -35,6 +35,7 @@ import { MemoryStatsPanel } from './components/MemoryStatsPanel';
 import logoImg from './assets/RhysticTrackerLogo.svg';
 import symbolIcon from './assets/RhysticTrackerICON.svg';
 import { APP_VERSION } from './version';
+import { useModalEscape } from './utils/modalStack';
 
 // Renders a Nerd Font glyph (from the bundled NerdFontSymbols font) as an
 // inline icon. `glyph` is one of the `.nf-*` classes defined in index.css.
@@ -455,34 +456,35 @@ export default function App() {
     };
   }, [collectionRefreshTrigger]);
 
-  // Open the card overlay, enriching lightweight card refs ({name}/{grp_id})
-  // with full metadata (cmc, mana_cost, card_type, set_code, rarity) from the
-  // local cards cache so the detail panel always has complete info.
-  const openCardOverlay = useCallback(async (card: any, isCommander: boolean) => {
+  // Open the card overlay immediately on click, then enrich lightweight card
+  // refs ({name}/{grp_id}) with full metadata asynchronously to ensure 0ms click latency.
+  const openCardOverlay = useCallback((card: any, isCommander: boolean) => {
+    setOverlayImgFailed(false);
+    setOverlayImgTriedNamed(false);
+    setDeckCardOverlay({ card, isCommander });
+
     const hasMeta =
       card &&
       (card.cmc !== undefined || card.mana_cost !== undefined) &&
       (card.set_code !== undefined || card.rarity !== undefined);
     if (card && !hasMeta) {
-      try {
-        let meta: any = null;
-        if (card.grp_id) {
-          meta = await invoke('get_card_info', { grpId: card.grp_id });
+      (async () => {
+        try {
+          let meta: any = null;
+          if (card.grp_id) {
+            meta = await invoke('get_card_info', { grpId: card.grp_id });
+          }
+          if (!meta && card.name) {
+            meta = await invoke('get_card_info_by_name', { name: card.name });
+          }
+          if (meta) {
+            setDeckCardOverlay((prev) => (prev ? { ...prev, card: { ...prev.card, ...meta } } : null));
+          }
+        } catch (e) {
+          console.error('Failed to enrich card metadata:', e);
         }
-        if (!meta && card.name) {
-          meta = await invoke('get_card_info_by_name', { name: card.name });
-        }
-        if (meta) {
-          setDeckCardOverlay({ card: { ...card, ...meta }, isCommander });
-          return;
-        }
-      } catch (e) {
-        console.error('Failed to enrich card metadata:', e);
-      }
+      })();
     }
-    setOverlayImgFailed(false);
-    setOverlayImgTriedNamed(false);
-    setDeckCardOverlay({ card, isCommander });
   }, []);
 
   // Dashboard view mode: '2.0' (default) or 'legacy', persisted locally.
@@ -502,6 +504,23 @@ export default function App() {
 
   const handleSelectDeck = useCallback((deckName: string) => {
     setSelectedDeckName(deckName);
+  }, []);
+
+  const handleFilterOpponent = useCallback((oppName: string) => {
+    setMatchHistorySearch(oppName);
+    setActiveTab('matches');
+  }, []);
+
+  const handleCloseLiveMatch = useCallback(() => {
+    setLiveMatchState(null);
+  }, []);
+
+  const handleDeleteDeckRequest = useCallback((deckName: string) => {
+    setDeckToDelete(deckName);
+  }, []);
+
+  const handleClearInitialAchievement = useCallback(() => {
+    setInitialAchievementName(null);
   }, []);
 
   // Hover state for theme selector preview
@@ -643,13 +662,9 @@ export default function App() {
     return () => clearInterval(timer);
   }, [impactfulCards]);
 
-  // Close the deck library card overlay with Escape.
-  useEffect(() => {
-    if (!deckCardOverlay) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDeckCardOverlay(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [deckCardOverlay]);
+  // Global Escape key integrations for top-level dialogs
+  useModalEscape(!!deckToDelete, () => setDeckToDelete(null), 30);
+  useModalEscape(showSplash, () => setShowSplash(false), 50);
 
   // Fetch printings + stats (IPC) and Scryfall card JSON whenever the overlay opens.
   useEffect(() => {
@@ -671,6 +686,7 @@ export default function App() {
         const printings = res?.printings || [];
         setOverlayPrintings(printings);
         setOverlayStats(res?.stats || null);
+        let initialKey: string | null = null;
         if (printings.length > 0) {
           // Prefer the saved card-style preference; else the newest printing.
           const pref = getCardStylePref(name);
@@ -680,23 +696,25 @@ export default function App() {
           const saved = prefKey
             ? printings.find((p) => printingKey(p) === prefKey)
             : null;
-          setOverlaySelected(saved ? printingKey(saved) : (prefKey || printingKey(printings[0])));
+          initialKey = saved ? printingKey(saved) : (prefKey || printingKey(printings[0]));
+          setOverlaySelected(initialKey);
         }
-        // Fetch flavor text for each printing so it matches the selected art.
+
+        // Fetch flavor text for the active printing (targeted single request, no multi-request lag)
         const isTokenCard =
           deckCardOverlay?.card?.card_type?.toLowerCase().includes('token') ||
           deckCardOverlay?.card?.name?.toLowerCase().includes('token') ||
           printings[0]?.card_type?.toLowerCase().includes('token') ||
           printings[0]?.rarity === 0;
 
-        const flavors: Record<string, string> = {};
-        for (const p of printings) {
-          const key = printingKey(p);
+        const activePrinting = printings.find((p) => printingKey(p) === initialKey) || printings[0];
+        if (activePrinting) {
+          const key = printingKey(activePrinting);
           try {
-            const rawSet = String(p.set_code).toLowerCase();
+            const rawSet = String(activePrinting.set_code).toLowerCase();
             const tokenSet = isTokenCard && !rawSet.startsWith('t') ? `t${rawSet}` : rawSet;
-            const url = p.set_code && p.collector_number
-              ? `https://api.scryfall.com/cards/${tokenSet}/${encodeURIComponent(cleanCollectorNumber(p.collector_number))}?format=json`
+            const url = activePrinting.set_code && activePrinting.collector_number
+              ? `https://api.scryfall.com/cards/${tokenSet}/${encodeURIComponent(cleanCollectorNumber(activePrinting.collector_number))}?format=json`
               : `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=json`;
             const resp = await fetch(url);
             if (resp.ok) {
@@ -707,13 +725,12 @@ export default function App() {
                 name.toLowerCase().includes(f.name?.toLowerCase())
               ) || data.card_faces?.[0] || null;
               const ft = data.flavor_text || face?.flavor_text || '';
-              if (ft) flavors[key] = ft;
+              if (ft && !cancelled) setOverlayFlavors({ [key]: ft });
             }
           } catch (e) {
-            // ignore individual printing failures
+            // ignore
           }
         }
-        if (!cancelled) setOverlayFlavors(flavors);
       } catch (e) {
         console.error('Failed to fetch card printings:', e);
       } finally {
@@ -800,6 +817,7 @@ export default function App() {
     loadDeckOverview();
 
     let wasActive = false;
+    let lastLiveSig = 'IDLE';
 
     const pollInterval = setInterval(async () => {
       try {
@@ -814,59 +832,67 @@ export default function App() {
               invoke('open_deck_tracker_window').catch(console.error);
             }
           }
-          setLiveMatchState({
-            status: 'IN_MATCH',
-            match_id: liveState.match_id,
-            turn: liveState.turn || 1,
-            round: liveState.round || 1,
-            format: liveState.format,
-            going_first: liveState.going_first,
-            player_life: liveState.player_life ?? 20,
-            opponent_life: liveState.opponent_life ?? 20,
-            opponent_name: liveState.opponent_name,
-            player_deck_name: liveState.player_deck_name,
-            player_commander: liveState.player_commander,
-            opponent_commander: liveState.opponent_commander,
-            player_colors: liveState.player_colors || [],
-            opponent_colors: liveState.opponent_colors || [],
-            player_cards_seen: liveState.player_cards_seen || 0,
-            opponent_cards_seen: liveState.opponent_cards_seen || 0,
-            last_event: liveState.last_event,
-            recent_events: liveState.recent_events || [],
-            deck_tracker: liveState.deck_tracker || null,
-          });
+          const sig = `ACTIVE|${liveState.match_id}|${liveState.turn}|${liveState.round}|${liveState.player_life}|${liveState.opponent_life}|${liveState.player_cards_seen}|${liveState.opponent_cards_seen}|${liveState.recent_events?.length || 0}|${liveState.last_event?.grp_id || 0}|${liveState.deck_tracker?.library_remaining ?? ''}`;
+          if (sig !== lastLiveSig) {
+            lastLiveSig = sig;
+            setLiveMatchState({
+              status: 'IN_MATCH',
+              match_id: liveState.match_id,
+              turn: liveState.turn || 1,
+              round: liveState.round || 1,
+              format: liveState.format,
+              going_first: liveState.going_first,
+              player_life: liveState.player_life ?? 20,
+              opponent_life: liveState.opponent_life ?? 20,
+              opponent_name: liveState.opponent_name,
+              player_deck_name: liveState.player_deck_name,
+              player_commander: liveState.player_commander,
+              opponent_commander: liveState.opponent_commander,
+              player_colors: liveState.player_colors || [],
+              opponent_colors: liveState.opponent_colors || [],
+              player_cards_seen: liveState.player_cards_seen || 0,
+              opponent_cards_seen: liveState.opponent_cards_seen || 0,
+              last_event: liveState.last_event,
+              recent_events: liveState.recent_events || [],
+              deck_tracker: liveState.deck_tracker || null,
+            });
+          }
         } else if (liveState && liveState.just_completed) {
           // Keep the HUD up showing the result overlay instead of blanking.
-          setLiveMatchState((prev: any) => ({
-            status: 'COMPLETED',
-            match_id: liveState.match_id,
-            format: liveState.format,
-            going_first: liveState.going_first ?? prev?.going_first,
-            player_deck_name: liveState.player_deck_name,
-            opponent_name: liveState.opponent_name,
-            player_life: liveState.player_life,
-            opponent_life: liveState.opponent_life,
-            duration_seconds: liveState.duration_seconds,
-            turns: liveState.turns,
-            turn: liveState.turns,
-            round: Math.ceil((liveState.turns || 1) / 2),
-            timestamp: liveState.timestamp,
-            impactful_cards: liveState.impactful_cards || [],
-            earned_achievements: liveState.earned_achievements || [],
-            just_completed: true,
-            result: liveState.result,
-            result_reason: liveState.result_reason,
-            reason_label: liveState.reason_label,
-            player_commander: prev?.player_commander,
-            opponent_commander: prev?.opponent_commander,
-            player_colors: prev?.player_colors || [],
-            opponent_colors: prev?.opponent_colors || [],
-            player_cards_seen: prev?.player_cards_seen || 0,
-            opponent_cards_seen: prev?.opponent_cards_seen || 0,
-            recent_events: (liveState.recent_events && liveState.recent_events.length > 0)
-              ? liveState.recent_events
-              : (prev?.match_id === liveState.match_id ? prev.recent_events || [] : []),
-          }));
+          const sig = `COMPLETED|${liveState.match_id}|${liveState.result}|${liveState.turns}`;
+          if (sig !== lastLiveSig) {
+            lastLiveSig = sig;
+            setLiveMatchState((prev: any) => ({
+              status: 'COMPLETED',
+              match_id: liveState.match_id,
+              format: liveState.format,
+              going_first: liveState.going_first ?? prev?.going_first,
+              player_deck_name: liveState.player_deck_name,
+              opponent_name: liveState.opponent_name,
+              player_life: liveState.player_life,
+              opponent_life: liveState.opponent_life,
+              duration_seconds: liveState.duration_seconds,
+              turns: liveState.turns,
+              turn: liveState.turns,
+              round: Math.ceil((liveState.turns || 1) / 2),
+              timestamp: liveState.timestamp,
+              impactful_cards: liveState.impactful_cards || [],
+              earned_achievements: liveState.earned_achievements || [],
+              just_completed: true,
+              result: liveState.result,
+              result_reason: liveState.result_reason,
+              reason_label: liveState.reason_label,
+              player_commander: prev?.player_commander,
+              opponent_commander: prev?.opponent_commander,
+              player_colors: prev?.player_colors || [],
+              opponent_colors: prev?.opponent_colors || [],
+              player_cards_seen: prev?.player_cards_seen || 0,
+              opponent_cards_seen: prev?.opponent_cards_seen || 0,
+              recent_events: (liveState.recent_events && liveState.recent_events.length > 0)
+                ? liveState.recent_events
+                : (prev?.match_id === liveState.match_id ? prev.recent_events || [] : []),
+            }));
+          }
           if (wasActive) {
             wasActive = false;
             await loadData(true);
@@ -874,12 +900,15 @@ export default function App() {
         } else {
           // Keep completed match permanently visible on screen until user explicitly closes it,
           // navigates away to another UI view, or a new match begins.
-          setLiveMatchState((prev: any) => {
-            if (prev && prev.status === 'COMPLETED') {
-              return prev;
-            }
-            return null;
-          });
+          if (lastLiveSig !== 'IDLE') {
+            lastLiveSig = 'IDLE';
+            setLiveMatchState((prev: any) => {
+              if (!prev || prev.status === 'COMPLETED') {
+                return prev;
+              }
+              return null;
+            });
+          }
           if (wasActive) {
             wasActive = false;
             await loadData(true);
@@ -997,7 +1026,7 @@ export default function App() {
     { value: 'ALL', label: 'All Time' },
   ];
 
-  const renderManaHistogram = (curve?: number[]) => {
+  const renderManaHistogram = useCallback((curve?: number[]) => {
     const bins = curve || [0, 0, 0, 0, 0, 0, 0, 0, 0];
     const startIdx = (bins[0] || 0) > 0 ? 0 : 1;
     const visible = bins.slice(startIdx);
@@ -1013,7 +1042,7 @@ export default function App() {
           return (
             <div 
               key={idx} 
-              className="flex-1 rounded-t-sm transition-all duration-200"
+              className="flex-1 rounded-t-sm"
               style={{ 
                 height: `${heightPct}%`, 
                 backgroundColor: val > 0 ? (palette?.accent || '#38BDF8') : 'rgba(255,255,255,0.06)'
@@ -1023,9 +1052,9 @@ export default function App() {
         })}
       </div>
     );
-  };
+  }, [palette?.accent]);
 
-  const renderDeckColorIdentity = (colors?: string[], size: number = 14, justify: string = 'justify-center') => {
+  const renderDeckColorIdentity = useCallback((colors?: string[], size: number = 14, justify: string = 'justify-center') => {
     if (!colors || colors.length === 0) {
       return <ManaPip symbol="C" size={size} className="shrink-0" />;
     }
@@ -1036,10 +1065,10 @@ export default function App() {
         ))}
       </div>
     );
-  };
+  }, []);
 
   // Muted format-chip colors, inspired by the mana pip palette but toned down.
-  const formatChipColor = (format: string): { bg: string; fg: string; border: string } => {
+  const formatChipColor = useCallback((format: string): { bg: string; fg: string; border: string } => {
     const f = (format || '').toLowerCase();
     if (f.includes('brawl - standard') || f.includes('standard brawl')) {
       return { bg: '#4A7FA318', fg: '#7FAAC9', border: '#4A7FA338' };
@@ -1071,10 +1100,10 @@ export default function App() {
       return { bg: '#6E8A4218', fg: '#98B36D', border: '#6E8A4238' };
     }
     return { bg: '#94A3B818', fg: '#CBD5E1', border: '#94A3B838' };
-  };
+  }, []);
 
   // Format timestamp as "14 Aug 26 14:52" (day, short month, 2-digit year, HH:MM)
-  const formatDateShort = (ts: string): string => {
+  const formatDateShort = useCallback((ts: string): string => {
     const d = new Date(ts);
     if (isNaN(d.getTime())) return ts || '';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1084,12 +1113,12 @@ export default function App() {
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     return `${day} ${mon} ${yr} ${hh}:${mm}`;
-  };
+  }, []);
 
   // Win-rate gradient: interpolate between the ManaPip theme colors — red
   // (#F87171) at 0%, yellow mid, green (#34D399) at 100%. Matches the app's
   // mana pip palette rather than a fluorescent HSL ramp.
-  const winRateColor = (rate: string): string => {
+  const winRateColor = useCallback((rate: string): string => {
     const pct = Math.max(0, Math.min(100, parseFloat(rate) || 0)) / 100;
     const red: [number, number, number] = [0xF8, 0x71, 0x71];
     const yellow: [number, number, number] = [0xF8, 0xCB, 0x6B];
@@ -1107,11 +1136,11 @@ export default function App() {
       b = yellow[2] + (green[2] - yellow[2]) * t;
     }
     return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-  };
+  }, []);
 
   // Representative art thumbnail for a deck row: dominant commander (Brawl) or
   // random non-land card (non-commander). Clicking opens the card overlay.
-  const renderDeckArt = (d: any, size: string = 'w-7 h-7') => {
+  const renderDeckArt = useCallback((d: any, size: string = 'w-7 h-7') => {
     const artName = d.top_commander_name || d.top_card_name;
     const openOverlay = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -1134,12 +1163,12 @@ export default function App() {
             version="art_crop"
             alt={artName}
             onClick={openOverlay}
-            className="w-full h-full object-cover shrink-0 cursor-pointer transition-transform duration-150 group-hover:scale-110 hover:brightness-110"
+            className="w-full h-full object-cover shrink-0 cursor-pointer transition-transform duration-150 group-hover:scale-110"
           />
         </div>
       </CardNameTooltip>
     );
-  };
+  }, [openCardOverlay]);
 
   return (
     <div 
@@ -1174,9 +1203,9 @@ export default function App() {
 
       {/* COLUMN 1: Left Sidebar (in-flow bar) */}
       <aside 
-        className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-all duration-300 ease-in-out z-10 backdrop-blur-md"
+        className="h-full border-r flex flex-col justify-between p-4 shrink-0 transition-[width] duration-200 ease-out z-10"
         style={{ 
-          backgroundColor: `${palette?.mantle || '#12141A'}C0`, 
+          backgroundColor: `${palette?.mantle || '#12141A'}EB`, 
           borderColor: palette?.border || '#2A2F3D',
           width: isSidebarCollapsed ? '72px' : '220px'
         }}
@@ -1184,7 +1213,7 @@ export default function App() {
         <div className="flex flex-col flex-1 min-h-0">
           {/* Logo Brand Section: Logo image above symbol icon */}
           <div 
-            className={`flex flex-col items-center justify-center shrink-0 transition-all pt-2 pb-3.5 ${
+            className={`flex flex-col items-center justify-center shrink-0 pt-2 pb-3.5 ${
               isSidebarCollapsed ? 'px-0' : 'px-2'
             }`}
           >
@@ -1192,19 +1221,19 @@ export default function App() {
               <img 
                 src={logoImg} 
                 alt="Rhystic Tracker" 
-                className="h-8 w-auto object-contain drop-shadow-md mb-2.5 transition-all"
+                className="h-8 w-auto object-contain mb-2.5"
               />
             )}
             <img 
               src={symbolIcon} 
               alt="Rhystic Tracker Icon" 
-              className={`object-contain w-auto drop-shadow-md transition-all ${
+              className={`object-contain w-auto ${
                 isSidebarCollapsed ? 'h-8' : 'h-[50px]'
               }`}
             />
             {envInfo?.is_test && (
               <div 
-                className={`mt-2 rounded-full border font-mono font-bold tracking-wider transition-all select-none flex items-center justify-center gap-1.5 shadow-sm ${
+                className={`mt-2 rounded-full border font-mono font-bold tracking-wider select-none flex items-center justify-center gap-1.5 shadow-sm ${
                   isSidebarCollapsed ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-3 py-0.5'
                 }`}
                 style={{
@@ -1222,7 +1251,7 @@ export default function App() {
 
           {/* Navigation Links — stays in place below the icon whether the sidebar
               is open or collapsed (no vertical centering on collapse). */}
-          <nav className={`transition-all duration-300 ease-in-out ${
+          <nav className={`${
             isSidebarCollapsed ? 'space-y-0.5' : 'space-y-1.5'
           }`}>
             {navItems.map((item) => {
@@ -1251,7 +1280,7 @@ export default function App() {
                     setActiveTab(item.id as any);
                   }}
                   title={isSidebarCollapsed ? item.label : undefined}
-                  className={`w-full flex items-center py-2.5 rounded-none font-medium text-sm transition-all cursor-pointer hover:bg-white/[0.04] ${
+                  className={`w-full flex items-center py-2.5 rounded-none font-medium text-sm transition-colors cursor-pointer hover:bg-white/[0.04] ${
                     isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-3.5'
                   }`}
                   style={{
@@ -1278,7 +1307,7 @@ export default function App() {
         {/* Sidebar Footer: mana theme selector + collapse chevron. When the
             sidebar is open the chevron sits on the left of the pips in one row;
             when collapsed the pips stack vertically with the chevron below. */}
-        <div className={`flex items-center transition-all ${
+        <div className={`flex items-center ${
           isSidebarCollapsed ? 'flex-col' : 'justify-center gap-3'
         }`}>
           {/* Collapse chevron — bare icon, no pill/button around it */}
@@ -1293,7 +1322,7 @@ export default function App() {
           </button>
 
           {/* Mana theme pips */}
-          <div className={`flex items-center transition-all ${
+          <div className={`flex items-center ${
             isSidebarCollapsed ? 'flex-col space-y-1 order-1' : 'gap-0.5 order-2'
           }`}>
             {manaThemeOptions.map((t) => {
@@ -1308,7 +1337,7 @@ export default function App() {
                   onMouseEnter={() => setHoveredThemeId(t.id)}
                   onMouseLeave={() => setHoveredThemeId(null)}
                   title={t.label}
-                  className={`transition-all duration-200 p-0.5 ${
+                  className={`transition-transform duration-150 p-0.5 ${
                     isLit ? 'scale-125' : 'opacity-60 scale-100 hover:opacity-100'
                   }`}
                 >
@@ -1326,7 +1355,7 @@ export default function App() {
       </aside>
 
       {/* COLUMN 2: Main Workspace Container */}
-      <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 transition-all duration-300 relative">
+      <main ref={workspaceRef} className="flex-1 min-w-[400px] h-full p-6 overflow-hidden flex flex-col space-y-4 relative">
         
         {/* VIEW 1: Dashboard (default landing view) */}
         {activeTab === 'dashboard' && (
@@ -1340,10 +1369,7 @@ export default function App() {
               onSelectMatch={handleSelectMatch}
               onSelectDeck={handleSelectDeck}
               onShowCard={openCardOverlay}
-              onFilterOpponent={(oppName) => {
-                setMatchHistorySearch(oppName);
-                setActiveTab('matches');
-              }}
+              onFilterOpponent={handleFilterOpponent}
               isTestEnv={envInfo?.is_test}
               dashboardMode={dashboardMode}
               setDashboardMode={handleSetDashboardMode}
@@ -1355,12 +1381,9 @@ export default function App() {
               palette={palette}
               formatOptions={formatOptions}
               timeOptions={timeOptions}
-              onSelectMatch={(matchId) => {
-                setSelectedMatchId(matchId);
-                setIsFullInfoOpen(true);
-              }}
-              onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
-              onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+              onSelectMatch={handleSelectMatch}
+              onSelectDeck={handleSelectDeck}
+              onShowCard={openCardOverlay}
               isTestEnv={envInfo?.is_test}
               dashboardMode={dashboardMode}
               setDashboardMode={handleSetDashboardMode}
@@ -1383,7 +1406,7 @@ export default function App() {
         {activeTab === 'collection' && (
           <CollectionView
             palette={palette}
-            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            onShowCard={openCardOverlay}
             refreshTrigger={collectionRefreshTrigger}
           />
         )}
@@ -1393,9 +1416,9 @@ export default function App() {
           <LiveHUDView
             palette={palette}
             liveMatchState={liveMatchState}
-            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            onShowCard={openCardOverlay}
             formatChipColor={formatChipColor}
-            onCloseMatch={() => setLiveMatchState(null)}
+            onCloseMatch={handleCloseLiveMatch}
             onSelectMatch={handleSelectMatch}
           />
         )}
@@ -1407,9 +1430,9 @@ export default function App() {
               deckOverview={deckOverview}
               palette={palette}
               showFlair={deckBoxFlair}
-              onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
-              onDeleteDeck={(deckName) => setDeckToDelete(deckName)}
-              onOpenCardOverlay={(card, isOpponent) => openCardOverlay(card, isOpponent)}
+              onSelectDeck={handleSelectDeck}
+              onDeleteDeck={handleDeleteDeckRequest}
+              onOpenCardOverlay={openCardOverlay}
               formatChipColor={formatChipColor}
               winRateColor={winRateColor}
               renderDeckArt={renderDeckArt}
@@ -1426,12 +1449,9 @@ export default function App() {
             deckOverview={deckOverview}
             palette={palette}
             formatOptions={formatOptions}
-            onSelectMatch={(matchId) => {
-              setSelectedMatchId(matchId);
-              setIsFullInfoOpen(true);
-            }}
-            onSelectDeck={(deckName) => setSelectedDeckName(deckName)}
-            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
+            onSelectMatch={handleSelectMatch}
+            onSelectDeck={handleSelectDeck}
+            onShowCard={openCardOverlay}
             initialSearch={matchHistorySearch}
             onDeleteMatch={() => loadData()}
           />
@@ -1442,12 +1462,9 @@ export default function App() {
           <AchievementsView
             palette={palette}
             initialAchievement={initialAchievementName}
-            onClearInitialAchievement={() => setInitialAchievementName(null)}
-            onShowCard={(card, isCommander) => openCardOverlay(card, isCommander)}
-            onSelectMatch={(matchId) => {
-              setSelectedMatchId(matchId);
-              setIsFullInfoOpen(true);
-            }}
+            onClearInitialAchievement={handleClearInitialAchievement}
+            onShowCard={openCardOverlay}
+            onSelectMatch={handleSelectMatch}
           />
         )}
 
@@ -1565,7 +1582,7 @@ export default function App() {
       {/* Delete-deck confirmation modal */}
       {deckToDelete && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl animate-fade-in"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85"
           onClick={() => setDeckToDelete(null)}
         >
           <div
@@ -1668,7 +1685,7 @@ export default function App() {
       {showSplash && (
         <div
           onClick={() => setShowSplash(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none bg-black/85 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer select-none bg-black/90"
         >
           <div className="flex flex-col items-center justify-center space-y-6">
             <img

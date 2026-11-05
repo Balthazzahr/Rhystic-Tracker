@@ -291,7 +291,7 @@ export const DeckAchievementBadge: React.FC<DeckAchievementBadgeProps> = ({
             top: `${tooltipPos.y}px`,
             transform: 'translate(-50%, -100%)',
           }}
-          className={`z-[9999] pointer-events-none w-64 p-3 bg-neutral-950/95 backdrop-blur-md border ${tierColors.border} ${tierColors.glow} shadow-2xl rounded-none text-left animate-fade-in`}
+          className={`z-[9999] pointer-events-none w-64 p-3 bg-neutral-950 border ${tierColors.border} ${tierColors.glow} shadow-2xl rounded-none text-left`}
         >
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
             <span className={`text-xs font-display font-bold uppercase tracking-wide ${tierColors.text}`}>

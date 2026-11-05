@@ -23,6 +23,7 @@ import { CardImage } from './CardImage';
 import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
+import { useModalEscape } from '../utils/modalStack';
 import { getCardStylePref } from '../utils/cardStylePrefs';
 import { ManaPip } from './ManaPip';
 import { ManaFontPip } from './ManaFontPip';
@@ -167,12 +168,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     released: 'RELEASE DATE',
     count: 'OWNED COUNT',
   };
-  useEffect(() => {
-    if (!sortOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSortOpen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [sortOpen]);
+  useModalEscape(sortOpen, () => setSortOpen(false), 25);
 
   const [setOptions, setSetOptions] = useState<{ set_code: string; name: string | null; released_at: string | null; icon_svg_uri: string | null }[]>([]);
   const [setNameQuery, setSetNameQuery] = useState('');
@@ -312,15 +308,9 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
     return () => { cancelled = true; };
   }, []);
 
-  // Close the advanced-filter modal on Escape.
-  useEffect(() => {
-    if (!showAdvModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowAdvModal(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showAdvModal]);
+  // Modal Escape stack integrations for Advanced Filters and Column Manager
+  useModalEscape(showAdvModal, () => setShowAdvModal(false), 20);
+  useModalEscape(showColumnModal, () => setShowColumnModal(false), 30);
 
   const fetchCollection = useCallback(async () => {
     setLoading(true);
@@ -1175,7 +1165,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
             </div>
           </div>
           {loading && displayedCards.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
               <span className="text-xs font-mono opacity-70">Loading collection…</span>
             </div>
           ) : cards.length === 0 ? (
@@ -1218,7 +1208,7 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
           )}
         >
           {loading && displayedCards.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
               <span className="text-xs font-mono opacity-70">Loading collection…</span>
             </div>
           )}
@@ -1249,11 +1239,11 @@ function CollectionView({ palette, onShowCard, refreshTrigger }: CollectionViewP
       {/* 3. ADVANCED FILTERS MODAL */}
       {showAdvModal && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/85 select-none"
           onClick={() => setShowAdvModal(false)}
         >
           <div
-            className="w-[900px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
+            className="w-[900px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}

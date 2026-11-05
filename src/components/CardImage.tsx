@@ -172,7 +172,7 @@ interface CardImageProps {
  * Card image that downloads once, caches locally, and never re-fetches from
  * Scryfall. Shows an orbital spinner while loading.
  */
-export function CardImage({ name, version = 'art_crop', printing, className, style, alt, onClick }: CardImageProps) {
+export const CardImage = React.memo(function CardImage({ name, version = 'art_crop', printing, className, style, alt, onClick }: CardImageProps) {
   const normSet = normalizeScryfallSetCode(printing?.setCode);
   const cleanCn = cleanCollectorNumber(printing?.collectorNumber);
   const cacheName = normSet && cleanCn ? `${name}|${normSet}|${cleanCn}` : name;
@@ -187,14 +187,20 @@ export function CardImage({ name, version = 'art_crop', printing, className, sty
     attemptRef.current = 0;
 
     if (srcCache.has(cacheKey)) {
-      // Already resolved in a previous mount — render immediately.
+      // Already resolved in a previous mount — render immediately without triggering re-render if state matches.
       const cached = srcCache.get(cacheKey)!;
-      setSrc(cached);
-      setFailed(false);
+      if (src !== cached) {
+        setSrc(cached);
+      }
+      if (failed) {
+        setFailed(false);
+      }
       return () => { mountedRef.current = false; };
     }
 
-    setSrc(null);
+    if (src !== null) {
+      setSrc(null);
+    }
     let cancelled = false;
     (async () => {
       const url = await ensureLocalImage(name, version, printing);
@@ -284,6 +290,6 @@ export function CardImage({ name, version = 'art_crop', printing, className, sty
       )}
     </div>
   );
-}
+});
 
 export default CardImage;

@@ -55,7 +55,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
             {/* Common */}
             <div
               onClick={() => openHistory("common")}
-              className="bg-white/[0.02] border border-slate-500/20 hover:border-slate-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              className="bg-white/[0.02] border border-slate-500/20 hover:border-slate-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-colors cursor-pointer group"
               title="Click to view Common wildcard history"
             >
               <WildcardLotusCard rarity="common" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
@@ -70,7 +70,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
             {/* Uncommon */}
             <div
               onClick={() => openHistory("uncommon")}
-              className="bg-white/[0.02] border border-sky-500/20 hover:border-sky-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              className="bg-white/[0.02] border border-sky-500/20 hover:border-sky-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-colors cursor-pointer group"
               title="Click to view Uncommon wildcard history"
             >
               <WildcardLotusCard rarity="uncommon" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
@@ -85,7 +85,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
             {/* Rare */}
             <div
               onClick={() => openHistory("rare")}
-              className="bg-white/[0.02] border border-amber-500/30 hover:border-amber-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              className="bg-white/[0.02] border border-amber-500/30 hover:border-amber-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-colors cursor-pointer group"
               title="Click to view Rare wildcard history"
             >
               <WildcardLotusCard rarity="rare" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
@@ -100,7 +100,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
             {/* Mythic */}
             <div
               onClick={() => openHistory("mythic")}
-              className="bg-white/[0.02] border border-orange-500/30 hover:border-orange-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-all cursor-pointer group"
+              className="bg-white/[0.02] border border-orange-500/30 hover:border-orange-400/60 hover:bg-white/[0.05] p-2.5 flex flex-col items-center justify-center text-center transition-colors cursor-pointer group"
               title="Click to view Mythic wildcard history"
             >
               <WildcardLotusCard rarity="mythic" size="lg" className="mb-1.5 transition-transform group-hover:scale-105" />
@@ -133,7 +133,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
                   return (
                     <div
                       key={idx}
-                      className={`h-2 border transition-all ${
+                      className={`h-2 border transition-colors ${
                         isFilled
                           ? "bg-amber-400 border-amber-300 shadow-[0_0_6px_rgba(251,191,36,0.35)]"
                           : "bg-neutral-900 border-white/10"
@@ -168,7 +168,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
                   return (
                     <div
                       key={idx}
-                      className={`h-2 border transition-all ${
+                      className={`h-2 border transition-colors ${
                         isFilled
                           ? "bg-sky-400 border-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.35)]"
                           : "bg-neutral-900 border-white/10"
@@ -218,7 +218,7 @@ export const WildcardsVaultWidget: React.FC<WidgetProps> = React.memo(({ widget 
 
                 <div className="flex items-center gap-1.5 text-xs font-sans font-bold uppercase tracking-wider text-purple-300">
                   {isVaultCracked ? (
-                    <Unlock className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                    <Unlock className="w-3.5 h-3.5 text-amber-300" />
                   ) : (
                     <Lock className="w-3.5 h-3.5 text-purple-400" />
                   )}

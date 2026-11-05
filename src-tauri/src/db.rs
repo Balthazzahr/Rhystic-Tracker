@@ -604,10 +604,19 @@ impl DatabaseManager {
     pub async fn init() -> Result<Self, Box<dyn std::error::Error>> {
         #[cfg(not(test))]
         {
-            if let Some(instance) = DB_SINGLETON.get() {
-                return Ok(instance.clone());
-            }
+            let instance = DB_SINGLETON
+                .get_or_try_init(|| Self::init_internal())
+                .await?;
+            Ok(instance.clone())
         }
+
+        #[cfg(test)]
+        {
+            Self::init_internal().await
+        }
+    }
+
+    async fn init_internal() -> Result<Self, Box<dyn std::error::Error>> {
 
         // TEST SAFETY GUARD: Under `cargo test` this code path is the ONLY way a
         // test can obtain a database handle, so it is forced to a hardcoded
@@ -1040,16 +1049,6 @@ impl DatabaseManager {
             "#
         ).execute(&pool).await;
 
-        // Migration: purge ability IDs and non-card grp_ids from match_turn_events
-        let _ = sqlx::query(
-            r#"
-            DELETE FROM match_turn_events
-            WHERE event_type IN ('play', 'draw')
-              AND grp_id > 0
-              AND grp_id NOT IN (SELECT grp_id FROM cards_cache);
-            "#
-        ).execute(&pool).await;
-
         // Migration: sanitize historical achievement titles in match_impactful_cards
         if let Ok(rows) = sqlx::query_as::<_, (i64, i64, String)>(
             "SELECT i.id, i.grp_id, i.titles FROM match_impactful_cards i WHERE i.titles IS NOT NULL AND i.titles != '' AND i.titles != '[]'"
@@ -1121,17 +1120,6 @@ impl DatabaseManager {
         let _ = sqlx::query(
             "UPDATE match_impactful_cards SET titles = '[]' WHERE match_id IN (SELECT id FROM matches WHERE timestamp < '2026-08-23T06:30:00')"
         ).execute(&pool).await;
-
-        // Migration: Record test match into deleted_matches and purge
-        let _ = sqlx::query("INSERT OR IGNORE INTO deleted_matches (match_id, deleted_at) VALUES ('02c2e7d6-40cd-412a-b587-3c0dcf97f5d1', '2026-08-23T06:50:00Z')").execute(&pool).await;
-        let _ = sqlx::query("DELETE FROM match_cards WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
-        let _ = sqlx::query("DELETE FROM match_turn_events WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
-        let _ = sqlx::query("DELETE FROM match_decks WHERE match_id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
-        let _ = sqlx::query("DELETE FROM matches WHERE id = '02c2e7d6-40cd-412a-b587-3c0dcf97f5d1'").execute(&pool).await;
-
-        // Migration: Purge non-impactful zero-damage and non-titled records from match_impactful_cards
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE total_damage = 0 AND (titles IS NULL OR titles = '' OR titles = '[]') AND (cards_drawn = 0 OR cards_drawn IS NULL)").execute(&pool).await;
 
         // Migration: Reclassify creature fight damage from damage_spell to damage_combat
         let _ = sqlx::query(
@@ -1481,236 +1469,7 @@ impl DatabaseManager {
                 .await;
         }
 
-        let mgr = Self { pool, db_filename };
-        #[cfg(not(test))]
-        {
-            let _ = DB_SINGLETON.set(mgr.clone());
-        }
-        Ok(mgr)
-    }
-
-    async fn backfill_draw_records_from_logs(pool: &Pool<Sqlite>) {
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE grp_id NOT IN (SELECT grp_id FROM cards_cache)").execute(pool).await;
-        let _ = sqlx::query("DELETE FROM match_impactful_cards WHERE id IN (SELECT i.id FROM match_impactful_cards i LEFT JOIN match_cards mc ON i.match_id = mc.match_id AND i.grp_id = mc.grp_id WHERE mc.id IS NULL)").execute(pool).await;
-
-        // Clean up any historical duplicate 'dies' events when a destroy or sacrifice event was already recorded for the same card
-        let _ = sqlx::query(
-            "DELETE FROM match_turn_events WHERE id IN (
-                SELECT e1.id
-                FROM match_turn_events e1
-                JOIN match_turn_events e2 ON e1.match_id = e2.match_id AND e1.turn_number = e2.turn_number AND e1.grp_id = e2.grp_id
-                WHERE e1.event_type = 'dies' AND (e2.event_type LIKE 'destroy%' OR e2.event_type LIKE 'sacrifice%')
-            )"
-        ).execute(pool).await;
-
-        // Clean up any historical duplicate 'draw' events when a bounce event was recorded for the same card on the same turn
-        let _ = sqlx::query(
-            "DELETE FROM match_turn_events WHERE id IN (
-                SELECT e1.id
-                FROM match_turn_events e1
-                JOIN match_turn_events e2 ON e1.match_id = e2.match_id AND e1.turn_number = e2.turn_number AND e1.grp_id = e2.grp_id
-                WHERE e1.event_type = 'draw' AND e2.event_type LIKE 'bounce%'
-            )"
-        ).execute(pool).await;
-
-        // Ensure turn 12 of match 8db6c41f has Jill and Ulamog cross-actions properly attributed
-        let _ = sqlx::query(
-            "UPDATE match_turn_events SET seat_id = 2, grp_id = 95914, event_type = 'bounce:' || grp_id WHERE match_id = '8db6c41f-0f7b-4e4c-bd79-7b3f32d358f6' AND turn_number = 12 AND event_type = 'bounce'"
-        ).execute(pool).await;
-        let _ = sqlx::query(
-            "UPDATE match_turn_events SET seat_id = 1, grp_id = 90864, event_type = 'sacrifice:' || grp_id WHERE match_id = '8db6c41f-0f7b-4e4c-bd79-7b3f32d358f6' AND turn_number = 12 AND event_type = 'sacrifice'"
-        ).execute(pool).await;
-        // Ensure turn 10 of match 8db6c41f has Loran destroying Staff of Domination properly attributed
-        let _ = sqlx::query(
-            "UPDATE match_turn_events SET seat_id = 2, grp_id = 82496, event_type = 'destroy:82855' WHERE match_id = '8db6c41f-0f7b-4e4c-bd79-7b3f32d358f6' AND turn_number = 10 AND grp_id = 82855 AND event_type = 'destroy:82496'"
-        ).execute(pool).await;
-
-        let log_path = match crate::tailer::discover_log_path() {
-            Some(p) => p,
-            None => return,
-        };
-
-        if !log_path.exists() {
-            return;
-        }
-
-        let file = match std::fs::File::open(&log_path) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let reader = std::io::BufReader::new(file);
-
-        use std::io::BufRead;
-        let mut current_match_id: Option<String> = None;
-        let mut inst_map: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
-        let mut inst_owner: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
-        let mut ability_parent: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
-        let mut hero_seat: u32 = 1;
-
-        for line in reader.lines().flatten() {
-            if line.contains("matchGameRoomStateChangedEvent") || line.contains("Connecting to matchId") {
-                if let Some(start) = line.find('{') {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line[start..]) {
-                        if let Some(r) = v.get("matchGameRoomStateChangedEvent").and_then(|e| e.get("gameRoomInfo")) {
-                            if let Some(mid) = r.get("gameRoomConfig").and_then(|c| c.get("matchId")).and_then(|m| m.as_str()) {
-                                current_match_id = Some(mid.to_string());
-                                inst_map.clear();
-                                inst_owner.clear();
-                                ability_parent.clear();
-                                if let Ok(Some(hs)) = sqlx::query_scalar::<_, i64>("SELECT hero_seat_id FROM matches WHERE id = ?").bind(mid).fetch_optional(pool).await {
-                                    hero_seat = hs as u32;
-                                } else {
-                                    hero_seat = 1;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if line.contains("GREMessageType_GameStateMessage") {
-                if let (Some(ref mid), Some(start)) = (&current_match_id, line.find('{')) {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line[start..]) {
-                        if let Some(msgs) = v.get("greToClientEvent").and_then(|e| e.get("greToClientMessages")).and_then(|m| m.as_array()) {
-                            for msg in msgs {
-                                if msg.get("type").and_then(|t| t.as_str()) == Some("GREMessageType_GameStateMessage") {
-                                    if let Some(gsm) = msg.get("gameStateMessage") {
-                                        if let Some(objs) = gsm.get("gameObjects").and_then(|o| o.as_array()) {
-                                            for obj in objs {
-                                                if let Some(iid) = obj.get("instanceId").and_then(|i| i.as_u64()).map(|i| i as u32) {
-                                                    let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                                                    let is_ability = obj_type.contains("Ability") || obj_type.contains("Trigger") || obj.get("objectSourceGrpId").is_some();
-                                                    let gid = if is_ability {
-                                                        obj.get("objectSourceGrpId")
-                                                            .or_else(|| obj.get("overlayGrpId"))
-                                                            .and_then(|g| g.as_u64())
-                                                            .map(|g| g as u32)
-                                                    } else {
-                                                        obj.get("grpId")
-                                                            .or_else(|| obj.get("overlayGrpId"))
-                                                            .or_else(|| obj.get("objectSourceGrpId"))
-                                                            .and_then(|g| g.as_u64())
-                                                            .map(|g| g as u32)
-                                                    };
-                                                    let owner = obj.get("ownerSeatId")
-                                                        .or_else(|| obj.get("controllerSeatId"))
-                                                        .and_then(|s| s.as_u64())
-                                                        .map(|s| s as u32);
-                                                    if let Some(g) = gid {
-                                                        inst_map.insert(iid, g);
-                                                    }
-                                                    if let Some(o) = owner {
-                                                        inst_owner.insert(iid, o);
-                                                    }
-                                                    if let Some(pid) = obj.get("parentId").and_then(|p| p.as_u64()).map(|p| p as u32) {
-                                                        ability_parent.insert(iid, pid);
-                                                        if let Some(pgid) = inst_map.get(&pid).copied() {
-                                                            inst_map.entry(iid).or_insert(pgid);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if let Some(anns) = gsm.get("annotations").and_then(|a| a.as_array()) {
-                                            for a in anns {
-                                                let ann_types = a.get("type").and_then(|t| t.as_array());
-                                                let is_ability_link = ann_types.as_ref().map(|arr| arr.iter().any(|s| {
-                                                    let st = s.as_str().unwrap_or("");
-                                                    st.contains("AbilityInstanceCreated") || st.contains("AbilityInstanceDeleted")
-                                                })).unwrap_or(false);
-
-                                                if is_ability_link {
-                                                    let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-                                                    if affector_id > 0 {
-                                                        if let Some(affected_ids) = a.get("affectedIds").and_then(|arr| arr.as_array()) {
-                                                            for aff_id in affected_ids.iter().filter_map(|x| x.as_u64().map(|v| v as u32)) {
-                                                                ability_parent.insert(aff_id, affector_id);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                let is_zone_transfer = ann_types.map(|arr| arr.iter().any(|s| s.as_str() == Some("AnnotationType_ZoneTransfer"))).unwrap_or(false);
-                                                if is_zone_transfer {
-                                                    let affector_id = a.get("affectorId").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
-                                                    if affector_id > 0 {
-                                                        let is_draw = a.get("details").and_then(|d| d.as_array()).map(|details| {
-                                                            details.iter().any(|d| {
-                                                                d.get("key").and_then(|k| k.as_str()) == Some("category")
-                                                                    && d.get("valueString").and_then(|v| v.as_array()).and_then(|arr| arr.first()).and_then(|s| s.as_str()).map(|s| s.eq_ignore_ascii_case("Draw")).unwrap_or(false)
-                                                            })
-                                                        }).unwrap_or(false);
-
-                                                        if is_draw {
-                                                            let affected_count = a.get("affectedIds").and_then(|arr| arr.as_array()).map(|arr| arr.len()).unwrap_or(1).max(1) as i64;
-                                                            let mut resolved_grp = inst_map.get(&affector_id).copied();
-                                                            if resolved_grp.is_none() {
-                                                                if let Some(pid) = ability_parent.get(&affector_id).copied() {
-                                                                    resolved_grp = inst_map.get(&pid).copied();
-                                                                }
-                                                            }
-
-                                                            if let Some(src_grp) = resolved_grp {
-                                                                let seat = inst_owner.get(&affector_id)
-                                                                    .or_else(|| ability_parent.get(&affector_id).and_then(|pid| inst_owner.get(pid)))
-                                                                    .copied()
-                                                                    .unwrap_or(hero_seat);
-                                                                
-                                                                let match_exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM matches WHERE id = ?")
-                                                                    .bind(mid)
-                                                                    .fetch_optional(pool)
-                                                                    .await
-                                                                    .unwrap_or(None);
-
-                                                                if match_exists.is_some() {
-                                                                    let existing_id: Option<(i64, i64)> = sqlx::query_as("SELECT id, cards_drawn FROM match_impactful_cards WHERE match_id = ? AND grp_id = ?")
-                                                                        .bind(mid)
-                                                                        .bind(src_grp as i64)
-                                                                        .fetch_optional(pool)
-                                                                        .await
-                                                                        .unwrap_or(None);
-
-                                                                    if let Some((row_id, curr_drawn)) = existing_id {
-                                                                        if curr_drawn < affected_count {
-                                                                            let _ = sqlx::query("UPDATE match_impactful_cards SET cards_drawn = ?, seat_id = ? WHERE id = ?")
-                                                                                .bind(affected_count)
-                                                                                .bind(seat as i64)
-                                                                                .bind(row_id)
-                                                                                .execute(pool)
-                                                                                .await;
-                                                                        }
-                                                                    } else {
-                                                                        let _ = sqlx::query(
-                                                                            r#"
-                                                                            INSERT INTO match_impactful_cards (
-                                                                                match_id, grp_id, seat_id, total_damage, max_hit, max_hit_combat, max_hit_spell,
-                                                                                damage_to_player, damage_to_permanents, damage_combat, damage_spell, titles, cards_drawn
-                                                                            ) VALUES (?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, '[]', ?)
-                                                                            "#
-                                                                        )
-                                                                        .bind(mid)
-                                                                        .bind(src_grp as i64)
-                                                                        .bind(seat as i64)
-                                                                        .bind(affected_count)
-                                                                        .execute(pool)
-                                                                        .await;
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        Ok(Self { pool, db_filename })
     }
 
     /// Migration for the abandoned earlier Collection attempt that created
@@ -3969,7 +3728,7 @@ impl DatabaseManager {
         .await?;
 
         let now = chrono::Utc::now();
-        let (daily_reset_raw, weekly_reset_raw, stored_daily_wins, stored_weekly_wins, updated_at_raw) = if let Some(r) = row {
+        let (daily_reset_raw, weekly_reset_raw, stored_daily_wins, stored_weekly_wins, _updated_at_raw) = if let Some(r) = row {
             (
                 r.get::<String, _>("daily_reset_timestamp"),
                 r.get::<String, _>("weekly_reset_timestamp"),

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Sparkles, RefreshCw, Check, Gamepad2, AlertCircle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { useModalEscape } from '../utils/modalStack';
 
 interface NewAvatarReminderModalProps {
   isOpen: boolean;
@@ -37,16 +38,7 @@ export const NewAvatarReminderModal: React.FC<NewAvatarReminderModalProps> = ({
   const [syncedCount, setSyncedCount] = useState<number | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSyncing) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, isSyncing]);
+  useModalEscape(isOpen && !isSyncing, onClose, 20);
 
   if (!isOpen) return null;
 
@@ -88,7 +80,7 @@ export const NewAvatarReminderModal: React.FC<NewAvatarReminderModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[115] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-[115] flex items-center justify-center p-4 sm:p-6 bg-black/85 select-none"
       onClick={!isSyncing ? onClose : undefined}
     >
       <div

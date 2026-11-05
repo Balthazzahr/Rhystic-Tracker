@@ -59,7 +59,7 @@ export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget })
               return (
                 <div
                   key={`daily-${m.win_number}`}
-                  className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-all ${
+                  className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-colors ${
                     isEarned
                       ? isCard
                         ? "bg-gradient-to-t from-purple-600/50 to-purple-500/20 border-purple-400/80 text-purple-200 shadow-[0_0_6px_rgba(168,85,247,0.3)]"
@@ -150,7 +150,7 @@ export const RewardTracksWidget: React.FC<WidgetProps> = React.memo(({ widget })
               return (
                 <div
                   key={`weekly-${winNum}`}
-                  className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-all ${
+                  className={`h-full min-h-[20px] border rounded-[2px] flex items-center justify-center transition-colors ${
                     isEarned
                       ? "bg-gradient-to-t from-cyan-600/50 to-cyan-500/20 border-cyan-400/80 text-cyan-200 shadow-[0_0_6px_rgba(6,182,212,0.3)]"
                       : isNext

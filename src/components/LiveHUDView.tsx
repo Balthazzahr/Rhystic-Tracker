@@ -1260,7 +1260,7 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
               {/* UNIFIED TIMELINE CONTAINER (Standardized bg-neutral-950/50, All Rounds Expanded by Default) */}
               <div
                 ref={timelineRef}
-                className="flex-1 min-h-0 border border-white/10 bg-neutral-950/50 backdrop-blur-md p-3 overflow-y-auto custom-scrollbar flex flex-col space-y-2.5"
+                className="flex-1 min-h-0 border border-white/10 bg-neutral-950/85 p-3 overflow-y-auto custom-scrollbar flex flex-col space-y-2.5"
               >
             {/* Opening Phase Row (if any) */}
             {openingEvents.length > 0 && (
@@ -1387,7 +1387,7 @@ export const LiveHUDView: React.FC<LiveHUDViewProps> = ({
           />
 
           {/* Idle Status Display */}
-          <div className="relative z-10 px-8 py-5 border border-white/20 bg-neutral-950/80 backdrop-blur-md shadow-2xl flex flex-col items-center space-y-2 text-center">
+          <div className="relative z-10 px-8 py-5 border border-white/20 bg-neutral-950/95 shadow-2xl flex flex-col items-center space-y-2 text-center">
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-neutral-500 animate-pulse" />
               <span className="text-base font-sans font-bold tracking-[0.14em] uppercase text-white">

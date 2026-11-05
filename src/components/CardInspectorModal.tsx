@@ -12,6 +12,7 @@ import {
 import { setCardStylePref, getCardStylePref, clearCardStylePref } from '../utils/cardStylePrefs';
 import { CardImage } from './CardImage';
 import { cleanCardName } from '../utils/cardImageCache';
+import { useModalEscape } from '../utils/modalStack';
 
 interface CardInspectorModalProps {
   isOpen: boolean;
@@ -110,6 +111,8 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
 
   const cardName = cleanCardName(deckCardOverlay?.card?.name) || 'Card';
 
+  useModalEscape(isOpen, onClose, 10);
+
   useEffect(() => {
     setOverlayImgFailed(false);
     setOverlayImgTriedNamed(false);
@@ -167,7 +170,7 @@ export const CardInspectorModal: React.FC<CardInspectorModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/85 select-none"
       onClick={onClose}
     >
       <div

@@ -36,7 +36,7 @@ const FoilBoosterPack: React.FC<FoilBoosterPackProps> = ({ setCode, className = 
         isGolden
           ? "bg-gradient-to-b from-amber-700/60 via-amber-950 to-yellow-950 border border-yellow-400/90 shadow-[0_0_14px_rgba(245,158,11,0.4)]"
           : "bg-gradient-to-b from-neutral-800 via-neutral-900 to-neutral-950 border border-amber-400/50 shadow-md"
-      } flex flex-col items-center justify-between overflow-hidden transition-all duration-200 ${className}`}
+      } flex flex-col items-center justify-between overflow-hidden transition-transform duration-150 ${className}`}
     >
       {/* Top Crimp Seal (Metallic Heat-Sealed Serrated Edge) */}
       <div
@@ -64,14 +64,14 @@ const FoilBoosterPack: React.FC<FoilBoosterPackProps> = ({ setCode, className = 
       <div className="relative flex-1 flex items-center justify-center w-full px-0.5 overflow-hidden">
         {isGolden ? (
           <span
-            className="ms ms-planeswalker text-amber-300 leading-none drop-shadow-[0_0_12px_rgba(251,191,36,0.9)] group-hover:text-amber-200 group-hover:scale-105 transition-all duration-150"
+            className="ms ms-planeswalker text-amber-300 leading-none group-hover:text-amber-200 group-hover:scale-105 transition-transform duration-150"
             style={{ fontSize: "38px" }}
           />
         ) : (
           <i
             className={`${keyruneClass(
               setCode
-            )} text-amber-300 leading-none drop-shadow-[0_0_10px_rgba(245,158,11,0.65)] group-hover:text-amber-200 group-hover:scale-105 transition-all duration-150`}
+            )} text-amber-300 leading-none group-hover:text-amber-200 group-hover:scale-105 transition-transform duration-150`}
             style={{ fontSize: "38px" }}
           />
         )}
@@ -176,7 +176,7 @@ const BoosterPackGroup: React.FC<BoosterPackGroupProps> = ({ booster }) => {
 
         {/* Amount Underneath when beyond 3 packs */}
         {count > 3 && (
-          <span className="mt-0.5 text-xs font-mono font-bold text-amber-300 drop-shadow-[0_0_6px_rgba(245,158,11,0.5)] tracking-wide">
+          <span className="mt-0.5 text-xs font-mono font-bold text-amber-300 tracking-wide">
             X{count}
           </span>
         )}
@@ -311,7 +311,7 @@ export const CurrenciesVaultWidget: React.FC<WidgetProps> = React.memo(({ widget
               return (
                 <div
                   key={idx}
-                  className={`h-2.5 border transition-all ${
+                  className={`h-2.5 border transition-colors ${
                     isFilled
                       ? "bg-gradient-to-r from-amber-400 to-yellow-300 border-yellow-200 shadow-[0_0_6px_rgba(234,179,8,0.35)]"
                       : "bg-neutral-950 border-white/10"

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Palette, X, RotateCcw, Check, Copy } from "lucide-react";
+import { useModalEscape } from "../../utils/modalStack";
 
 export interface DashboardCustomColors {
   allTimeWinRate: { positive: string; negative: string };
@@ -159,6 +160,7 @@ export const DashboardColorPickerModal: React.FC<DashboardColorPickerModalProps>
   colors,
   onSaveColors,
 }) => {
+  useModalEscape(isOpen, onClose, 20);
   const [draft, setDraft] = useState<DashboardCustomColors>(colors);
 
   useEffect(() => {
@@ -243,7 +245,7 @@ export const DashboardColorPickerModal: React.FC<DashboardColorPickerModalProps>
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 select-none"
       onClick={onClose}
     >
       <div

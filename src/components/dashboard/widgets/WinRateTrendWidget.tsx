@@ -524,7 +524,7 @@ export const WinRateTrendWidget: React.FC<WidgetProps> = React.memo(({
                     chartTime === "100G";
 
                   return (
-                    <div className="px-3 py-2 bg-neutral-900/95 border border-white/20 text-xs font-sans text-white shadow-2xl backdrop-blur-md">
+                    <div className="px-3 py-2 bg-neutral-900 border border-white/20 text-xs font-sans text-white shadow-2xl">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-neutral-200">
                           {isGameCount ? `Game ${d.label}` : d.label}

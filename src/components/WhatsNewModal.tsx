@@ -1,6 +1,7 @@
 import React from "react";
 import { X, ExternalLink, Sliders, Layers } from "lucide-react";
 import symbolIcon from "../assets/RhysticTrackerICON.svg";
+import { useModalEscape } from "../utils/modalStack";
 
 interface WhatsNewModalProps {
   isOpen: boolean;
@@ -42,10 +43,12 @@ export const WhatsNewModal: React.FC<WhatsNewModalProps> = ({
   onOpenDeckTracker,
   onOpenSettings,
 }) => {
+  useModalEscape(isOpen, onClose, 20);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 select-none">
       <div className="relative w-full max-w-2xl bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header Ribbon */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">

@@ -28,6 +28,7 @@ import {
   DashboardCustomColors,
   DEFAULT_DASHBOARD_COLORS,
 } from "./DashboardColorPickerModal";
+import { useModalEscape } from "../../utils/modalStack";
 
 interface Dashboard2ViewProps {
   matches: MatchRecord[];
@@ -232,6 +233,9 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
   const [isModulePickerOpen, setIsModulePickerOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [inspectedAchievement, setInspectedAchievement] = useState<any>(null);
+
+  useModalEscape(isModulePickerOpen, () => setIsModulePickerOpen(false), 20);
+  useModalEscape(!!inspectedAchievement, () => setInspectedAchievement(null), 30);
 
   useEffect(() => {
     const handleOpenCustomize = () => {
@@ -648,7 +652,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                   <button
                     key={pageNum}
                     onClick={() => setActivePage(pageNum)}
-                    className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-mono font-bold transition-all cursor-pointer select-none ${
+                    className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-mono font-bold transition-colors cursor-pointer select-none ${
                       isActive
                         ? "bg-sky-500/25 text-sky-200 border border-sky-400/60 shadow-[0_0_8px_rgba(56,189,248,0.2)]"
                         : "bg-white/[0.04] text-neutral-400 hover:text-white hover:bg-white/[0.08] border border-white/10"
@@ -667,7 +671,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                     const newPage = totalPages + 1;
                     setActivePage(newPage);
                   }}
-                  className="h-7 px-2 rounded-md flex items-center gap-1 text-xs font-mono font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 transition-all cursor-pointer shadow-xs"
+                  className="h-7 px-2 rounded-md flex items-center gap-1 text-xs font-mono font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 transition-colors cursor-pointer shadow-xs"
                   title="Add a new dashboard page"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -686,7 +690,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
               setDraggedWidgetId(null);
               setDragOverWidgetId(null);
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer active:scale-95 ${
               isEditMode
                 ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold"
                 : "bg-transparent hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-transparent"
@@ -710,7 +714,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
               {/* Change Colors Button */}
               <button
                 onClick={() => setIsColorPickerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] text-emerald-300 border border-transparent hover:border-white/10 active:scale-95 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] text-emerald-300 border border-transparent hover:border-white/10 active:scale-95 transition-colors cursor-pointer"
               >
                 <Palette className="w-3.5 h-3.5" />
                 <span>Colors</span>
@@ -719,7 +723,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
               {/* Add Widget Button */}
               <button
                 onClick={() => setIsModulePickerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] text-sky-300 border border-transparent hover:border-white/10 active:scale-95 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider bg-transparent hover:bg-white/[0.08] text-sky-300 border border-transparent hover:border-white/10 active:scale-95 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Widget</span>
@@ -771,7 +775,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                     onDragLeave={(e) => handleDragLeave(e, w.id)}
                     onDrop={(e) => handleDrop(e, w.id)}
                     onDragEnd={handleDragEnd}
-                    className={`${colSpan} ${rowSpan} h-full flex flex-col relative group transition-all duration-150 overflow-hidden ${
+                    className={`${colSpan} ${rowSpan} h-full flex flex-col relative group transition-opacity duration-150 overflow-hidden ${
                       isDraggingThis
                         ? "opacity-40 border-2 border-dashed border-amber-400/80 scale-[0.99]"
                         : "opacity-100"
@@ -787,8 +791,8 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
                   >
                     {/* Swap Target Visual Badge */}
                     {isDropTarget && (
-                      <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-none">
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-black font-sans font-bold text-xs uppercase tracking-wider animate-bounce">
+                      <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 pointer-events-none">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 text-black font-sans font-bold text-xs uppercase tracking-wider">
                           <ArrowLeftRight className="w-4 h-4" />
                           <span>Swap with {def.title}</span>
                         </div>
@@ -797,7 +801,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
 
                     {/* Edit Mode Overlay Header & Stepper Controls */}
                     {isEditMode && (
-                      <div className="absolute top-0 left-0 right-0 z-30 bg-neutral-900/95 border-b border-white/20 px-2 py-1 flex items-center justify-between backdrop-blur-md gap-2 flex-wrap">
+                      <div className="absolute top-0 left-0 right-0 z-30 bg-neutral-900/95 border-b border-white/20 px-2 py-1 flex items-center justify-between gap-2 flex-wrap">
                         {/* Drag Handle */}
                         <div
                           className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing text-neutral-300 hover:text-white min-w-0"
@@ -955,7 +959,7 @@ export const Dashboard2View: React.FC<Dashboard2ViewProps> = ({
       {/* MODULE PICKER CATALOG MODAL */}
       {isModulePickerOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 select-none"
           onClick={() => setIsModulePickerOpen(false)}
         >
           <div

@@ -27,6 +27,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { LogoQuill } from './LogoQuill';
 import { ManaPip } from './ManaPip';
 import { getAvatarCacheStats } from '../utils/avatarImageCache';
+import { useModalEscape } from '../utils/modalStack';
 
 interface SetupStatus {
   setup_completed: boolean;
@@ -60,6 +61,8 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
   const [syncResult, setSyncResult] = useState<{ success: boolean; count: number; elapsedMs: number; error?: string } | null>(null);
   const [avatarCount, setAvatarCount] = useState<number>(0);
   const [avatarExtracting, setAvatarExtracting] = useState<boolean>(false);
+
+  useModalEscape(!syncing, onFinish, 10);
 
   const fetchAvatarStatus = async () => {
     try {
@@ -195,7 +198,7 @@ export const FirstTimeSetupWizard: React.FC<FirstTimeSetupWizardProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 select-none">
       <div 
         className="w-full max-w-2xl rounded-none border border-white/20 shadow-2xl overflow-hidden flex flex-col transition-all duration-300"
         style={{ 

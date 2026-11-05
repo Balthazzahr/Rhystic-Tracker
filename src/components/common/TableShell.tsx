@@ -97,7 +97,7 @@ export function TableShell<T = any>({
       </div>
 
       {/* Table Body Container Frame */}
-      <div className="border border-white/10 bg-neutral-950/50 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0 relative">
+      <div className="border border-white/10 bg-neutral-950/85 overflow-hidden flex flex-col flex-1 min-h-0 relative">
         {/* Scrollable Rows Area */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto relative custom-scrollbar divide-y divide-white/5">
           {empty ? (

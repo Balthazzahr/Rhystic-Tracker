@@ -23,6 +23,7 @@ import { DeckBoxCard, DeckBoxClipDef } from './DeckBoxCard';
 import { PaginationFooter, GlassSearchInput, TableShell } from './common';
 import { useColumnManager } from '../hooks/useColumnManager';
 import { ColumnCustomizerModal } from './ColumnCustomizerModal';
+import { useModalEscape } from '../utils/modalStack';
 
 const NerdIcon = ({ glyph, className = '', style }: { glyph: string; className?: string; style?: React.CSSProperties }) => (
   <i className={`nf ${glyph} ${className}`} style={style} aria-hidden="true" />
@@ -184,12 +185,9 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
     last_played: 'LAST PLAYED',
   };
 
-  useEffect(() => {
-    if (!sortOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSortOpen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [sortOpen]);
+  useModalEscape(showAdvModal, () => setShowAdvModal(false), 20);
+  useModalEscape(sortOpen, () => setSortOpen(false), 25);
+  useModalEscape(showColumnModal, () => setShowColumnModal(false), 30);
 
   // Card view layout measurement (callback ref: measures the moment the grid
   // mounts — including after a table→cards switch — so pagination is never
@@ -839,11 +837,11 @@ export const DeckLibraryView: React.FC<DeckLibraryViewProps> = ({
       {showAdvModal && (
         <div
           onClick={() => setShowAdvModal(false)}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/85 select-none"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-[800px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950/92 backdrop-blur-md border border-white/20 shadow-2xl overflow-hidden"
+            className="w-[800px] max-w-full max-h-[85vh] flex flex-col bg-neutral-950 border border-white/20 shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
             <div className="p-5 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-900/60">
