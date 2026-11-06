@@ -55,6 +55,8 @@ export function getTierTheme(tier: string): {
   badgeBorder: string;
   textColor: string;
   pipActive: string;
+  pipText: string;
+  pipInnerBorder: string;
   glow: string;
 } {
   const t = tier.toLowerCase();
@@ -64,7 +66,9 @@ export function getTierTheme(tier: string): {
         badgeBg: "bg-gradient-to-br from-amber-500/20 via-rose-500/20 to-purple-600/30",
         badgeBorder: "border-amber-400/70",
         textColor: "text-amber-300",
-        pipActive: "bg-gradient-to-r from-amber-400 to-rose-400 border-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.5)]",
+        pipActive: "bg-gradient-to-r from-amber-400 via-rose-500 to-purple-600 border-amber-300 border-t-amber-200/90 border-b-purple-950/60 shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.7)]",
+        pipText: "text-white font-black drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
+        pipInnerBorder: "border-white/50",
         glow: "shadow-[0_0_12px_rgba(245,158,11,0.25)]",
       };
     case "diamond":
@@ -72,7 +76,9 @@ export function getTierTheme(tier: string): {
         badgeBg: "bg-gradient-to-br from-cyan-500/20 to-blue-600/30",
         badgeBorder: "border-cyan-400/70",
         textColor: "text-cyan-300",
-        pipActive: "bg-cyan-400 border-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.5)]",
+        pipActive: "bg-gradient-to-b from-cyan-300 via-cyan-400 to-cyan-600 border-cyan-300 border-t-cyan-100/90 border-b-cyan-950/60 shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]",
+        pipText: "text-neutral-950 font-black",
+        pipInnerBorder: "border-black/20",
         glow: "shadow-[0_0_10px_rgba(6,182,212,0.25)]",
       };
     case "platinum":
@@ -80,7 +86,9 @@ export function getTierTheme(tier: string): {
         badgeBg: "bg-gradient-to-br from-teal-500/20 to-emerald-600/30",
         badgeBorder: "border-teal-400/70",
         textColor: "text-teal-300",
-        pipActive: "bg-teal-400 border-teal-300 shadow-[0_0_8px_rgba(20,184,166,0.5)]",
+        pipActive: "bg-gradient-to-b from-teal-300 via-teal-400 to-teal-600 border-teal-300 border-t-teal-100/90 border-b-teal-950/60 shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]",
+        pipText: "text-neutral-950 font-black",
+        pipInnerBorder: "border-black/20",
         glow: "shadow-[0_0_10px_rgba(20,184,166,0.25)]",
       };
     case "gold":
@@ -88,7 +96,9 @@ export function getTierTheme(tier: string): {
         badgeBg: "bg-gradient-to-br from-amber-500/20 to-yellow-600/30",
         badgeBorder: "border-amber-500/70",
         textColor: "text-amber-400",
-        pipActive: "bg-amber-400 border-yellow-300 shadow-[0_0_8px_rgba(245,158,11,0.5)]",
+        pipActive: "bg-gradient-to-b from-amber-300 via-amber-400 to-amber-600 border-yellow-300 border-t-yellow-100/90 border-b-amber-950/60 shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.8)]",
+        pipText: "text-neutral-950 font-black",
+        pipInnerBorder: "border-black/20",
         glow: "shadow-[0_0_10px_rgba(245,158,11,0.25)]",
       };
     case "silver":
@@ -96,7 +106,9 @@ export function getTierTheme(tier: string): {
         badgeBg: "bg-gradient-to-br from-slate-400/20 to-zinc-500/30",
         badgeBorder: "border-slate-400/70",
         textColor: "text-slate-200",
-        pipActive: "bg-slate-300 border-slate-200 shadow-[0_0_6px_rgba(203,213,225,0.4)]",
+        pipActive: "bg-gradient-to-b from-slate-200 via-slate-300 to-slate-400 border-slate-200 border-t-white/90 border-b-slate-600/60 shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.9)]",
+        pipText: "text-neutral-950 font-black",
+        pipInnerBorder: "border-black/25",
         glow: "shadow-[0_0_8px_rgba(203,213,225,0.2)]",
       };
     case "bronze":
@@ -105,7 +117,9 @@ export function getTierTheme(tier: string): {
         badgeBg: "bg-gradient-to-br from-amber-700/20 to-orange-900/30",
         badgeBorder: "border-amber-700/60",
         textColor: "text-amber-500",
-        pipActive: "bg-amber-600 border-amber-500 shadow-[0_0_6px_rgba(217,119,6,0.4)]",
+        pipActive: "bg-gradient-to-b from-amber-600 via-amber-700 to-amber-800 border-amber-500 border-t-amber-300/60 border-b-black/60 shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.4)]",
+        pipText: "text-white font-black drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
+        pipInnerBorder: "border-amber-300/30",
         glow: "shadow-[0_0_8px_rgba(217,119,6,0.2)]",
       };
   }

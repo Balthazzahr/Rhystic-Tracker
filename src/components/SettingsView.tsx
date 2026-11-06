@@ -707,6 +707,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { value: 'dashboard', label: 'Dashboard (Overview)' },
     { value: 'live', label: 'Live Match HUD' },
     { value: 'matches', label: 'Match History' },
+    { value: 'ranked', label: 'Ranked Ladder' },
     { value: 'decks', label: 'Deck Library' },
     { value: 'collection', label: 'Card Library / Collection' },
     { value: 'achievements', label: 'Achievements (Trophy Case)' },

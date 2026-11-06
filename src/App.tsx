@@ -22,6 +22,7 @@ import { AchievementsView } from './components/AchievementsView';
 import { LeaderboardsView } from './components/LeaderboardsView';
 import CollectionView from './components/CollectionView';
 import { MatchHistoryView } from './components/MatchHistoryView';
+import { RankedLadderView } from './components/RankedLadderView';
 import { DeckLibraryView } from './components/DeckLibraryView';
 import { LiveHUDView } from './components/LiveHUDView';
 import { CardInspectorModal } from './components/CardInspectorModal';
@@ -63,6 +64,7 @@ const PodiumIcon = ({ className = 'w-4 h-4', style }: { className?: string; styl
 const DEFAULT_SIDEBAR_ICONS: Record<string, string> = {
   dashboard: 'ms-ability-party',
   matches: 'ms-battle',
+  ranked: 'ms-ability-ascend',
   collection: 'ms-library',
   decks: 'ms-ability-adventure',
   achievements: 'ms-ability-duels-renowned',
@@ -956,6 +958,7 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', manaIcon: 'ms-ability-party' },
     { id: 'matches', label: 'Match History', manaIcon: 'ms-battle' },
+    { id: 'ranked', label: 'Ranked Ladder', manaIcon: 'ms-ability-ascend' },
     { id: 'collection', label: 'Card Library', manaIcon: 'ms-library' },
     { id: 'decks', label: 'Deck Library', manaIcon: 'ms-ability-adventure' },
     { id: 'achievements', label: 'Achievements', manaIcon: 'ms-ability-duels-renowned' },
@@ -1455,6 +1458,18 @@ export default function App() {
             initialSearch={matchHistorySearch}
             onSearchChange={setMatchHistorySearch}
             onDeleteMatch={() => loadData()}
+          />
+        )}
+
+        {/* VIEW 2B: Dedicated Ranked Ladder View */}
+        {activeTab === 'ranked' && (
+          <RankedLadderView
+            palette={palette}
+            matches={matches}
+            deckOverview={deckOverview}
+            onSelectMatch={handleSelectMatch}
+            onSelectDeck={handleSelectDeck}
+            onShowCard={openCardOverlay}
           />
         )}
 

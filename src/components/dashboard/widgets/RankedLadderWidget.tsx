@@ -8,6 +8,7 @@ import {
   Tooltip,
   ReferenceArea,
   ReferenceLine,
+  Customized,
 } from "recharts";
 import { Award, Shield, Trophy, Clock, History, TrendingUp } from "lucide-react";
 import { WidgetProps } from "../types";
@@ -83,41 +84,82 @@ function formatMonthDay(d: Date): string {
 }
 
 // 24 units per Tier (4 divisions x 6 units).
-// Gradients from darkest at division IV up to lighter at division I.
-const ALL_DIVISION_BANDS: DivisionBand[] = [
-  // Bronze: deep ember bronze ascending to warm burnished bronze
-  { y1: 0, y2: 6, tier: "Bronze", division: "IV", fill: "#1a0f07", fillOpacity: 0.95 },
-  { y1: 6, y2: 12, tier: "Bronze", division: "III", fill: "#27160a", fillOpacity: 0.95 },
-  { y1: 12, y2: 18, tier: "Bronze", division: "II", fill: "#361e0e", fillOpacity: 0.95 },
-  { y1: 18, y2: 24, tier: "Bronze", division: "I", fill: "#462812", fillOpacity: 0.95 },
+// Translucent tinted tier and division backgrounds allowing ambient card art to shine through.
+export const ALL_DIVISION_BANDS: DivisionBand[] = [
+  // Bronze: warm amber bronze
+  { y1: 0, y2: 6, tier: "Bronze", division: "IV", fill: "#d97706", fillOpacity: 0.07 },
+  { y1: 6, y2: 12, tier: "Bronze", division: "III", fill: "#d97706", fillOpacity: 0.10 },
+  { y1: 12, y2: 18, tier: "Bronze", division: "II", fill: "#d97706", fillOpacity: 0.14 },
+  { y1: 18, y2: 24, tier: "Bronze", division: "I", fill: "#d97706", fillOpacity: 0.18 },
 
-  // Silver: dark steel slate ascending to cool bright silver
-  { y1: 24, y2: 30, tier: "Silver", division: "IV", fill: "#141922", fillOpacity: 0.95 },
-  { y1: 30, y2: 36, tier: "Silver", division: "III", fill: "#1e2532", fillOpacity: 0.95 },
-  { y1: 36, y2: 42, tier: "Silver", division: "II", fill: "#293243", fillOpacity: 0.95 },
-  { y1: 42, y2: 48, tier: "Silver", division: "I", fill: "#354156", fillOpacity: 0.95 },
+  // Silver: cool bright silver slate
+  { y1: 24, y2: 30, tier: "Silver", division: "IV", fill: "#94a3b8", fillOpacity: 0.07 },
+  { y1: 30, y2: 36, tier: "Silver", division: "III", fill: "#94a3b8", fillOpacity: 0.10 },
+  { y1: 36, y2: 42, tier: "Silver", division: "II", fill: "#94a3b8", fillOpacity: 0.14 },
+  { y1: 42, y2: 48, tier: "Silver", division: "I", fill: "#94a3b8", fillOpacity: 0.18 },
 
-  // Gold: deep warm gold ascending to lustrous aurum
-  { y1: 48, y2: 54, tier: "Gold", division: "IV", fill: "#201a09", fillOpacity: 0.95 },
-  { y1: 54, y2: 60, tier: "Gold", division: "III", fill: "#2d230c", fillOpacity: 0.95 },
-  { y1: 60, y2: 66, tier: "Gold", division: "II", fill: "#3b2e0f", fillOpacity: 0.95 },
-  { y1: 66, y2: 72, tier: "Gold", division: "I", fill: "#4c3b14", fillOpacity: 0.95 },
+  // Gold: warm luminous gold
+  { y1: 48, y2: 54, tier: "Gold", division: "IV", fill: "#eab308", fillOpacity: 0.07 },
+  { y1: 54, y2: 60, tier: "Gold", division: "III", fill: "#eab308", fillOpacity: 0.10 },
+  { y1: 60, y2: 66, tier: "Gold", division: "II", fill: "#eab308", fillOpacity: 0.14 },
+  { y1: 66, y2: 72, tier: "Gold", division: "I", fill: "#eab308", fillOpacity: 0.18 },
 
-  // Platinum: deep teal-slate ascending to frosted celadon
-  { y1: 72, y2: 78, tier: "Platinum", division: "IV", fill: "#10201e", fillOpacity: 0.95 },
-  { y1: 78, y2: 84, tier: "Platinum", division: "III", fill: "#152a27", fillOpacity: 0.95 },
-  { y1: 84, y2: 90, tier: "Platinum", division: "II", fill: "#1a3532", fillOpacity: 0.95 },
-  { y1: 90, y2: 96, tier: "Platinum", division: "I", fill: "#21443f", fillOpacity: 0.95 },
+  // Platinum: teal-slate celadon
+  { y1: 72, y2: 78, tier: "Platinum", division: "IV", fill: "#14b8a6", fillOpacity: 0.07 },
+  { y1: 78, y2: 84, tier: "Platinum", division: "III", fill: "#14b8a6", fillOpacity: 0.10 },
+  { y1: 84, y2: 90, tier: "Platinum", division: "II", fill: "#14b8a6", fillOpacity: 0.14 },
+  { y1: 90, y2: 96, tier: "Platinum", division: "I", fill: "#14b8a6", fillOpacity: 0.18 },
 
-  // Diamond: deep midnight cobalt ascending to sapphire crystal
-  { y1: 96, y2: 102, tier: "Diamond", division: "IV", fill: "#0d1d27", fillOpacity: 0.95 },
-  { y1: 102, y2: 108, tier: "Diamond", division: "III", fill: "#112633", fillOpacity: 0.95 },
-  { y1: 108, y2: 114, tier: "Diamond", division: "II", fill: "#163142", fillOpacity: 0.95 },
-  { y1: 114, y2: 120, tier: "Diamond", division: "I", fill: "#1c3d52", fillOpacity: 0.95 },
+  // Diamond: sapphire crystal cyan
+  { y1: 96, y2: 102, tier: "Diamond", division: "IV", fill: "#06b6d4", fillOpacity: 0.07 },
+  { y1: 102, y2: 108, tier: "Diamond", division: "III", fill: "#06b6d4", fillOpacity: 0.10 },
+  { y1: 108, y2: 114, tier: "Diamond", division: "II", fill: "#06b6d4", fillOpacity: 0.14 },
+  { y1: 114, y2: 120, tier: "Diamond", division: "I", fill: "#06b6d4", fillOpacity: 0.18 },
 
-  // Mythic: arcane amethyst gradient
-  { y1: 120, y2: 144, tier: "Mythic", division: "Leaderboard", fill: "#2b1434", fillOpacity: 0.95 },
+  // Mythic: arcane amethyst
+  { y1: 120, y2: 144, tier: "Mythic", division: "Leaderboard", fill: "#a855f7", fillOpacity: 0.13 },
 ];
+
+export const TIER_THRESHOLDS = [
+  { tier: "Mythic", min: 120, max: 144, color: "#F59E0B" },
+  { tier: "Diamond", min: 96, max: 120, color: "#06B6D4" },
+  { tier: "Platinum", min: 72, max: 96, color: "#14B8A6" },
+  { tier: "Gold", min: 48, max: 72, color: "#EAB308" },
+  { tier: "Silver", min: 24, max: 48, color: "#CBD5E1" },
+  { tier: "Bronze", min: 0, max: 24, color: "#D97706" },
+];
+
+export function getScoreTierColor(
+  val?: number | [number, number] | any,
+  tierName?: string
+): string {
+  if (tierName) {
+    const t = tierName.toLowerCase();
+    switch (t) {
+      case "mythic":
+        return "#F59E0B";
+      case "diamond":
+        return "#06B6D4";
+      case "platinum":
+        return "#14B8A6";
+      case "gold":
+        return "#EAB308";
+      case "silver":
+        return "#CBD5E1";
+      case "bronze":
+      default:
+        return "#D97706";
+    }
+  }
+
+  const num = Array.isArray(val) ? val[1] : typeof val === "number" ? val : 0;
+  if (num >= 120) return "#F59E0B";
+  if (num >= 96) return "#06B6D4";
+  if (num >= 72) return "#14B8A6";
+  if (num >= 48) return "#EAB308";
+  if (num >= 24) return "#CBD5E1";
+  return "#D97706";
+}
 
 export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget }) => {
   const [activeTab, setActiveTab] = useState<"constructed" | "limited">("constructed");
@@ -442,25 +484,71 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
     return { yMin: min, yMax: max, yTicks: ticks, visibleBands: bands };
   }, [chartData, tier, level, step, isLimited]);
 
-  // Color selection for line / gradient stroke based on tier
-  const strokeColor = useMemo(() => {
-    const t = tier.toLowerCase();
-    switch (t) {
-      case "mythic":
-        return "#F59E0B";
-      case "diamond":
-        return "#06B6D4";
-      case "platinum":
-        return "#14B8A6";
-      case "gold":
-        return "#EAB308";
-      case "silver":
-        return "#CBD5E1";
-      case "bronze":
-      default:
-        return "#D97706";
+  // Compute exact tier color stops for vertical chart gradient (stroke and shading)
+  const { strokeStops, fillStops } = useMemo(() => {
+    const span = Math.max(1, yMax - yMin);
+    const stroke: { offset: string; color: string }[] = [];
+    const fill: { offset: string; color: string; opacity: number }[] = [];
+
+    const activeTiers = TIER_THRESHOLDS.filter((t) => t.max > yMin && t.min < yMax);
+    for (const t of activeTiers) {
+      const tTop = Math.min(yMax, t.max);
+      const tBottom = Math.max(yMin, t.min);
+      const offTop = ((yMax - tTop) / span) * 100;
+      const offBottom = ((yMax - tBottom) / span) * 100;
+
+      stroke.push({ offset: `${offTop.toFixed(2)}%`, color: t.color });
+      stroke.push({ offset: `${offBottom.toFixed(2)}%`, color: t.color });
+
+      fill.push({ offset: `${offTop.toFixed(2)}%`, color: t.color, opacity: 0.45 });
+      fill.push({ offset: `${offBottom.toFixed(2)}%`, color: t.color, opacity: 0.12 });
     }
-  }, [tier]);
+
+    return { strokeStops: stroke, fillStops: fill };
+  }, [yMin, yMax]);
+
+  // Dynamic SVG gradients mapped strictly to chart plotting coordinates in userSpaceOnUse
+  const DynamicTierGradients = (props: any) => {
+    const yAxis = props.yAxisMap ? props.yAxisMap[0] : null;
+    const yTop = yAxis ? yAxis.scale(yMax) : (props.offset?.top ?? 10);
+    const yBottom = yAxis
+      ? yAxis.scale(yMin)
+      : ((props.offset?.top ?? 10) + (props.offset?.height ?? 100));
+
+    return (
+      <defs>
+        <linearGradient
+          id="climbStroke"
+          gradientUnits="userSpaceOnUse"
+          x1={0}
+          y1={yTop}
+          x2={0}
+          y2={yBottom}
+        >
+          {strokeStops.map((s, idx) => (
+            <stop key={`str-${idx}`} offset={s.offset} stopColor={s.color} stopOpacity={1} />
+          ))}
+        </linearGradient>
+        <linearGradient
+          id="climbFill"
+          gradientUnits="userSpaceOnUse"
+          x1={0}
+          y1={yTop}
+          x2={0}
+          y2={yBottom}
+        >
+          {fillStops.map((s, idx) => (
+            <stop
+              key={`fill-${idx}`}
+              offset={s.offset}
+              stopColor={s.color}
+              stopOpacity={s.opacity}
+            />
+          ))}
+        </linearGradient>
+      </defs>
+    );
+  };
 
   const formatYTick = (val: number) => {
     if (val >= 120) return "Mythic";
@@ -563,7 +651,7 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
               y1={prevY}
               x2={leftCapX}
               y2={prevY}
-              stroke={strokeColor}
+              stroke={getScoreTierColor(t.prevScore)}
               strokeWidth={2}
             />
           </>
@@ -614,7 +702,7 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
               y1={startY}
               x2={x + width}
               y2={currY}
-              stroke={strokeColor}
+              stroke="url(#climbStroke)"
               strokeWidth={2}
             />
           </>
@@ -661,16 +749,35 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
   };
 
   const renderChartDot = (props: any) => {
-    const { cx, cy, value } = props;
-    if (cx == null || cy == null || value == null) return null;
+    const { cx, cy, value, payload } = props;
+    if (cx == null || cy == null) return null;
+
+    const dotColor = getScoreTierColor(value, payload?.tier);
 
     return (
       <circle
         cx={cx}
         cy={cy}
         r={2.5}
-        fill={strokeColor}
+        fill={dotColor}
         strokeWidth={0}
+      />
+    );
+  };
+
+  const renderActiveDot = (props: any) => {
+    const { cx, cy, payload, value } = props;
+    if (cx == null || cy == null) return null;
+    const dotColor = getScoreTierColor(value, payload?.tier);
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={4.5}
+        fill={dotColor}
+        stroke="#ffffff"
+        strokeWidth={1.5}
       />
     );
   };
@@ -831,32 +938,51 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
 
             {/* Pips Segmented Continuum Rail */}
             <div
-              className="min-h-[16px] max-h-[22px] my-1 w-full items-stretch"
+              className="h-6 sm:h-7 my-1.5 w-full items-stretch"
               style={{
                 display: "grid",
                 gridTemplateColumns: `repeat(${maxSteps}, minmax(0, 1fr))`,
-                gap: "3px",
+                gap: "4px",
               }}
             >
               {Array.from({ length: maxSteps }).map((_, idx) => {
                 const isEarned = idx < step;
-                const isNext = idx === step;
 
                 return (
                   <div
                     key={`pip-${idx}`}
-                    className={`h-full min-h-[14px] flex items-center justify-center border transition-all duration-300 ${
+                    className={`relative h-full flex items-center justify-center border transition-all duration-300 select-none overflow-hidden ${
                       isEarned
-                        ? theme.pipActive
-                        : isNext
-                        ? "border-amber-400/80 bg-amber-400/10 text-neutral-300 ring-1 ring-amber-400/40"
-                        : "bg-white/[0.03] border-white/10 text-neutral-600 hover:border-white/20"
+                        ? `${theme.pipActive} ${theme.pipText}`
+                        : "bg-neutral-900/80 border-white/10 text-neutral-600"
                     }`}
-                    title={`Tier Point ${idx + 1} of ${maxSteps}`}
+                    title={`Tier Point ${idx + 1} of ${maxSteps}${isEarned ? " (Earned)" : ""}`}
                   >
-                    <span className="text-[8px] font-mono opacity-60 leading-none">
-                      {idx + 1}
-                    </span>
+                    {/* MTG Card Frame Inset Double-Border */}
+                    <div
+                      className={`absolute inset-[2px] border pointer-events-none transition-colors ${
+                        isEarned ? theme.pipInnerBorder : "border-white/[0.04]"
+                      }`}
+                    />
+
+                    {/* Corner Brackets / Embellishment Accent Ticks */}
+                    <div className="absolute top-[2px] left-[2px] w-[3px] h-[3px] border-t border-l border-current opacity-50 pointer-events-none" />
+                    <div className="absolute top-[2px] right-[2px] w-[3px] h-[3px] border-t border-r border-current opacity-50 pointer-events-none" />
+                    <div className="absolute bottom-[2px] left-[2px] w-[3px] h-[3px] border-b border-l border-current opacity-50 pointer-events-none" />
+                    <div className="absolute bottom-[2px] right-[2px] w-[3px] h-[3px] border-b border-r border-current opacity-50 pointer-events-none" />
+
+                    {/* Achievement Diamond & Number */}
+                    <div className="relative z-10 flex items-center justify-center gap-1 leading-none">
+                      {isEarned && (
+                        <span className="text-[6.5px] opacity-40 font-mono select-none">◆</span>
+                      )}
+                      <span className="text-[10px] font-sans font-bold leading-none tabular-nums">
+                        {idx + 1}
+                      </span>
+                      {isEarned && (
+                        <span className="text-[6.5px] opacity-40 font-mono select-none">◆</span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -989,12 +1115,8 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
                     data={chartData}
                     margin={{ top: 10, right: 12, left: 4, bottom: 0 }}
                   >
-                    <defs>
-                      <linearGradient id="climbFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={strokeColor} stopOpacity={0.45} />
-                        <stop offset="95%" stopColor={strokeColor} stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
+                    {/* Dynamic SVG Gradients strictly aligned to tier boundaries in userSpaceOnUse */}
+                    <Customized component={DynamicTierGradients} />
 
                     {/* Colored Division Background Bands (consistent across entire chart) */}
                     {visibleBands.map((band) => (
@@ -1088,17 +1210,12 @@ export const RankedLadderWidget: React.FC<WidgetProps> = React.memo(({ widget })
                         key={`area-season-${s}`}
                         type="monotone"
                         dataKey={`s_${s}`}
-                        stroke={strokeColor}
+                        stroke="url(#climbStroke)"
                         strokeWidth={2}
                         fill="url(#climbFill)"
-                        fillOpacity={0.6}
+                        fillOpacity={1}
                         dot={renderChartDot}
-                        activeDot={{
-                          r: 4.5,
-                          stroke: "#fff",
-                          strokeWidth: 1.5,
-                          fill: strokeColor,
-                        }}
+                        activeDot={renderActiveDot}
                         isAnimationActive={false}
                         connectNulls={false}
                       />

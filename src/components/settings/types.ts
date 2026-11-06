@@ -49,6 +49,7 @@ export interface ManaThemeOption {
 export const BG_WINDOWS = [
   { id: 'dashboard', label: 'Dashboard', iconClass: 'ms ms-ability-party' },
   { id: 'matches', label: 'Match History', iconClass: 'ms ms-battle' },
+  { id: 'ranked', label: 'Ranked Ladder', iconClass: 'ms ms-ability-ascend' },
   { id: 'decks', label: 'Deck Library', iconClass: 'ms ms-ability-adventure' },
   { id: 'collection', label: 'Card Library', iconClass: 'ms ms-library' },
   { id: 'achievements', label: 'Achievements', iconClass: 'ms ms-ability-duels-renowned' },

@@ -74,6 +74,9 @@ body {
 .ms-ability-prototype::before {
   content: "\e9be";
 }
+.ms-ability-ascend::before {
+  content: "\e94a";
+}
 
 /* --- Semantic Typography Suite (Consolidated Scale) ----------------------- */
 .rt-hero-stat {
