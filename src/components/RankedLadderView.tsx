@@ -985,6 +985,37 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
   const viewTotal = viewWins + viewLosses;
   const viewWinRate = viewTotal > 0 ? Math.round((viewWins / viewTotal) * 100) : 0;
 
+  // Resolve match tier points impact using official MTGA rules based on tier active at match time
+  const getMatchImpact = useCallback(
+    (m: MatchRecord): number => {
+      const isWin = m.result === "win";
+      const isTraditional = (m.format_name || "").toLowerCase().includes("traditional");
+      const multiplier = isTraditional ? 2 : 1;
+      const mTime = new Date(m.timestamp).getTime();
+
+      let matchTier = "bronze";
+      if (rawPoints && rawPoints.length > 0) {
+        for (const pt of rawPoints) {
+          const ptTime = new Date(pt.rawTimestamp).getTime();
+          if (ptTime <= mTime) {
+            matchTier = (pt.tier || "bronze").toLowerCase();
+          } else {
+            break;
+          }
+        }
+      }
+
+      if (matchTier === "bronze") {
+        return isWin ? 2 * multiplier : 0;
+      } else if (matchTier === "silver") {
+        return isWin ? 2 * multiplier : -1 * multiplier;
+      } else {
+        return isWin ? 1 * multiplier : -1 * multiplier;
+      }
+    },
+    [rawPoints]
+  );
+
   // Today's net tier points (for current season)
   const todaysNetPoints = useMemo(() => {
     const todayStr = getLocalDateStr(new Date());
@@ -1005,15 +1036,10 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       return last.score - first.score;
     }
     if (filteredRankedMatches.length > 0) {
-      let net = 0;
-      for (const m of filteredRankedMatches) {
-        if (m.result === "win") net += (displayTier.toLowerCase() === "bronze" ? 2 : 1);
-        else if (displayTier.toLowerCase() !== "bronze") net -= 1;
-      }
-      return net;
+      return filteredRankedMatches.reduce((acc, m) => acc + getMatchImpact(m), 0);
     }
     return 0;
-  }, [seasonRawPoints, filteredRankedMatches, displayTier]);
+  }, [seasonRawPoints, filteredRankedMatches, getMatchImpact]);
 
   // Next division distance
   const pointsToNextDivision = Math.max(0, displayMaxSteps - displayStep);
@@ -1052,19 +1078,16 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
 
       if (m.result === "win") {
         existing.wins += 1;
-        existing.netPoints += displayTier.toLowerCase() === "bronze" ? 2 : 1;
       } else {
         existing.losses += 1;
-        if (displayTier.toLowerCase() !== "bronze") {
-          existing.netPoints -= 1;
-        }
       }
+      existing.netPoints += getMatchImpact(m);
 
       deckMap.set(name, existing);
     }
 
     return Array.from(deckMap.values()).sort((a, b) => b.wins + b.losses - (a.wins + a.losses));
-  }, [filteredRankedMatches, displayTier]);
+  }, [filteredRankedMatches, getMatchImpact]);
 
   // Format Stats Breakdown (calculated directly from filtered matches)
   const formatStats = useMemo(() => {
@@ -1839,13 +1862,8 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
               {filteredRankedMatches.length > 0 ? (
                 filteredRankedMatches.map((m) => {
                   const isWin = m.result === "win";
-                  const impact = isWin
-                    ? displayTier.toLowerCase() === "bronze"
-                      ? "+2"
-                      : "+1"
-                    : displayTier.toLowerCase() === "bronze"
-                    ? "0"
-                    : "-1";
+                  const impactNum = getMatchImpact(m);
+                  const impact = impactNum > 0 ? `+${impactNum}` : `${impactNum}`;
 
                   return (
                     <div
