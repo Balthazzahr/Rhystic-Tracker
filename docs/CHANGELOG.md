@@ -2,6 +2,30 @@
 
 All notable changes to Rhystic Tracker are documented here.
 
+## [1.9.3] - 2026-11-07 — 📈 Ranked Ladder Continuum, Dual-Distance Telemetry & Reward Visuals
+
+### 📈 Ranked Ladder View Refinements & Intraday Granularity
+- **Streamlined Top Navigation**: Cleaned top header to essentials—Season Selector on the far-left and Constructed/Limited mode toggle on the far-right, purging unneeded win/loss and play/draw filters.
+- **Embedded Heading Filters**: Relocated time filters directly into the Season Progression graph heading with complete selection: `1D`, `7D`, `30D`, `60D`, `Full Season`, `Previous Season`, and `All Time`.
+- **Intraday Granularity Preservation**: Upgraded continuous timeline generator (`buildContinuousTimeline`) to preserve all individual intraday match peaks and drops while keeping clean calendar-day legend formatting on the X-axis.
+- **Equal 50-50 Analytical Split**: Rebalanced Ranked Match History and Deck/Format performance panels into an equal 50/50 horizontal split, expanding the Record column to prevent text overflow.
+
+### 🎯 Dual-Distance Telemetry & Authentic Reward Visuals
+- **Dual-Distance Target Tracking**: Current Rank box now displays both the distance to the immediate division (e.g. `6 Tier Points to Silver I`) and distance to the next major rank (e.g. `12 Tier Points to Gold IV`).
+- **Dynamic Tier-Accurate Coloring**: Division and major rank distance targets are dynamically styled in their respective tier colors (silver for Silver, gold for Gold, teal for Platinum, cyan for Diamond).
+- **Scaled Telemetry Typography**: Enlarged win-loss record and net progress font to prominent `text-xl` monospace tabular-nums with aligned percentage and metric labels.
+- **Authentic MTGA Reward Visuals**: Replaced generic delivery package icon with `<Layers />` (card stack icon from the Wildcards widget) for Booster Packs, `<Coins />` for Gold, and `<Sparkles />` for Card Styles.
+
+## [1.9.2] - 2026-11-06 — 🛠️ RankedLadderView Import Hotfix
+- **Hook Import Restoration**: Added missing `useCallback` import in `RankedLadderView.tsx` resolving runtime reference errors.
+
+## [1.9.1] - 2026-11-06 — 🎯 Dynamic Match-Time Tier Points Hotfix
+- **Dynamic Match-Time Calculations**: Synchronized intra-match tier point attributions across timeline snapshots and climb delta computations.
+
+## [1.9.0] - 2026-11-06 — 🏆 Dedicated Ascend / Ranked Ladder View
+- **Dedicated Ranked Navigation**: Introduced full-page dedicated Ascend / Ranked Ladder view accessible via the primary navigation sidebar (`Swords` icon).
+- **Multi-Season Climb Analytics**: Integrated deep season progression tracking, format breakdown charts, and ranked deck performance matrix.
+
 ## [1.8.3] - 2026-11-05 — 🏆 Ranked Ladder Overhaul & Victory/Defeat Breakdown Analytics
 
 ### 🏆 Ranked Ladder Widget Overhaul

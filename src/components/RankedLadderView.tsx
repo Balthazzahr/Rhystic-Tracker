@@ -23,6 +23,9 @@ import {
   Swords,
   ChevronDown,
   Minus,
+  Layers,
+  Coins,
+  Sparkles,
 } from "lucide-react";
 import {
   usePlayerRank,
@@ -32,6 +35,7 @@ import {
   getMaxStepsForTier,
   getRankClimbScore,
   formatRankLabel,
+  TIER_ORDER,
 } from "./dashboard/widgets/rankCommon";
 import {
   ALL_DIVISION_BANDS,
@@ -110,6 +114,16 @@ const DECK_PIE_COLORS = [
   "#6366f1", // Indigo
 ];
 
+const FILTER_OPTIONS = [
+  { id: "1d", label: "1D", title: "One Day (Last 24 Hours)" },
+  { id: "7d", label: "7D", title: "Seven Days" },
+  { id: "30d", label: "30D", title: "Thirty Days" },
+  { id: "60d", label: "60D", title: "Sixty Days" },
+  { id: "full_season", label: "Full Season", title: "Full Season" },
+  { id: "prev_season", label: "Previous Season", title: "Previous Season" },
+  { id: "all_time", label: "All Time", title: "All Time" },
+];
+
 function getLocalDateStr(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -136,18 +150,37 @@ function getProjectedRewards(tier: string) {
   const t = (tier || "bronze").toLowerCase();
   switch (t) {
     case "mythic":
-      return { packs: 5, gold: 1000, rewardText: "5 Packs + 1,000 Gold + 2 Card Styles" };
+      return { packs: 5, gold: 1000, styles: 2, rewardText: "5 Packs + 1,000 Gold + 2 Card Styles" };
     case "diamond":
-      return { packs: 4, gold: 1000, rewardText: "4 Packs + 1,000 Gold + 2 Card Styles" };
+      return { packs: 4, gold: 1000, styles: 2, rewardText: "4 Packs + 1,000 Gold + 2 Card Styles" };
     case "platinum":
-      return { packs: 3, gold: 1000, rewardText: "3 Packs + 1,000 Gold + 2 Card Styles" };
+      return { packs: 3, gold: 1000, styles: 2, rewardText: "3 Packs + 1,000 Gold + 2 Card Styles" };
     case "gold":
-      return { packs: 2, gold: 1000, rewardText: "2 Packs + 1,000 Gold + 1 Card Style" };
+      return { packs: 2, gold: 1000, styles: 1, rewardText: "2 Packs + 1,000 Gold + 1 Card Style" };
     case "silver":
-      return { packs: 1, gold: 500, rewardText: "1 Pack + 500 Gold + 1 Card Style" };
+      return { packs: 1, gold: 500, styles: 1, rewardText: "1 Pack + 500 Gold + 1 Card Style" };
     case "bronze":
     default:
-      return { packs: 1, gold: 0, rewardText: "1 Pack" };
+      return { packs: 1, gold: 0, styles: 0, rewardText: "1 Pack" };
+  }
+}
+
+function getTierColorClass(tier?: string | null): string {
+  switch ((tier || "").toLowerCase()) {
+    case "mythic":
+      return "text-amber-400";
+    case "diamond":
+      return "text-cyan-400";
+    case "platinum":
+      return "text-teal-400";
+    case "gold":
+      return "text-yellow-400";
+    case "silver":
+      return "text-slate-200";
+    case "bronze":
+      return "text-amber-600";
+    default:
+      return "text-neutral-300";
   }
 }
 
@@ -174,8 +207,6 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
   // Mode & Filters State
   const [activeTab, setActiveTab] = useState<"constructed" | "limited">("constructed");
   const [timeFilter, setTimeFilter] = useState<string>("full_season");
-  const [resultFilter, setResultFilter] = useState<"ALL" | "win" | "loss">("ALL");
-  const [positionFilter, setPositionFilter] = useState<"ALL" | "play" | "draw">("ALL");
 
   // Interactive Slice Selection (Deck & Format win/loss view)
   const [selectedDeckName, setSelectedDeckName] = useState<string | null>(null);
@@ -256,6 +287,13 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
     const s = Array.from(new Set(rawPoints.map((p) => p.season)));
     return s.sort((a, b) => b - a);
   }, [rawPoints]);
+
+  const previousSeason = useMemo(() => {
+    return (
+      distinctSeasons.find((s) => s < currentSeason) ??
+      (currentSeason > 1 ? currentSeason - 1 : null)
+    );
+  }, [distinctSeasons, currentSeason]);
 
   // Selected season state (defaults to current season)
   const [selectedSeason, setSelectedSeason] = useState<number | "all">(
@@ -358,11 +396,11 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       return { chartData: [] };
     }
 
-    // Daily continuous timeline generator
-    const buildDailyTimeline = (
+    // Granular continuous timeline generator that preserves every intraday climb/drop snapshot
+    const buildContinuousTimeline = (
       startDate: Date,
       endDate: Date,
-      labelStep = 1,
+      labelStepDays = 1,
       fixedSeason?: number
     ) => {
       const points: ChartPoint[] = [];
@@ -372,6 +410,7 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       const targetEnd = new Date(endDate);
       targetEnd.setHours(23, 59, 59, 999);
 
+      // Establish baseline rank entering the timeframe
       let activeState = rawPoints[0];
       for (const p of rawPoints) {
         if (p.d.getTime() <= cur.getTime()) {
@@ -382,42 +421,110 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       let dayIndex = 0;
       while (cur.getTime() <= targetEnd.getTime()) {
         const curStr = getLocalDateStr(cur);
+        // All snapshots recorded on this calendar day in exact chronological order
         const daySnaps = rawPoints.filter((p) => {
           if (fixedSeason !== undefined && p.season !== fixedSeason) return false;
           return p.dateStr === curStr;
         });
 
-        if (daySnaps.length > 0) {
-          activeState = daySnaps[daySnaps.length - 1];
-        }
-
+        // Determine if this calendar day should display an X-Axis label in the legend
         const shouldLabel =
-          labelStep === 1 ||
+          labelStepDays === 1 ||
           dayIndex === 0 ||
           cur.getTime() >= targetEnd.getTime() - 86400 * 1000 ||
-          dayIndex % labelStep === 0;
+          dayIndex % labelStepDays === 0;
 
-        points.push({
-          key: `daily-${curStr}`,
-          xLabel: shouldLabel ? formatMonthDay(cur) : "",
-          tooltipTime: cur.toLocaleDateString(undefined, {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }),
-          score: activeState.score,
-          tier: activeState.tier,
-          level: activeState.level,
-          step: activeState.step,
-          wins: activeState.wins,
-          losses: activeState.losses,
-          winRate: activeState.winRate,
-          label: activeState.label,
-          season: activeState.season,
-          matchesCount: daySnaps.length,
-          [`s_${activeState.season}`]: activeState.score,
-        });
+        const dayLabelText = shouldLabel ? formatMonthDay(cur) : "";
+
+        if (daySnaps.length === 0) {
+          // No matches played on this day: add a single continuity anchor point
+          points.push({
+            key: `daily-${curStr}`,
+            xLabel: dayLabelText,
+            tooltipTime: cur.toLocaleDateString(undefined, {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            }),
+            score: activeState.score,
+            tier: activeState.tier,
+            level: activeState.level,
+            step: activeState.step,
+            wins: activeState.wins,
+            losses: activeState.losses,
+            winRate: activeState.winRate,
+            label: activeState.label,
+            season: activeState.season,
+            matchesCount: 0,
+            [`s_${activeState.season}`]: activeState.score,
+          });
+        } else {
+          // Matches WERE played on this day!
+          let hasPlacedDayLabel = false;
+
+          // If the day's first snapshot changed from previous active score,
+          // include a day-start anchor at 00:00 to anchor the starting baseline
+          if (daySnaps[0].score !== activeState.score) {
+            points.push({
+              key: `daystart-${curStr}`,
+              xLabel: dayLabelText,
+              tooltipTime: `${cur.toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })} (Day Start)`,
+              score: activeState.score,
+              tier: activeState.tier,
+              level: activeState.level,
+              step: activeState.step,
+              wins: activeState.wins,
+              losses: activeState.losses,
+              winRate: activeState.winRate,
+              label: activeState.label,
+              season: activeState.season,
+              matchesCount: 0,
+              [`s_${activeState.season}`]: activeState.score,
+            });
+            hasPlacedDayLabel = true;
+          }
+
+          // Add EVERY individual snapshot recorded during this day (fine up/down granularity)
+          for (let sIdx = 0; sIdx < daySnaps.length; sIdx++) {
+            const snap = daySnaps[sIdx];
+            activeState = snap;
+
+            const isFirstPointOfDay = sIdx === 0 && !hasPlacedDayLabel;
+            const ptLabel = isFirstPointOfDay ? dayLabelText : "";
+
+            const timeStr = snap.d.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            const dateStr = snap.d.toLocaleDateString(undefined, {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            });
+
+            points.push({
+              key: `snap-${curStr}-${sIdx}-${snap.rawTimestamp}`,
+              xLabel: ptLabel,
+              tooltipTime: `${dateStr}, ${timeStr}`,
+              score: snap.score,
+              tier: snap.tier,
+              level: snap.level,
+              step: snap.step,
+              wins: snap.wins,
+              losses: snap.losses,
+              winRate: snap.winRate,
+              label: snap.label,
+              season: snap.season,
+              matchesCount: 1,
+              [`s_${snap.season}`]: snap.score,
+            });
+          }
+        }
 
         cur.setDate(cur.getDate() + 1);
         dayIndex++;
@@ -428,78 +535,43 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
 
     const now = new Date();
 
-    // 1. Single Past Season or Current Season (Full Season view)
-    if (selectedSeason !== "all") {
-      const range = seasonRanges.get(selectedSeason);
-      const start = range ? range.start : new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = range
-        ? range.end > now && selectedSeason === currentSeason
-          ? now
-          : range.end
-        : now;
-
-      if (timeFilter === "1d") {
-        const oneDayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
-        const snaps = rawPoints.filter(
-          (p) => p.d >= oneDayAgo && (selectedSeason === "all" || p.season === selectedSeason)
-        );
-        if (snaps.length < 2) {
-          return { chartData: buildDailyTimeline(oneDayAgo, now, 1, selectedSeason) };
-        }
-        return {
-          chartData: snaps.map((p, idx) => ({
-            key: `snap-${idx}-${p.rawTimestamp}`,
-            xLabel: p.d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            tooltipTime: p.d.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            }),
-            score: p.score,
-            tier: p.tier,
-            level: p.level,
-            step: p.step,
-            wins: p.wins,
-            losses: p.losses,
-            winRate: p.winRate,
-            label: p.label,
-            season: p.season,
-            matchesCount: 1,
-            [`s_${p.season}`]: p.score,
-          })),
-        };
-      }
-
-      if (timeFilter === "7d") {
-        const start7 = new Date(now.getTime() - 6 * 24 * 3600 * 1000);
-        return { chartData: buildDailyTimeline(start7, now, 1, selectedSeason) };
-      }
-
-      if (timeFilter === "30d") {
-        const start30 = new Date(now.getTime() - 29 * 24 * 3600 * 1000);
-        return { chartData: buildDailyTimeline(start30, now, 5, selectedSeason) };
-      }
-
-      // Default: Full Season
-      return { chartData: buildDailyTimeline(start, end, 5, selectedSeason) };
-    }
-
-    // 2. All Seasons
+    // 1. One Day (1D)
     if (timeFilter === "1d") {
       const oneDayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
-      const snaps = rawPoints.filter((p) => p.d >= oneDayAgo);
+      const snaps = rawPoints.filter(
+        (p) => p.d >= oneDayAgo && (selectedSeason === "all" || p.season === selectedSeason)
+      );
       if (snaps.length < 2) {
-        return { chartData: buildDailyTimeline(oneDayAgo, now, 1) };
+        return {
+          chartData: buildContinuousTimeline(
+            oneDayAgo,
+            now,
+            1,
+            selectedSeason === "all"
+              ? undefined
+              : typeof selectedSeason === "number"
+              ? selectedSeason
+              : undefined
+          ),
+        };
       }
+      const step = Math.max(1, Math.floor(snaps.length / 5));
       return {
         chartData: snaps.map((p, idx) => ({
           key: `snap-${idx}-${p.rawTimestamp}`,
-          xLabel: p.d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          tooltipTime: p.d.toLocaleTimeString([], {
+          xLabel:
+            idx === 0 || idx === snaps.length - 1 || idx % step === 0
+              ? p.d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : "",
+          tooltipTime: `${p.d.toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          })}, ${p.d.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit",
-          }),
+          })}`,
           score: p.score,
           tier: p.tier,
           level: p.level,
@@ -515,20 +587,95 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       };
     }
 
+    // 2. Seven Days (7D)
     if (timeFilter === "7d") {
       const start7 = new Date(now.getTime() - 6 * 24 * 3600 * 1000);
-      return { chartData: buildDailyTimeline(start7, now, 1) };
+      return {
+        chartData: buildContinuousTimeline(
+          start7,
+          now,
+          1,
+          selectedSeason === "all"
+            ? undefined
+            : typeof selectedSeason === "number"
+            ? selectedSeason
+            : undefined
+        ),
+      };
     }
 
+    // 3. Thirty Days (30D)
     if (timeFilter === "30d") {
       const start30 = new Date(now.getTime() - 29 * 24 * 3600 * 1000);
-      return { chartData: buildDailyTimeline(start30, now, 5) };
+      return {
+        chartData: buildContinuousTimeline(
+          start30,
+          now,
+          5,
+          selectedSeason === "all"
+            ? undefined
+            : typeof selectedSeason === "number"
+            ? selectedSeason
+            : undefined
+        ),
+      };
     }
 
-    // All Time across all seasons: from first recorded snapshot date to today
-    const earliestDate = rawPoints[0].d;
-    return { chartData: buildDailyTimeline(earliestDate, now, 7) };
-  }, [rawPoints, selectedSeason, timeFilter, seasonRanges, currentSeason]);
+    // 4. Sixty Days (60D)
+    if (timeFilter === "60d") {
+      const start60 = new Date(now.getTime() - 59 * 24 * 3600 * 1000);
+      return {
+        chartData: buildContinuousTimeline(
+          start60,
+          now,
+          7,
+          selectedSeason === "all"
+            ? undefined
+            : typeof selectedSeason === "number"
+            ? selectedSeason
+            : undefined
+        ),
+      };
+    }
+
+    // 5. Previous Season
+    if (timeFilter === "prev_season" && previousSeason !== null) {
+      const range = seasonRanges.get(previousSeason);
+      const pSnaps = rawPoints.filter((p) => p.season === previousSeason);
+      if (range) {
+        const diffDays = Math.max(1, Math.round((range.end.getTime() - range.start.getTime()) / (86400 * 1000)));
+        const stepInterval = diffDays > 45 ? 7 : diffDays > 20 ? 5 : 2;
+        return { chartData: buildContinuousTimeline(range.start, range.end, stepInterval, previousSeason) };
+      } else if (pSnaps.length > 0) {
+        const start = new Date(pSnaps[0].d);
+        const end = new Date(pSnaps[pSnaps.length - 1].d);
+        const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (86400 * 1000)));
+        const stepInterval = diffDays > 45 ? 7 : diffDays > 20 ? 5 : 2;
+        return { chartData: buildContinuousTimeline(start, end, stepInterval, previousSeason) };
+      }
+    }
+
+    // 6. All Time
+    if (timeFilter === "all_time") {
+      const earliestDate = rawPoints[0].d;
+      const diffDays = Math.max(1, Math.round((now.getTime() - earliestDate.getTime()) / (86400 * 1000)));
+      const stepInterval = diffDays > 60 ? 10 : diffDays > 20 ? 5 : 2;
+      return { chartData: buildContinuousTimeline(earliestDate, now, stepInterval) };
+    }
+
+    // 7. Full Season (default)
+    const targetSeason = selectedSeason !== "all" ? selectedSeason : currentSeason;
+    const range = seasonRanges.get(targetSeason);
+    const start = range ? range.start : new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = range
+      ? range.end > now && targetSeason === currentSeason
+        ? now
+        : range.end
+      : now;
+    const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (86400 * 1000)));
+    const stepInterval = diffDays > 45 ? 7 : diffDays > 20 ? 5 : 2;
+    return { chartData: buildContinuousTimeline(start, end, stepInterval, targetSeason) };
+  }, [rawPoints, selectedSeason, timeFilter, seasonRanges, currentSeason, previousSeason]);
 
   // Distinct seasons present in currently generated chart points
   const distinctSeasonsInView = useMemo(() => {
@@ -749,6 +896,11 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       return null;
     }
 
+    // Do not render dots on continuity anchor points where no matches were played
+    if (payload?.matchesCount === 0) {
+      return null;
+    }
+
     const scoreVal = Array.isArray(value)
       ? value[1]
       : typeof value === "number"
@@ -764,12 +916,14 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
     else if (scoreVal >= 48 || payload?.tier?.toLowerCase() === "gold") dotColor = "#facc15";
     else if (scoreVal >= 24 || payload?.tier?.toLowerCase() === "silver") dotColor = "#cbd5e1";
 
+    const dotRadius = chartData.length > 60 ? 2 : 3;
+
     return (
       <circle
         key={`dot-${payload?.key}-${dataKey || ""}-${cx}`}
         cx={cx}
         cy={cy}
-        r={3}
+        r={dotRadius}
         fill={dotColor}
         stroke="#121212"
         strokeWidth={1.5}
@@ -928,6 +1082,25 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       timeCutoffStart = now - 7 * 24 * 3600 * 1000;
     } else if (timeFilter === "30d") {
       timeCutoffStart = now - 30 * 24 * 3600 * 1000;
+    } else if (timeFilter === "60d") {
+      timeCutoffStart = now - 60 * 24 * 3600 * 1000;
+    } else if (timeFilter === "prev_season") {
+      if (previousSeason !== null) {
+        const range = seasonRanges.get(previousSeason);
+        if (range) {
+          timeCutoffStart = range.start.getTime();
+          timeCutoffEnd = range.end.getTime();
+        } else {
+          const pSnaps = rawPoints.filter((p) => p.season === previousSeason);
+          if (pSnaps.length > 0) {
+            timeCutoffStart = pSnaps[0].d.getTime();
+            timeCutoffEnd = pSnaps[pSnaps.length - 1].d.getTime();
+          }
+        }
+      }
+    } else if (timeFilter === "all_time") {
+      timeCutoffStart = null;
+      timeCutoffEnd = null;
     } else {
       // "full_season" / default: filter to selectedSeason if not "all"
       if (selectedSeason !== "all") {
@@ -961,17 +1134,9 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
       if (timeCutoffStart !== null && mTime < timeCutoffStart) return false;
       if (timeCutoffEnd !== null && mTime > timeCutoffEnd) return false;
 
-      // Result filter
-      if (resultFilter === "win" && m.result !== "win") return false;
-      if (resultFilter === "loss" && m.result !== "loss") return false;
-
-      // Position filter
-      if (positionFilter === "play" && !m.going_first) return false;
-      if (positionFilter === "draw" && m.going_first) return false;
-
       return true;
     });
-  }, [matches, isLimited, timeFilter, selectedSeason, seasonRanges, resultFilter, positionFilter]);
+  }, [matches, isLimited, timeFilter, selectedSeason, seasonRanges, previousSeason, rawPoints]);
 
   // Recalculate Win/Loss and Win Rate based on current filter selection
   const viewWins = useMemo(
@@ -1041,14 +1206,31 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
     return 0;
   }, [seasonRawPoints, filteredRankedMatches, getMatchImpact]);
 
-  // Next division distance
+  // Next division & next major rank (tier) distance
   const pointsToNextDivision = Math.max(0, displayMaxSteps - displayStep);
-  const nextDivisionLabel =
-    displayTier.toLowerCase() === "mythic"
-      ? "Leaderboard Active"
-      : displayLevel === 1
-      ? `${pointsToNextDivision} Tier Points to Next Tier`
-      : `${pointsToNextDivision} Tier Points to ${displayTier} ${formatRomanLevel(displayLevel - 1)}`;
+  const tierIdx = TIER_ORDER.indexOf(displayTier.toLowerCase() as any);
+  const nextTierRaw = tierIdx >= 0 && tierIdx < TIER_ORDER.length - 1 ? TIER_ORDER[tierIdx + 1] : null;
+  const nextTierName = nextTierRaw ? nextTierRaw.charAt(0).toUpperCase() + nextTierRaw.slice(1) : "";
+  const nextTierTarget = nextTierName === "Mythic" ? "Mythic" : `${nextTierName} IV`;
+
+  const remainingDivisionsAbove = Math.max(0, displayLevel - 1);
+  const pointsToNextTier = pointsToNextDivision + remainingDivisionsAbove * displayMaxSteps;
+
+  const nextDivisionTarget =
+    displayLevel === 1 ? nextTierTarget : `${displayTier} ${formatRomanLevel(displayLevel - 1)}`;
+
+  const isMythic = displayTier.toLowerCase() === "mythic";
+
+  const nextDivisionLabel = isMythic
+    ? "Leaderboard Active"
+    : `${pointsToNextDivision} Tier Points to ${nextDivisionTarget}`;
+
+  const nextTierLabel =
+    isMythic || displayLevel === 1
+      ? null
+      : `${pointsToNextTier} Tier Points to ${nextTierTarget}`;
+
+  const nextDivisionTier = displayLevel === 1 ? nextTierRaw : displayTier;
 
   // Projected or Earned Rewards
   const rewards = getProjectedRewards(displayTier);
@@ -1276,6 +1458,27 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
     return null;
   };
 
+  const handleFilterSelect = (filterId: string) => {
+    setTimeFilter(filterId);
+
+    if (filterId === "prev_season") {
+      if (previousSeason !== null) {
+        setSelectedSeason(previousSeason);
+      }
+    } else if (filterId === "all_time") {
+      setSelectedSeason("all");
+    } else if (filterId === "full_season") {
+      if (selectedSeason === "all" || selectedSeason === previousSeason) {
+        setSelectedSeason(currentSeason);
+      }
+    } else {
+      // "1d", "7d", "30d", "60d"
+      if (selectedSeason !== "all" && selectedSeason !== currentSeason) {
+        setSelectedSeason(currentSeason);
+      }
+    }
+  };
+
   return (
     <div className="flex-1 min-h-0 flex flex-col h-full space-y-2.5 px-6 py-2.5 overflow-hidden select-none">
       {/* 1. PAGE HEADER */}
@@ -1304,9 +1507,9 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
         )}
       </div>
 
-      {/* 2. TOP FILTER & CONTROLS TOOLBAR: Left-justified Season Dropdown, Right-justified Filter Groups */}
+      {/* 2. TOP TOOLBAR: Far Left Season Dropdown, Far Right Constructed/Limited Mode Selector */}
       <div className="shrink-0 flex items-center justify-between pb-0.5 gap-2 select-none">
-        {/* 1. Custom React Season Dropdown (Left-justified, slightly transparent/grayer glass) */}
+        {/* Far Left: Custom React Season Dropdown */}
         <div className="relative inline-flex items-center shrink-0" ref={dropdownRef}>
           <button
             type="button"
@@ -1335,7 +1538,11 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                   onClick={() => {
                     setSelectedSeason(s);
                     setIsSeasonOpen(false);
-                    if (s !== currentSeason) {
+                    if (s === previousSeason) {
+                      setTimeFilter("prev_season");
+                    } else if (s === currentSeason) {
+                      setTimeFilter("full_season");
+                    } else {
                       setTimeFilter("full_season");
                     }
                   }}
@@ -1359,6 +1566,7 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                 onClick={() => {
                   setSelectedSeason("all");
                   setIsSeasonOpen(false);
+                  setTimeFilter("all_time");
                 }}
                 className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition-colors cursor-pointer rounded-none ${
                   selectedSeason === "all"
@@ -1375,125 +1583,32 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
           )}
         </div>
 
-        {/* Right-justified Filter Groups */}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Format Mode Selector Pills */}
-          <div className="flex items-center border border-white/10 bg-black/40 p-0.5 rounded-none text-xs font-mono">
-            <button
-              type="button"
-              onClick={() => setActiveTab("constructed")}
-              className={`px-2.5 py-1 transition-colors cursor-pointer flex items-center gap-1 ${
-                !isLimited
-                  ? "bg-white/15 text-white font-bold"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 text-current" />
-              <span>Constructed</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("limited")}
-              className={`px-2.5 py-1 transition-colors cursor-pointer flex items-center gap-1 ${
-                isLimited
-                  ? "bg-white/15 text-white font-bold"
-                  : "text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              <Trophy className="w-3.5 h-3.5 text-current" />
-              <span>Limited</span>
-            </button>
-          </div>
-
-          {/* Time Horizon Range Pills (For past seasons, locked to Full Season) */}
-          <div className="flex items-center gap-1 text-xs font-mono">
-            {isPastSeason ? (
-              <button
-                onClick={() => setTimeFilter("full_season")}
-                className="px-2.5 py-1 border bg-white/20 text-white border-white/30 font-bold uppercase tracking-wider rounded-none cursor-default"
-              >
-                Full Season {selectedSeason}
-              </button>
-            ) : (
-              [
-                { id: "1d", label: "1D" },
-                { id: "7d", label: "7D" },
-                { id: "30d", label: "30D" },
-                {
-                  id: "full_season",
-                  label: selectedSeason === "all" ? "All Time" : "Full Season",
-                },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setTimeFilter(item.id)}
-                  className={`px-2.5 py-1 border transition-colors cursor-pointer uppercase tracking-wider rounded-none ${
-                    timeFilter === item.id
-                      ? "bg-white/20 text-white border-white/30 font-bold"
-                      : "bg-white/[0.03] text-neutral-400 border-white/5 hover:text-neutral-200 hover:border-white/20"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))
-            )}
-          </div>
-
-          {/* Result Filter Toggles */}
-          <div className="flex items-center border border-white/10 bg-black/40 p-0.5 rounded-none text-xs font-mono">
-            <button
-              onClick={() => setResultFilter("ALL")}
-              className={`px-2 py-0.5 transition-colors cursor-pointer ${
-                resultFilter === "ALL" ? "bg-white/15 text-white font-bold" : "text-neutral-400"
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setResultFilter("win")}
-              className={`px-2 py-0.5 transition-colors cursor-pointer ${
-                resultFilter === "win" ? "bg-emerald-500/20 text-emerald-300 font-bold" : "text-neutral-400"
-              }`}
-            >
-              Wins
-            </button>
-            <button
-              onClick={() => setResultFilter("loss")}
-              className={`px-2 py-0.5 transition-colors cursor-pointer ${
-                resultFilter === "loss" ? "bg-rose-500/20 text-rose-300 font-bold" : "text-neutral-400"
-              }`}
-            >
-              Losses
-            </button>
-          </div>
-
-          {/* Play/Draw Filter Toggles */}
-          <div className="flex items-center border border-white/10 bg-black/40 p-0.5 rounded-none text-xs font-mono">
-            <button
-              onClick={() => setPositionFilter("ALL")}
-              className={`px-2 py-0.5 transition-colors cursor-pointer ${
-                positionFilter === "ALL" ? "bg-white/15 text-white font-bold" : "text-neutral-400"
-              }`}
-            >
-              Any Turn
-            </button>
-            <button
-              onClick={() => setPositionFilter("play")}
-              className={`px-2 py-0.5 transition-colors cursor-pointer ${
-                positionFilter === "play" ? "bg-white/15 text-white font-bold" : "text-neutral-400"
-              }`}
-            >
-              Play
-            </button>
-            <button
-              onClick={() => setPositionFilter("draw")}
-              className={`px-2 py-0.5 transition-colors cursor-pointer ${
-                positionFilter === "draw" ? "bg-white/15 text-white font-bold" : "text-neutral-400"
-              }`}
-            >
-              Draw
-            </button>
-          </div>
+        {/* Far Right: Constructed / Limited Format Mode Selector Pills */}
+        <div className="flex items-center border border-white/10 bg-black/40 p-0.5 rounded-none text-xs font-mono shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab("constructed")}
+            className={`px-2.5 py-1 transition-colors cursor-pointer flex items-center gap-1 rounded-none ${
+              !isLimited
+                ? "bg-white/15 text-white font-bold"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5 text-current" />
+            <span>Constructed</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("limited")}
+            className={`px-2.5 py-1 transition-colors cursor-pointer flex items-center gap-1 rounded-none ${
+              isLimited
+                ? "bg-white/15 text-white font-bold"
+                : "text-neutral-400 hover:text-neutral-200"
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-current" />
+            <span>Limited</span>
+          </button>
         </div>
       </div>
 
@@ -1592,7 +1707,11 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                 {isPastSeason ? "Final Tier Points" : "Tier Points Earned"}
               </span>
               <span className="text-neutral-500 text-[11px]">
-                {isPastSeason ? "Season Finished" : nextDivisionLabel}
+                {isPastSeason
+                  ? "Season Finished"
+                  : nextTierLabel
+                  ? `${nextDivisionLabel} (${pointsToNextTier} to ${nextTierTarget})`
+                  : nextDivisionLabel}
               </span>
             </div>
           </div>
@@ -1600,21 +1719,29 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
           {/* 4 Telemetry Stat Boxes */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-2 border-t border-white/5">
             {/* Box 1: Record & Win Rate */}
-            <div className="bg-white/[0.02] border border-white/5 p-2">
+            <div className="bg-white/[0.02] border border-white/5 p-2 flex flex-col justify-between">
               <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block mb-0.5">
                 {isPastSeason
                   ? "Season Record"
                   : isAllSeasons
                   ? "All-Time Record"
+                  : timeFilter === "1d"
+                  ? "Today's Record"
+                  : timeFilter === "7d"
+                  ? "7-Day Record"
+                  : timeFilter === "30d"
+                  ? "30-Day Record"
+                  : timeFilter === "60d"
+                  ? "60-Day Record"
                   : "Current Season"}
               </span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm sm:text-base font-mono font-bold text-white tabular-nums">
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-base sm:text-lg md:text-xl font-mono font-bold text-white tabular-nums leading-tight">
                   {viewWins}W - {viewLosses}L
                 </span>
                 {viewTotal > 0 && (
                   <span
-                    className={`text-[10px] font-mono font-semibold px-1 py-0.2 border ${
+                    className={`text-xs sm:text-sm font-mono font-bold px-1.5 py-0.5 border leading-tight ${
                       viewWinRate >= 50
                         ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
                         : "text-rose-400 bg-rose-500/10 border-rose-500/30"
@@ -1627,21 +1754,46 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
             </div>
 
             {/* Box 2: Next Division vs Season Peak */}
-            <div className="bg-white/[0.02] border border-white/5 p-2">
+            <div className="bg-white/[0.02] border border-white/5 p-2 flex flex-col justify-between">
               <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block mb-0.5">
                 {isPastSeason
                   ? "Season Peak"
                   : isAllSeasons
                   ? "All-Time Peak"
-                  : "Next Division"}
+                  : "Next Division & Rank"}
               </span>
-              <span className="text-xs sm:text-sm font-mono font-bold text-amber-300 truncate block">
-                {isPastSeason || isAllSeasons ? peakStandingLabel : nextDivisionLabel}
-              </span>
+              {isPastSeason || isAllSeasons ? (
+                <span
+                  className={`text-sm sm:text-base font-mono font-bold truncate block mt-0.5 leading-tight ${getTierColorClass(
+                    peakStandingPoint?.tier
+                  )}`}
+                >
+                  {peakStandingLabel}
+                </span>
+              ) : (
+                <div className="space-y-0.5 mt-0.5">
+                  <span
+                    className={`text-xs sm:text-sm font-mono font-bold truncate block leading-tight ${getTierColorClass(
+                      nextDivisionTier
+                    )}`}
+                  >
+                    {nextDivisionLabel}
+                  </span>
+                  {nextTierLabel && (
+                    <span
+                      className={`text-[11px] sm:text-xs font-mono font-bold truncate block leading-tight ${getTierColorClass(
+                        nextTierRaw
+                      )}`}
+                    >
+                      {nextTierLabel}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Box 3: Total Progress vs Today's Progress */}
-            <div className="bg-white/[0.02] border border-white/5 p-2">
+            <div className="bg-white/[0.02] border border-white/5 p-2 flex flex-col justify-between">
               <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block mb-0.5">
                 {isPastSeason
                   ? "Total Progress"
@@ -1649,49 +1801,88 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                   ? "All-Time Progress"
                   : "Today's Progress"}
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2 mt-0.5">
                 {isPastSeason || isAllSeasons ? (
                   totalSeasonNetPoints > 0 ? (
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
                   ) : totalSeasonNetPoints < 0 ? (
-                    <TrendingDown className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 shrink-0" />
                   ) : (
-                    <Minus className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                    <Minus className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-500 shrink-0" />
                   )
                 ) : todaysNetPoints > 0 ? (
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
                 ) : todaysNetPoints < 0 ? (
-                  <TrendingDown className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 shrink-0" />
                 ) : (
-                  <Minus className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                  <Minus className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-500 shrink-0" />
                 )}
-                <span
-                  className={`text-xs sm:text-sm font-mono font-bold tabular-nums truncate ${
-                    (isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints) > 0
-                      ? "text-emerald-400"
-                      : (isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints) < 0
-                      ? "text-rose-400"
-                      : "text-neutral-400"
-                  }`}
-                >
-                  {(isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints) > 0
-                    ? `+${isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints}`
-                    : isPastSeason || isAllSeasons
-                    ? totalSeasonNetPoints
-                    : todaysNetPoints}{" "}
-                  Tier Points
-                </span>
+                <div className="flex items-baseline gap-1.5 leading-tight">
+                  <span
+                    className={`text-base sm:text-lg md:text-xl font-mono font-bold tabular-nums leading-tight ${
+                      (isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints) > 0
+                        ? "text-emerald-400"
+                        : (isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints) < 0
+                        ? "text-rose-400"
+                        : "text-neutral-400"
+                    }`}
+                  >
+                    {(isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints) > 0
+                      ? `+${isPastSeason || isAllSeasons ? totalSeasonNetPoints : todaysNetPoints}`
+                      : isPastSeason || isAllSeasons
+                      ? totalSeasonNetPoints
+                      : todaysNetPoints}
+                  </span>
+                  <span className="text-xs sm:text-sm font-mono text-neutral-400">
+                    Tier Points
+                  </span>
+                </div>
               </div>
             </div>
 
             {/* Box 4: Projected Rewards vs Rewards Earned */}
-            <div className="bg-white/[0.02] border border-white/5 p-2">
+            <div className="bg-white/[0.02] border border-white/5 p-2 flex flex-col justify-between">
               <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block mb-0.5">
                 {isPastSeason ? "Rewards Earned" : "Projected Rewards"}
               </span>
-              <span className="text-xs font-mono font-semibold text-neutral-200 truncate block">
-                {rewards.rewardText}
-              </span>
+              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                {/* Booster Packs */}
+                <div
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-gradient-to-r from-amber-950/60 to-neutral-900 border border-amber-500/40 text-amber-300 shadow-sm"
+                  title={`${rewards.packs} ${rewards.packs === 1 ? "Booster Pack" : "Booster Packs"}`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-mono text-xs sm:text-sm font-bold tabular-nums text-amber-200">
+                    {rewards.packs} {rewards.packs === 1 ? "Pack" : "Packs"}
+                  </span>
+                </div>
+
+                {/* Gold */}
+                {rewards.gold > 0 && (
+                  <div
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-gradient-to-r from-yellow-950/60 to-neutral-900 border border-yellow-500/40 text-yellow-300 shadow-sm"
+                    title={`${rewards.gold.toLocaleString()} Arena Gold`}
+                  >
+                    <Coins className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                    <span className="font-mono text-xs sm:text-sm font-bold tabular-nums text-yellow-200">
+                      {rewards.gold.toLocaleString()} Gold
+                    </span>
+                  </div>
+                )}
+
+                {/* Card Styles */}
+                {rewards.styles > 0 && (
+                  <div
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-gradient-to-r from-cyan-950/60 to-neutral-900 border border-cyan-500/40 text-cyan-300 shadow-sm"
+                    title={`${rewards.styles} Parallax Card Cosmetic ${rewards.styles === 1 ? "Style" : "Styles"}`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span className="font-mono text-xs sm:text-sm font-bold tabular-nums text-cyan-200">
+                      {rewards.styles} {rewards.styles === 1 ? "Style" : "Styles"}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1700,12 +1891,36 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
         {/* ZONE B: GRAPH SECTION ("Season Progression" - Expanded by 50% in height)   */}
         {/* ========================================================================= */}
         <div className="shrink-0 bg-neutral-950/85 backdrop-blur-md border border-white/10 p-3">
-          <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-white/10">
+          <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-white/10 gap-2 flex-wrap">
             <h2 className="text-sm sm:text-base font-display font-bold tracking-[0.12em] uppercase text-white leading-none">
               Season Progression
             </h2>
-            <div className="text-[11px] font-mono text-neutral-400">
-              {selectedSeason === "all" ? "All Seasons Progression" : `Season ${selectedSeason} Progression`}
+
+            {/* Filter selection at the top of the Season Progression Graph */}
+            <div className="flex items-center gap-1 text-xs font-mono flex-wrap justify-end">
+              {FILTER_OPTIONS.map((item) => {
+                const isSelected = timeFilter === item.id;
+                const isDisabled = item.id === "prev_season" && previousSeason === null;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => handleFilterSelect(item.id)}
+                    title={item.title}
+                    className={`px-2.5 py-1 border transition-colors cursor-pointer uppercase tracking-wider rounded-none ${
+                      isSelected
+                        ? "bg-white/20 text-white border-white/30 font-bold"
+                        : isDisabled
+                        ? "bg-white/[0.01] text-neutral-600 border-white/5 cursor-not-allowed"
+                        : "bg-white/[0.03] text-neutral-400 border-white/5 hover:text-neutral-200 hover:border-white/20"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1831,11 +2046,11 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* ZONE C: BOTTOM SPLIT PANELS (Ranked Match History 60% & Performance 40%) */}
+        {/* ZONE C: BOTTOM SPLIT PANELS (Ranked Match History 50% & Performance 50%) */}
         {/* ========================================================================= */}
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 pb-1">
-          {/* Left Panel: RANKED MATCH HISTORY (60% width) */}
-          <div className="lg:flex-[3] w-full min-w-0 h-full flex flex-col bg-neutral-950/85 backdrop-blur-md border border-white/10 p-3">
+          {/* Left Panel: RANKED MATCH HISTORY (50% width) */}
+          <div className="lg:flex-1 lg:w-1/2 w-full min-w-0 h-full flex flex-col bg-neutral-950/85 backdrop-blur-md border border-white/10 p-3">
             <div className="flex items-center justify-between pb-2 mb-1 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-2">
                 <Swords className="w-4 h-4 text-amber-400" />
@@ -1935,8 +2150,8 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
             </div>
           </div>
 
-          {/* Right Panel: RANKED DECK PERFORMANCE & FORMAT STATS (40% width) */}
-          <div className="lg:flex-[2] w-full min-w-0 h-full grid grid-rows-2 gap-2.5">
+          {/* Right Panel: RANKED DECK PERFORMANCE & FORMAT STATS (50% width) */}
+          <div className="lg:flex-1 lg:w-1/2 w-full min-w-0 h-full grid grid-rows-2 gap-2.5">
             {/* Upper: Ranked Deck Performance (Side-by-side: Pie on LEFT, Table on RIGHT) */}
             <div className="h-full min-h-0 flex flex-col bg-neutral-950/85 backdrop-blur-md border border-white/10 p-2.5">
               <div className="flex items-center justify-between pb-1 mb-1 border-b border-white/10 shrink-0">
@@ -2069,9 +2284,9 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                   {/* Floating Frozen Header (No dark background, per design system) */}
                   <div className="flex items-center h-[28px] px-1.5 shrink-0 select-none text-[11px] font-sans font-bold text-white border-b border-white/10">
                     <div className="flex-1 min-w-0 text-left px-1">Deck</div>
-                    <div className="w-14 text-center px-1 shrink-0">Points</div>
-                    <div className="w-16 text-center px-1 shrink-0">Record</div>
-                    <div className="w-14 text-right px-1 shrink-0">Win Rate</div>
+                    <div className="w-16 text-center px-1 shrink-0">Points</div>
+                    <div className="w-20 text-center px-1 shrink-0">Record</div>
+                    <div className="w-16 text-right px-1 shrink-0">Win Rate</div>
                   </div>
 
                   {/* Scrollable Rows */}
@@ -2102,7 +2317,7 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                                 ))}
                               </div>
                               <span
-                                className={`font-bold truncate max-w-[100px] sm:max-w-[130px] ${
+                                className={`font-bold truncate max-w-[120px] sm:max-w-[160px] ${
                                   isSelected ? "text-white" : "text-neutral-200"
                                 }`}
                                 title={d.name}
@@ -2110,7 +2325,7 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                                 {d.name}
                               </span>
                             </div>
-                            <div className="w-14 px-1 text-center shrink-0">
+                            <div className="w-16 px-1 text-center shrink-0">
                               <span
                                 className={`font-bold tabular-nums ${
                                   d.netPoints > 0
@@ -2123,12 +2338,12 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                                 {d.netPoints > 0 ? `+${d.netPoints}` : d.netPoints}
                               </span>
                             </div>
-                            <div className="w-16 px-1 text-center text-neutral-300 shrink-0 tabular-nums">
+                            <div className="w-20 px-1 text-center text-neutral-300 shrink-0 tabular-nums whitespace-nowrap">
                               {d.wins}W - {d.losses}L
                             </div>
-                            <div className="w-14 px-1 text-right shrink-0">
+                            <div className="w-16 px-1 text-right shrink-0 whitespace-nowrap">
                               <span
-                                className={`inline-block px-1 py-0.2 text-[9px] font-bold border ${
+                                className={`inline-block px-1.5 py-0.2 text-[9px] font-bold border ${
                                   dWr >= 50
                                     ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
                                     : "text-rose-400 bg-rose-500/10 border-rose-500/30"
@@ -2263,8 +2478,8 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                   {/* Floating Frozen Header (No dark background, per design system) */}
                   <div className="flex items-center h-[28px] px-1.5 shrink-0 select-none text-[11px] font-sans font-bold text-white border-b border-white/10">
                     <div className="flex-1 min-w-0 text-left px-1">Format</div>
-                    <div className="w-16 text-center px-1 shrink-0">Record</div>
-                    <div className="w-14 text-right px-1 shrink-0">Win Rate</div>
+                    <div className="w-20 text-center px-1 shrink-0">Record</div>
+                    <div className="w-16 text-right px-1 shrink-0">Win Rate</div>
                   </div>
 
                   {/* Scrollable Format List */}
@@ -2294,7 +2509,7 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                                 style={{ backgroundColor: color }}
                               />
                               <span
-                                className={`truncate max-w-[110px] sm:max-w-[140px] ${
+                                className={`truncate max-w-[120px] sm:max-w-[160px] ${
                                   isSelected ? "text-white" : "text-neutral-200"
                                 }`}
                                 title={fmt.format}
@@ -2302,12 +2517,12 @@ export const RankedLadderView: React.FC<RankedLadderViewProps> = ({
                                 {fmt.format}
                               </span>
                             </div>
-                            <div className="w-16 px-1 text-center text-neutral-300 shrink-0 tabular-nums">
+                            <div className="w-20 px-1 text-center text-neutral-300 shrink-0 tabular-nums whitespace-nowrap">
                               {fmt.wins}W - {fmt.losses}L
                             </div>
-                            <div className="w-14 px-1 text-right shrink-0">
+                            <div className="w-16 px-1 text-right shrink-0 whitespace-nowrap">
                               <span
-                                className={`inline-block px-1 py-0.2 text-[9px] font-bold border ${
+                                className={`inline-block px-1.5 py-0.2 text-[9px] font-bold border ${
                                   fWr >= 50
                                     ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
                                     : "text-rose-400 bg-rose-500/10 border-rose-500/30"
